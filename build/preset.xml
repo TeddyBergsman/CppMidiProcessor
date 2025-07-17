@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MidiProcessorPreset name="Live Guitar Setup">
+    
+    <Settings>
+        <InputPort name="GUITAR_IN">IAC Driver MG3 Guitar</InputPort>
+        <InputPort name="VOICE_IN">IAC Driver MG3 Voice</InputPort>
+        <OutputPort name="CONTROLLER_OUT">IAC Driver Controller</OutputPort>
+        <CommandNote>86</CommandNote>
+        
+        <!-- This is the fallback state for toggles when a program doesn't specify them. -->
+        <DefaultTrackStates>
+            <DefaultState toggleId="track1" enabled="true" />
+            <DefaultState toggleId="track2" enabled="false" />
+            <DefaultState toggleId="track3" enabled="false" />
+            <DefaultState toggleId="track4" enabled="true" />
+            <DefaultState toggleId="track5" enabled="true" />
+            <DefaultState toggleId="track6" enabled="false" />
+        </DefaultTrackStates>
+    </Settings>
+
+    <Toggles>
+        <Toggle id="track1" name="Track 1: Chromatic"   note="0" channel="16" velocity="100"/>
+        <Toggle id="track2" name="Track 2: Guitar"      note="1" channel="16" velocity="100"/>
+        <Toggle id="track3" name="Track 3: Voice"       note="2" channel="16" velocity="100"/>
+        <Toggle id="track4" name="Track 4: Instruments" note="3" channel="16" velocity="100"/>
+        <Toggle id="track5" name="Track 5: Vocals"      note="4" channel="16" velocity="100"/>
+        <Toggle id="track6" name="Track 6: Votar"       note="5" channel="16" velocity="100"/>
+    </Toggles>
+
+    <Programs>
+        <!-- This program explicitly defines all track states. -->
+        <Program name="Flügelhorn" triggerNote="85" programCC="119" programValue="0" volumeCC="7" volumeValue="127">
+            <InitialState toggleId="track1" enabled="false" />
+            <InitialState toggleId="track2" enabled="true" />
+            <InitialState toggleId="track3" enabled="true" />
+            <InitialState toggleId="track4" enabled="true" />
+            <InitialState toggleId="track5" enabled="true" />
+            <InitialState toggleId="track6" enabled="false" />
+        </Program>
+        <!-- This program only defines track 3. Tracks 1 and 2 will use the DefaultTrackStates. -->
+        <Program name="Martin J-40" triggerNote="84" programCC="119" programValue="1" volumeCC="7" volumeValue="96">
+            <InitialState toggleId="track1" enabled="false" />
+            <InitialState toggleId="track2" enabled="true" />
+            <InitialState toggleId="track3" enabled="false" />
+            <InitialState toggleId="track4" enabled="true" />
+            <InitialState toggleId="track5" enabled="true" />
+            <InitialState toggleId="track6" enabled="false" />
+        </Program>
+        <!-- This program defines no states, so all tracks will be set to their default state. -->
+        <Program name="EMP Mark II (Wah)" triggerNote="83" programCC="119" programValue="2" volumeCC="7" volumeValue="112" />
+        <Program name="Votar" triggerNote="82" programCC="119" programValue="3" volumeCC="7" volumeValue="70" >
+            <InitialState toggleId="track1" enabled="false" />
+            <InitialState toggleId="track2" enabled="true" />
+            <InitialState toggleId="track3" enabled="false" />
+            <InitialState toggleId="track4" enabled="false" />
+            <InitialState toggleId="track5" enabled="false" />
+            <InitialState toggleId="track6" enabled="true" />
+        </Program>
+        <Program name="Program 5" triggerNote="81" programCC="119" programValue="4" volumeCC="7" volumeValue="70" />
+        <Program name="Program 6" triggerNote="80" programCC="119" programValue="5" volumeCC="7" volumeValue="64" />
+        <Program name="Program 7" triggerNote="79" programCC="119" programValue="6" volumeCC="7" volumeValue="108" />
+        <Program name="Program 8" triggerNote="78" programCC="119" programValue="7" volumeCC="7" volumeValue="112" />
+        <Program name="Program 9" triggerNote="77" programCC="119" programValue="8" volumeCC="7" volumeValue="125" />
+        <Program name="Program 10" triggerNote="76" programCC="119" programValue="9" volumeCC="7" volumeValue="125" />
+    </Programs>
+    
+</MidiProcessorPreset>

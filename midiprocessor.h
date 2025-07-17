@@ -42,7 +42,8 @@ private:
     const Preset& m_preset;
     std::map<int, int> m_programRulesMap;
 
-    void toggleTrack_unlocked(const std::string& trackId);
+    // NEW: A robust helper function that sets a track to a specific state.
+    void setTrackState_unlocked(const std::string& trackId, bool newState);
 
     // Static MIDI callback functions
     static void guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData);

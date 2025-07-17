@@ -1,5 +1,6 @@
 # Build products
-build/
+build/*
+!build/preset.xml
 *.o
 *.a
 *.so

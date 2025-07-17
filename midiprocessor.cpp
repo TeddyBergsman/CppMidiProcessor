@@ -95,20 +95,14 @@ void MidiProcessor::applyProgram(int programIndex) {
     emit logMessage("Applied program: " + program.name.toStdString());
     emit programChanged(currentProgramIndex);
 
-    // Set initial track states for this program, using the default states as a fallback.
+    // Set track states based on the program, using defaults as a fallback.
     for (const auto& toggle : m_preset.toggles) {
         std::string toggleIdStd = toggle.id.toStdString();
-        
-        // 1. Get the global default state for this toggle from settings.
         bool defaultState = m_preset.settings.defaultTrackStates.value(toggle.id, false);
-        
-        // 2. The desired state is the program's specific state, or the global default if not specified.
         bool desiredState = program.initialStates.value(toggle.id, defaultState);
         
-        // 3. If the current state is different from the desired state, toggle it.
-        if (trackStates.at(toggleIdStd) != desiredState) {
-            toggleTrack_unlocked(toggleIdStd);
-        }
+        // Use the new, robust setter function. This is the core of the fix.
+        setTrackState_unlocked(toggleIdStd, desiredState);
     }
 }
 
@@ -123,19 +117,27 @@ void MidiProcessor::sendNoteToggle(int note, int channel, int velocity) {
     midiOut->sendMessage(&msg);
 }
 
+// Public function for manual toggling from the UI.
 void MidiProcessor::toggleTrack(const std::string& trackId) {
     std::lock_guard<std::mutex> lock(stateMutex);
-    toggleTrack_unlocked(trackId);
+    // Determine the desired new state by inverting the current one.
+    bool newState = !trackStates.at(trackId);
+    // Call the robust setter function with the desired state.
+    setTrackState_unlocked(trackId, newState);
 }
 
-void MidiProcessor::toggleTrack_unlocked(const std::string& trackId) {
-    for (const auto& toggle : m_preset.toggles) {
-        if (toggle.id.toStdString() == trackId) {
-            sendNoteToggle(toggle.note, toggle.channel, toggle.velocity);
-            trackStates[trackId] = !trackStates[trackId];
-            emit logMessage("Toggled track: " + trackId + " to " + (trackStates[trackId] ? "ON" : "OFF"));
-            emit trackStateUpdated(trackId, trackStates[trackId]);
-            return;
+// NEW: Private helper that robustly SETS a track to a specific state.
+void MidiProcessor::setTrackState_unlocked(const std::string& trackId, bool newState) {
+    // Only send a MIDI message and update state if the state is actually changing.
+    if (trackStates.at(trackId) != newState) {
+        for (const auto& toggle : m_preset.toggles) {
+            if (toggle.id.toStdString() == trackId) {
+                sendNoteToggle(toggle.note, toggle.channel, toggle.velocity);
+                trackStates[trackId] = newState; // Set the new state directly.
+                emit logMessage("Set track: " + trackId + " to " + (newState ? "ON" : "OFF"));
+                emit trackStateUpdated(trackId, newState);
+                return;
+            }
         }
     }
 }

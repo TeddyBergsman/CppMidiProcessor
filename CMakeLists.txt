@@ -11,17 +11,20 @@ set(CMAKE_AUTOUIC ON)
 
 # Find Qt6. This requires CMAKE_PREFIX_PATH on Apple Silicon Macs.
 set(CMAKE_PREFIX_PATH "/opt/homebrew") # Use /usr/local for Intel Macs.
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Xml)
 
 
 # --- Define the Executable Target ---
-# Add RtMidi.cpp to the list of source files to be compiled.
+# Add all source files to the list to be compiled.
 add_executable(CppMidiProcessor
   main.cpp
   mainwindow.h
   mainwindow.cpp
   midiprocessor.h
   midiprocessor.cpp
+  PresetData.h
+  PresetLoader.h
+  PresetLoader.cpp
   RtMidi.h
   RtMidi.cpp
 )
@@ -35,6 +38,7 @@ target_compile_definitions(CppMidiProcessor PRIVATE __MACOSX_CORE__)
 target_link_libraries(CppMidiProcessor
   PRIVATE
   Qt6::Widgets
+  Qt6::Xml
   "-framework CoreMIDI"
   "-framework CoreAudio"
   "-framework CoreFoundation"

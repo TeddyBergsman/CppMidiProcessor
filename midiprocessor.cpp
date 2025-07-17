@@ -2,40 +2,21 @@
 #include <iostream>
 #include <algorithm>
 
-// --- Configuration ---
-const std::string GUITAR_IN_PORT_NAME = "IAC Driver MG3 Guitar";
-const std::string VOICE_IN_PORT_NAME  = "IAC Driver MG3 Voice";
-const std::string CONTROLLER_OUT_PORT_NAME = "IAC Driver Controller";
-const int COMMAND_NOTE = 86;
-const int PROGRAM_SELECT_CC = 119;
-
-// The actual DATA for the vectors remains here.
-const std::vector<ProgramConfig> programConfigs = {
-    { "Program 1", 85, 0, 127, { {"track1", false}, {"track2", true},  {"track3", true} } },
-    { "Program 2", 84, 1, 96,  { {"track1", false}, {"track2", true},  {"track3", false} } },
-    { "Program 3", 83, 2, 112, {} },
-    { "Program 4", 82, 3, 70,  {} },
-    { "Program 5", 81, 4, 70,  {} },
-    { "Program 6", 80, 5, 64,  {} },
-    { "Program 7", 79, 6, 108, {} },
-    { "Program 8", 78, 7, 112, {} },
-    { "Program 9", 77, 8, 125, {} },
-    { "Program 10", 76, 9, 125,{} }
-};
-const std::map<std::string, int> trackToggleNotes = { {"track1", 0}, {"track2", 1}, {"track3", 2} };
-const std::map<std::string, bool> defaultProgramTrackStates = { {"track1", true}, {"track2", false}, {"track3", false} };
-std::map<int, int> programRulesMap;
-
-
-// --- Implementation ---
-
-MidiProcessor::MidiProcessor(QObject *parent) : QObject(parent) {
-    // Initialize state
-    trackStates = { {"track1", false}, {"track2", true}, {"track3", true} };
-    currentProgramIndex = 0;
-    for (size_t i = 0; i < programConfigs.size(); ++i) {
-        programRulesMap[programConfigs[i].note] = i;
+MidiProcessor::MidiProcessor(const Preset& preset, QObject *parent) 
+    : QObject(parent), m_preset(preset) {
+    
+    // Build the map for program trigger notes.
+    for (int i = 0; i < m_preset.programs.size(); ++i) {
+        m_programRulesMap[m_preset.programs[i].triggerNote] = i;
     }
+
+    // Initialize all track states to be 'off' (false) initially.
+    // The correct state will be set when the first program is applied.
+    for (const auto& toggle : m_preset.toggles) {
+        trackStates[toggle.id.toStdString()] = false;
+    }
+    
+    currentProgramIndex = -1; // Indicates no program is initially active.
 }
 
 MidiProcessor::~MidiProcessor() {
@@ -49,19 +30,6 @@ bool MidiProcessor::initialize() {
     midiOut = new RtMidiOut();
     midiInVoice = new RtMidiIn();
 
-    // You can remove this debugging code now if you wish
-    std::cout << "\n--- Available MIDI Input Ports ---" << std::endl;
-    for (unsigned int i = 0; i < midiInGuitar->getPortCount(); ++i) {
-        std::cout << "Input Port " << i << ": " << midiInGuitar->getPortName(i) << std::endl;
-    }
-
-    std::cout << "\n--- Available MIDI Output Ports ---" << std::endl;
-    for (unsigned int i = 0; i < midiOut->getPortCount(); ++i) {
-        std::cout << "Output Port " << i << ": " << midiOut->getPortName(i) << std::endl;
-    }
-    std::cout << "------------------------------------\n" << std::endl;
-
-
     auto find_port = [](RtMidi& midi, const std::string& name) {
         for (unsigned int i = 0; i < midi.getPortCount(); i++) {
             if (midi.getPortName(i).find(name) != std::string::npos) return (int)i;
@@ -69,12 +37,12 @@ bool MidiProcessor::initialize() {
         return -1;
     };
 
-    int guitarPort = find_port(*midiInGuitar, GUITAR_IN_PORT_NAME);
-    int voicePort = find_port(*midiInVoice, VOICE_IN_PORT_NAME);
-    int outPort = find_port(*midiOut, CONTROLLER_OUT_PORT_NAME);
+    int guitarPort = find_port(*midiInGuitar, m_preset.settings.ports["GUITAR_IN"].toStdString());
+    int voicePort = find_port(*midiInVoice, m_preset.settings.ports["VOICE_IN"].toStdString());
+    int outPort = find_port(*midiOut, m_preset.settings.ports["CONTROLLER_OUT"].toStdString());
 
     if (guitarPort == -1 || outPort == -1 || voicePort == -1) {
-        emit logMessage("ERROR: Could not find all MIDI ports. Check names in code.");
+        emit logMessage("ERROR: Could not find all MIDI ports. Check names in preset.xml.");
         return false;
     }
 
@@ -89,13 +57,10 @@ bool MidiProcessor::initialize() {
 
     emit logMessage("SUCCESS: MIDI ports opened and listeners attached.");
     
-    // Set the initial program state. This also emits the programChanged signal
-    // which will cause the GUI to highlight the correct button.
+    // Apply the first program and sync the UI.
     applyProgram(0);
 
-    // Force an update for the initial track toggle states. This is necessary because
-    // applyProgram only sends signals for tracks whose state *changes*, and on
-    // startup, there is no change.
+    // After applying the first program, emit the current state of all tracks to sync the UI.
     std::lock_guard<std::mutex> lock(stateMutex);
     for (const auto& pair : trackStates) {
         emit trackStateUpdated(pair.first, pair.second);
@@ -105,86 +70,99 @@ bool MidiProcessor::initialize() {
 }
 
 void MidiProcessor::applyProgram(int programIndex) {
-    if (programIndex >= programConfigs.size()) return;
+    if (programIndex < 0 || programIndex >= m_preset.programs.size()) return;
 
-    std::lock_guard<std::mutex> lock(stateMutex); // Lock is acquired ONCE here.
-    const auto& rule = programConfigs[programIndex];
+    std::lock_guard<std::mutex> lock(stateMutex);
+    const auto& program = m_preset.programs[programIndex];
     currentProgramIndex = programIndex;
 
-    std::vector<unsigned char> msg;
-    msg.push_back(0xB0); msg.push_back(PROGRAM_SELECT_CC); msg.push_back(rule.program);
-    midiOut->sendMessage(&msg);
+    // Send Program Change via specified Control Change
+    std::vector<unsigned char> prog_msg = {
+        (unsigned char)(0xB0), // CC on Channel 1
+        (unsigned char)program.programCC,
+        (unsigned char)program.programValue
+    };
+    midiOut->sendMessage(&prog_msg);
 
-    msg[1] = 7; msg[2] = rule.volume;
-    midiOut->sendMessage(&msg);
+    // Send Volume via specified Control Change
+    std::vector<unsigned char> vol_msg = {
+        (unsigned char)(0xB0), // CC on Channel 1
+        (unsigned char)program.volumeCC,
+        (unsigned char)program.volumeValue
+    };
+    midiOut->sendMessage(&vol_msg);
 
-    emit logMessage("Applied program: " + rule.name);
+    emit logMessage("Applied program: " + program.name.toStdString());
     emit programChanged(currentProgramIndex);
 
-    const auto& desiredStates = rule.trackStates.empty() ? defaultProgramTrackStates : rule.trackStates;
-    for (const auto& pair : desiredStates) {
-        if (trackStates.at(pair.first) != pair.second) {
-            // *** CHANGED: Call the unlocked helper function ***
-            toggleTrack_unlocked(pair.first);
+    // Set initial track states for this program, using the default states as a fallback.
+    for (const auto& toggle : m_preset.toggles) {
+        std::string toggleIdStd = toggle.id.toStdString();
+        
+        // 1. Get the global default state for this toggle from settings.
+        bool defaultState = m_preset.settings.defaultTrackStates.value(toggle.id, false);
+        
+        // 2. The desired state is the program's specific state, or the global default if not specified.
+        bool desiredState = program.initialStates.value(toggle.id, defaultState);
+        
+        // 3. If the current state is different from the desired state, toggle it.
+        if (trackStates.at(toggleIdStd) != desiredState) {
+            toggleTrack_unlocked(toggleIdStd);
         }
     }
 }
 
-void MidiProcessor::sendNoteToggle(int noteNumber) {
+void MidiProcessor::sendNoteToggle(int note, int channel, int velocity) {
+    if (channel < 1 || channel > 16) return;
+    unsigned char chan = channel - 1;
+
     std::vector<unsigned char> msg;
-    msg.push_back(0x9F); msg.push_back(noteNumber); msg.push_back(100);
+    msg = {(unsigned char)(0x90 | chan), (unsigned char)note, (unsigned char)velocity};
     midiOut->sendMessage(&msg);
-    msg[0] = 0x8F; msg[2] = 0;
+    msg[0] = (0x80 | chan); msg[2] = 0;
     midiOut->sendMessage(&msg);
 }
 
-// *** CHANGED: The public toggleTrack now just locks and calls the helper ***
 void MidiProcessor::toggleTrack(const std::string& trackId) {
     std::lock_guard<std::mutex> lock(stateMutex);
     toggleTrack_unlocked(trackId);
 }
 
-// *** NEW: The private helper contains the core logic without locking ***
 void MidiProcessor::toggleTrack_unlocked(const std::string& trackId) {
-    // This function assumes the mutex is already locked by the calling function.
-    sendNoteToggle(trackToggleNotes.at(trackId));
-    trackStates[trackId] = !trackStates[trackId];
-    emit logMessage("Toggled track: " + trackId);
-    emit trackStateUpdated(trackId, trackStates[trackId]);
+    for (const auto& toggle : m_preset.toggles) {
+        if (toggle.id.toStdString() == trackId) {
+            sendNoteToggle(toggle.note, toggle.channel, toggle.velocity);
+            trackStates[trackId] = !trackStates[trackId];
+            emit logMessage("Toggled track: " + trackId + " to " + (trackStates[trackId] ? "ON" : "OFF"));
+            emit trackStateUpdated(trackId, trackStates[trackId]);
+            return;
+        }
+    }
 }
 
-
-// --- Callbacks ---
 void MidiProcessor::guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
     MidiProcessor* self = static_cast<MidiProcessor*>(userData);
     unsigned char status = message->at(0) & 0xF0;
 
-    // Check for note-on messages to handle command logic
-    if (status == 0x90 && message->at(2) > 0) { // Note On
+    if (status == 0x90 && message->at(2) > 0) {
         int note = message->at(1);
         
-        // Case 1: The note is the COMMAND_NOTE. Enter command mode and absorb the note.
-        if (note == COMMAND_NOTE) {
+        if (note == self->m_preset.settings.commandNote) {
             self->inCommandMode = true;
-            return; // Do not pass the note through
+            return;
         } 
-        // Case 2: We are already in command mode. This must be the program selection note.
         else if (self->inCommandMode) {
-            // Apply the program if the note is a valid program trigger
-            if (programRulesMap.count(note)) {
-                QMetaObject::invokeMethod(self, [=](){
-                    self->applyProgram(programRulesMap.at(note));
+            if (self->m_programRulesMap.count(note)) {
+                QMetaObject::invokeMethod(self, [self, note](){
+                    self->applyProgram(self->m_programRulesMap.at(note));
                 }, Qt::QueuedConnection);
             }
-            // Always exit command mode after the next note is received.
             self->inCommandMode = false;
-            return; // Absorb the program selection note
+            return;
         }
     }
 
-    // If the note was not a command note, it's a musical note that should be passed through.
-    // Note-off messages for command/program notes will also be passed through, which is harmless.
-    message->at(0) = status | 0x00; // Force to channel 1
+    message->at(0) = (message->at(0) & 0xF0) | 0x00; // Force to channel 1
     self->midiOut->sendMessage(message);
 }
 
@@ -192,10 +170,12 @@ void MidiProcessor::voiceCallback(double deltatime, std::vector<unsigned char>* 
     MidiProcessor* self = static_cast<MidiProcessor*>(userData);
     unsigned char status = message->at(0) & 0xF0;
     
-    if (status == 0xD0) { // Aftertouch
+    if (status == 0xD0) { // Voice channel pressure (aftertouch)
         int value = message->at(1);
         int breathValue = std::max(0, value - 16);
-        std::vector<unsigned char> cc_msg = {0xB0, 2, (unsigned char)breathValue};
+        std::vector<unsigned char> cc_msg = {0xB0, 2, (unsigned char)breathValue}; // CC 2 (Breath) on channel 1
         self->midiOut->sendMessage(&cc_msg);
     }
 }
+
+#include "midiprocessor.moc"

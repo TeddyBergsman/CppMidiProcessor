@@ -8,27 +8,13 @@
 #include <atomic>
 #include <mutex>
 #include "RtMidi.h"
+#include "PresetData.h"
 
-// Define the struct here so it can be shared.
-struct ProgramConfig {
-    std::string name;
-    int note;
-    int program;
-    int volume;
-    std::map<std::string, bool> trackStates;
-};
-
-// Declare the global configuration vectors as 'extern'.
-// This tells other files "these variables exist somewhere else".
-extern const std::vector<ProgramConfig> programConfigs;
-extern const std::map<std::string, int> trackToggleNotes;
-
-// Inheriting from QObject is necessary to use Qt's signal and slot system.
 class MidiProcessor : public QObject {
-    Q_OBJECT // This macro must be included for any object that has signals or slots.
+    Q_OBJECT
 
 public:
-    explicit MidiProcessor(QObject *parent = nullptr);
+    explicit MidiProcessor(const Preset& preset, QObject *parent = nullptr);
     ~MidiProcessor();
 
     bool initialize();
@@ -36,7 +22,6 @@ public:
     void toggleTrack(const std::string& trackId);
 
 signals:
-    // Signals are messages the MIDI thread can safely send to the GUI thread.
     void programChanged(int newProgramIndex);
     void trackStateUpdated(const std::string& trackId, bool newState);
     void logMessage(const std::string& message);
@@ -53,14 +38,17 @@ private:
     std::map<std::string, bool> trackStates;
     int currentProgramIndex;
     
-    // NEW: A helper function that assumes the mutex is already locked
+    // Loaded Configuration
+    const Preset& m_preset;
+    std::map<int, int> m_programRulesMap;
+
     void toggleTrack_unlocked(const std::string& trackId);
 
     // Static MIDI callback functions
     static void guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData);
     static void voiceCallback(double deltatime, std::vector<unsigned char>* message, void* userData);
 
-    void sendNoteToggle(int noteNumber);
+    void sendNoteToggle(int note, int channel, int velocity);
 };
 
 #endif // MIDIPROCESSOR_H

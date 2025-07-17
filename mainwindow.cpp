@@ -1,42 +1,43 @@
 #include "mainwindow.h"
 #include <QtWidgets>
-#include "midiprocessor.h"
 
+MainWindow::MainWindow(const Preset& preset, QWidget *parent) 
+    : QMainWindow(parent) {
 
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
-    midiProcessor = new MidiProcessor(this);
+    // MainWindow now owns MidiProcessor
+    m_midiProcessor = new MidiProcessor(preset, this);
 
-    createWidgets();
+    createWidgets(preset);
     createLayout();
     createConnections();
 
-    setWindowTitle("C++ MIDI Processor");
+    setWindowTitle(preset.name);
     
-    // Start the MIDI processing
-    if (!midiProcessor->initialize()) {
-        // If it fails, show an error message
-        QMessageBox::critical(this, "MIDI Error", "Could not initialize MIDI ports. Please check connections and port names in midiprocessor.cpp.");
+    // Initialize the processor after the UI is ready to receive signals
+    if (!m_midiProcessor->initialize()) {
+        QMessageBox::critical(this, "MIDI Error", "Could not initialize MIDI ports. Please check connections and port names in preset.xml.");
     }
 }
 
 MainWindow::~MainWindow() {
-    // No need to delete child widgets, Qt handles it.
+    // Qt's parent-child ownership will automatically delete m_midiProcessor
 }
 
-void MainWindow::createWidgets() {
+void MainWindow::createWidgets(const Preset& preset) {
     centralWidget = new QWidget;
     setCentralWidget(centralWidget);
 
-    // Program Buttons
-    for (const auto& config : programConfigs) {
-        programButtons.push_back(new QPushButton(QString::fromStdString(config.name)));
-        programButtons.back()->setCheckable(true); // Make the button checkable
+    // Dynamically create program buttons from preset data
+    for (const auto& program : preset.programs) {
+        QPushButton* button = new QPushButton(program.name);
+        button->setCheckable(true);
+        programButtons.push_back(button);
     }
 
-    // Track Checkboxes
-    trackCheckBoxes["track1"] = new QCheckBox("Track 1: Chromatic Guitar");
-    trackCheckBoxes["track2"] = new QCheckBox("Track 2: Guitar");
-    trackCheckBoxes["track3"] = new QCheckBox("Track 3: Voice");
+    // Dynamically create track checkboxes from preset data
+    for (const auto& toggle : preset.toggles) {
+        trackCheckBoxes[toggle.id.toStdString()] = new QCheckBox(toggle.name);
+    }
 
     // Log Console
     logConsole = new QTextEdit;
@@ -46,7 +47,6 @@ void MainWindow::createWidgets() {
 void MainWindow::createLayout() {
     mainLayout = new QVBoxLayout(centralWidget);
 
-    // Programs Box
     QGroupBox *programBox = new QGroupBox("Programs");
     QVBoxLayout *programLayout = new QVBoxLayout;
     for (auto button : programButtons) {
@@ -55,46 +55,47 @@ void MainWindow::createLayout() {
     programBox->setLayout(programLayout);
     mainLayout->addWidget(programBox);
 
-    // Tracks Box
     QGroupBox *trackBox = new QGroupBox("Track Toggles");
     QVBoxLayout *trackLayout = new QVBoxLayout;
+    // Iterate through the map in a defined order for consistent layout
+    std::vector<std::string> sorted_keys;
     for(auto const& [key, val] : trackCheckBoxes) {
-        trackLayout->addWidget(val);
+        sorted_keys.push_back(key);
+    }
+    std::sort(sorted_keys.begin(), sorted_keys.end());
+    for(const auto& key : sorted_keys) {
+        trackLayout->addWidget(trackCheckBoxes.at(key));
     }
     trackBox->setLayout(trackLayout);
     mainLayout->addWidget(trackBox);
 
-    // Console Box
     QGroupBox *consoleBox = new QGroupBox("Debug Console");
     QVBoxLayout *consoleLayout = new QVBoxLayout;
     consoleLayout->addWidget(logConsole);
     consoleBox->setLayout(consoleLayout);
-    mainLayout->addWidget(consoleBox, 1); // The '1' makes it stretch
+    mainLayout->addWidget(consoleBox, 1);
 }
 
 void MainWindow::createConnections() {
-    // Connect GUI actions to MIDI processor slots
-    for (int i = 0; i < programButtons.size(); ++i) {
+    for (size_t i = 0; i < programButtons.size(); ++i) {
         connect(programButtons[i], &QPushButton::clicked, this, [this, i]() {
-            midiProcessor->applyProgram(i);
+            m_midiProcessor->applyProgram(i);
         });
     }
 
     for(auto const& [key, checkbox] : trackCheckBoxes) {
         connect(checkbox, &QCheckBox::clicked, this, [this, key](){
-            midiProcessor->toggleTrack(key);
+            m_midiProcessor->toggleTrack(key);
         });
     }
 
-    // Connect MIDI processor signals to GUI update slots
-    connect(midiProcessor, &MidiProcessor::programChanged, this, &MainWindow::updateProgramUI);
-    connect(midiProcessor, &MidiProcessor::trackStateUpdated, this, &MainWindow::updateTrackUI);
-    connect(midiProcessor, &MidiProcessor::logMessage, this, &MainWindow::logToConsole);
+    connect(m_midiProcessor, &MidiProcessor::programChanged, this, &MainWindow::updateProgramUI);
+    connect(m_midiProcessor, &MidiProcessor::trackStateUpdated, this, &MainWindow::updateTrackUI);
+    connect(m_midiProcessor, &MidiProcessor::logMessage, this, &MainWindow::logToConsole);
 }
 
-// --- UI Update Slots ---
 void MainWindow::updateProgramUI(int newProgramIndex) {
-    for (int i = 0; i < programButtons.size(); ++i) {
+    for (size_t i = 0; i < programButtons.size(); ++i) {
         programButtons[i]->setChecked(i == newProgramIndex);
     }
 }

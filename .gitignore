@@ -1,0 +1,12 @@
+# Build products
+build/
+*.o
+*.a
+*.so
+*.dylib
+
+# macOS
+.DS_Store
+
+# User-specific files
+.vscode/

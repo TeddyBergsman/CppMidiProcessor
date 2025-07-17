@@ -157,28 +157,35 @@ void MidiProcessor::toggleTrack_unlocked(const std::string& trackId) {
 // --- Callbacks ---
 void MidiProcessor::guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
     MidiProcessor* self = static_cast<MidiProcessor*>(userData);
-
-    // This is running on a high-priority thread.
-    // We must pass MIDI through with ZERO delay.
     unsigned char status = message->at(0) & 0xF0;
-    message->at(0) = status | 0x00; // Force to channel 1
-    self->midiOut->sendMessage(message);
 
-    // Now, handle command logic
+    // Check for note-on messages to handle command logic
     if (status == 0x90 && message->at(2) > 0) { // Note On
         int note = message->at(1);
+        
+        // Case 1: The note is the COMMAND_NOTE. Enter command mode and absorb the note.
         if (note == COMMAND_NOTE) {
             self->inCommandMode = true;
-        } else if (self->inCommandMode) {
+            return; // Do not pass the note through
+        } 
+        // Case 2: We are already in command mode. This must be the program selection note.
+        else if (self->inCommandMode) {
+            // Apply the program if the note is a valid program trigger
             if (programRulesMap.count(note)) {
-                // We use QMetaObject::invokeMethod to safely call it on the main GUI thread.
                 QMetaObject::invokeMethod(self, [=](){
                     self->applyProgram(programRulesMap.at(note));
                 }, Qt::QueuedConnection);
             }
+            // Always exit command mode after the next note is received.
             self->inCommandMode = false;
+            return; // Absorb the program selection note
         }
     }
+
+    // If the note was not a command note, it's a musical note that should be passed through.
+    // Note-off messages for command/program notes will also be passed through, which is harmless.
+    message->at(0) = status | 0x00; // Force to channel 1
+    self->midiOut->sendMessage(message);
 }
 
 void MidiProcessor::voiceCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {

@@ -88,7 +88,19 @@ bool MidiProcessor::initialize() {
     midiInVoice->ignoreTypes(true, true, true);
 
     emit logMessage("SUCCESS: MIDI ports opened and listeners attached.");
+    
+    // Set the initial program state. This also emits the programChanged signal
+    // which will cause the GUI to highlight the correct button.
     applyProgram(0);
+
+    // Force an update for the initial track toggle states. This is necessary because
+    // applyProgram only sends signals for tracks whose state *changes*, and on
+    // startup, there is no change.
+    std::lock_guard<std::mutex> lock(stateMutex);
+    for (const auto& pair : trackStates) {
+        emit trackStateUpdated(pair.first, pair.second);
+    }
+
     return true;
 }
 

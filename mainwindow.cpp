@@ -30,6 +30,7 @@ void MainWindow::createWidgets() {
     // Program Buttons
     for (const auto& config : programConfigs) {
         programButtons.push_back(new QPushButton(QString::fromStdString(config.name)));
+        programButtons.back()->setCheckable(true); // Make the button checkable
     }
 
     // Track Checkboxes

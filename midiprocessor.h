@@ -9,6 +9,7 @@
 #include <mutex>
 #include "RtMidi.h"
 
+// Define the struct here so it can be shared.
 struct ProgramConfig {
     std::string name;
     int note;
@@ -17,8 +18,8 @@ struct ProgramConfig {
     std::map<std::string, bool> trackStates;
 };
 
-// 2. DECLARE the global configuration vectors as 'extern'.
-//    This tells other files "these variables exist somewhere else".
+// Declare the global configuration vectors as 'extern'.
+// This tells other files "these variables exist somewhere else".
 extern const std::vector<ProgramConfig> programConfigs;
 extern const std::map<std::string, int> trackToggleNotes;
 
@@ -51,6 +52,9 @@ private:
     std::mutex stateMutex;
     std::map<std::string, bool> trackStates;
     int currentProgramIndex;
+    
+    // NEW: A helper function that assumes the mutex is already locked
+    void toggleTrack_unlocked(const std::string& trackId);
 
     // Static MIDI callback functions
     static void guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData);

@@ -9,9 +9,6 @@ const std::string CONTROLLER_OUT_PORT_NAME = "IAC Driver Controller";
 const int COMMAND_NOTE = 86;
 const int PROGRAM_SELECT_CC = 119;
 
-// ******************** START OF CHANGES ********************
-// The "struct ProgramConfig { ... };" definition has been REMOVED from here.
-
 // The actual DATA for the vectors remains here.
 const std::vector<ProgramConfig> programConfigs = {
     { "Program 1", 85, 0, 127, { {"track1", false}, {"track2", true},  {"track3", true} } },
@@ -36,7 +33,7 @@ MidiProcessor::MidiProcessor(QObject *parent) : QObject(parent) {
     // Initialize state
     trackStates = { {"track1", false}, {"track2", true}, {"track3", true} };
     currentProgramIndex = 0;
-    for (int i = 0; i < programConfigs.size(); ++i) {
+    for (size_t i = 0; i < programConfigs.size(); ++i) {
         programRulesMap[programConfigs[i].note] = i;
     }
 }
@@ -52,6 +49,7 @@ bool MidiProcessor::initialize() {
     midiOut = new RtMidiOut();
     midiInVoice = new RtMidiIn();
 
+    // You can remove this debugging code now if you wish
     std::cout << "\n--- Available MIDI Input Ports ---" << std::endl;
     for (unsigned int i = 0; i < midiInGuitar->getPortCount(); ++i) {
         std::cout << "Input Port " << i << ": " << midiInGuitar->getPortName(i) << std::endl;
@@ -62,8 +60,6 @@ bool MidiProcessor::initialize() {
         std::cout << "Output Port " << i << ": " << midiOut->getPortName(i) << std::endl;
     }
     std::cout << "------------------------------------\n" << std::endl;
-
-    // ********************* END OF DEBUGGING CODE *********************
 
 
     auto find_port = [](RtMidi& midi, const std::string& name) {
@@ -99,7 +95,7 @@ bool MidiProcessor::initialize() {
 void MidiProcessor::applyProgram(int programIndex) {
     if (programIndex >= programConfigs.size()) return;
 
-    std::lock_guard<std::mutex> lock(stateMutex);
+    std::lock_guard<std::mutex> lock(stateMutex); // Lock is acquired ONCE here.
     const auto& rule = programConfigs[programIndex];
     currentProgramIndex = programIndex;
 
@@ -116,7 +112,8 @@ void MidiProcessor::applyProgram(int programIndex) {
     const auto& desiredStates = rule.trackStates.empty() ? defaultProgramTrackStates : rule.trackStates;
     for (const auto& pair : desiredStates) {
         if (trackStates.at(pair.first) != pair.second) {
-            toggleTrack(pair.first);
+            // *** CHANGED: Call the unlocked helper function ***
+            toggleTrack_unlocked(pair.first);
         }
     }
 }
@@ -129,13 +126,21 @@ void MidiProcessor::sendNoteToggle(int noteNumber) {
     midiOut->sendMessage(&msg);
 }
 
+// *** CHANGED: The public toggleTrack now just locks and calls the helper ***
 void MidiProcessor::toggleTrack(const std::string& trackId) {
     std::lock_guard<std::mutex> lock(stateMutex);
+    toggleTrack_unlocked(trackId);
+}
+
+// *** NEW: The private helper contains the core logic without locking ***
+void MidiProcessor::toggleTrack_unlocked(const std::string& trackId) {
+    // This function assumes the mutex is already locked by the calling function.
     sendNoteToggle(trackToggleNotes.at(trackId));
     trackStates[trackId] = !trackStates[trackId];
     emit logMessage("Toggled track: " + trackId);
     emit trackStateUpdated(trackId, trackStates[trackId]);
 }
+
 
 // --- Callbacks ---
 void MidiProcessor::guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
@@ -154,7 +159,6 @@ void MidiProcessor::guitarCallback(double deltatime, std::vector<unsigned char>*
             self->inCommandMode = true;
         } else if (self->inCommandMode) {
             if (programRulesMap.count(note)) {
-                // To call a member function from a static function, we need to do it this way.
                 // We use QMetaObject::invokeMethod to safely call it on the main GUI thread.
                 QMetaObject::invokeMethod(self, [=](){
                     self->applyProgram(programRulesMap.at(note));

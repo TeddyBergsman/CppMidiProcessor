@@ -27,7 +27,9 @@ public:
 private slots:
     void updateProgramUI(int newProgramIndex);
     void updateTrackUI(const std::string& trackId, bool newState);
-    void logToConsole(const std::string& message);
+    // FIX: Changed signature to match the signal's type
+    void logToConsole(const QString& message); 
+    void onVerboseLogToggled(bool checked);
 
 private:
     void createWidgets(const Preset& preset);
@@ -43,6 +45,7 @@ private:
     std::vector<QPushButton*> programButtons;
     std::map<std::string, QCheckBox*> trackCheckBoxes;
     QTextEdit* logConsole;
+    QCheckBox* verboseLogCheckBox;
 };
 
 #endif // MAINWINDOW_H

@@ -50,8 +50,14 @@ void PresetLoader::parseSettings(QXmlStreamReader& xml, Preset& preset) {
             preset.settings.ports[portId] = portName;
         } else if (elementName == "CommandNote") {
             preset.settings.commandNote = xml.readElementText().toInt();
-        } else if (elementName == "DefaultTrackStates") { // NEW
+        } else if (elementName == "DefaultTrackStates") {
             parseDefaultTrackStates(xml, preset);
+        } else if (elementName == "PitchBendDeadZoneCents") { // NEW
+            preset.settings.pitchBendDeadZoneCents = xml.readElementText().toInt();
+        } else if (elementName == "PitchBendDownRangeCents") { // NEW
+            preset.settings.pitchBendDownRangeCents = xml.readElementText().toInt();
+        } else if (elementName == "PitchBendUpRangeCents") { // NEW
+            preset.settings.pitchBendUpRangeCents = xml.readElementText().toInt();
         } else {
             xml.skipCurrentElement();
         }

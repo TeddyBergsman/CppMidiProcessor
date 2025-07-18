@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include <QtWidgets>
+#include <algorithm>
 
 MainWindow::MainWindow(const Preset& preset, QWidget *parent) 
     : QMainWindow(parent) {
@@ -42,6 +43,10 @@ void MainWindow::createWidgets(const Preset& preset) {
     // Log Console
     logConsole = new QTextEdit;
     logConsole->setReadOnly(true);
+
+    // Verbose Log Checkbox
+    verboseLogCheckBox = new QCheckBox("Verbose Pitch-Bend Logging");
+    verboseLogCheckBox->setChecked(false);
 }
 
 void MainWindow::createLayout() {
@@ -57,7 +62,6 @@ void MainWindow::createLayout() {
 
     QGroupBox *trackBox = new QGroupBox("Track Toggles");
     QVBoxLayout *trackLayout = new QVBoxLayout;
-    // Iterate through the map in a defined order for consistent layout
     std::vector<std::string> sorted_keys;
     for(auto const& [key, val] : trackCheckBoxes) {
         sorted_keys.push_back(key);
@@ -71,6 +75,7 @@ void MainWindow::createLayout() {
 
     QGroupBox *consoleBox = new QGroupBox("Debug Console");
     QVBoxLayout *consoleLayout = new QVBoxLayout;
+    consoleLayout->addWidget(verboseLogCheckBox);
     consoleLayout->addWidget(logConsole);
     consoleBox->setLayout(consoleLayout);
     mainLayout->addWidget(consoleBox, 1);
@@ -84,14 +89,20 @@ void MainWindow::createConnections() {
     }
 
     for(auto const& [key, checkbox] : trackCheckBoxes) {
-        connect(checkbox, &QCheckBox::clicked, this, [this, key](){
-            m_midiProcessor->toggleTrack(key);
+        // FIX: Use C++14 init-capture to be fully C++17 compliant and remove warning.
+        connect(checkbox, &QCheckBox::clicked, this, [this, trackId = key](){
+            m_midiProcessor->toggleTrack(trackId);
         });
     }
 
+    // Connect processor signals to UI slots
     connect(m_midiProcessor, &MidiProcessor::programChanged, this, &MainWindow::updateProgramUI);
     connect(m_midiProcessor, &MidiProcessor::trackStateUpdated, this, &MainWindow::updateTrackUI);
+    
+    // FIX: This connection now works because the signal and slot signatures match.
     connect(m_midiProcessor, &MidiProcessor::logMessage, this, &MainWindow::logToConsole);
+    
+    connect(verboseLogCheckBox, &QCheckBox::toggled, this, &MainWindow::onVerboseLogToggled);
 }
 
 void MainWindow::updateProgramUI(int newProgramIndex) {
@@ -106,6 +117,11 @@ void MainWindow::updateTrackUI(const std::string& trackId, bool newState) {
     }
 }
 
-void MainWindow::logToConsole(const std::string& message) {
-    logConsole->append(QString::fromStdString(message));
+// FIX: Signature updated and body simplified.
+void MainWindow::logToConsole(const QString& message) {
+    logConsole->append(message);
+}
+
+void MainWindow::onVerboseLogToggled(bool checked) {
+    m_midiProcessor->setVerbose(checked);
 }

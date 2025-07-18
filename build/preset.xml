@@ -7,6 +7,11 @@
         <OutputPort name="CONTROLLER_OUT">IAC Driver Controller</OutputPort>
         <CommandNote>86</CommandNote>
         
+        <!-- New settings for Voice Pitch Bend -->
+        <PitchBendDeadZoneCents>50</PitchBendDeadZoneCents>
+        <PitchBendDownRangeCents>200</PitchBendDownRangeCents>
+        <PitchBendUpRangeCents>200</PitchBendUpRangeCents>
+        
         <!-- This is the fallback state for toggles when a program doesn't specify them. -->
         <DefaultTrackStates>
             <DefaultState toggleId="track1" enabled="true" />

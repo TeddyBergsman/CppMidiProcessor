@@ -169,8 +169,14 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     if (status == 0xD0) { // Aftertouch
                         int value = message[1];
                         int breathValue = std::max(0, value - 16);
-                        std::vector<unsigned char> cc_msg = {0xB0, 2, (unsigned char)breathValue};
-                        midiOut->sendMessage(&cc_msg);
+                        
+                        // Send original CC2 message
+                        std::vector<unsigned char> cc2_msg = {0xB0, 2, (unsigned char)breathValue};
+                        midiOut->sendMessage(&cc2_msg);
+
+                        // FIX: Duplicate CC2 on CC104
+                        std::vector<unsigned char> cc104_msg = {0xB0, 104, (unsigned char)breathValue};
+                        midiOut->sendMessage(&cc104_msg);
                     }
                 }
 

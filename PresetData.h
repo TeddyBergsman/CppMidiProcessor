@@ -19,10 +19,10 @@ struct Toggle {
 struct Program {
     QString name;
     int triggerNote;
-    int programCC;
-    int programValue;
-    int volumeCC;
-    int volumeValue;
+    int programCC = -1;
+    int programValue = -1;
+    int volumeCC = -1;
+    int volumeValue = -1;
     QMap<QString, bool> initialStates; // Defines which toggles are on for this program
 };
 

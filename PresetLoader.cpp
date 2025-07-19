@@ -97,12 +97,23 @@ void PresetLoader::parsePrograms(QXmlStreamReader& xml, Preset& preset) {
     while (xml.readNextStartElement()) {
         if (xml.name().toString() == "Program") {
             Program p;
-            p.name = xml.attributes().value("name").toString();
-            p.triggerNote = xml.attributes().value("triggerNote").toInt();
-            p.programCC = xml.attributes().value("programCC").toInt();
-            p.programValue = xml.attributes().value("programValue").toInt();
-            p.volumeCC = xml.attributes().value("volumeCC").toInt();
-            p.volumeValue = xml.attributes().value("volumeValue").toInt();
+            const auto& attributes = xml.attributes();
+            p.name = attributes.value("name").toString();
+            p.triggerNote = attributes.value("triggerNote").toInt();
+
+            if (attributes.hasAttribute("programCC")) {
+                p.programCC = attributes.value("programCC").toInt();
+            }
+            if (attributes.hasAttribute("programValue")) {
+                p.programValue = attributes.value("programValue").toInt();
+            }
+            if (attributes.hasAttribute("volumeCC")) {
+                p.volumeCC = attributes.value("volumeCC").toInt();
+            }
+            if (attributes.hasAttribute("volumeValue")) {
+                p.volumeValue = attributes.value("volumeValue").toInt();
+            }
+
             parseProgram(xml, p);
             preset.programs.append(p);
         } else {

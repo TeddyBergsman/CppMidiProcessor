@@ -37,7 +37,10 @@ void MainWindow::createWidgets(const Preset& preset) {
 
     // Dynamically create track checkboxes from preset data
     for (const auto& toggle : preset.toggles) {
-        trackCheckBoxes[toggle.id.toStdString()] = new QCheckBox(toggle.name);
+        QCheckBox* checkbox = new QCheckBox(toggle.name);
+        // FIX: Initialize checkboxes to checked to match the processor's initial state.
+        checkbox->setChecked(true); 
+        trackCheckBoxes[toggle.id.toStdString()] = checkbox;
     }
 
     // Log Console

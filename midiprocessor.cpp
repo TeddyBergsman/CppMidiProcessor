@@ -13,7 +13,7 @@ MidiProcessor::MidiProcessor(const Preset& preset, QObject *parent)
         m_programRulesMap[m_preset.programs[i].triggerNote] = i;
     }
     for (const auto& toggle : m_preset.toggles) {
-        m_trackStates[toggle.id.toStdString()] = false;
+        m_trackStates[toggle.id.toStdString()] = true;
     }
 
     m_logPollTimer = new QTimer(this);
@@ -195,10 +195,15 @@ void MidiProcessor::processProgramChange(int programIndex) {
     const auto& program = m_preset.programs[programIndex];
     m_currentProgramIndex = programIndex;
 
-    std::vector<unsigned char> prog_msg = { 0xB0, (unsigned char)program.programCC, (unsigned char)program.programValue };
-    midiOut->sendMessage(&prog_msg);
-    std::vector<unsigned char> vol_msg = { 0xB0, (unsigned char)program.volumeCC, (unsigned char)program.volumeValue };
-    midiOut->sendMessage(&vol_msg);
+    if (program.programCC != -1 && program.programValue != -1) {
+        std::vector<unsigned char> prog_msg = { 0xB0, (unsigned char)program.programCC, (unsigned char)program.programValue };
+        midiOut->sendMessage(&prog_msg);
+    }
+    
+    if (program.volumeCC != -1 && program.volumeValue != -1) {
+        std::vector<unsigned char> vol_msg = { 0xB0, (unsigned char)program.volumeCC, (unsigned char)program.volumeValue };
+        midiOut->sendMessage(&vol_msg);
+    }
 
     {
         std::lock_guard<std::mutex> lock(m_logMutex);

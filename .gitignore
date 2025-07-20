@@ -1,6 +1,7 @@
 # Build products
 build/*
 !build/preset.xml
+!build/preset.logicx
 *.o
 *.a
 *.so

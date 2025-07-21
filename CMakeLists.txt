@@ -14,9 +14,9 @@ set(CMAKE_PREFIX_PATH "/opt/homebrew") # Use /usr/local for Intel Macs.
 find_package(Qt6 REQUIRED COMPONENTS Widgets Xml)
 
 
-# --- Define the Executable Target ---
-# Add all source files to the list to be compiled.
-add_executable(CppMidiProcessor
+# --- Define the Executable Target as a macOS App Bundle---
+# We add resources.qrc here. CMAKE_AUTORCC will handle it automatically.
+add_executable(CppMidiProcessor MACOSX_BUNDLE
   main.cpp
   mainwindow.h
   mainwindow.cpp
@@ -27,6 +27,7 @@ add_executable(CppMidiProcessor
   PresetLoader.cpp
   RtMidi.h
   RtMidi.cpp
+  resources.qrc
 )
 
 # Force the compiler to define the macro that enables macOS CoreMIDI code in RtMidi.

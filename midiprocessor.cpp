@@ -335,5 +335,3 @@ double MidiProcessor::noteToFrequency(int note) const {
     if (note < 0) return 0.0;
     return 440.0 * pow(2.0, (static_cast<double>(note) - 69.0) / 12.0);
 }
-
-#include "midiprocessor.moc"

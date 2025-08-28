@@ -69,6 +69,28 @@ void MainWindow::createWidgets(const Preset& preset) {
     // NEW: Backing Track Widgets
     backingTrackBox = new QGroupBox("Backing Tracks");
     backingTrackList = new QListWidget;
+    
+    // Set dark theme for the backing track list
+    backingTrackList->setStyleSheet(
+        "QListWidget {"
+        "    background-color: black;"
+        "    color: white;"
+        "    font-family: Consolas, Monaco, monospace;"
+        "    font-size: 10pt;"
+        "    border: 1px solid #333;"
+        "}"
+        "QListWidget::item {"
+        "    padding: 5px;"
+        "    border-bottom: 1px solid #222;"
+        "}"
+        "QListWidget::item:selected {"
+        "    background-color: #2a2a2a;"  // Faint dark gray
+        "}"
+        "QListWidget::item:hover {"
+        "    background-color: #1a1a1a;"
+        "}"
+    );
+    
     playButton = new QPushButton("Play");
     pauseButton = new QPushButton("Pause");
     playButton->setEnabled(false);
@@ -223,23 +245,43 @@ void MainWindow::onBackingTracksLoaded(const QStringList& tracks) {
 }
 
 void MainWindow::onBackingTrackStateChanged(int trackIndex, QMediaPlayer::PlaybackState state) {
-    // Reset all item backgrounds
+    // Reset all item backgrounds and fonts to defaults
     for (int i = 0; i < backingTrackList->count(); ++i) {
-        backingTrackList->item(i)->setBackground(Qt::white);
+        backingTrackList->item(i)->setBackground(QBrush());
+        QFont font = backingTrackList->item(i)->font();
+        font.setBold(false);
+        backingTrackList->item(i)->setFont(font);
     }
 
     if (trackIndex < 0 || trackIndex >= backingTrackList->count()) return;
 
     if (state == QMediaPlayer::PlayingState) {
-        backingTrackList->item(trackIndex)->setBackground(Qt::green);
+        // Faint dark green for playing track
+        backingTrackList->item(trackIndex)->setBackground(QColor(0, 40, 0));
+        
+        // Make text bold for playing track
+        QFont font = backingTrackList->item(trackIndex)->font();
+        font.setBold(true);
+        backingTrackList->item(trackIndex)->setFont(font);
+        
+        // Automatically select the playing track
+        backingTrackList->setCurrentRow(trackIndex);
+        
         playButton->setEnabled(false);
         pauseButton->setEnabled(true);
     } else if (state == QMediaPlayer::PausedState) {
-        backingTrackList->item(trackIndex)->setBackground(Qt::yellow);
+        // Slightly brighter green for paused
+        backingTrackList->item(trackIndex)->setBackground(QColor(40, 60, 0));
+        
+        // Keep text bold for paused track
+        QFont font = backingTrackList->item(trackIndex)->font();
+        font.setBold(true);
+        backingTrackList->item(trackIndex)->setFont(font);
+        
         playButton->setEnabled(true);
         pauseButton->setEnabled(false);
     } else { // StoppedState
-        backingTrackList->item(trackIndex)->setBackground(Qt::white);
+        backingTrackList->item(trackIndex)->setBackground(QBrush());
         playButton->setEnabled(backingTrackList->currentItem() != nullptr);
         pauseButton->setEnabled(false);
     }

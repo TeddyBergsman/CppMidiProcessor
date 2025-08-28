@@ -6,6 +6,14 @@
 #include <QMap>
 #include <string>
 
+// Represents metadata for a backing track
+struct TrackMetadata {
+    double volume = 0.5;        // Volume level (0.0 to 1.0)
+    int tempo = 120;            // BPM
+    QString key = "C";          // Musical key
+    int program = 1;            // Program to activate when track starts (1-based)
+};
+
 // Represents a toggleable track with its full MIDI note definition
 struct Toggle {
     QString id;

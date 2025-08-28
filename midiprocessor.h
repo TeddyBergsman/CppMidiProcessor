@@ -88,6 +88,7 @@ private:
     double noteToFrequency(int note) const;
     void precalculateRatios();
     void loadBackingTracks();
+    TrackMetadata loadTrackMetadata(const QString& trackPath);
 
     // --- MIDI Ports ---
     RtMidiIn* midiInGuitar = nullptr;

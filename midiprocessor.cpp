@@ -9,6 +9,9 @@
 #include <QFileInfo>
 #include <QAudioOutput>
 #include <QUrl>
+#include <QFile>
+#include <QXmlStreamReader>
+#include <QRegularExpression>
 
 MidiProcessor::MidiProcessor(const Preset& preset, QObject *parent) 
     : QObject(parent), m_preset(preset), m_currentProgramIndex(-1) {
@@ -267,9 +270,27 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                         emit _internal_resumeTrack();
                     }
                 } else {
-                    // It's a new track, so play it from the start
+                    // It's a new track, so load metadata and play it
+                    QString trackPath = m_backingTracks.at(event.programIndex);
+                    TrackMetadata metadata = loadTrackMetadata(trackPath);
+                    
+                    // Apply volume from metadata
+                    if (m_audioOutput) {
+                        m_audioOutput->setVolume(metadata.volume);
+                    }
+                    
+                    // Apply program change if specified
+                    if (metadata.program > 0 && metadata.program <= m_preset.programs.size()) {
+                        // Switch to the specified program (1-based in XML, convert to 0-based)
+                        processProgramChange(metadata.program - 1);
+                        {
+                            std::lock_guard<std::mutex> lock(m_logMutex);
+                            m_logQueue.push(QString("Track metadata: Applied program %1").arg(metadata.program).toStdString());
+                        }
+                    }
+                    
                     m_currentlyPlayingTrackIndex = event.programIndex;
-                    emit _internal_playTrack(QUrl::fromLocalFile(m_backingTracks.at(event.programIndex)));
+                    emit _internal_playTrack(QUrl::fromLocalFile(trackPath));
                 }
             }
             break;
@@ -294,6 +315,68 @@ void MidiProcessor::loadBackingTracks() {
     m_backingTracks = absolutePaths;
     m_backingTracks.sort();
     emit backingTracksLoaded(m_backingTracks);
+}
+
+TrackMetadata MidiProcessor::loadTrackMetadata(const QString& trackPath) {
+    TrackMetadata metadata;
+    
+    // Generate XML filename by replacing .mp3 extension with .xml
+    QString xmlPath = trackPath;
+    xmlPath.replace(QRegularExpression("\\.mp3$", QRegularExpression::CaseInsensitiveOption), ".xml");
+    
+    QFile xmlFile(xmlPath);
+    if (!xmlFile.exists()) {
+        qDebug() << "No metadata file found for track:" << trackPath;
+        return metadata; // Return default values
+    }
+    
+    if (!xmlFile.open(QIODevice::ReadOnly)) {
+        qDebug() << "Failed to open metadata file:" << xmlPath;
+        return metadata;
+    }
+    
+    QXmlStreamReader xml(&xmlFile);
+    
+    while (!xml.atEnd() && !xml.hasError()) {
+        QXmlStreamReader::TokenType token = xml.readNext();
+        
+        if (token == QXmlStreamReader::StartElement) {
+            if (xml.name().toString() == "TrackMetadata") {
+                while (!(xml.tokenType() == QXmlStreamReader::EndElement && 
+                         xml.name().toString() == "TrackMetadata")) {
+                    xml.readNext();
+                    
+                    if (xml.tokenType() == QXmlStreamReader::StartElement) {
+                        QString elementName = xml.name().toString();
+                        QString elementText = xml.readElementText();
+                        
+                        if (elementName == "Volume") {
+                            metadata.volume = elementText.toDouble();
+                        } else if (elementName == "Tempo") {
+                            metadata.tempo = elementText.toInt();
+                        } else if (elementName == "Key") {
+                            metadata.key = elementText;
+                        } else if (elementName == "Program") {
+                            metadata.program = elementText.toInt();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (xml.hasError()) {
+        qDebug() << "XML parsing error:" << xml.errorString();
+    }
+    
+    xmlFile.close();
+    qDebug() << "Loaded metadata for" << QFileInfo(trackPath).fileName() 
+             << "- Volume:" << metadata.volume 
+             << "Tempo:" << metadata.tempo 
+             << "Key:" << metadata.key 
+             << "Program:" << metadata.program;
+    
+    return metadata;
 }
 
 void MidiProcessor::processProgramChange(int programIndex) {

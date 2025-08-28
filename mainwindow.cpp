@@ -262,15 +262,16 @@ void MainWindow::onVoiceControlToggled(bool checked) {
     }
 }
 
-void MainWindow::onTranscriptionReceived(const QString& text, double confidence, const QStringList& detectedCommands) {
+void MainWindow::onTranscriptionReceived(const QString& text, double confidence, const QStringList& detectedTriggers, const QStringList& detectedTargets) {
     // Log the transcription to debug console
     QString logMsg = QString("Voice: \"%1\" (confidence: %2)").arg(text).arg(confidence, 0, 'f', 2);
-    if (!detectedCommands.isEmpty()) {
-        logMsg += " - Commands: " + detectedCommands.join(", ");
+    if (!detectedTriggers.isEmpty() || !detectedTargets.isEmpty()) {
+        logMsg += " - Triggers: " + detectedTriggers.join(", ");
+        logMsg += " - Targets: " + detectedTargets.join(", ");
     }
     logToConsole(logMsg);
     
-    QString formattedText = formatTranscriptionWithBoldTriggers(text, detectedCommands);
+    QString formattedText = formatTranscriptionWithColors(text, detectedTriggers, detectedTargets);
     voiceTranscriptionLabel->setText(formattedText);
     
     // Restart the timer to clear after 5 seconds
@@ -288,7 +289,7 @@ void MainWindow::onVoiceConnectionStatusChanged(bool connected) {
     }
 }
 
-QString MainWindow::formatTranscriptionWithBoldTriggers(const QString& text, const QStringList& triggers) {
+QString MainWindow::formatTranscriptionWithColors(const QString& text, const QStringList& triggers, const QStringList& targets) {
     QString formattedText = text;
     
     // Escape HTML special characters
@@ -299,6 +300,33 @@ QString MainWindow::formatTranscriptionWithBoldTriggers(const QString& text, con
         QString pattern = "\\b" + QRegularExpression::escape(trigger) + "\\b";
         QRegularExpression re(pattern, QRegularExpression::CaseInsensitiveOption);
         formattedText.replace(re, "<b style='color: yellow;'>" + trigger + "</b>");
+    }
+    
+    // Make target words bold with green color
+    for (const QString& target : targets) {
+        QString pattern = "\\b" + QRegularExpression::escape(target) + "\\b";
+        QRegularExpression re(pattern, QRegularExpression::CaseInsensitiveOption);
+        // Only replace if not already formatted (to avoid overwriting yellow triggers)
+        QString replacement = "<b style='color: #00ff00;'>" + target + "</b>";
+        QRegularExpressionMatchIterator it = re.globalMatch(formattedText);
+        QList<QPair<int, int>> positions;
+        while (it.hasNext()) {
+            QRegularExpressionMatch match = it.next();
+            int start = match.capturedStart();
+            int end = match.capturedEnd();
+            // Check if this position is already formatted
+            QString before = formattedText.mid(qMax(0, start - 4), 4);
+            if (!before.contains("<b ")) {
+                positions.append(qMakePair(start, end));
+            }
+        }
+        // Replace from end to start to maintain positions
+        for (int i = positions.size() - 1; i >= 0; --i) {
+            int start = positions[i].first;
+            int end = positions[i].second;
+            QString word = formattedText.mid(start, end - start);
+            formattedText.replace(start, end - start, "<b style='color: #00ff00;'>" + word + "</b>");
+        }
     }
     
     return formattedText;

@@ -8,6 +8,7 @@
 #include <QRegularExpression>
 #include <QCoreApplication>
 #include <QThread>
+#include <algorithm>
 
 // VoiceController implementation
 VoiceController::VoiceController(const Preset& preset, QObject *parent)
@@ -71,11 +72,21 @@ VoiceControllerWorker::VoiceControllerWorker(const Preset& preset, QObject *pare
     
     // Load backing tracks list
     QDir backingTracksDir(m_preset.settings.backingTrackDirectory);
+    qDebug() << "VoiceController: Loading tracks from:" << m_preset.settings.backingTrackDirectory;
     QFileInfoList fileInfoList = backingTracksDir.entryInfoList(QStringList() << "*.mp3", QDir::Files);
     for (const QFileInfo& fileInfo : fileInfoList) {
         m_backingTracks.append(fileInfo.absoluteFilePath());
     }
     m_backingTracks.sort();
+    qDebug() << "VoiceController: Loaded" << m_backingTracks.size() << "tracks";
+    if (m_backingTracks.size() > 0) {
+        for (const QString& track : m_backingTracks) {
+            QFileInfo fi(track);
+            QString fullName = fi.fileName();
+            QString displayName = fullName.left(fullName.lastIndexOf('.'));
+            qDebug() << "  Track:" << displayName;
+        }
+    }
 }
 
 VoiceControllerWorker::~VoiceControllerWorker() {
@@ -127,19 +138,16 @@ bool VoiceControllerWorker::startBridgeProcess() {
         QFileInfo scriptFile(path);
         if (scriptFile.exists()) {
             scriptPath = path;
-            qDebug() << "VoiceController: Found voice_bridge.py at:" << scriptPath;
             break;
         }
     }
     
     if (scriptPath.isEmpty()) {
-        qDebug() << "VoiceController: Searched for voice_bridge.py in:" << searchPaths;
         emit errorOccurred("Voice bridge script not found");
         return false;
     }
     
     // Start the Python bridge process
-    qDebug() << "VoiceController: Starting Python bridge with command: python3" << scriptPath;
     m_bridgeProcess->start("python3", QStringList() << scriptPath);
     
     if (!m_bridgeProcess->waitForStarted(5000)) {
@@ -149,7 +157,6 @@ bool VoiceControllerWorker::startBridgeProcess() {
         return false;
     }
     
-    qDebug() << "VoiceController: Python bridge process started successfully";
     return true;
 }
 
@@ -172,7 +179,7 @@ void VoiceControllerWorker::onProcessReadyRead() {
     QByteArray data = m_bridgeProcess->readAllStandardOutput();
     m_buffer += QString::fromUtf8(data);
     
-    // Also read and log stderr
+    // Also read and log stderr for debugging
     QByteArray errorData = m_bridgeProcess->readAllStandardError();
     if (!errorData.isEmpty()) {
         qDebug() << "VoiceController: Python stderr:" << QString::fromUtf8(errorData);
@@ -186,14 +193,10 @@ void VoiceControllerWorker::onProcessReadyRead() {
         
         if (line.isEmpty()) continue;
         
-        qDebug() << "VoiceController: Received line:" << line;
-        
         // Parse JSON
         QJsonDocument doc = QJsonDocument::fromJson(line.toUtf8());
         if (doc.isObject()) {
             processIncomingMessage(doc.object());
-        } else {
-            qDebug() << "VoiceController: Failed to parse JSON:" << line;
         }
     }
 }
@@ -233,16 +236,12 @@ void VoiceControllerWorker::onProcessFinished(int exitCode, QProcess::ExitStatus
 void VoiceControllerWorker::processIncomingMessage(const QJsonObject& message) {
     QString type = message["type"].toString();
     
-    qDebug() << "VoiceController: Processing message type:" << type;
-    
     if (type == "ready") {
         QString status = message["status"].toString();
-        qDebug() << "VoiceController: Ready status:" << status;
         if (status == "connected") {
             emit connectionStatusChanged(true);
         } else if (status == "listening") {
             // Ready to receive transcriptions
-            qDebug() << "VoiceController: Bridge is now listening for transcriptions";
         }
     } else if (type == "transcription") {
         TranscriptionData transcription;
@@ -266,53 +265,135 @@ void VoiceControllerWorker::parseVoiceCommand(const QString& text, double confid
         return;
     }
     
-    QString lowerText = text.toLower().trimmed();
-    QStringList detectedCommands = detectTriggerWords(lowerText);
+    // Remove punctuation from the end
+    QString cleanText = text.trimmed();
+    while (!cleanText.isEmpty() && (cleanText.endsWith('.') || cleanText.endsWith(',') || 
+           cleanText.endsWith('!') || cleanText.endsWith('?') || cleanText.endsWith(';') ||
+           cleanText.endsWith(':'))) {
+        cleanText.chop(1);
+    }
     
-    // Emit the transcription with detected commands
-    emit transcriptionReceived(text, confidence, detectedCommands);
+    QString lowerText = cleanText.toLower();
+    QStringList detectedTriggers, detectedTargets;
+    detectTriggerWords(lowerText, detectedTriggers, detectedTargets);
+    
+    // Emit the transcription with detected triggers and targets
+    emit transcriptionReceived(text, confidence, detectedTriggers, detectedTargets);
     
     // Try to parse different command types
+    qDebug() << "VoiceController: Attempting to parse command:" << lowerText;
+    
     if (parseProgramCommand(lowerText)) {
+        qDebug() << "VoiceController: Matched as program command";
         return;
     }
     
     if (parseTrackCommand(lowerText)) {
+        qDebug() << "VoiceController: Matched as track command";
         return;
     }
     
     if (parseToggleCommand(lowerText)) {
+        qDebug() << "VoiceController: Matched as toggle command";
         return;
     }
+    
+    qDebug() << "VoiceController: No command matched";
 }
 
-QStringList VoiceControllerWorker::detectTriggerWords(const QString& text) {
-    QStringList triggers;
+void VoiceControllerWorker::detectTriggerWords(const QString& text, QStringList& triggers, QStringList& targets) {
+    QString lowerText = text.toLower();
     
-    // Program switching triggers
-    if (text.contains("switch") || text.contains("switched") || text.contains("go to")) {
-        triggers << "switch" << "switched" << "go to";
+    // Program switching triggers (yellow)
+    QStringList switchTriggers = {"switch", "switched", "change", "changed", "go to", "go"};
+    for (const QString& trigger : switchTriggers) {
+        if (lowerText.contains(trigger)) {
+            triggers << trigger;
+        }
     }
     
-    // Track control triggers
-    if (text.contains("play")) {
+    // Track control triggers (yellow)
+    if (lowerText.contains("play")) {
         triggers << "play";
     }
-    if (text.contains("stop") || text.contains("pause")) {
-        triggers << "stop" << "pause";
+    if (lowerText.contains("stop") || lowerText.contains("pause")) {
+        if (lowerText.contains("stop")) triggers << "stop";
+        if (lowerText.contains("pause")) triggers << "pause";
     }
     
-    // Toggle triggers
-    if (text.contains("toggle") || text.contains("turn on") || text.contains("turn off")) {
-        triggers << "toggle" << "turn on" << "turn off";
+    // Toggle triggers (yellow)
+    if (lowerText.contains("toggle") || lowerText.contains("turn on") || lowerText.contains("turn off")) {
+        if (lowerText.contains("toggle")) triggers << "toggle";
+        if (lowerText.contains("turn on")) triggers << "turn on";
+        if (lowerText.contains("turn off")) triggers << "turn off";
     }
     
-    return triggers;
+    // Program names and tags (green targets)
+    for (const auto& program : m_preset.programs) {
+        if (lowerText.contains(program.name.toLower())) {
+            targets << program.name.toLower();
+        }
+        for (const QString& tag : program.tags) {
+            if (lowerText.contains(tag.toLower())) {
+                targets << tag.toLower();
+            }
+        }
+    }
+    
+    // Numbers and "program"/"track" keywords (green targets)
+    // Include all number words
+    QStringList numberWords;
+    for (auto it = m_numberWords.begin(); it != m_numberWords.end(); ++it) {
+        numberWords << it.key();
+    }
+    QString numberPattern = numberWords.join("|");
+    
+    QRegularExpression numRe("\\b(program\\s*\\d+|track\\s*\\d+|\\d+|" + numberPattern + ")\\b");
+    QRegularExpressionMatchIterator matchIt = numRe.globalMatch(lowerText);
+    while (matchIt.hasNext()) {
+        QRegularExpressionMatch match = matchIt.next();
+        targets << match.captured(0);
+    }
+    
+    // Track names if "play" was mentioned (green targets)
+    if (lowerText.contains("play")) {
+        // Find what track would be matched by fuzzy search
+        QRegularExpression playRe("play(?:\\s+play)*\\s*(?:the|a)?\\s*(.+)");
+        QRegularExpressionMatch match = playRe.match(lowerText);
+        
+        if (match.hasMatch()) {
+            QString trackQuery = match.captured(1).trimmed();
+            QString matchedTrack = fuzzyMatchTrackName(trackQuery);
+            
+            if (!matchedTrack.isEmpty()) {
+                QFileInfo fi(matchedTrack);
+                QString fullName = fi.fileName();
+                QString trackName = fullName.left(fullName.lastIndexOf('.')).toLower();
+                
+                // Remove leading numbers and punctuation
+                QRegularExpression leadingNum("^\\d+\\.\\s*");
+                trackName.remove(leadingNum);
+                
+                // Add individual words from the matched track name
+                QStringList trackWords = trackName.split(QRegularExpression("[\\s_.-]+"), Qt::SkipEmptyParts);
+                for (const QString& word : trackWords) {
+                    if (lowerText.contains(word) && word.length() > 2) {
+                        targets << word;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Remove duplicates
+    triggers.removeDuplicates();
+    targets.removeDuplicates();
 }
 
 bool VoiceControllerWorker::parseProgramCommand(const QString& text) {
-    // Look for program switching patterns
-    QRegularExpression switchRe("(?:switch|change|go)\\s*(?:to)?\\s*(.+)");
+    // More flexible pattern that handles multiple triggers and various connecting words
+    // This will match things like "switch switch to trumpet" or "go saxophone" etc.
+    QRegularExpression switchRe("(?:switch|switched|change|changed|go|going)(?:\\s+(?:switch|switched|change|changed|go|going))*\\s*(?:to\\s+the|to\\s+a|to)?\\s*(.+)");
     QRegularExpressionMatch match = switchRe.match(text);
     
     if (match.hasMatch()) {
@@ -360,12 +441,14 @@ bool VoiceControllerWorker::parseTrackCommand(const QString& text) {
         return true;
     }
     
-    // Look for play patterns
-    QRegularExpression playRe("play\\s+(.+)");
+    // More flexible play pattern that handles multiple "play" words and optional connecting words
+    QRegularExpression playRe("play(?:\\s+play)*\\s*(?:the|a)?\\s*(.+)");
     QRegularExpressionMatch match = playRe.match(text);
     
     if (match.hasMatch()) {
         QString target = match.captured(1).trimmed();
+        qDebug() << "VoiceController: parseTrackCommand - target:" << target;
+        qDebug() << "VoiceController: Available tracks:" << m_backingTracks;
         
         // Convert number words to digits
         QString convertedTarget = convertNumberWordsToDigits(target);
@@ -378,6 +461,7 @@ bool VoiceControllerWorker::parseTrackCommand(const QString& text) {
             int trackNum = numMatch.captured(1).toInt();
             // Convert 1-based to 0-based index
             if (trackNum > 0 && trackNum <= m_backingTracks.size()) {
+                qDebug() << "VoiceController: Detected track number:" << trackNum;
                 emit trackCommandDetected(trackNum - 1, true);
                 return true;
             }
@@ -387,15 +471,18 @@ bool VoiceControllerWorker::parseTrackCommand(const QString& text) {
         bool isNumber;
         int num = convertedTarget.toInt(&isNumber);
         if (isNumber && num > 0 && num <= m_backingTracks.size()) {
+            qDebug() << "VoiceController: Detected number:" << num;
             emit trackCommandDetected(num - 1, true);
             return true;
         }
         
         // Try fuzzy matching on track name
         QString matchedTrack = fuzzyMatchTrackName(target);
+        qDebug() << "VoiceController: Fuzzy match result:" << matchedTrack;
         if (!matchedTrack.isEmpty()) {
             int index = m_backingTracks.indexOf(matchedTrack);
             if (index >= 0) {
+                qDebug() << "VoiceController: Playing track at index:" << index << "path:" << matchedTrack;
                 emit trackCommandDetected(index, true);
                 return true;
             }
@@ -429,6 +516,75 @@ void VoiceControllerWorker::initializeNumberWords() {
     m_numberWords["fourth"] = 4; m_numberWords["fifth"] = 5; m_numberWords["sixth"] = 6;
     m_numberWords["seventh"] = 7; m_numberWords["eighth"] = 8; m_numberWords["ninth"] = 9;
     m_numberWords["tenth"] = 10;
+    
+    // Generate compound numbers from 21 to 99
+    QStringList tens = {"twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"};
+    QStringList ones = {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine"};
+    
+    for (int i = 0; i < tens.size(); ++i) {
+        for (int j = 0; j < ones.size(); ++j) {
+            int value = (i + 2) * 10 + (j + 1);
+            QString word = tens[i] + "-" + ones[j];
+            m_numberWords[word] = value;
+            // Also without hyphen
+            m_numberWords[tens[i] + " " + ones[j]] = value;
+        }
+    }
+    
+    // Numbers from 100 to 128
+    m_numberWords["one hundred"] = 100;
+    m_numberWords["hundred one"] = 101;
+    m_numberWords["one hundred one"] = 101;
+    m_numberWords["hundred two"] = 102;
+    m_numberWords["one hundred two"] = 102;
+    m_numberWords["hundred three"] = 103;
+    m_numberWords["one hundred three"] = 103;
+    m_numberWords["hundred four"] = 104;
+    m_numberWords["one hundred four"] = 104;
+    m_numberWords["hundred five"] = 105;
+    m_numberWords["one hundred five"] = 105;
+    m_numberWords["hundred six"] = 106;
+    m_numberWords["one hundred six"] = 106;
+    m_numberWords["hundred seven"] = 107;
+    m_numberWords["one hundred seven"] = 107;
+    m_numberWords["hundred eight"] = 108;
+    m_numberWords["one hundred eight"] = 108;
+    m_numberWords["hundred nine"] = 109;
+    m_numberWords["one hundred nine"] = 109;
+    m_numberWords["hundred ten"] = 110;
+    m_numberWords["one hundred ten"] = 110;
+    m_numberWords["hundred eleven"] = 111;
+    m_numberWords["one hundred eleven"] = 111;
+    m_numberWords["hundred twelve"] = 112;
+    m_numberWords["one hundred twelve"] = 112;
+    m_numberWords["hundred thirteen"] = 113;
+    m_numberWords["one hundred thirteen"] = 113;
+    m_numberWords["hundred fourteen"] = 114;
+    m_numberWords["one hundred fourteen"] = 114;
+    m_numberWords["hundred fifteen"] = 115;
+    m_numberWords["one hundred fifteen"] = 115;
+    m_numberWords["hundred sixteen"] = 116;
+    m_numberWords["one hundred sixteen"] = 116;
+    m_numberWords["hundred seventeen"] = 117;
+    m_numberWords["one hundred seventeen"] = 117;
+    m_numberWords["hundred eighteen"] = 118;
+    m_numberWords["one hundred eighteen"] = 118;
+    m_numberWords["hundred nineteen"] = 119;
+    m_numberWords["one hundred nineteen"] = 119;
+    m_numberWords["hundred twenty"] = 120;
+    m_numberWords["one hundred twenty"] = 120;
+    
+    // Generate 121-128
+    for (int i = 1; i <= 8; ++i) {
+        QString word1 = "hundred twenty-" + ones[i-1];
+        QString word2 = "one hundred twenty-" + ones[i-1];
+        QString word3 = "hundred twenty " + ones[i-1];
+        QString word4 = "one hundred twenty " + ones[i-1];
+        m_numberWords[word1] = 120 + i;
+        m_numberWords[word2] = 120 + i;
+        m_numberWords[word3] = 120 + i;
+        m_numberWords[word4] = 120 + i;
+    }
 }
 
 QString VoiceControllerWorker::convertNumberWordsToDigits(const QString& text) {
@@ -497,19 +653,60 @@ QString VoiceControllerWorker::fuzzyMatchTrackName(const QString& input) {
     QString bestMatch;
     int bestScore = 0;
     
+    qDebug() << "VoiceController: fuzzyMatchTrackName - input:" << input;
+    
     for (const QString& track : m_backingTracks) {
         QFileInfo fi(track);
-        QString trackName = fi.baseName().toLower();
+        QString fullName = fi.fileName(); // Get full filename including extension
+        QString trackName = fullName.left(fullName.lastIndexOf('.')).toLower(); // Remove extension
         
-        // Simple fuzzy matching: count matching words
-        QStringList inputWords = input.toLower().split(' ', Qt::SkipEmptyParts);
+        // Remove leading numbers and punctuation (e.g., "1. " from "1. My Funny Valentine")
+        QString cleanTrackName = trackName;
+        QRegularExpression leadingNum("^\\d+\\.\\s*");
+        cleanTrackName.remove(leadingNum);
+        
+        // Split both input and track name into words
+        QStringList inputWords = input.toLower().split(QRegularExpression("[\\s_.-]+"), Qt::SkipEmptyParts);
+        QStringList trackWords = cleanTrackName.split(QRegularExpression("[\\s_.-]+"), Qt::SkipEmptyParts);
+        
+        qDebug() << "  Comparing with track:" << trackName << "clean:" << cleanTrackName;
+        qDebug() << "  Input words:" << inputWords;
+        qDebug() << "  Track words:" << trackWords;
+        
         int score = 0;
         
-        for (const QString& word : inputWords) {
-            if (trackName.contains(word)) {
-                score += word.length(); // Longer matches score higher
+        // Check if all input words appear in the track name
+        bool allWordsFound = true;
+        for (const QString& inputWord : inputWords) {
+            bool wordFound = false;
+            for (const QString& trackWord : trackWords) {
+                if (trackWord.startsWith(inputWord) || trackWord == inputWord) {
+                    wordFound = true;
+                    score += inputWord.length() * 2; // Bonus for exact/prefix match
+                    break;
+                } else if (trackWord.contains(inputWord) && inputWord.length() > 2) {
+                    wordFound = true;
+                    score += inputWord.length(); // Lower score for partial match
+                }
+            }
+            if (!wordFound) {
+                allWordsFound = false;
             }
         }
+        
+        // Bonus if all words were found
+        if (allWordsFound && inputWords.size() > 0) {
+            score += 10;
+        }
+        
+        // Bonus for matching word order
+        QString inputJoined = inputWords.join(" ");
+        QString trackJoined = trackWords.join(" ");
+        if (trackJoined.contains(inputJoined)) {
+            score += 20;
+        }
+        
+        qDebug() << "  Score:" << score << "allWordsFound:" << allWordsFound;
         
         if (score > bestScore) {
             bestScore = score;
@@ -517,31 +714,67 @@ QString VoiceControllerWorker::fuzzyMatchTrackName(const QString& input) {
         }
     }
     
+    qDebug() << "VoiceController: Best match score:" << bestScore << "track:" << bestMatch;
+    
     // Only return a match if we have a reasonable score
-    return (bestScore > 3) ? bestMatch : QString();
+    return (bestScore > 5) ? bestMatch : QString();
 }
 
 int VoiceControllerWorker::findProgramByNameOrTag(const QString& search) {
-    QString searchLower = search.toLower();
+    QString searchLower = search.toLower().trimmed();
+    
+    // Remove common filler words that might appear after the trigger
+    QStringList fillerWords = {"the", "a", "an", "to"};
+    QStringList searchWords = searchLower.split(' ', Qt::SkipEmptyParts);
+    searchWords.erase(std::remove_if(searchWords.begin(), searchWords.end(),
+        [&fillerWords](const QString& word) { 
+            return fillerWords.contains(word); 
+        }), searchWords.end());
+    QString cleanSearch = searchWords.join(' ');
     
     // First try exact name match
     for (int i = 0; i < m_preset.programs.size(); ++i) {
-        if (m_preset.programs[i].name.toLower() == searchLower) {
+        if (m_preset.programs[i].name.toLower() == cleanSearch) {
             return i;
         }
     }
     
-    // Then try partial name match
-    for (int i = 0; i < m_preset.programs.size(); ++i) {
-        if (m_preset.programs[i].name.toLower().contains(searchLower)) {
-            return i;
-        }
-    }
-    
-    // Finally try tag match
+    // Try exact tag match
     for (int i = 0; i < m_preset.programs.size(); ++i) {
         for (const QString& tag : m_preset.programs[i].tags) {
-            if (tag.toLower() == searchLower || tag.toLower().contains(searchLower)) {
+            if (tag.toLower() == cleanSearch) {
+                return i;
+            }
+        }
+    }
+    
+    // Then try if any search word matches a program name
+    for (const QString& word : searchWords) {
+        for (int i = 0; i < m_preset.programs.size(); ++i) {
+            if (m_preset.programs[i].name.toLower() == word) {
+                return i;
+            }
+        }
+    }
+    
+    // Try if any search word matches a tag
+    for (const QString& word : searchWords) {
+        for (int i = 0; i < m_preset.programs.size(); ++i) {
+            for (const QString& tag : m_preset.programs[i].tags) {
+                if (tag.toLower() == word) {
+                    return i;
+                }
+            }
+        }
+    }
+    
+    // Finally try partial matches
+    for (int i = 0; i < m_preset.programs.size(); ++i) {
+        if (m_preset.programs[i].name.toLower().contains(cleanSearch)) {
+            return i;
+        }
+        for (const QString& tag : m_preset.programs[i].tags) {
+            if (tag.toLower().contains(cleanSearch)) {
                 return i;
             }
         }

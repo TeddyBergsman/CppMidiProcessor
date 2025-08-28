@@ -41,14 +41,14 @@ private slots:
     
     // Voice control slots
     void onVoiceControlToggled(bool checked);
-    void onTranscriptionReceived(const QString& text, double confidence, const QStringList& detectedCommands);
+    void onTranscriptionReceived(const QString& text, double confidence, const QStringList& detectedTriggers, const QStringList& detectedTargets);
     void onVoiceConnectionStatusChanged(bool connected);
 
 private:
     void createWidgets(const Preset& preset);
     void createLayout();
     void createConnections();
-    QString formatTranscriptionWithBoldTriggers(const QString& text, const QStringList& triggers);
+    QString formatTranscriptionWithColors(const QString& text, const QStringList& triggers, const QStringList& targets);
 
     // MIDI Logic handler (owned by MainWindow)
     MidiProcessor* m_midiProcessor;

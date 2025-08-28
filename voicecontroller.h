@@ -28,7 +28,7 @@ public:
     void setEnabled(bool enabled);
 
 signals:
-    void transcriptionReceived(const QString& text, double confidence, const QStringList& detectedCommands);
+    void transcriptionReceived(const QString& text, double confidence, const QStringList& detectedTriggers, const QStringList& detectedTargets);
     void connectionStatusChanged(bool connected);
     void errorOccurred(const QString& error);
     void programCommandDetected(int programIndex);
@@ -57,7 +57,7 @@ public slots:
     void setEnabled(bool enabled);
 
 signals:
-    void transcriptionReceived(const QString& text, double confidence, const QStringList& detectedCommands);
+    void transcriptionReceived(const QString& text, double confidence, const QStringList& detectedTriggers, const QStringList& detectedTargets);
     void connectionStatusChanged(bool connected);
     void errorOccurred(const QString& error);
     void programCommandDetected(int programIndex);
@@ -84,7 +84,7 @@ private:
     
     // Command parsing
     void parseVoiceCommand(const QString& text, double confidence);
-    QStringList detectTriggerWords(const QString& text);
+    void detectTriggerWords(const QString& text, QStringList& triggers, QStringList& targets);
     bool parseProgramCommand(const QString& text);
     bool parseTrackCommand(const QString& text);
     bool parseToggleCommand(const QString& text);

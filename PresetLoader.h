@@ -16,6 +16,7 @@ private:
     void parseToggles(QXmlStreamReader& xml, Preset& preset);
     void parsePrograms(QXmlStreamReader& xml, Preset& preset);
     void parseProgram(QXmlStreamReader& xml, Program& program);
+    void parseProgramTags(QXmlStreamReader& xml, Program& program);
 };
 
 #endif // PRESETLOADER_H

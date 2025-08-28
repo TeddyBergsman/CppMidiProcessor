@@ -112,8 +112,7 @@
                 <Tag>sax</Tag>
                 <Tag>saxophone</Tag>
                 <Tag>alto</Tag>
-                <Tag>sucks</Tag>
-                <Tag>sex</Tag>
+                <Tag>jazz</Tag>
             </Tags>
             <InitialState toggleId="track1" enabled="false" />
             <InitialState toggleId="track2" enabled="true" />

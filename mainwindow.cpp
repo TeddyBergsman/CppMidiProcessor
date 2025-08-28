@@ -1,13 +1,22 @@
 #include "mainwindow.h"
 #include <QtWidgets>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <algorithm>
+#include <QTimer>
 
 MainWindow::MainWindow(const Preset& preset, QWidget *parent) 
     : QMainWindow(parent) {
 
     // MainWindow now owns MidiProcessor
     m_midiProcessor = new MidiProcessor(preset, this);
+    
+    // Initialize voice controller
+    m_voiceController = new VoiceController(preset, this);
+    
+    // Initialize transcription timer
+    voiceTranscriptionTimer = new QTimer(this);
+    voiceTranscriptionTimer->setSingleShot(true);
 
     createWidgets(preset);
     createLayout();
@@ -18,6 +27,11 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
     // Initialize the processor after the UI is ready to receive signals
     if (!m_midiProcessor->initialize()) {
         QMessageBox::critical(this, "MIDI Error", "Could not initialize MIDI ports. Please check connections and port names in preset.xml.");
+    }
+    
+    // Start voice controller if enabled
+    if (preset.settings.voiceControlEnabled) {
+        m_voiceController->start();
     }
 }
 
@@ -59,6 +73,20 @@ void MainWindow::createWidgets(const Preset& preset) {
     pauseButton = new QPushButton("Pause");
     playButton->setEnabled(false);
     pauseButton->setEnabled(false);
+    
+    // Voice Control Widgets
+    voiceControlBox = new QGroupBox("Voice Control");
+    voiceControlCheckBox = new QCheckBox("Enable Voice Control");
+    voiceControlCheckBox->setChecked(preset.settings.voiceControlEnabled);
+    
+    voiceStatusLabel = new QLabel("Status: Disconnected");
+    voiceStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
+    
+    voiceTranscriptionLabel = new QLabel("");
+    voiceTranscriptionLabel->setWordWrap(true);
+    voiceTranscriptionLabel->setMinimumHeight(50);
+    voiceTranscriptionLabel->setTextFormat(Qt::RichText);
+    voiceTranscriptionLabel->setStyleSheet("QLabel { background-color: black; color: white; padding: 10px; border-radius: 5px; font-family: monospace; }");
 }
 
 void MainWindow::createLayout() {
@@ -94,6 +122,17 @@ void MainWindow::createLayout() {
     backingTrackLayout->addLayout(backingTrackButtonsLayout);
     backingTrackBox->setLayout(backingTrackLayout);
     mainLayout->addWidget(backingTrackBox);
+    
+    // Voice control layout
+    QVBoxLayout* voiceControlLayout = new QVBoxLayout;
+    QHBoxLayout* voiceControlHeaderLayout = new QHBoxLayout;
+    voiceControlHeaderLayout->addWidget(voiceControlCheckBox);
+    voiceControlHeaderLayout->addWidget(voiceStatusLabel);
+    voiceControlHeaderLayout->addStretch();
+    voiceControlLayout->addLayout(voiceControlHeaderLayout);
+    voiceControlLayout->addWidget(voiceTranscriptionLabel);
+    voiceControlBox->setLayout(voiceControlLayout);
+    mainLayout->addWidget(voiceControlBox);
 
     QGroupBox *consoleBox = new QGroupBox("Debug Console");
     QVBoxLayout *consoleLayout = new QVBoxLayout;
@@ -132,6 +171,27 @@ void MainWindow::createConnections() {
     connect(playButton, &QPushButton::clicked, this, &MainWindow::onPlayClicked);
     connect(pauseButton, &QPushButton::clicked, this, &MainWindow::onPauseClicked);
     connect(backingTrackList, &QListWidget::currentItemChanged, this, [this](){ playButton->setEnabled(true); });
+    
+    // Voice control connections
+    connect(voiceControlCheckBox, &QCheckBox::toggled, this, &MainWindow::onVoiceControlToggled);
+    connect(m_voiceController, &VoiceController::transcriptionReceived, this, &MainWindow::onTranscriptionReceived);
+    connect(m_voiceController, &VoiceController::connectionStatusChanged, this, &MainWindow::onVoiceConnectionStatusChanged);
+    connect(m_voiceController, &VoiceController::errorOccurred, this, [this](const QString& error) {
+        logToConsole("Voice Control Error: " + error);
+    });
+    connect(m_voiceController, &VoiceController::programCommandDetected, m_midiProcessor, &MidiProcessor::applyProgram);
+    connect(m_voiceController, &VoiceController::trackCommandDetected, this, [this](int trackIndex, bool play) {
+        if (play && trackIndex >= 0) {
+            m_midiProcessor->playTrack(trackIndex);
+        } else if (!play) {
+            m_midiProcessor->pauseTrack();
+        }
+    });
+    
+    // Timer to clear transcription after 5 seconds
+    connect(voiceTranscriptionTimer, &QTimer::timeout, this, [this]() {
+        voiceTranscriptionLabel->clear();
+    });
 }
 
 void MainWindow::updateProgramUI(int newProgramIndex) {
@@ -191,4 +251,55 @@ void MainWindow::onPlayClicked() {
 
 void MainWindow::onPauseClicked() {
     m_midiProcessor->pauseTrack();
+}
+
+void MainWindow::onVoiceControlToggled(bool checked) {
+    m_voiceController->setEnabled(checked);
+    m_midiProcessor->setVoiceControlEnabled(checked);
+    
+    if (checked && !m_voiceController->isConnected()) {
+        m_voiceController->start();
+    }
+}
+
+void MainWindow::onTranscriptionReceived(const QString& text, double confidence, const QStringList& detectedCommands) {
+    // Log the transcription to debug console
+    QString logMsg = QString("Voice: \"%1\" (confidence: %2)").arg(text).arg(confidence, 0, 'f', 2);
+    if (!detectedCommands.isEmpty()) {
+        logMsg += " - Commands: " + detectedCommands.join(", ");
+    }
+    logToConsole(logMsg);
+    
+    QString formattedText = formatTranscriptionWithBoldTriggers(text, detectedCommands);
+    voiceTranscriptionLabel->setText(formattedText);
+    
+    // Restart the timer to clear after 5 seconds
+    voiceTranscriptionTimer->stop();
+    voiceTranscriptionTimer->start(5000);
+}
+
+void MainWindow::onVoiceConnectionStatusChanged(bool connected) {
+    if (connected) {
+        voiceStatusLabel->setText("Status: Connected");
+        voiceStatusLabel->setStyleSheet("QLabel { color: green; font-weight: bold; }");
+    } else {
+        voiceStatusLabel->setText("Status: Disconnected");
+        voiceStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
+    }
+}
+
+QString MainWindow::formatTranscriptionWithBoldTriggers(const QString& text, const QStringList& triggers) {
+    QString formattedText = text;
+    
+    // Escape HTML special characters
+    formattedText = formattedText.toHtmlEscaped();
+    
+    // Make trigger words bold with yellow color
+    for (const QString& trigger : triggers) {
+        QString pattern = "\\b" + QRegularExpression::escape(trigger) + "\\b";
+        QRegularExpression re(pattern, QRegularExpression::CaseInsensitiveOption);
+        formattedText.replace(re, "<b style='color: yellow;'>" + trigger + "</b>");
+    }
+    
+    return formattedText;
 }

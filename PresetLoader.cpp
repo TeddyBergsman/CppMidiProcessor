@@ -62,6 +62,12 @@ void PresetLoader::parseSettings(QXmlStreamReader& xml, Preset& preset) {
             preset.settings.pitchBendDownRangeCents = xml.readElementText().toInt();
         } else if (elementName == "PitchBendUpRangeCents") { // NEW
             preset.settings.pitchBendUpRangeCents = xml.readElementText().toInt();
+        } else if (elementName == "VoiceControlEnabled") {
+            preset.settings.voiceControlEnabled = (xml.readElementText().toLower() == "true");
+        } else if (elementName == "VoiceConfidenceThreshold") {
+            preset.settings.voiceConfidenceThreshold = xml.readElementText().toDouble();
+        } else if (elementName == "RTSTTSocketPath") {
+            preset.settings.rtSttSocketPath = xml.readElementText();
         } else {
             xml.skipCurrentElement();
         }
@@ -133,6 +139,18 @@ void PresetLoader::parseProgram(QXmlStreamReader& xml, Program& program) {
             bool enabled = (xml.attributes().value("enabled").toString() == "true");
             program.initialStates[toggleId] = enabled;
             xml.skipCurrentElement();
+        } else if (xml.name().toString() == "Tags") {
+            parseProgramTags(xml, program);
+        } else {
+            xml.skipCurrentElement();
+        }
+    }
+}
+
+void PresetLoader::parseProgramTags(QXmlStreamReader& xml, Program& program) {
+    while (xml.readNextStartElement()) {
+        if (xml.name().toString() == "Tag") {
+            program.tags.append(xml.readElementText());
         } else {
             xml.skipCurrentElement();
         }

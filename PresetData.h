@@ -24,6 +24,7 @@ struct Program {
     int volumeCC = -1;
     int volumeValue = -1;
     QMap<QString, bool> initialStates; // Defines which toggles are on for this program
+    QStringList tags; // Voice command aliases for this program
 };
 
 // Represents the global settings for the application
@@ -38,6 +39,11 @@ struct Settings {
     int pitchBendDeadZoneCents = 50;   // +/- cents before pitch bend CCs are generated
     int pitchBendDownRangeCents = 200; // Cents below deadzone for CC102 to reach 127
     int pitchBendUpRangeCents = 200;   // Cents above deadzone for CC103 to reach 127
+
+    // Voice control settings
+    bool voiceControlEnabled = true;   // Enable/disable voice control
+    double voiceConfidenceThreshold = 0.8; // Minimum confidence for voice commands
+    QString rtSttSocketPath = "/tmp/rt-stt.sock"; // RT-STT daemon socket path
 };
 
 // Top-level container for the entire preset file

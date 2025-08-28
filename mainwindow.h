@@ -7,6 +7,7 @@
 #include <string>
 #include "midiprocessor.h"
 #include "PresetData.h"
+#include "voicecontroller.h"
 
 // Forward declare Qt classes
 QT_BEGIN_NAMESPACE
@@ -16,6 +17,8 @@ class QListWidget;
 class QCheckBox;
 class QTextEdit;
 class QGroupBox;
+class QLabel;
+class QTimer;
 QT_END_NAMESPACE
 
 class MainWindow : public QMainWindow {
@@ -35,14 +38,23 @@ private slots:
     void onBackingTrackStateChanged(int trackIndex, QMediaPlayer::PlaybackState state);
     void onPlayClicked();
     void onPauseClicked();
+    
+    // Voice control slots
+    void onVoiceControlToggled(bool checked);
+    void onTranscriptionReceived(const QString& text, double confidence, const QStringList& detectedCommands);
+    void onVoiceConnectionStatusChanged(bool connected);
 
 private:
     void createWidgets(const Preset& preset);
     void createLayout();
     void createConnections();
+    QString formatTranscriptionWithBoldTriggers(const QString& text, const QStringList& triggers);
 
     // MIDI Logic handler (owned by MainWindow)
     MidiProcessor* m_midiProcessor;
+    
+    // Voice control
+    VoiceController* m_voiceController;
 
     // UI Widgets
     QWidget* centralWidget;
@@ -57,6 +69,13 @@ private:
     QListWidget* backingTrackList;
     QPushButton* playButton;
     QPushButton* pauseButton;
+    
+    // Voice control UI
+    QGroupBox* voiceControlBox;
+    QCheckBox* voiceControlCheckBox;
+    QLabel* voiceTranscriptionLabel;
+    QLabel* voiceStatusLabel;
+    QTimer* voiceTranscriptionTimer;
 };
 
 #endif // MAINWINDOW_H

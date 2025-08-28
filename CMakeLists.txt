@@ -22,6 +22,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   mainwindow.cpp
   midiprocessor.h
   midiprocessor.cpp
+  voicecontroller.h
+  voicecontroller.cpp
   PresetData.h
   PresetLoader.h
   PresetLoader.cpp

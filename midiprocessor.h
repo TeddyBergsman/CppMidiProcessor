@@ -33,6 +33,7 @@ public slots:
     void setVerbose(bool verbose);
     void playTrack(int index);
     void pauseTrack();
+    void setVoiceControlEnabled(bool enabled);
 
 private slots:
     void pollLogQueue();
@@ -109,6 +110,7 @@ private:
     bool m_inCommandMode = false;
 
     std::atomic<bool> m_isVerbose{false};
+    std::atomic<bool> m_voiceControlEnabled{true};
 
     // Pitch state
     int m_lastGuitarNote = -1;

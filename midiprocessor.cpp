@@ -19,6 +19,9 @@ MidiProcessor::MidiProcessor(const Preset& preset, QObject *parent)
     for (const auto& toggle : m_preset.toggles) {
         m_trackStates[toggle.id.toStdString()] = true;
     }
+    
+    // Initialize voice control state from preset
+    m_voiceControlEnabled.store(preset.settings.voiceControlEnabled);
 
     m_logPollTimer = new QTimer(this);
     connect(m_logPollTimer, &QTimer::timeout, this, &MidiProcessor::pollLogQueue);
@@ -128,6 +131,10 @@ void MidiProcessor::setVerbose(bool verbose) {
     m_isVerbose.store(verbose);
 }
 
+void MidiProcessor::setVoiceControlEnabled(bool enabled) {
+    m_voiceControlEnabled.store(enabled);
+}
+
 void MidiProcessor::pollLogQueue() {
     QString allMessages;
     std::lock_guard<std::mutex> lock(m_logMutex);
@@ -207,17 +214,20 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     int note = message.size() > 1 ? message[1] : 0;
                     int velocity = message.size() > 2 ? message[2] : 0;
                     if (status == 0x90 && velocity > 0) {
-                        if (note == m_preset.settings.commandNote) { m_inCommandMode = true; return; }
-                        else if (m_inCommandMode) {
-                            if (m_programRulesMap.count(note)) processProgramChange(m_programRulesMap.at(note));
-                            m_inCommandMode = false;
-                            return;
-                        } else if (note == m_preset.settings.backingTrackCommandNote) { 
-                            m_backingTrackSelectionMode = true; return;
-                        } else if (m_backingTrackSelectionMode) {
-                            handleBackingTrackSelection(note);
-                            m_backingTrackSelectionMode = false;
-                            return;
+                        // Only process MIDI commands if voice control is disabled
+                        if (!m_voiceControlEnabled.load()) {
+                            if (note == m_preset.settings.commandNote) { m_inCommandMode = true; return; }
+                            else if (m_inCommandMode) {
+                                if (m_programRulesMap.count(note)) processProgramChange(m_programRulesMap.at(note));
+                                m_inCommandMode = false;
+                                return;
+                            } else if (note == m_preset.settings.backingTrackCommandNote) { 
+                                m_backingTrackSelectionMode = true; return;
+                            } else if (m_backingTrackSelectionMode) {
+                                handleBackingTrackSelection(note);
+                                m_backingTrackSelectionMode = false;
+                                return;
+                            }
                         }
                     }
                     std::vector<unsigned char> passthroughMsg = message;

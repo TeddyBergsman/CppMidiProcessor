@@ -30,6 +30,8 @@ struct Program {
 struct Settings {
     QMap<QString, QString> ports; // e.g., {"GUITAR_IN": "IAC Driver..."}
     int commandNote = -1;
+    int backingTrackCommandNote = -1;
+    QString backingTrackDirectory;
     QMap<QString, bool> defaultTrackStates; // NEW: Holds the default state for each toggle
 
     // NEW: Pitch bend settings

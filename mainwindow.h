@@ -12,6 +12,7 @@
 QT_BEGIN_NAMESPACE
 class QVBoxLayout;
 class QPushButton;
+class QListWidget;
 class QCheckBox;
 class QTextEdit;
 class QGroupBox;
@@ -30,6 +31,10 @@ private slots:
     // FIX: Changed signature to match the signal's type
     void logToConsole(const QString& message); 
     void onVerboseLogToggled(bool checked);
+    void onBackingTracksLoaded(const QStringList& tracks);
+    void onBackingTrackStateChanged(int trackIndex, QMediaPlayer::PlaybackState state);
+    void onPlayClicked();
+    void onPauseClicked();
 
 private:
     void createWidgets(const Preset& preset);
@@ -46,6 +51,12 @@ private:
     std::map<std::string, QCheckBox*> trackCheckBoxes;
     QTextEdit* logConsole;
     QCheckBox* verboseLogCheckBox;
+
+    // NEW: Backing track UI
+    QGroupBox* backingTrackBox;
+    QListWidget* backingTrackList;
+    QPushButton* playButton;
+    QPushButton* pauseButton;
 };
 
 #endif // MAINWINDOW_H

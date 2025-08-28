@@ -6,6 +6,7 @@
         <InputPort name="VOICE_IN">IAC Driver MG3 Voice</InputPort>
         <OutputPort name="CONTROLLER_OUT">IAC Driver Controller</OutputPort>
         <CommandNote>86</CommandNote>
+        <BackingTrackCommandNote>87</BackingTrackCommandNote>
         
         <!-- New settings for Voice Pitch Bend -->
         <PitchBendDeadZoneCents>50</PitchBendDeadZoneCents>
@@ -24,6 +25,9 @@
             <DefaultState toggleId="track8" enabled="false" />
             <DefaultState toggleId="track9" enabled="false" />
         </DefaultTrackStates>
+
+        <!-- Path to backing tracks relative to the build directory -->
+        <BackingTrackDirectory>/Users/teddybergsman/Documents/Backing Tracks</BackingTrackDirectory>
     </Settings>
 
     <Toggles>

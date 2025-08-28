@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include <QtWidgets>
+#include <QFileInfo>
 #include <algorithm>
 
 MainWindow::MainWindow(const Preset& preset, QWidget *parent) 
@@ -50,6 +51,14 @@ void MainWindow::createWidgets(const Preset& preset) {
     // Verbose Log Checkbox
     verboseLogCheckBox = new QCheckBox("Verbose Pitch-Bend Logging");
     verboseLogCheckBox->setChecked(false);
+
+    // NEW: Backing Track Widgets
+    backingTrackBox = new QGroupBox("Backing Tracks");
+    backingTrackList = new QListWidget;
+    playButton = new QPushButton("Play");
+    pauseButton = new QPushButton("Pause");
+    playButton->setEnabled(false);
+    pauseButton->setEnabled(false);
 }
 
 void MainWindow::createLayout() {
@@ -75,6 +84,16 @@ void MainWindow::createLayout() {
     }
     trackBox->setLayout(trackLayout);
     mainLayout->addWidget(trackBox);
+
+    // NEW: Backing track layout
+    QVBoxLayout* backingTrackLayout = new QVBoxLayout;
+    QHBoxLayout* backingTrackButtonsLayout = new QHBoxLayout;
+    backingTrackButtonsLayout->addWidget(playButton);
+    backingTrackButtonsLayout->addWidget(pauseButton);
+    backingTrackLayout->addWidget(backingTrackList);
+    backingTrackLayout->addLayout(backingTrackButtonsLayout);
+    backingTrackBox->setLayout(backingTrackLayout);
+    mainLayout->addWidget(backingTrackBox);
 
     QGroupBox *consoleBox = new QGroupBox("Debug Console");
     QVBoxLayout *consoleLayout = new QVBoxLayout;
@@ -106,6 +125,13 @@ void MainWindow::createConnections() {
     connect(m_midiProcessor, &MidiProcessor::logMessage, this, &MainWindow::logToConsole);
     
     connect(verboseLogCheckBox, &QCheckBox::toggled, this, &MainWindow::onVerboseLogToggled);
+
+    // NEW: Connect backing track signals and slots
+    connect(m_midiProcessor, &MidiProcessor::backingTracksLoaded, this, &MainWindow::onBackingTracksLoaded);
+    connect(m_midiProcessor, &MidiProcessor::backingTrackStateChanged, this, &MainWindow::onBackingTrackStateChanged);
+    connect(playButton, &QPushButton::clicked, this, &MainWindow::onPlayClicked);
+    connect(pauseButton, &QPushButton::clicked, this, &MainWindow::onPauseClicked);
+    connect(backingTrackList, &QListWidget::currentItemChanged, this, [this](){ playButton->setEnabled(true); });
 }
 
 void MainWindow::updateProgramUI(int newProgramIndex) {
@@ -127,4 +153,42 @@ void MainWindow::logToConsole(const QString& message) {
 
 void MainWindow::onVerboseLogToggled(bool checked) {
     m_midiProcessor->setVerbose(checked);
+}
+
+void MainWindow::onBackingTracksLoaded(const QStringList& tracks) {
+    backingTrackList->clear();
+    for (const QString& fullPath : tracks) {
+        backingTrackList->addItem(QFileInfo(fullPath).fileName());
+    }
+}
+
+void MainWindow::onBackingTrackStateChanged(int trackIndex, QMediaPlayer::PlaybackState state) {
+    // Reset all item backgrounds
+    for (int i = 0; i < backingTrackList->count(); ++i) {
+        backingTrackList->item(i)->setBackground(Qt::white);
+    }
+
+    if (trackIndex < 0 || trackIndex >= backingTrackList->count()) return;
+
+    if (state == QMediaPlayer::PlayingState) {
+        backingTrackList->item(trackIndex)->setBackground(Qt::green);
+        playButton->setEnabled(false);
+        pauseButton->setEnabled(true);
+    } else if (state == QMediaPlayer::PausedState) {
+        backingTrackList->item(trackIndex)->setBackground(Qt::yellow);
+        playButton->setEnabled(true);
+        pauseButton->setEnabled(false);
+    } else { // StoppedState
+        backingTrackList->item(trackIndex)->setBackground(Qt::white);
+        playButton->setEnabled(backingTrackList->currentItem() != nullptr);
+        pauseButton->setEnabled(false);
+    }
+}
+
+void MainWindow::onPlayClicked() {
+    m_midiProcessor->playTrack(backingTrackList->currentRow());
+}
+
+void MainWindow::onPauseClicked() {
+    m_midiProcessor->pauseTrack();
 }

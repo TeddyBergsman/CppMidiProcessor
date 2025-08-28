@@ -11,8 +11,12 @@
 #include <mutex>
 #include <condition_variable>
 #include <queue>
+#include <QMediaPlayer>
+#include <QStringList>
 #include "RtMidi.h"
 #include "PresetData.h"
+
+class QAudioOutput;
 
 class MidiProcessor : public QObject {
     Q_OBJECT
@@ -27,17 +31,31 @@ public slots:
     void applyProgram(int programIndex);
     void toggleTrack(const std::string& trackId);
     void setVerbose(bool verbose);
+    void playTrack(int index);
+    void pauseTrack();
 
 private slots:
     void pollLogQueue();
+    void onPlayerStateChanged(QMediaPlayer::PlaybackState state);
+    // NEW: Thread-safe slots to control the player
+    void onInternalPlay(const QUrl& url);
+    void onInternalPause();
+    void onInternalResume();
+
 
 signals:
     void programChanged(int newProgramIndex);
     void trackStateUpdated(const std::string& trackId, bool newState);
     void logMessage(const QString& message);
+    void backingTracksLoaded(const QStringList& trackList);
+    void backingTrackStateChanged(int trackIndex, QMediaPlayer::PlaybackState state);
+    // NEW: Internal signals for cross-thread communication
+    void _internal_playTrack(const QUrl& url);
+    void _internal_pauseTrack();
+    void _internal_resumeTrack();
 
 private:
-    enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE };
+    enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, PLAY_TRACK, PAUSE_TRACK };
     struct MidiEvent {
         EventType type;
         std::vector<unsigned char> message;
@@ -45,6 +63,7 @@ private:
         int programIndex;
         std::string trackId;
     };
+    void handleBackingTrackSelection(int note);
 
     // --- Threading & Queues ---
     std::thread m_workerThread;
@@ -67,11 +86,20 @@ private:
     void processPitchBend();
     double noteToFrequency(int note) const;
     void precalculateRatios();
+    void loadBackingTracks();
 
     // --- MIDI Ports ---
     RtMidiIn* midiInGuitar = nullptr;
     RtMidiOut* midiOut = nullptr;
     RtMidiIn* midiInVoice = nullptr;
+
+    // --- Audio Player ---
+    QMediaPlayer* m_player = nullptr;
+    QAudioOutput* m_audioOutput = nullptr;
+    QStringList m_backingTracks;
+    int m_currentlyPlayingTrackIndex = -1;
+    bool m_backingTrackSelectionMode = false;
+
 
     // --- State (Confined to Worker Thread) ---
     const Preset& m_preset;
@@ -79,6 +107,7 @@ private:
     std::map<std::string, bool> m_trackStates;
     int m_currentProgramIndex;
     bool m_inCommandMode = false;
+
     std::atomic<bool> m_isVerbose{false};
 
     // Pitch state

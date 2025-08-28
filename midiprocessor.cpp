@@ -5,6 +5,10 @@
 #include <cmath>
 #include <cstdio>
 #include <QStringBuilder>
+#include <QDir>
+#include <QFileInfo>
+#include <QAudioOutput>
+#include <QUrl>
 
 MidiProcessor::MidiProcessor(const Preset& preset, QObject *parent) 
     : QObject(parent), m_preset(preset), m_currentProgramIndex(-1) {
@@ -31,12 +35,17 @@ MidiProcessor::~MidiProcessor() {
     delete midiInGuitar;
     delete midiOut;
     delete midiInVoice;
+    delete m_player;
+    delete m_audioOutput;
 }
 
 bool MidiProcessor::initialize() {
     midiInGuitar = new RtMidiIn();
     midiOut = new RtMidiOut();
     midiInVoice = new RtMidiIn();
+    m_player = new QMediaPlayer(this);
+    m_audioOutput = new QAudioOutput(this);
+    m_player->setAudioOutput(m_audioOutput);
 
     auto find_port = [](RtMidi& midi, const std::string& name) {
         for (unsigned int i = 0; i < midi.getPortCount(); i++) {
@@ -62,11 +71,23 @@ bool MidiProcessor::initialize() {
     midiInGuitar->setCallback(&MidiProcessor::guitarCallback, this);
     midiInVoice->setCallback(&MidiProcessor::voiceCallback, this);
     
+    // Connect player state changes to the main window
+    connect(m_player, &QMediaPlayer::playbackStateChanged, this, &MidiProcessor::onPlayerStateChanged);
+
+    // *** THE FIX: Connect internal signals to slots using a QueuedConnection ***
+    connect(this, &MidiProcessor::_internal_playTrack, this, &MidiProcessor::onInternalPlay, Qt::QueuedConnection);
+    connect(this, &MidiProcessor::_internal_pauseTrack, this, &MidiProcessor::onInternalPause, Qt::QueuedConnection);
+    connect(this, &MidiProcessor::_internal_resumeTrack, this, &MidiProcessor::onInternalResume, Qt::QueuedConnection);
+
+
     midiInGuitar->ignoreTypes(false, true, true);
     midiInVoice->ignoreTypes(false, true, true);
 
     precalculateRatios();
     m_isRunning = true;
+
+    loadBackingTracks();
+
     m_workerThread = std::thread(&MidiProcessor::workerLoop, this);
 
     {
@@ -90,6 +111,18 @@ void MidiProcessor::toggleTrack(const std::string& trackId) {
     m_eventQueue.push({EventType::TRACK_TOGGLE, {}, false, -1, trackId});
     m_condition.notify_one();
 }
+ 
+void MidiProcessor::playTrack(int index) {
+    std::lock_guard<std::mutex> lock(m_eventMutex);
+    m_eventQueue.push({EventType::PLAY_TRACK, {}, false, index, ""});
+    m_condition.notify_one();
+}
+
+void MidiProcessor::pauseTrack() {
+    std::lock_guard<std::mutex> lock(m_eventMutex);
+    m_eventQueue.push({EventType::PAUSE_TRACK, {}, false, -1, ""});
+    m_condition.notify_one();
+}
 
 void MidiProcessor::setVerbose(bool verbose) {
     m_isVerbose.store(verbose);
@@ -105,6 +138,25 @@ void MidiProcessor::pollLogQueue() {
         m_logQueue.pop();
     }
     emit logMessage(allMessages.trimmed());
+}
+
+void MidiProcessor::onPlayerStateChanged(QMediaPlayer::PlaybackState state) {
+    emit backingTrackStateChanged(m_currentlyPlayingTrackIndex, state);
+}
+
+// These slots are now executed safely on the main thread
+void MidiProcessor::onInternalPlay(const QUrl& url) {
+    m_player->stop();
+    m_player->setSource(url);
+    m_player->play();
+}
+
+void MidiProcessor::onInternalPause() {
+    m_player->pause();
+}
+
+void MidiProcessor::onInternalResume() {
+    m_player->play();
 }
 
 void MidiProcessor::guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
@@ -160,6 +212,12 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                             if (m_programRulesMap.count(note)) processProgramChange(m_programRulesMap.at(note));
                             m_inCommandMode = false;
                             return;
+                        } else if (note == m_preset.settings.backingTrackCommandNote) { 
+                            m_backingTrackSelectionMode = true; return;
+                        } else if (m_backingTrackSelectionMode) {
+                            handleBackingTrackSelection(note);
+                            m_backingTrackSelectionMode = false;
+                            return;
                         }
                     }
                     std::vector<unsigned char> passthroughMsg = message;
@@ -170,11 +228,9 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                         int value = message[1];
                         int breathValue = std::max(0, value - 16);
                         
-                        // Send original CC2 message
                         std::vector<unsigned char> cc2_msg = {0xB0, 2, (unsigned char)breathValue};
                         midiOut->sendMessage(&cc2_msg);
 
-                        // FIX: Duplicate CC2 on CC104
                         std::vector<unsigned char> cc104_msg = {0xB0, 104, (unsigned char)breathValue};
                         midiOut->sendMessage(&cc104_msg);
                     }
@@ -193,7 +249,41 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                 setTrackState(event.trackId, !m_trackStates.at(event.trackId));
             }
             break;
+        case EventType::PLAY_TRACK:
+             if (event.programIndex >= 0 && event.programIndex < m_backingTracks.size()) {
+                if (m_currentlyPlayingTrackIndex == event.programIndex) {
+                    // It's the same track, so just resume if paused
+                    if (m_player->playbackState() == QMediaPlayer::PausedState) {
+                        emit _internal_resumeTrack();
+                    }
+                } else {
+                    // It's a new track, so play it from the start
+                    m_currentlyPlayingTrackIndex = event.programIndex;
+                    emit _internal_playTrack(QUrl::fromLocalFile(m_backingTracks.at(event.programIndex)));
+                }
+            }
+            break;
+        case EventType::PAUSE_TRACK:
+            if (m_player->playbackState() == QMediaPlayer::PlayingState) {
+                emit _internal_pauseTrack();
+            }
+            break;
     }
+}
+ 
+void MidiProcessor::loadBackingTracks() {
+    QDir backingTracksDir(m_preset.settings.backingTrackDirectory);
+    QStringList absolutePaths;
+    // Get a list of QFileInfo objects
+    QFileInfoList fileInfoList = backingTracksDir.entryInfoList(QStringList() << "*.mp3", QDir::Files);
+
+    // Populate the list of absolute paths
+    for (const QFileInfo &fileInfo : fileInfoList) {
+        absolutePaths.append(fileInfo.absoluteFilePath());
+    }
+    m_backingTracks = absolutePaths;
+    m_backingTracks.sort();
+    emit backingTracksLoaded(m_backingTracks);
 }
 
 void MidiProcessor::processProgramChange(int programIndex) {
@@ -236,6 +326,31 @@ void MidiProcessor::setTrackState(const std::string& trackId, bool newState) {
                 return;
             }
         }
+    }
+}
+
+void MidiProcessor::handleBackingTrackSelection(int note) {
+    if (note > 86) return;
+
+    int trackIndex = 86 - note;
+
+    if (trackIndex < 0 || trackIndex >= m_backingTracks.size()) {
+        {
+            std::lock_guard<std::mutex> lock(m_logMutex);
+            m_logQueue.push("Backing track index " + std::to_string(trackIndex) + " is out of range.");
+        }
+        return;
+    }
+
+    if (m_currentlyPlayingTrackIndex == trackIndex) { // Same track selected
+        if (m_player->playbackState() == QMediaPlayer::PlayingState) {
+            emit _internal_pauseTrack();
+        } else {
+            emit _internal_resumeTrack();
+        }
+    } else { // New track selected
+        m_currentlyPlayingTrackIndex = trackIndex;
+        emit _internal_playTrack(QUrl::fromLocalFile(m_backingTracks.at(trackIndex)));
     }
 }
 
@@ -311,7 +426,6 @@ void MidiProcessor::processPitchBend() {
     cc102_val = std::min(127, std::max(0, cc102_val));
     cc103_val = std::min(127, std::max(0, cc103_val));
 
-    // THE GUARANTEED FIX: Only send MIDI if the value has changed.
     if (cc102_val != m_lastCC102Value) {
         std::vector<unsigned char> msg = { 0xB0, (unsigned char)BEND_DOWN_CC, (unsigned char)cc102_val };
         midiOut->sendMessage(&msg);

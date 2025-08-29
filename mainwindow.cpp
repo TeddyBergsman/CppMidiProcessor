@@ -109,6 +109,10 @@ void MainWindow::createWidgets(const Preset& preset) {
     voiceTranscriptionLabel->setMinimumHeight(50);
     voiceTranscriptionLabel->setTextFormat(Qt::RichText);
     voiceTranscriptionLabel->setStyleSheet("QLabel { background-color: black; color: white; padding: 10px; border-radius: 5px; font-family: monospace; }");
+    
+    // Transpose checkbox
+    transposeCheckBox = new QCheckBox("Transpose");
+    transposeCheckBox->setChecked(false); // Default to OFF
 }
 
 void MainWindow::createLayout() {
@@ -142,6 +146,14 @@ void MainWindow::createLayout() {
     }
     trackBox->setLayout(trackLayout);
     leftColumnLayout->addWidget(trackBox);
+    
+    // Transpose section
+    QGroupBox *transposeBox = new QGroupBox("Transpose Control");
+    QVBoxLayout *transposeLayout = new QVBoxLayout;
+    transposeLayout->addWidget(transposeCheckBox);
+    transposeBox->setLayout(transposeLayout);
+    leftColumnLayout->addWidget(transposeBox);
+    
     leftColumnLayout->addStretch(1); // Add stretch to keep widgets at top
 
     // Right column layout
@@ -229,11 +241,19 @@ void MainWindow::createConnections() {
             m_midiProcessor->pauseTrack();
         }
     });
+    connect(m_voiceController, &VoiceController::toggleCommandDetected, this, [this](const QString& toggleId) {
+        if (toggleId.toLower() == "transpose") {
+            toggleTranspose();
+        }
+    });
     
     // Timer to clear transcription after 5 seconds
     connect(voiceTranscriptionTimer, &QTimer::timeout, this, [this]() {
         voiceTranscriptionLabel->clear();
     });
+    
+    // Transpose checkbox connection
+    connect(transposeCheckBox, &QCheckBox::toggled, this, &MainWindow::onTransposeToggled);
 }
 
 void MainWindow::updateProgramUI(int newProgramIndex) {
@@ -349,6 +369,22 @@ void MainWindow::onVoiceConnectionStatusChanged(bool connected) {
         voiceStatusLabel->setText("Status: Disconnected");
         voiceStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
     }
+}
+
+void MainWindow::onTransposeToggled(bool checked) {
+    // The checkbox state has changed, so we need to apply transpose
+    // When OFF->ON: we transpose up (existing notes play higher)
+    // When ON->OFF: we transpose down (back to normal)
+    int transposeAmount = checked ? 12 : 0;
+    m_midiProcessor->setTranspose(transposeAmount);
+    logToConsole(QString("Transpose %1: notes will play %2")
+        .arg(checked ? "ON" : "OFF")
+        .arg(checked ? "one octave higher" : "at normal pitch"));
+}
+
+void MainWindow::toggleTranspose() {
+    // Toggle the checkbox which will trigger onTransposeToggled
+    transposeCheckBox->setChecked(!transposeCheckBox->isChecked());
 }
 
 QString MainWindow::formatTranscriptionWithColors(const QString& text, const QStringList& triggers, const QStringList& targets) {

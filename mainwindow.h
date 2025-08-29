@@ -27,6 +27,9 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(const Preset& preset, QWidget *parent = nullptr);
     ~MainWindow();
+    
+    // Public method to toggle transpose checkbox (for voice control)
+    void toggleTranspose();
 
 private slots:
     void updateProgramUI(int newProgramIndex);
@@ -43,6 +46,9 @@ private slots:
     void onVoiceControlToggled(bool checked);
     void onTranscriptionReceived(const QString& text, double confidence, const QStringList& detectedTriggers, const QStringList& detectedTargets);
     void onVoiceConnectionStatusChanged(bool connected);
+    
+    // Transpose slot
+    void onTransposeToggled(bool checked);
 
 private:
     void createWidgets(const Preset& preset);
@@ -76,6 +82,9 @@ private:
     QLabel* voiceTranscriptionLabel;
     QLabel* voiceStatusLabel;
     QTimer* voiceTranscriptionTimer;
+    
+    // Transpose control
+    QCheckBox* transposeCheckBox;
 };
 
 #endif // MAINWINDOW_H

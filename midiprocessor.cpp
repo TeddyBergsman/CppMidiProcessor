@@ -138,6 +138,14 @@ void MidiProcessor::setVoiceControlEnabled(bool enabled) {
     m_voiceControlEnabled.store(enabled);
 }
 
+void MidiProcessor::setTranspose(int semitones) {
+    m_transposeAmount.store(semitones);
+    {
+        std::lock_guard<std::mutex> lock(m_logMutex);
+        m_logQueue.push("Transpose set to: " + std::to_string(semitones) + " semitones");
+    }
+}
+
 void MidiProcessor::pollLogQueue() {
     QString allMessages;
     std::lock_guard<std::mutex> lock(m_logMutex);
@@ -219,12 +227,17 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     if (status == 0x90 && velocity > 0) {
                         // Only process MIDI commands if voice control is disabled
                         if (!m_voiceControlEnabled.load()) {
-                            if (note == m_preset.settings.commandNote) { m_inCommandMode = true; return; }
+                            // Adjust command note thresholds based on transpose amount
+                            int transposeAmount = m_transposeAmount.load();
+                            int adjustedCommandNote = m_preset.settings.commandNote + transposeAmount;
+                            int adjustedBackingTrackNote = m_preset.settings.backingTrackCommandNote + transposeAmount;
+                            
+                            if (note == adjustedCommandNote) { m_inCommandMode = true; return; }
                             else if (m_inCommandMode) {
                                 if (m_programRulesMap.count(note)) processProgramChange(m_programRulesMap.at(note));
                                 m_inCommandMode = false;
                                 return;
-                            } else if (note == m_preset.settings.backingTrackCommandNote) { 
+                            } else if (note == adjustedBackingTrackNote) { 
                                 m_backingTrackSelectionMode = true; return;
                             } else if (m_backingTrackSelectionMode) {
                                 handleBackingTrackSelection(note);
@@ -235,6 +248,19 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     }
                     std::vector<unsigned char> passthroughMsg = message;
                     passthroughMsg[0] = (passthroughMsg[0] & 0xF0) | 0x00;
+                    
+                    // Apply transpose to note on/off messages
+                    if ((status == 0x90 || status == 0x80) && !m_inCommandMode && !m_backingTrackSelectionMode) {
+                        int transposeAmount = m_transposeAmount.load();
+                        if (transposeAmount != 0 && passthroughMsg.size() > 1) {
+                            int transposedNote = passthroughMsg[1] + transposeAmount;
+                            // Clamp to valid MIDI range
+                            if (transposedNote < 0) transposedNote = 0;
+                            if (transposedNote > 127) transposedNote = 127;
+                            passthroughMsg[1] = (unsigned char)transposedNote;
+                        }
+                    }
+                    
                     midiOut->sendMessage(&passthroughMsg);
                 } else { // Voice
                     if (status == 0xD0) { // Aftertouch
@@ -246,6 +272,26 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
 
                         std::vector<unsigned char> cc104_msg = {0xB0, 104, (unsigned char)breathValue};
                         midiOut->sendMessage(&cc104_msg);
+                    } else if (status == 0x90 || status == 0x80) { // Note on/off for voice
+                        std::vector<unsigned char> voiceMsg = message;
+                        voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01; // Set to channel 2
+                        
+                        // Apply transpose to voice notes
+                        int transposeAmount = m_transposeAmount.load();
+                        if (transposeAmount != 0 && voiceMsg.size() > 1) {
+                            int transposedNote = voiceMsg[1] + transposeAmount;
+                            // Clamp to valid MIDI range
+                            if (transposedNote < 0) transposedNote = 0;
+                            if (transposedNote > 127) transposedNote = 127;
+                            voiceMsg[1] = (unsigned char)transposedNote;
+                        }
+                        
+                        midiOut->sendMessage(&voiceMsg);
+                    } else {
+                        // Forward other voice messages as-is on channel 2
+                        std::vector<unsigned char> voiceMsg = message;
+                        voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01;
+                        midiOut->sendMessage(&voiceMsg);
                     }
                 }
 

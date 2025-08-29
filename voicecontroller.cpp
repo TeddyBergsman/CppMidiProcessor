@@ -389,6 +389,12 @@ void VoiceControllerWorker::detectTriggerWords(const QString& text, QStringList&
         if (lowerText.contains("turn off")) triggers << "turn off";
     }
     
+    // Transpose trigger and target
+    if (lowerText.contains("transpose")) {
+        triggers << "transpose";
+        targets << "transpose";
+    }
+    
     // Program names and tags (green targets)
     for (const auto& program : m_preset.programs) {
         if (lowerText.contains(program.name.toLower())) {
@@ -554,8 +560,17 @@ bool VoiceControllerWorker::parseTrackCommand(const QString& text) {
 }
 
 bool VoiceControllerWorker::parseToggleCommand(const QString& text) {
-    // This is a placeholder for future toggle commands
-    // You can implement track toggle commands here
+    // Check for transpose command (with or without toggle trigger)
+    if (text.contains("transpose")) {
+        emit toggleCommandDetected("transpose");
+        return true;
+    }
+    
+    // Check for other toggle commands with explicit trigger words
+    if (text.contains("toggle") || text.contains("turn on") || text.contains("turn off")) {
+        // Future toggle commands can be added here
+    }
+    
     return false;
 }
 

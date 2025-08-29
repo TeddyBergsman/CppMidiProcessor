@@ -107,7 +107,7 @@
             <InitialState toggleId="track8" enabled="true" />
             <InitialState toggleId="track9" enabled="false" />
         </Program>
-        <Program name="Alto Sax" triggerNote="80" >
+        <Program name="Alto Sax" quickSwitch="Flügelhorn" triggerNote="80" >
             <Tags>
                 <Tag>sax</Tag>
                 <Tag>saxophone</Tag>

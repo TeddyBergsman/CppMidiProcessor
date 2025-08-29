@@ -34,6 +34,7 @@ public slots:
     void playTrack(int index);
     void pauseTrack();
     void setVoiceControlEnabled(bool enabled);
+    void setTranspose(int semitones);
 
 private slots:
     void pollLogQueue();
@@ -112,6 +113,7 @@ private:
 
     std::atomic<bool> m_isVerbose{false};
     std::atomic<bool> m_voiceControlEnabled{true};
+    std::atomic<int> m_transposeAmount{0};
 
     // Pitch state
     int m_lastGuitarNote = -1;

@@ -109,6 +109,9 @@ void PresetLoader::parsePrograms(QXmlStreamReader& xml, Preset& preset) {
             Program p;
             const auto& attributes = xml.attributes();
             p.name = attributes.value("name").toString();
+            if (attributes.hasAttribute("quickSwitch")) {
+                p.quickSwitch = attributes.value("quickSwitch").toString();
+            }
             p.triggerNote = attributes.value("triggerNote").toInt();
 
             if (attributes.hasAttribute("programCC")) {

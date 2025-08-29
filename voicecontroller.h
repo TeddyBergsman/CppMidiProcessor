@@ -85,6 +85,7 @@ private:
     // Command parsing
     void parseVoiceCommand(const QString& text, double confidence);
     void detectTriggerWords(const QString& text, QStringList& triggers, QStringList& targets);
+    bool parseQuickSwitchCommand(const QString& text);
     bool parseProgramCommand(const QString& text);
     bool parseTrackCommand(const QString& text);
     bool parseToggleCommand(const QString& text);

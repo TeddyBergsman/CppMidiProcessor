@@ -317,6 +317,12 @@ void VoiceControllerWorker::parseVoiceCommand(const QString& text, double confid
     // Try to parse different command types
     qDebug() << "VoiceController: Attempting to parse command:" << lowerText;
     
+    // Try quick switch first since it's more specific
+    if (parseQuickSwitchCommand(lowerText)) {
+        qDebug() << "VoiceController: Matched as quick switch command";
+        return;
+    }
+    
     if (parseProgramCommand(lowerText)) {
         qDebug() << "VoiceController: Matched as program command";
         return;
@@ -335,11 +341,30 @@ void VoiceControllerWorker::parseVoiceCommand(const QString& text, double confid
     qDebug() << "VoiceController: No command matched";
 }
 
+bool VoiceControllerWorker::parseQuickSwitchCommand(const QString& text) {
+    // Check if the command is "quick switch"
+    if (text.contains("quick switch")) {
+        // Find the current program
+        for (int i = 0; i < m_preset.programs.size(); ++i) {
+            const Program& program = m_preset.programs[i];
+            if (!program.quickSwitch.isEmpty()) {
+                // Try to find the target program by name
+                int targetIndex = findProgramByNameOrTag(program.quickSwitch);
+                if (targetIndex >= 0) {
+                    emit programCommandDetected(targetIndex);
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 void VoiceControllerWorker::detectTriggerWords(const QString& text, QStringList& triggers, QStringList& targets) {
     QString lowerText = text.toLower();
     
     // Program switching triggers (yellow)
-    QStringList switchTriggers = {"switch", "switched", "change", "changed", "go to", "go"};
+    QStringList switchTriggers = {"switch", "switched", "change", "changed", "go to", "go", "quick switch"};
     for (const QString& trigger : switchTriggers) {
         if (lowerText.contains(trigger)) {
             triggers << trigger;

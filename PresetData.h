@@ -26,6 +26,7 @@ struct Toggle {
 // Represents a single program, with explicit CCs for program/volume
 struct Program {
     QString name;
+    QString quickSwitch;  // Name of program to switch to when "quick switch" command is received
     int triggerNote;
     int programCC = -1;
     int programValue = -1;

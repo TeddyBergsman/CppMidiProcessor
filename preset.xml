@@ -49,7 +49,7 @@
 
     <Programs>
         <!-- This program explicitly defines all track states. -->
-        <Program name="Flügelhorn" triggerNote="85" programCC="119" programValue="0" volumeCC="7" volumeValue="127">
+        <Program name="Flügelhorn" quickSwitch="Alto Sax" triggerNote="85" programCC="119" programValue="0" volumeCC="7" volumeValue="127">
             <Tags>
                 <Tag>trumpet</Tag>
                 <Tag>chet baker</Tag>

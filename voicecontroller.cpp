@@ -306,6 +306,8 @@ void VoiceControllerWorker::parseVoiceCommand(const QString& text, double confid
            cleanText.endsWith(':'))) {
         cleanText.chop(1);
     }
+    // Normalize commas inside the sentence so phrases like "quick, switch" still match
+    cleanText.remove(',');
     
     QString lowerText = cleanText.toLower();
     QStringList detectedTriggers, detectedTargets;

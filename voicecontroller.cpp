@@ -8,6 +8,8 @@
 #include <QRegularExpression>
 #include <QCoreApplication>
 #include <QThread>
+#include <QProcess>
+#include <QProcessEnvironment>
 #include <algorithm>
 
 // VoiceController implementation
@@ -130,6 +132,7 @@ bool VoiceControllerWorker::startBridgeProcess() {
     
     // Try various locations
     searchPaths << QCoreApplication::applicationDirPath() + "/../../../voice_bridge.py"  // From app bundle
+                << QCoreApplication::applicationDirPath() + "/../Resources/voice_bridge.py" // Inside bundle Resources
                 << QCoreApplication::applicationDirPath() + "/voice_bridge.py"           // Next to executable
                 << QDir::currentPath() + "/voice_bridge.py"                             // Current directory
                 << "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/voice_bridge.py"; // Absolute path
@@ -147,8 +150,39 @@ bool VoiceControllerWorker::startBridgeProcess() {
         return false;
     }
     
+    // Prepare environment and choose Python interpreter explicitly for Finder launches
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PATH", "/opt/homebrew/bin:/usr/local/bin:" + env.value("PATH"));
+    env.insert("PYTHONUNBUFFERED", "1");
+    m_bridgeProcess->setProcessEnvironment(env);
+    m_bridgeProcess->setWorkingDirectory(QFileInfo(scriptPath).absolutePath());
+
+    // Choose a Python interpreter that can import rt_stt
+    QString pythonExe;
+    QString envPython = QString::fromUtf8(qgetenv("RTSTT_PYTHON"));
+    QStringList pythonCandidates;
+    if (!envPython.isEmpty()) pythonCandidates << envPython;
+    pythonCandidates << "python3" << "/opt/homebrew/bin/python3" << "/usr/local/bin/python3" << "python";
+
+    auto canImportRtStt = [&](const QString& exe) -> bool {
+        if (exe.startsWith("/") && !QFileInfo::exists(exe)) return false;
+        QProcess checkProc;
+        checkProc.setProcessEnvironment(env);
+        int code = checkProc.execute(exe, QStringList() << "-c" << "import rt_stt");
+        return code == 0;
+    };
+
+    for (const QString& cand : pythonCandidates) {
+        if (canImportRtStt(cand)) { pythonExe = cand; break; }
+    }
+    if (pythonExe.isEmpty()) {
+        // Fallback to python3 even if import test failed; surface a clear error to UI
+        pythonExe = "python3";
+        emit errorOccurred("rt_stt Python package not found in any interpreter (tried: " + pythonCandidates.join(", ") + ")");
+    }
+
     // Start the Python bridge process
-    m_bridgeProcess->start("python3", QStringList() << scriptPath);
+    m_bridgeProcess->start(pythonExe, QStringList() << scriptPath);
     
     if (!m_bridgeProcess->waitForStarted(5000)) {
         emit errorOccurred("Failed to start voice bridge: " + m_bridgeProcess->errorString());

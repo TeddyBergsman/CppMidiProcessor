@@ -113,15 +113,23 @@ void MainWindow::createWidgets(const Preset& preset) {
 
 void MainWindow::createLayout() {
     mainLayout = new QVBoxLayout(centralWidget);
-
+    
+    // Create a horizontal layout for the two columns
+    QHBoxLayout* columnsLayout = new QHBoxLayout;
+    
+    // Left column layout
+    QVBoxLayout* leftColumnLayout = new QVBoxLayout;
+    
+    // Programs section
     QGroupBox *programBox = new QGroupBox("Programs");
     QVBoxLayout *programLayout = new QVBoxLayout;
     for (auto button : programButtons) {
         programLayout->addWidget(button);
     }
     programBox->setLayout(programLayout);
-    mainLayout->addWidget(programBox);
+    leftColumnLayout->addWidget(programBox);
 
+    // Track Toggles section
     QGroupBox *trackBox = new QGroupBox("Track Toggles");
     QVBoxLayout *trackLayout = new QVBoxLayout;
     std::vector<std::string> sorted_keys;
@@ -133,9 +141,13 @@ void MainWindow::createLayout() {
         trackLayout->addWidget(trackCheckBoxes.at(key));
     }
     trackBox->setLayout(trackLayout);
-    mainLayout->addWidget(trackBox);
+    leftColumnLayout->addWidget(trackBox);
+    leftColumnLayout->addStretch(1); // Add stretch to keep widgets at top
 
-    // NEW: Backing track layout
+    // Right column layout
+    QVBoxLayout* rightColumnLayout = new QVBoxLayout;
+
+    // Backing track layout
     QVBoxLayout* backingTrackLayout = new QVBoxLayout;
     QHBoxLayout* backingTrackButtonsLayout = new QHBoxLayout;
     backingTrackButtonsLayout->addWidget(playButton);
@@ -143,7 +155,7 @@ void MainWindow::createLayout() {
     backingTrackLayout->addWidget(backingTrackList);
     backingTrackLayout->addLayout(backingTrackButtonsLayout);
     backingTrackBox->setLayout(backingTrackLayout);
-    mainLayout->addWidget(backingTrackBox);
+    rightColumnLayout->addWidget(backingTrackBox);
     
     // Voice control layout
     QVBoxLayout* voiceControlLayout = new QVBoxLayout;
@@ -154,14 +166,22 @@ void MainWindow::createLayout() {
     voiceControlLayout->addLayout(voiceControlHeaderLayout);
     voiceControlLayout->addWidget(voiceTranscriptionLabel);
     voiceControlBox->setLayout(voiceControlLayout);
-    mainLayout->addWidget(voiceControlBox);
+    rightColumnLayout->addWidget(voiceControlBox);
 
+    // Debug Console section
     QGroupBox *consoleBox = new QGroupBox("Debug Console");
     QVBoxLayout *consoleLayout = new QVBoxLayout;
     consoleLayout->addWidget(verboseLogCheckBox);
     consoleLayout->addWidget(logConsole);
     consoleBox->setLayout(consoleLayout);
-    mainLayout->addWidget(consoleBox, 1);
+    rightColumnLayout->addWidget(consoleBox, 1);
+
+    // Add both columns to the columns layout
+    columnsLayout->addLayout(leftColumnLayout);
+    columnsLayout->addLayout(rightColumnLayout);
+    
+    // Add the columns layout to the main layout
+    mainLayout->addLayout(columnsLayout);
 }
 
 void MainWindow::createConnections() {

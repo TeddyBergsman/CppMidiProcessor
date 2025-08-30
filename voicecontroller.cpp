@@ -355,6 +355,7 @@ bool VoiceControllerWorker::parseQuickSwitchCommand(const QString& text) {
         int current = m_currentProgramIndex.load();
         if (current >= 0 && current < m_preset.programs.size()) {
             const Program& currentProgram = m_preset.programs[current];
+            // 1) Try explicit quickSwitch target
             if (!currentProgram.quickSwitch.isEmpty()) {
                 int targetIndex = findProgramByNameOrTag(currentProgram.quickSwitch);
                 if (targetIndex >= 0 && targetIndex != current) {
@@ -362,12 +363,22 @@ bool VoiceControllerWorker::parseQuickSwitchCommand(const QString& text) {
                     return true;
                 }
             }
+            // 2) Fallback to previously active program if valid
+            int previous = m_previousProgramIndex.load();
+            if (previous >= 0 && previous < m_preset.programs.size() && previous != current) {
+                emit programCommandDetected(previous);
+                return true;
+            }
         }
     }
     return false;
 }
 
 void VoiceControllerWorker::onProgramChanged(int programIndex) {
+    int prev = m_currentProgramIndex.load();
+    if (prev != programIndex && prev >= 0) {
+        m_previousProgramIndex.store(prev);
+    }
     m_currentProgramIndex.store(programIndex);
 }
 

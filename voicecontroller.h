@@ -105,6 +105,7 @@ private:
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_enabled{true};
     std::atomic<int> m_currentProgramIndex{-1};
+    std::atomic<int> m_previousProgramIndex{-1};
     QStringList m_backingTracks; // Will be populated from directory
     QString m_buffer; // Buffer for incomplete JSON lines
     

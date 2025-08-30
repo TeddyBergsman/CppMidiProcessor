@@ -27,6 +27,9 @@ public:
     bool isConnected() const { return m_connected; }
     void setEnabled(bool enabled);
 
+public slots:
+    void onProgramChanged(int programIndex);
+
 signals:
     void transcriptionReceived(const QString& text, double confidence, const QStringList& detectedTriggers, const QStringList& detectedTargets);
     void connectionStatusChanged(bool connected);
@@ -55,6 +58,7 @@ public slots:
     void start();
     void stop();
     void setEnabled(bool enabled);
+    void onProgramChanged(int programIndex);
 
 signals:
     void transcriptionReceived(const QString& text, double confidence, const QStringList& detectedTriggers, const QStringList& detectedTargets);
@@ -100,6 +104,7 @@ private:
     QProcess* m_bridgeProcess = nullptr;
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_enabled{true};
+    std::atomic<int> m_currentProgramIndex{-1};
     QStringList m_backingTracks; // Will be populated from directory
     QString m_buffer; // Buffer for incomplete JSON lines
     

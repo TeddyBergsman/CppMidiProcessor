@@ -67,6 +67,12 @@ void VoiceController::setEnabled(bool enabled) {
     }
 }
 
+void VoiceController::onProgramChanged(int programIndex) {
+    if (m_worker) {
+        QMetaObject::invokeMethod(m_worker, "onProgramChanged", Qt::QueuedConnection, Q_ARG(int, programIndex));
+    }
+}
+
 // VoiceControllerWorker implementation
 VoiceControllerWorker::VoiceControllerWorker(const Preset& preset, QObject *parent)
     : QObject(parent), m_preset(preset) {
@@ -346,13 +352,12 @@ void VoiceControllerWorker::parseVoiceCommand(const QString& text, double confid
 bool VoiceControllerWorker::parseQuickSwitchCommand(const QString& text) {
     // Check if the command is "quick switch"
     if (text.contains("quick switch")) {
-        // Find the current program
-        for (int i = 0; i < m_preset.programs.size(); ++i) {
-            const Program& program = m_preset.programs[i];
-            if (!program.quickSwitch.isEmpty()) {
-                // Try to find the target program by name
-                int targetIndex = findProgramByNameOrTag(program.quickSwitch);
-                if (targetIndex >= 0) {
+        int current = m_currentProgramIndex.load();
+        if (current >= 0 && current < m_preset.programs.size()) {
+            const Program& currentProgram = m_preset.programs[current];
+            if (!currentProgram.quickSwitch.isEmpty()) {
+                int targetIndex = findProgramByNameOrTag(currentProgram.quickSwitch);
+                if (targetIndex >= 0 && targetIndex != current) {
                     emit programCommandDetected(targetIndex);
                     return true;
                 }
@@ -360,6 +365,10 @@ bool VoiceControllerWorker::parseQuickSwitchCommand(const QString& text) {
         }
     }
     return false;
+}
+
+void VoiceControllerWorker::onProgramChanged(int programIndex) {
+    m_currentProgramIndex.store(programIndex);
 }
 
 void VoiceControllerWorker::detectTriggerWords(const QString& text, QStringList& triggers, QStringList& targets) {

@@ -67,7 +67,8 @@
             <InitialState toggleId="track9" enabled="false" />
         </Program>
         <!-- This program only defines track 3. Tracks 1 and 2 will use the DefaultTrackStates. -->
-        <Program name="Martin J-40" triggerNote="84" programCC="119" programValue="1" volumeCC="7" volumeValue="96">
+        <Program name="Martin" quickSwitch="Votar" triggerNote="84" programCC="119" programValue="1" volumeCC="7" volumeValue="96">
+            <!-- Martin J-40 -->
             <Tags>
                 <Tag>acoustic</Tag>
                 <Tag>guitar</Tag>
@@ -84,7 +85,8 @@
             <InitialState toggleId="track9" enabled="false" />
         </Program>
         <!-- This program defines no states, so all tracks will be set to their default state. -->
-        <Program name="EMP Mark II (Wah)" triggerNote="83" programCC="119" programValue="2" volumeCC="7" volumeValue="112" />
+        <Program name="EMP" triggerNote="83" programCC="119" programValue="2" volumeCC="7" volumeValue="112" />
+        <!-- EMP Mark II (Wah) -->
         <Program name="Votar" triggerNote="82" >
             <InitialState toggleId="track1" enabled="false" />
             <InitialState toggleId="track2" enabled="true" />

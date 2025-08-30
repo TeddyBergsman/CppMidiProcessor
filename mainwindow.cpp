@@ -254,6 +254,10 @@ void MainWindow::createConnections() {
     
     // Transpose checkbox connection
     connect(transposeCheckBox, &QCheckBox::toggled, this, &MainWindow::onTransposeToggled);
+
+    // Inform VoiceController of current program changes so quick switch can use the active program
+    connect(m_midiProcessor, &MidiProcessor::programChanged,
+            m_voiceController, &VoiceController::onProgramChanged);
 }
 
 void MainWindow::updateProgramUI(int newProgramIndex) {

@@ -1,5 +1,4 @@
 #include "midiprocessor.h"
-#include <iostream>
 #include <vector>
 #include <algorithm>
 #include <cmath>
@@ -79,6 +78,8 @@ bool MidiProcessor::initialize() {
     
     // Connect player state changes to the main window
     connect(m_player, &QMediaPlayer::playbackStateChanged, this, &MidiProcessor::onPlayerStateChanged);
+    connect(m_player, &QMediaPlayer::positionChanged, this, &MidiProcessor::onPlayerPositionChanged);
+    connect(m_player, &QMediaPlayer::durationChanged, this, &MidiProcessor::onPlayerDurationChanged);
 
     // *** THE FIX: Connect internal signals to slots using a QueuedConnection ***
     connect(this, &MidiProcessor::_internal_playTrack, this, &MidiProcessor::onInternalPlay, Qt::QueuedConnection);
@@ -175,6 +176,14 @@ void MidiProcessor::onInternalPause() {
 
 void MidiProcessor::onInternalResume() {
     m_player->play();
+}
+
+void MidiProcessor::onPlayerPositionChanged(qint64 position) {
+    emit backingTrackPositionChanged(position);
+}
+
+void MidiProcessor::onPlayerDurationChanged(qint64 duration) {
+    emit backingTrackDurationChanged(duration);
 }
 
 void MidiProcessor::guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {

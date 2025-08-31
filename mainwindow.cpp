@@ -91,10 +91,22 @@ void MainWindow::createWidgets(const Preset& preset) {
         "}"
     );
     
-    playButton = new QPushButton("Play");
-    pauseButton = new QPushButton("Pause");
-    playButton->setEnabled(false);
-    pauseButton->setEnabled(false);
+    // Top timeline bar controls
+    transportButton = new QPushButton;
+    transportButton->setEnabled(false);
+    transportButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+    transportButton->setIconSize(QSize(24, 24));
+    transportButton->setFlat(false);
+    
+    timelineBar = new QProgressBar;
+    timelineBar->setTextVisible(false);
+    timelineBar->setRange(0, 0);
+    timelineBar->setValue(0);
+    timelineBar->setMinimumHeight(12);
+    
+    timeRemainingLabel = new QLabel("--:--");
+    timeRemainingLabel->setMinimumWidth(48);
+    timeRemainingLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     
     // Voice Control Widgets
     voiceControlBox = new QGroupBox("Voice Control");
@@ -117,6 +129,13 @@ void MainWindow::createWidgets(const Preset& preset) {
 
 void MainWindow::createLayout() {
     mainLayout = new QVBoxLayout(centralWidget);
+    
+    // Top timeline bar spanning both columns
+    QHBoxLayout* timelineLayout = new QHBoxLayout;
+    timelineLayout->addWidget(transportButton);
+    timelineLayout->addWidget(timelineBar, 1);
+    timelineLayout->addWidget(timeRemainingLabel);
+    mainLayout->addLayout(timelineLayout);
     
     // Create a horizontal layout for the two columns
     QHBoxLayout* columnsLayout = new QHBoxLayout;
@@ -161,11 +180,7 @@ void MainWindow::createLayout() {
 
     // Backing track layout
     QVBoxLayout* backingTrackLayout = new QVBoxLayout;
-    QHBoxLayout* backingTrackButtonsLayout = new QHBoxLayout;
-    backingTrackButtonsLayout->addWidget(playButton);
-    backingTrackButtonsLayout->addWidget(pauseButton);
     backingTrackLayout->addWidget(backingTrackList);
-    backingTrackLayout->addLayout(backingTrackButtonsLayout);
     backingTrackBox->setLayout(backingTrackLayout);
     rightColumnLayout->addWidget(backingTrackBox);
     
@@ -222,9 +237,10 @@ void MainWindow::createConnections() {
     // NEW: Connect backing track signals and slots
     connect(m_midiProcessor, &MidiProcessor::backingTracksLoaded, this, &MainWindow::onBackingTracksLoaded);
     connect(m_midiProcessor, &MidiProcessor::backingTrackStateChanged, this, &MainWindow::onBackingTrackStateChanged);
-    connect(playButton, &QPushButton::clicked, this, &MainWindow::onPlayClicked);
-    connect(pauseButton, &QPushButton::clicked, this, &MainWindow::onPauseClicked);
-    connect(backingTrackList, &QListWidget::currentItemChanged, this, [this](){ playButton->setEnabled(true); });
+    connect(m_midiProcessor, &MidiProcessor::backingTrackPositionChanged, this, &MainWindow::onTrackPositionChanged);
+    connect(m_midiProcessor, &MidiProcessor::backingTrackDurationChanged, this, &MainWindow::onTrackDurationChanged);
+    connect(transportButton, &QPushButton::clicked, this, &MainWindow::onTransportClicked);
+    connect(backingTrackList, &QListWidget::currentItemChanged, this, [this](){ transportButton->setEnabled(true); });
     
     // Voice control connections
     connect(voiceControlCheckBox, &QCheckBox::toggled, this, &MainWindow::onVoiceControlToggled);
@@ -289,6 +305,9 @@ void MainWindow::onBackingTracksLoaded(const QStringList& tracks) {
 }
 
 void MainWindow::onBackingTrackStateChanged(int trackIndex, QMediaPlayer::PlaybackState state) {
+    m_currentTrackIndex = trackIndex;
+    m_currentPlaybackState = state;
+    
     // Reset all item backgrounds and fonts to defaults
     for (int i = 0; i < backingTrackList->count(); ++i) {
         backingTrackList->item(i)->setBackground(QBrush());
@@ -296,47 +315,65 @@ void MainWindow::onBackingTrackStateChanged(int trackIndex, QMediaPlayer::Playba
         font.setBold(false);
         backingTrackList->item(i)->setFont(font);
     }
+    
+    if (trackIndex >= 0 && trackIndex < backingTrackList->count()) {
+        if (state == QMediaPlayer::PlayingState) {
+            backingTrackList->item(trackIndex)->setBackground(QColor(0, 40, 0));
+            QFont font = backingTrackList->item(trackIndex)->font();
+            font.setBold(true);
+            backingTrackList->item(trackIndex)->setFont(font);
+            backingTrackList->setCurrentRow(trackIndex);
+            transportButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+        } else if (state == QMediaPlayer::PausedState) {
+            backingTrackList->item(trackIndex)->setBackground(QColor(40, 60, 0));
+            QFont font = backingTrackList->item(trackIndex)->font();
+            font.setBold(true);
+            backingTrackList->item(trackIndex)->setFont(font);
+            transportButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+        } else { // Stopped
+            backingTrackList->item(trackIndex)->setBackground(QBrush());
+            transportButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+        }
+    }
+    
+    // Enable/disable transport button
+    transportButton->setEnabled(backingTrackList->currentItem() != nullptr);
+}
 
-    if (trackIndex < 0 || trackIndex >= backingTrackList->count()) return;
-
-    if (state == QMediaPlayer::PlayingState) {
-        // Faint dark green for playing track
-        backingTrackList->item(trackIndex)->setBackground(QColor(0, 40, 0));
-        
-        // Make text bold for playing track
-        QFont font = backingTrackList->item(trackIndex)->font();
-        font.setBold(true);
-        backingTrackList->item(trackIndex)->setFont(font);
-        
-        // Automatically select the playing track
-        backingTrackList->setCurrentRow(trackIndex);
-        
-        playButton->setEnabled(false);
-        pauseButton->setEnabled(true);
-    } else if (state == QMediaPlayer::PausedState) {
-        // Slightly brighter green for paused
-        backingTrackList->item(trackIndex)->setBackground(QColor(40, 60, 0));
-        
-        // Keep text bold for paused track
-        QFont font = backingTrackList->item(trackIndex)->font();
-        font.setBold(true);
-        backingTrackList->item(trackIndex)->setFont(font);
-        
-        playButton->setEnabled(true);
-        pauseButton->setEnabled(false);
-    } else { // StoppedState
-        backingTrackList->item(trackIndex)->setBackground(QBrush());
-        playButton->setEnabled(backingTrackList->currentItem() != nullptr);
-        pauseButton->setEnabled(false);
+void MainWindow::onTransportClicked() {
+    int selected = backingTrackList->currentRow();
+    if (selected < 0) return;
+    if (m_currentPlaybackState == QMediaPlayer::PlayingState) {
+        m_midiProcessor->pauseTrack();
+    } else {
+        m_midiProcessor->playTrack(selected);
     }
 }
 
-void MainWindow::onPlayClicked() {
-    m_midiProcessor->playTrack(backingTrackList->currentRow());
+static QString formatMsToMinSec(qint64 ms) {
+    if (ms < 0) ms = 0;
+    qint64 totalSeconds = ms / 1000;
+    qint64 minutes = totalSeconds / 60;
+    qint64 seconds = totalSeconds % 60;
+    return QString::asprintf("%lld:%02lld", (long long)minutes, (long long)seconds);
 }
 
-void MainWindow::onPauseClicked() {
-    m_midiProcessor->pauseTrack();
+void MainWindow::onTrackPositionChanged(qint64 positionMs) {
+    m_trackPositionMs = positionMs;
+    if (m_trackDurationMs > 0) {
+        timelineBar->setRange(0, (int)m_trackDurationMs);
+        timelineBar->setValue((int)std::min<qint64>(m_trackDurationMs, positionMs));
+        qint64 remaining = m_trackDurationMs - positionMs;
+        timeRemainingLabel->setText(formatMsToMinSec(remaining));
+    } else {
+        timelineBar->setRange(0, 0);
+        timeRemainingLabel->setText("--:--");
+    }
+}
+
+void MainWindow::onTrackDurationChanged(qint64 durationMs) {
+    m_trackDurationMs = durationMs;
+    onTrackPositionChanged(m_trackPositionMs);
 }
 
 void MainWindow::onVoiceControlToggled(bool checked) {

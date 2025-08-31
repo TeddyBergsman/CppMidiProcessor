@@ -43,6 +43,8 @@ private slots:
     void onInternalPlay(const QUrl& url);
     void onInternalPause();
     void onInternalResume();
+    void onPlayerPositionChanged(qint64 position);
+    void onPlayerDurationChanged(qint64 duration);
 
 
 signals:
@@ -55,6 +57,8 @@ signals:
     void _internal_playTrack(const QUrl& url);
     void _internal_pauseTrack();
     void _internal_resumeTrack();
+    void backingTrackPositionChanged(qint64 position);
+    void backingTrackDurationChanged(qint64 duration);
 
 private:
     enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, PLAY_TRACK, PAUSE_TRACK };

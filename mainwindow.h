@@ -19,6 +19,7 @@ class QTextEdit;
 class QGroupBox;
 class QLabel;
 class QTimer;
+class QProgressBar;
 QT_END_NAMESPACE
 
 class MainWindow : public QMainWindow {
@@ -39,8 +40,9 @@ private slots:
     void onVerboseLogToggled(bool checked);
     void onBackingTracksLoaded(const QStringList& tracks);
     void onBackingTrackStateChanged(int trackIndex, QMediaPlayer::PlaybackState state);
-    void onPlayClicked();
-    void onPauseClicked();
+    void onTransportClicked();
+    void onTrackPositionChanged(qint64 positionMs);
+    void onTrackDurationChanged(qint64 durationMs);
     
     // Voice control slots
     void onVoiceControlToggled(bool checked);
@@ -73,8 +75,14 @@ private:
     // NEW: Backing track UI
     QGroupBox* backingTrackBox;
     QListWidget* backingTrackList;
-    QPushButton* playButton;
-    QPushButton* pauseButton;
+    // Top timeline bar
+    QPushButton* transportButton;
+    QProgressBar* timelineBar;
+    QLabel* timeRemainingLabel;
+    qint64 m_trackDurationMs = 0;
+    qint64 m_trackPositionMs = 0;
+    int m_currentTrackIndex = -1;
+    QMediaPlayer::PlaybackState m_currentPlaybackState = QMediaPlayer::StoppedState;
     
     // Voice control UI
     QGroupBox* voiceControlBox;

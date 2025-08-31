@@ -11,6 +11,9 @@
 #include <QFile>
 #include <QXmlStreamReader>
 #include <QRegularExpression>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 MidiProcessor::MidiProcessor(const Preset& preset, QObject *parent) 
     : QObject(parent), m_preset(preset), m_currentProgramIndex(-1) {
@@ -129,6 +132,12 @@ void MidiProcessor::pauseTrack() {
     std::lock_guard<std::mutex> lock(m_eventMutex);
     m_eventQueue.push({EventType::PAUSE_TRACK, {}, false, -1, ""});
     m_condition.notify_one();
+}
+
+void MidiProcessor::seekToPosition(qint64 positionMs) {
+    if (m_player && m_player->playbackState() != QMediaPlayer::StoppedState) {
+        m_player->setPosition(positionMs);
+    }
 }
 
 void MidiProcessor::setVerbose(bool verbose) {
@@ -345,6 +354,110 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     }
                     
                     m_currentlyPlayingTrackIndex = event.programIndex;
+                    
+                    // Emit timeline data as JSON for the UI
+                    QJsonObject timelineJson;
+                    
+                    // Bar markers
+                    QJsonArray barsArray;
+                    for (const auto& bar : metadata.barMarkers) {
+                        QJsonObject barObj;
+                        barObj["bar"] = bar.bar;
+                        barObj["timeMs"] = (double)bar.timeMs;
+                        barsArray.append(barObj);
+                    }
+                    timelineJson["bars"] = barsArray;
+                    
+                    // Sections
+                    QJsonArray sectionsArray;
+                    for (const auto& section : metadata.sections) {
+                        QJsonObject sectionObj;
+                        sectionObj["label"] = section.label;
+                        sectionObj["timeMs"] = (double)section.timeMs;
+                        sectionObj["bar"] = section.bar;
+                        sectionsArray.append(sectionObj);
+                    }
+                    timelineJson["sections"] = sectionsArray;
+                    
+                    // Chords
+                    QJsonArray chordsArray;
+                    for (const auto& chord : metadata.chordEvents) {
+                        QJsonObject chordObj;
+                        chordObj["bar"] = chord.bar;
+                        chordObj["chord"] = chord.chord;
+                        chordsArray.append(chordObj);
+                    }
+                    timelineJson["chords"] = chordsArray;
+                    
+                    // Program changes
+                    QJsonArray programsArray;
+                    for (const auto& prog : metadata.programChanges) {
+                        QJsonObject progObj;
+                        progObj["bar"] = prog.bar;
+                        progObj["program"] = prog.programName;
+                        programsArray.append(progObj);
+                    }
+                    timelineJson["programs"] = programsArray;
+                    
+                    // Transpose toggles
+                    QJsonArray transposeArray;
+                    for (const auto& trans : metadata.transposeToggles) {
+                        QJsonObject transObj;
+                        transObj["bar"] = trans.bar;
+                        transObj["on"] = trans.on;
+                        transposeArray.append(transObj);
+                    }
+                    timelineJson["transpose"] = transposeArray;
+                    
+                    // Lyrics
+                    QJsonArray lyricsArray;
+                    for (const auto& lyric : metadata.lyricLines) {
+                        QJsonObject lyricObj;
+                        lyricObj["startBar"] = lyric.startBar;
+                        lyricObj["endBar"] = lyric.endBar;
+                        lyricObj["text"] = lyric.text;
+                        
+                        // Add word timing if available
+                        if (!lyric.words.isEmpty()) {
+                            QJsonArray wordsArray;
+                            for (const auto& word : lyric.words) {
+                                QJsonObject wordObj;
+                                wordObj["text"] = word.text;
+                                wordObj["startFraction"] = word.startFraction;
+                                wordObj["endFraction"] = word.endFraction;
+                                wordsArray.append(wordObj);
+                            }
+                            lyricObj["words"] = wordsArray;
+                        }
+                        lyricsArray.append(lyricObj);
+                    }
+                    timelineJson["lyrics"] = lyricsArray;
+                    
+                    // Tempo changes
+                    QJsonArray tempoArray;
+                    for (const auto& tempo : metadata.tempoChanges) {
+                        QJsonObject tempoObj;
+                        tempoObj["bar"] = tempo.bar;
+                        tempoObj["bpm"] = tempo.bpm;
+                        tempoArray.append(tempoObj);
+                    }
+                    timelineJson["tempos"] = tempoArray;
+                    
+                    // Time signature changes
+                    QJsonArray timeSigArray;
+                    for (const auto& ts : metadata.timeSignatureChanges) {
+                        QJsonObject tsObj;
+                        tsObj["bar"] = ts.bar;
+                        tsObj["numerator"] = ts.numerator;
+                        tsObj["denominator"] = ts.denominator;
+                        timeSigArray.append(tsObj);
+                    }
+                    timelineJson["timeSignatures"] = timeSigArray;
+                    
+                    // Window size
+                    timelineJson["barWindowSize"] = metadata.barWindowSize;
+                    
+                    emit backingTrackTimelineUpdated(QJsonDocument(timelineJson).toJson(QJsonDocument::Compact));
                     emit _internal_playTrack(QUrl::fromLocalFile(trackPath));
                 }
             }
@@ -372,6 +485,119 @@ void MidiProcessor::loadBackingTracks() {
     emit backingTracksLoaded(m_backingTracks);
 }
 
+void MidiProcessor::loadTrackTimeline(int index) {
+    if (index < 0 || index >= m_backingTracks.size()) {
+        return;
+    }
+    
+    QString trackPath = m_backingTracks.at(index);
+    TrackMetadata metadata = loadTrackMetadata(trackPath);
+    
+    // Build and emit timeline JSON
+    QJsonObject timelineJson;
+    
+    // Bar markers
+    QJsonArray barsArray;
+    for (const auto& bar : metadata.barMarkers) {
+        QJsonObject barObj;
+        barObj["bar"] = bar.bar;
+        barObj["timeMs"] = (double)bar.timeMs;
+        barsArray.append(barObj);
+    }
+    timelineJson["bars"] = barsArray;
+    
+    // Sections
+    QJsonArray sectionsArray;
+    for (const auto& section : metadata.sections) {
+        QJsonObject sectionObj;
+        sectionObj["label"] = section.label;
+        sectionObj["timeMs"] = (double)section.timeMs;
+        sectionObj["bar"] = section.bar;
+        sectionsArray.append(sectionObj);
+    }
+    timelineJson["sections"] = sectionsArray;
+    
+    // Chords
+    QJsonArray chordsArray;
+    for (const auto& chord : metadata.chordEvents) {
+        QJsonObject chordObj;
+        chordObj["bar"] = chord.bar;
+        chordObj["chord"] = chord.chord;
+        chordsArray.append(chordObj);
+    }
+    timelineJson["chords"] = chordsArray;
+    
+    // Program changes
+    QJsonArray programsArray;
+    for (const auto& prog : metadata.programChanges) {
+        QJsonObject progObj;
+        progObj["bar"] = prog.bar;
+        progObj["program"] = prog.programName;
+        programsArray.append(progObj);
+    }
+    timelineJson["programs"] = programsArray;
+    
+    // Transpose toggles
+    QJsonArray transposeArray;
+    for (const auto& trans : metadata.transposeToggles) {
+        QJsonObject transObj;
+        transObj["bar"] = trans.bar;
+        transObj["on"] = trans.on;
+        transposeArray.append(transObj);
+    }
+    timelineJson["transpose"] = transposeArray;
+    
+    // Lyrics
+    QJsonArray lyricsArray;
+    for (const auto& lyric : metadata.lyricLines) {
+        QJsonObject lyricObj;
+        lyricObj["startBar"] = lyric.startBar;
+        lyricObj["endBar"] = lyric.endBar;
+        lyricObj["text"] = lyric.text;
+        
+        // Add word timing if available
+        if (!lyric.words.isEmpty()) {
+            QJsonArray wordsArray;
+            for (const auto& word : lyric.words) {
+                QJsonObject wordObj;
+                wordObj["text"] = word.text;
+                wordObj["startFraction"] = word.startFraction;
+                wordObj["endFraction"] = word.endFraction;
+                wordsArray.append(wordObj);
+            }
+            lyricObj["words"] = wordsArray;
+        }
+        lyricsArray.append(lyricObj);
+    }
+    timelineJson["lyrics"] = lyricsArray;
+    
+    // Tempo changes
+    QJsonArray tempoArray;
+    for (const auto& tempo : metadata.tempoChanges) {
+        QJsonObject tempoObj;
+        tempoObj["bar"] = tempo.bar;
+        tempoObj["bpm"] = tempo.bpm;
+        tempoArray.append(tempoObj);
+    }
+    timelineJson["tempos"] = tempoArray;
+    
+    // Time signature changes
+    QJsonArray timeSigArray;
+    for (const auto& ts : metadata.timeSignatureChanges) {
+        QJsonObject tsObj;
+        tsObj["bar"] = ts.bar;
+        tsObj["numerator"] = ts.numerator;
+        tsObj["denominator"] = ts.denominator;
+        timeSigArray.append(tsObj);
+    }
+    timelineJson["timeSignatures"] = timeSigArray;
+    
+    // Window size
+    timelineJson["barWindowSize"] = metadata.barWindowSize;
+    
+    emit backingTrackTimelineUpdated(QJsonDocument(timelineJson).toJson(QJsonDocument::Compact));
+}
+
 TrackMetadata MidiProcessor::loadTrackMetadata(const QString& trackPath) {
     TrackMetadata metadata;
     
@@ -392,27 +618,175 @@ TrackMetadata MidiProcessor::loadTrackMetadata(const QString& trackPath) {
     
     QXmlStreamReader xml(&xmlFile);
     
+    // Helper to parse time strings like "0:04.11" or "1:23.45"
+    auto readTimeMs = [](const QString& timeStr) -> qint64 {
+        QStringList parts = timeStr.split(":");
+        if (parts.size() == 2) {
+            int minutes = parts[0].toInt();
+            double seconds = parts[1].toDouble();
+            return (qint64)(minutes * 60000 + seconds * 1000);
+        }
+        return 0;
+    };
+    
     while (!xml.atEnd() && !xml.hasError()) {
         QXmlStreamReader::TokenType token = xml.readNext();
         
-        if (token == QXmlStreamReader::StartElement) {
-            if (xml.name().toString() == "TrackMetadata") {
-                while (!(xml.tokenType() == QXmlStreamReader::EndElement && 
-                         xml.name().toString() == "TrackMetadata")) {
-                    xml.readNext();
+        if (token == QXmlStreamReader::StartElement && xml.name() == "TrackMetadata") {
+            while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "TrackMetadata")) {
+                xml.readNext();
+                
+                if (xml.tokenType() == QXmlStreamReader::StartElement) {
+                    QString elementName = xml.name().toString();
                     
-                    if (xml.tokenType() == QXmlStreamReader::StartElement) {
-                        QString elementName = xml.name().toString();
-                        QString elementText = xml.readElementText();
-                        
-                        if (elementName == "Volume") {
-                            metadata.volume = elementText.toDouble();
-                        } else if (elementName == "Tempo") {
-                            metadata.tempo = elementText.toInt();
-                        } else if (elementName == "Key") {
-                            metadata.key = elementText;
-                        } else if (elementName == "Program") {
-                            metadata.program = elementText.toInt();
+                    if (elementName == "Volume") {
+                        metadata.volume = xml.readElementText().toDouble();
+                    } else if (elementName == "Tempo") {
+                        metadata.tempo = xml.readElementText().toInt();
+                    } else if (elementName == "Key") {
+                        metadata.key = xml.readElementText();
+                    } else if (elementName == "Program") {
+                        metadata.program = xml.readElementText().toInt();
+                    } else if (elementName == "BarWindowSize") {
+                        metadata.barWindowSize = xml.readElementText().toInt();
+                    } else if (elementName == "Timeline") {
+                        // Parse timeline data
+                        while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Timeline")) {
+                            xml.readNext();
+                            
+                            if (xml.tokenType() == QXmlStreamReader::StartElement) {
+                                QString sectionName = xml.name().toString();
+                                
+                                if (sectionName == "Bars") {
+                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Bars")) {
+                                        xml.readNext();
+                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "Bar") {
+                                            BarMarker bar;
+                                            bar.bar = xml.attributes().value("number").toDouble();
+                                            bar.timeMs = readTimeMs(xml.attributes().value("time").toString());
+                                            metadata.barMarkers.append(bar);
+                                            xml.skipCurrentElement();
+                                        }
+                                    }
+                                } else if (sectionName == "Sections") {
+                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Sections")) {
+                                        xml.readNext();
+                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "Section") {
+                                            SectionMarker section;
+                                            section.label = xml.attributes().value("label").toString();
+                                            section.timeMs = readTimeMs(xml.attributes().value("time").toString());
+                                            if (xml.attributes().hasAttribute("bar")) {
+                                                section.bar = xml.attributes().value("bar").toDouble();
+                                            }
+                                            metadata.sections.append(section);
+                                            xml.skipCurrentElement();
+                                        }
+                                    }
+                                } else if (sectionName == "Chords") {
+                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Chords")) {
+                                        xml.readNext();
+                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "Chord") {
+                                            ChordEvent chord;
+                                            chord.bar = xml.attributes().value("bar").toDouble();
+                                            chord.chord = xml.attributes().value("name").toString();
+                                            metadata.chordEvents.append(chord);
+                                            xml.skipCurrentElement();
+                                        }
+                                    }
+                                } else if (sectionName == "Programs") {
+                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Programs")) {
+                                        xml.readNext();
+                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "ProgramChange") {
+                                            ProgramChangeEvent prog;
+                                            prog.bar = xml.attributes().value("bar").toDouble();
+                                            prog.programName = xml.attributes().value("name").toString();
+                                            metadata.programChanges.append(prog);
+                                            xml.skipCurrentElement();
+                                        }
+                                    }
+                                } else if (sectionName == "Transpose") {
+                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Transpose")) {
+                                        xml.readNext();
+                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "Toggle") {
+                                            TransposeToggleEvent trans;
+                                            trans.bar = xml.attributes().value("bar").toDouble();
+                                            trans.on = xml.attributes().value("state").toString().toLower() != "off";
+                                            metadata.transposeToggles.append(trans);
+                                            xml.skipCurrentElement();
+                                        }
+                                    }
+                                } else if (sectionName == "Lyrics") {
+                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Lyrics")) {
+                                        xml.readNext();
+                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "Line") {
+                                            LyricLine lyric;
+                                            lyric.startBar = xml.attributes().value("startBar").toDouble();
+                                            lyric.endBar = xml.attributes().value("endBar").toDouble();
+                                            
+                                            // Read line content
+                                            while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Line")) {
+                                                xml.readNext();
+                                                if (xml.tokenType() == QXmlStreamReader::StartElement) {
+                                                    if (xml.name() == "Text") {
+                                                        lyric.text = xml.readElementText();
+                                                    } else if (xml.name() == "Words") {
+                                                        while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Words")) {
+                                                            xml.readNext();
+                                                            if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "Word") {
+                                                                LyricLine::Word word;
+                                                                word.text = xml.attributes().value("text").toString();
+                                                                word.startFraction = xml.attributes().value("startFraction").toDouble();
+                                                                word.endFraction = xml.attributes().value("endFraction").toDouble();
+                                                                lyric.words.append(word);
+                                                                xml.skipCurrentElement();
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            metadata.lyricLines.append(lyric);
+                                        }
+                                    }
+                                } else if (sectionName == "Keys") {
+                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Keys")) {
+                                        xml.readNext();
+                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "KeyChange") {
+                                            KeyChangeEvent key;
+                                            key.bar = xml.attributes().value("bar").toDouble();
+                                            key.key = xml.attributes().value("name").toString();
+                                            metadata.keyChanges.append(key);
+                                            xml.skipCurrentElement();
+                                        }
+                                    }
+                                } else if (sectionName == "Tempos") {
+                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Tempos")) {
+                                        xml.readNext();
+                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "TempoChange") {
+                                            TempoChangeEvent tempo;
+                                            tempo.bar = xml.attributes().value("bar").toDouble();
+                                            tempo.bpm = xml.attributes().value("bpm").toInt();
+                                            metadata.tempoChanges.append(tempo);
+                                            xml.skipCurrentElement();
+                                        }
+                                    }
+                                } else if (sectionName == "TimeSignatures") {
+                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "TimeSignatures")) {
+                                        xml.readNext();
+                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "TimeSignatureChange") {
+                                            TimeSignatureChangeEvent ts;
+                                            ts.bar = xml.attributes().value("bar").toDouble();
+                                            QString sig = xml.attributes().value("signature").toString();
+                                            QStringList parts = sig.split("/");
+                                            if (parts.size() == 2) {
+                                                ts.numerator = parts[0].toInt();
+                                                ts.denominator = parts[1].toInt();
+                                            }
+                                            metadata.timeSignatureChanges.append(ts);
+                                            xml.skipCurrentElement();
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -427,9 +801,8 @@ TrackMetadata MidiProcessor::loadTrackMetadata(const QString& trackPath) {
     xmlFile.close();
     qDebug() << "Loaded metadata for" << QFileInfo(trackPath).fileName() 
              << "- Volume:" << metadata.volume 
-             << "Tempo:" << metadata.tempo 
-             << "Key:" << metadata.key 
-             << "Program:" << metadata.program;
+             << "Timeline bars:" << metadata.barMarkers.size()
+             << "Sections:" << metadata.sections.size();
     
     return metadata;
 }

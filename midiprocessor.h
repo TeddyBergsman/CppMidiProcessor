@@ -33,8 +33,10 @@ public slots:
     void setVerbose(bool verbose);
     void playTrack(int index);
     void pauseTrack();
+    void seekToPosition(qint64 positionMs);
     void setVoiceControlEnabled(bool enabled);
     void setTranspose(int semitones);
+    void loadTrackTimeline(int index);
 
 private slots:
     void pollLogQueue();
@@ -59,6 +61,7 @@ signals:
     void _internal_resumeTrack();
     void backingTrackPositionChanged(qint64 position);
     void backingTrackDurationChanged(qint64 duration);
+    void backingTrackTimelineUpdated(const QString& timelineJson);
 
 private:
     enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, PLAY_TRACK, PAUSE_TRACK };

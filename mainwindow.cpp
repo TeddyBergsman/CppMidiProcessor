@@ -101,7 +101,7 @@ void MainWindow::createWidgets(const Preset& preset) {
     transportButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
     transportButton->setIconSize(QSize(20, 20));
     transportButton->setFlat(false);
-    transportButton->setFixedSize(40, 30);
+    transportButton->setFixedSize(30, 30);
     
     timelineBar = new QProgressBar;
     timelineBar->setTextVisible(false);
@@ -123,9 +123,9 @@ void MainWindow::createWidgets(const Preset& preset) {
     
     // 4-bar window widgets
     fourBarWidget = new QWidget;
-    fourBarWidget->setStyleSheet("QWidget { background-color: #2a2a2a; border-radius: 4px; padding: 5px; }");
+    fourBarWidget->setStyleSheet("QWidget { background-color: #2a2a2a; border-radius: 4px; padding: 0px; }");
     // Keep consistent height whether populated or empty to avoid layout popping
-    fourBarWidget->setFixedHeight(100);
+    fourBarWidget->setFixedHeight(80);
     
     fourBarRangeLabel = new QLabel("");  // Removed label
     fourBarRangeLabel->setVisible(false);
@@ -140,7 +140,7 @@ void MainWindow::createWidgets(const Preset& preset) {
     // Lyrics widgets
     lyricsWidget = new QWidget;
     lyricsWidget->setStyleSheet("QWidget { background-color: #2a2a2a; padding: 2px; }");
-    lyricsWidget->setFixedHeight(60); // Further reduced height
+    lyricsWidget->setFixedHeight(38); // Reduced height to be more compact
     
     currentLyricLabel = new QLabel("");
     currentLyricLabel->setWordWrap(true);
@@ -210,7 +210,6 @@ void MainWindow::createLayout() {
     lyricsLayout->setSpacing(2);
     lyricsLayout->addWidget(currentLyricLabel);
     lyricsLayout->addWidget(nextLyricLabel);
-    lyricsLayout->addStretch();
     mainLayout->addWidget(lyricsWidget);
     
     // Create a horizontal layout for the two columns

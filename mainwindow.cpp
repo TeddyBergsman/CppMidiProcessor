@@ -124,6 +124,8 @@ void MainWindow::createWidgets(const Preset& preset) {
     // 4-bar window widgets
     fourBarWidget = new QWidget;
     fourBarWidget->setStyleSheet("QWidget { background-color: #2a2a2a; border-radius: 4px; padding: 5px; }");
+    // Keep consistent height whether populated or empty to avoid layout popping
+    fourBarWidget->setFixedHeight(100);
     
     fourBarRangeLabel = new QLabel("");  // Removed label
     fourBarRangeLabel->setVisible(false);

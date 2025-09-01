@@ -493,8 +493,10 @@ void MainWindow::onTrackPositionChanged(qint64 positionMs) {
         // Check for transpose toggles
         for (const auto& trans : m_transposeToggles) {
             if (trans.bar > lastCheckedBar && trans.bar <= currentBar) {
-                m_midiProcessor->setTranspose(trans.on ? 12 : 0);
+                m_midiProcessor->applyTranspose(trans.on ? 12 : 0);
+                bool prev = transposeCheckBox->blockSignals(true);
                 transposeCheckBox->setChecked(trans.on);
+                transposeCheckBox->blockSignals(prev);
             }
         }
         
@@ -1049,7 +1051,7 @@ void MainWindow::onTransposeToggled(bool checked) {
     // When OFF->ON: we transpose up (existing notes play higher)
     // When ON->OFF: we transpose down (back to normal)
     int transposeAmount = checked ? 12 : 0;
-    m_midiProcessor->setTranspose(transposeAmount);
+    m_midiProcessor->applyTranspose(transposeAmount);
     logToConsole(QString("Transpose %1: notes will play %2")
         .arg(checked ? "ON" : "OFF")
         .arg(checked ? "one octave higher" : "at normal pitch"));

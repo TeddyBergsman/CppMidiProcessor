@@ -31,6 +31,8 @@ MidiProcessor::MidiProcessor(const Preset& preset, QObject *parent)
     m_logPollTimer = new QTimer(this);
     connect(m_logPollTimer, &QTimer::timeout, this, &MidiProcessor::pollLogQueue);
     m_logPollTimer->start(33);
+
+    // Nothing extra here
 }
 
 MidiProcessor::~MidiProcessor() {
@@ -113,6 +115,13 @@ bool MidiProcessor::initialize() {
 void MidiProcessor::applyProgram(int programIndex) {
     std::lock_guard<std::mutex> lock(m_eventMutex);
     m_eventQueue.push({EventType::PROGRAM_CHANGE, {}, false, programIndex, ""});
+    m_condition.notify_one();
+}
+
+void MidiProcessor::applyTranspose(int semitones) {
+    std::lock_guard<std::mutex> lock(m_eventMutex);
+    // Use programIndex field to carry semitone value for TRANSPOSE_CHANGE
+    m_eventQueue.push({EventType::TRANSPOSE_CHANGE, {}, false, semitones, ""});
     m_condition.notify_one();
 }
 
@@ -240,7 +249,7 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                 unsigned char status = message[0] & 0xF0;
 
                 if (event.isGuitar) {
-                    int note = message.size() > 1 ? message[1] : 0;
+                    int inputNote = message.size() > 1 ? message[1] : 0;
                     int velocity = message.size() > 2 ? message[2] : 0;
                     if (status == 0x90 && velocity > 0) {
                         // Only process MIDI commands if voice control is disabled
@@ -250,15 +259,18 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                             int adjustedCommandNote = m_preset.settings.commandNote + transposeAmount;
                             int adjustedBackingTrackNote = m_preset.settings.backingTrackCommandNote + transposeAmount;
                             
-                            if (note == adjustedCommandNote) { m_inCommandMode = true; return; }
+                            if (inputNote == adjustedCommandNote) { m_inCommandMode = true; return; }
                             else if (m_inCommandMode) {
-                                if (m_programRulesMap.count(note)) processProgramChange(m_programRulesMap.at(note));
+                                if (m_programRulesMap.count(inputNote)) { 
+                                    panicSilence();
+                                    processProgramChange(m_programRulesMap.at(inputNote));
+                                }
                                 m_inCommandMode = false;
                                 return;
-                            } else if (note == adjustedBackingTrackNote) { 
+                            } else if (inputNote == adjustedBackingTrackNote) { 
                                 m_backingTrackSelectionMode = true; return;
                             } else if (m_backingTrackSelectionMode) {
-                                handleBackingTrackSelection(note);
+                                handleBackingTrackSelection(inputNote);
                                 m_backingTrackSelectionMode = false;
                                 return;
                             }
@@ -280,6 +292,7 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     }
                     
                     midiOut->sendMessage(&passthroughMsg);
+                    
                 } else { // Voice
                     if (status == 0xD0) { // Aftertouch
                         int value = message[1];
@@ -291,6 +304,8 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                         std::vector<unsigned char> cc104_msg = {0xB0, 104, (unsigned char)breathValue};
                         midiOut->sendMessage(&cc104_msg);
                     } else if (status == 0x90 || status == 0x80) { // Note on/off for voice
+                        int inputNote = message.size() > 1 ? message[1] : 0;
+                        int velocity = message.size() > 2 ? message[2] : 0;
                         std::vector<unsigned char> voiceMsg = message;
                         voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01; // Set to channel 2
                         
@@ -303,7 +318,6 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                             if (transposedNote > 127) transposedNote = 127;
                             voiceMsg[1] = (unsigned char)transposedNote;
                         }
-                        
                         midiOut->sendMessage(&voiceMsg);
                     } else {
                         // Forward other voice messages as-is on channel 2
@@ -319,7 +333,18 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
             }
             break;
         case EventType::PROGRAM_CHANGE:
+            // Silence any sounding notes before switching programs to avoid stuck notes
+            panicSilence();
             processProgramChange(event.programIndex);
+            break;
+        case EventType::TRANSPOSE_CHANGE:
+            // Silence before changing transpose to ensure on/off pairs match
+            panicSilence();
+            m_transposeAmount.store(event.programIndex);
+            {
+                std::lock_guard<std::mutex> lock(m_logMutex);
+                m_logQueue.push("Transpose set to: " + std::to_string(event.programIndex) + " semitones");
+            }
             break;
         case EventType::TRACK_TOGGLE:
             if (m_trackStates.count(event.trackId)) {
@@ -345,6 +370,8 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     
                     // Apply program change if specified
                     if (metadata.program > 0 && metadata.program <= m_preset.programs.size()) {
+                        // Silence first to avoid stuck notes when auto-switching program from metadata
+                        panicSilence();
                         // Switch to the specified program (1-based in XML, convert to 0-based)
                         processProgramChange(metadata.program - 1);
                         {
@@ -882,6 +909,31 @@ void MidiProcessor::sendNoteToggle(int note, int channel, int velocity) {
     midiOut->sendMessage(&msg);
     msg[0] = (0x80 | chan); msg[2] = 0;
     midiOut->sendMessage(&msg);
+}
+
+void MidiProcessor::sendChannelAllNotesOff(int zeroBasedChannel) {
+    if (zeroBasedChannel < 0 || zeroBasedChannel > 15) return;
+    unsigned char chan = (unsigned char)zeroBasedChannel;
+    // Sustain Off (CC64 = 0)
+    std::vector<unsigned char> sustainOff = { (unsigned char)(0xB0 | chan), 64, 0 };
+    midiOut->sendMessage(&sustainOff);
+    // All Notes Off (CC123 = 0)
+    std::vector<unsigned char> allNotesOff = { (unsigned char)(0xB0 | chan), 123, 0 };
+    midiOut->sendMessage(&allNotesOff);
+    // All Sound Off (CC120 = 0)
+    std::vector<unsigned char> allSoundOff = { (unsigned char)(0xB0 | chan), 120, 0 };
+    midiOut->sendMessage(&allSoundOff);
+}
+
+void MidiProcessor::panicSilence() {
+    // Hard kill per note for channels 1 and 2 to be extra safe, then send CC kills
+    for (int ch = 0; ch < 2; ++ch) {
+        for (int n = 0; n < 128; ++n) {
+            std::vector<unsigned char> offMsg = { (unsigned char)(0x80 | ch), (unsigned char)n, 0 };
+            midiOut->sendMessage(&offMsg);
+        }
+        sendChannelAllNotesOff(ch);
+    }
 }
 
 void MidiProcessor::updatePitch(const std::vector<unsigned char>& message, bool isGuitar) {

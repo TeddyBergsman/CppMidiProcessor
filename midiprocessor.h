@@ -36,6 +36,7 @@ public slots:
     void seekToPosition(qint64 positionMs);
     void setVoiceControlEnabled(bool enabled);
     void setTranspose(int semitones);
+    void applyTranspose(int semitones);
     void loadTrackTimeline(int index);
 
 private slots:
@@ -64,12 +65,12 @@ signals:
     void backingTrackTimelineUpdated(const QString& timelineJson);
 
 private:
-    enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, PLAY_TRACK, PAUSE_TRACK };
+    enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, PLAY_TRACK, PAUSE_TRACK, TRANSPOSE_CHANGE };
     struct MidiEvent {
         EventType type;
         std::vector<unsigned char> message;
         bool isGuitar;
-        int programIndex;
+        int programIndex; // For PROGRAM_CHANGE/PLAY_TRACK this is index; for TRANSPOSE_CHANGE this is semitone amount
         std::string trackId;
     };
     void handleBackingTrackSelection(int note);
@@ -91,6 +92,8 @@ private:
     void processProgramChange(int programIndex);
     void setTrackState(const std::string& trackId, bool newState);
     void sendNoteToggle(int note, int channel, int velocity);
+    void panicSilence();
+    void sendChannelAllNotesOff(int zeroBasedChannel);
     void updatePitch(const std::vector<unsigned char>& message, bool isGuitar);
     void processPitchBend();
     double noteToFrequency(int note) const;

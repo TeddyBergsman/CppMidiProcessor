@@ -504,6 +504,8 @@ void MainWindow::onTrackPositionChanged(qint64 positionMs) {
 void MainWindow::onTrackDurationChanged(qint64 durationMs) {
     m_trackDurationMs = durationMs;
     onTrackPositionChanged(m_trackPositionMs);
+    // Ensure section markers are positioned using the correct, current duration
+    rebuildSectionMarkers();
 }
 
 void MainWindow::onTimelineDataReceived(const QString& timelineJson) {
@@ -516,6 +518,11 @@ void MainWindow::onTimelineDataReceived(const QString& timelineJson) {
     m_lyrics.clear();
     m_tempoChanges.clear();
     m_timeSignatureChanges.clear();
+    
+    // Reset duration so we don't position sections using a stale duration
+    m_trackDurationMs = 0;
+    timelineBar->setRange(0, 0);
+    timeRemainingLabel->setText("--:--");
     
     // Parse JSON
     QJsonDocument doc = QJsonDocument::fromJson(timelineJson.toUtf8());

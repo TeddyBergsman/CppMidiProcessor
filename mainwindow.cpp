@@ -7,6 +7,11 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QStackedWidget>
+#include <QSettings>
+#include <QMenuBar>
+#include <QDialog>
+#include "NoteMonitorWidget.h"
 
 MainWindow::MainWindow(const Preset& preset, QWidget *parent) 
     : QMainWindow(parent) {
@@ -36,6 +41,11 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
     if (preset.settings.voiceControlEnabled) {
         m_voiceController->start();
     }
+
+    // Apply legacy UI preference (default: OFF -> show new minimal UI)
+    QSettings settings;
+    bool legacyOn = settings.value("ui/legacy", false).toBool();
+    applyLegacyUiSetting(legacyOn);
 }
 
 MainWindow::~MainWindow() {
@@ -43,8 +53,35 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::createWidgets(const Preset& preset) {
+    rootStack = new QStackedWidget;
+    setCentralWidget(rootStack);
+
+    // Legacy page container (existing UI)
     centralWidget = new QWidget;
-    setCentralWidget(centralWidget);
+    rootStack->addWidget(centralWidget);
+
+    // Minimal note-only UI
+    noteMonitorWidget = new NoteMonitorWidget(this);
+    rootStack->addWidget(noteMonitorWidget);
+
+    // Preferences action in a Settings menu (PreferencesRole => macOS App menu)
+    QAction* preferencesAction = new QAction("Preferences…", this);
+    preferencesAction->setMenuRole(QAction::PreferencesRole);
+    connect(preferencesAction, &QAction::triggered, this, &MainWindow::openPreferences);
+    if (menuBar()) {
+        QMenu* settingsMenu = nullptr;
+        // Try to find an existing "Settings" menu to avoid duplicates
+        for (QAction* a : menuBar()->actions()) {
+            if (a->menu() && a->menu()->title() == "Settings") {
+                settingsMenu = a->menu();
+                break;
+            }
+        }
+        if (!settingsMenu) {
+            settingsMenu = menuBar()->addMenu("Settings");
+        }
+        settingsMenu->addAction(preferencesAction);
+    }
 
     // Dynamically create program buttons from preset data
     for (const auto& program : preset.programs) {
@@ -360,6 +397,14 @@ void MainWindow::createConnections() {
     // Inform VoiceController of current program changes so quick switch can use the active program
     connect(m_midiProcessor, &MidiProcessor::programChanged,
             m_voiceController, &VoiceController::onProgramChanged);
+
+    // Wire pitch updates to minimal NoteMonitor UI
+    if (noteMonitorWidget) {
+        connect(m_midiProcessor, &MidiProcessor::guitarPitchUpdated,
+                noteMonitorWidget, &NoteMonitorWidget::setGuitarNote);
+        connect(m_midiProcessor, &MidiProcessor::voicePitchUpdated,
+                noteMonitorWidget, &NoteMonitorWidget::setVoiceNote);
+    }
 }
 
 void MainWindow::updateProgramUI(int newProgramIndex) {
@@ -1122,4 +1167,33 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event) {
         return true;
     }
     return QMainWindow::eventFilter(obj, event);
+}
+
+void MainWindow::openPreferences() {
+    QSettings settings;
+    bool legacyOn = settings.value("ui/legacy", false).toBool();
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Preferences");
+    QVBoxLayout* layout = new QVBoxLayout(&dlg);
+    QCheckBox* legacyCheck = new QCheckBox("Legacy UI", &dlg);
+    legacyCheck->setChecked(legacyOn);
+    layout->addWidget(legacyCheck);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    if (dlg.exec() == QDialog::Accepted) {
+        bool legacy = legacyCheck->isChecked();
+        settings.setValue("ui/legacy", legacy);
+        applyLegacyUiSetting(legacy);
+    }
+}
+
+void MainWindow::applyLegacyUiSetting(bool legacyOn) {
+    if (!rootStack) return;
+    // index 0 = legacy (existing UI), index 1 = new minimal UI
+    rootStack->setCurrentIndex(legacyOn ? 0 : 1);
 }

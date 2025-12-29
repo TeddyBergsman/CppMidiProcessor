@@ -21,7 +21,10 @@ class QLabel;
 class QTimer;
 class QProgressBar;
 class QHBoxLayout;
+class QStackedWidget;
 QT_END_NAMESPACE
+
+class NoteMonitorWidget;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -54,6 +57,8 @@ private slots:
     
     // Transpose slot
     void onTransposeToggled(bool checked);
+    void openPreferences();
+    void applyLegacyUiSetting(bool legacyOn);
 
 private:
     void createWidgets(const Preset& preset);
@@ -72,6 +77,7 @@ protected:
     VoiceController* m_voiceController;
 
     // UI Widgets
+    QStackedWidget* rootStack = nullptr;
     QWidget* centralWidget;
     QVBoxLayout* mainLayout;
     std::vector<QPushButton*> programButtons;
@@ -79,6 +85,7 @@ protected:
     std::map<std::string, QCheckBox*> trackCheckBoxes;
     QTextEdit* logConsole;
     QCheckBox* verboseLogCheckBox;
+    NoteMonitorWidget* noteMonitorWidget = nullptr;
 
     // NEW: Backing track UI
     QGroupBox* backingTrackBox;

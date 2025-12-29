@@ -4,9 +4,14 @@
 #include "PresetLoader.h"
 #include "PresetData.h"
 // No longer need <QDir>
+#include <QCoreApplication>
 
 int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
+
+    // QSettings identity (needed for Preferences persistence)
+    QCoreApplication::setOrganizationName("TeddyBergsman");
+    QCoreApplication::setApplicationName("CppMidiProcessor");
 
     // --- Path to find the resource inside the executable ---
     // The ":/" prefix tells QFile to look inside the embedded resources

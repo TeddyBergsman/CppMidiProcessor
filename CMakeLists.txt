@@ -29,6 +29,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   PresetLoader.cpp
   RtMidi.h
   RtMidi.cpp
+  NoteMonitorWidget.h
+  NoteMonitorWidget.cpp
   resources.qrc
 )
 

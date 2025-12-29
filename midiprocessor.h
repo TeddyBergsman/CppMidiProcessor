@@ -63,6 +63,9 @@ signals:
     void backingTrackPositionChanged(qint64 position);
     void backingTrackDurationChanged(qint64 duration);
     void backingTrackTimelineUpdated(const QString& timelineJson);
+    // Low-latency pitch updates for UI
+    void guitarPitchUpdated(int midiNote, double cents);
+    void voicePitchUpdated(int midiNote, double cents);
 
 private:
     enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, PLAY_TRACK, PAUSE_TRACK, TRANSPOSE_CHANGE };
@@ -100,6 +103,8 @@ private:
     void precalculateRatios();
     void loadBackingTracks();
     TrackMetadata loadTrackMetadata(const QString& trackPath);
+    void emitPitchIfChanged(bool isGuitar);
+    void hzToNoteAndCents(double hz, int& noteOut, double& centsOut) const;
 
     // --- MIDI Ports ---
     RtMidiIn* midiInGuitar = nullptr;
@@ -130,6 +135,10 @@ private:
     int m_lastVoiceNote = -1;
     double m_lastGuitarPitchHz = 0.0;
     double m_lastVoicePitchHz = 0.0;
+    int m_lastEmittedGuitarNote = -2;
+    double m_lastEmittedGuitarCents = 0.0;
+    int m_lastEmittedVoiceNote = -2;
+    double m_lastEmittedVoiceCents = 0.0;
     const int BEND_DOWN_CC = 102;
     const int BEND_UP_CC = 103;
 

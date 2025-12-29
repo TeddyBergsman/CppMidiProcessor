@@ -959,6 +959,7 @@ void MidiProcessor::updatePitch(const std::vector<unsigned char>& message, bool 
     }
     
     processPitchBend();
+    emitPitchIfChanged(isGuitar);
 }
 
 void MidiProcessor::precalculateRatios() {
@@ -1021,4 +1022,44 @@ void MidiProcessor::processPitchBend() {
 double MidiProcessor::noteToFrequency(int note) const {
     if (note < 0) return 0.0;
     return 440.0 * pow(2.0, (static_cast<double>(note) - 69.0) / 12.0);
+}
+
+void MidiProcessor::hzToNoteAndCents(double hz, int& noteOut, double& centsOut) const {
+    if (hz <= 1.0) {
+        noteOut = -1;
+        centsOut = 0.0;
+        return;
+    }
+    double n = 69.0 + 12.0 * log2(hz / 440.0);
+    int nearest = static_cast<int>(std::llround(n));
+    double nearestHz = noteToFrequency(nearest);
+    double cents = 1200.0 * log2(hz / nearestHz);
+    // Constrain cents to [-50, 50] by construction (nearest note), but clamp for safety
+    if (cents > 50.0) cents = 50.0;
+    if (cents < -50.0) cents = -50.0;
+    noteOut = nearest;
+    centsOut = cents;
+}
+
+void MidiProcessor::emitPitchIfChanged(bool isGuitar) {
+    int note;
+    double cents;
+    const double hz = isGuitar ? m_lastGuitarPitchHz : m_lastVoicePitchHz;
+    hzToNoteAndCents(hz, note, cents);
+
+    // Threshold to avoid spamming UI; keeps latency negligible while reducing overhead
+    constexpr double centsThreshold = 0.5;
+    if (isGuitar) {
+        if (note != m_lastEmittedGuitarNote || std::fabs(cents - m_lastEmittedGuitarCents) >= centsThreshold) {
+            m_lastEmittedGuitarNote = note;
+            m_lastEmittedGuitarCents = cents;
+            emit guitarPitchUpdated(note, cents);
+        }
+    } else {
+        if (note != m_lastEmittedVoiceNote || std::fabs(cents - m_lastEmittedVoiceCents) >= centsThreshold) {
+            m_lastEmittedVoiceNote = note;
+            m_lastEmittedVoiceCents = cents;
+            emit voicePitchUpdated(note, cents);
+        }
+    }
 }

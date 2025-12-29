@@ -252,6 +252,11 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     int inputNote = message.size() > 1 ? message[1] : 0;
                     int velocity = message.size() > 2 ? message[2] : 0;
                     if (status == 0x90 && velocity > 0) {
+                        // Emit velocity for visualizer fallback amplitude
+                        if (velocity != m_lastGuitarVelocity) {
+                            m_lastGuitarVelocity = velocity;
+                            emit guitarVelocityUpdated(velocity);
+                        }
                         // Only process MIDI commands if voice control is disabled
                         if (!m_voiceControlEnabled.load()) {
                             // Adjust command note thresholds based on transpose amount
@@ -279,6 +284,15 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     std::vector<unsigned char> passthroughMsg = message;
                     passthroughMsg[0] = (passthroughMsg[0] & 0xF0) | 0x00;
                     
+                    // Capture guitar channel pressure as amplitude for visualizer
+                    if (status == 0xD0 && message.size() > 1) {
+                        int aftertouch = message[1];
+                        if (aftertouch != m_lastGuitarAftertouch) {
+                            m_lastGuitarAftertouch = aftertouch;
+                            emit guitarAftertouchUpdated(aftertouch);
+                        }
+                    }
+                    
                     // Apply transpose to note on/off messages
                     if ((status == 0x90 || status == 0x80) && !m_inCommandMode && !m_backingTrackSelectionMode) {
                         int transposeAmount = m_transposeAmount.load();
@@ -303,6 +317,12 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
 
                         std::vector<unsigned char> cc104_msg = {0xB0, 104, (unsigned char)breathValue};
                         midiOut->sendMessage(&cc104_msg);
+                        
+                        // Emit breath (CC2) amplitude for visualizer if changed
+                        if (breathValue != m_lastVoiceCc2) {
+                            m_lastVoiceCc2 = breathValue;
+                            emit voiceCc2Updated(breathValue);
+                        }
                     } else if (status == 0x90 || status == 0x80) { // Note on/off for voice
                         int inputNote = message.size() > 1 ? message[1] : 0;
                         int velocity = message.size() > 2 ? message[2] : 0;
@@ -960,6 +980,24 @@ void MidiProcessor::updatePitch(const std::vector<unsigned char>& message, bool 
     
     processPitchBend();
     emitPitchIfChanged(isGuitar);
+
+    // Emit Hz updates with minimal threshold and on note state changes
+    constexpr double hzThreshold = 0.1;
+    if (isGuitar) {
+        double hz = m_lastGuitarPitchHz;
+        if ((m_lastEmittedGuitarHz < 0 && hz > 0) || (hz <= 0 && m_lastEmittedGuitarHz > 0) ||
+            std::fabs(hz - m_lastEmittedGuitarHz) >= hzThreshold) {
+            m_lastEmittedGuitarHz = hz;
+            emit guitarHzUpdated(hz);
+        }
+    } else {
+        double hz = m_lastVoicePitchHz;
+        if ((m_lastEmittedVoiceHz < 0 && hz > 0) || (hz <= 0 && m_lastEmittedVoiceHz > 0) ||
+            std::fabs(hz - m_lastEmittedVoiceHz) >= hzThreshold) {
+            m_lastEmittedVoiceHz = hz;
+            emit voiceHzUpdated(hz);
+        }
+    }
 }
 
 void MidiProcessor::precalculateRatios() {

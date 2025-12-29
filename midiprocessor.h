@@ -66,6 +66,12 @@ signals:
     // Low-latency pitch updates for UI
     void guitarPitchUpdated(int midiNote, double cents);
     void voicePitchUpdated(int midiNote, double cents);
+    // Wave visualizer updates
+    void guitarHzUpdated(double hz);
+    void voiceHzUpdated(double hz);
+    void guitarAftertouchUpdated(int value); // 0-127 channel pressure
+    void voiceCc2Updated(int value);         // 0-127 breath (CC2)
+    void guitarVelocityUpdated(int value);   // 0-127 note velocity
 
 private:
     enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, PLAY_TRACK, PAUSE_TRACK, TRANSPOSE_CHANGE };
@@ -135,6 +141,11 @@ private:
     int m_lastVoiceNote = -1;
     double m_lastGuitarPitchHz = 0.0;
     double m_lastVoicePitchHz = 0.0;
+    double m_lastEmittedGuitarHz = -1.0;
+    double m_lastEmittedVoiceHz = -1.0;
+    int m_lastGuitarAftertouch = -1;
+    int m_lastVoiceCc2 = -1;
+    int m_lastGuitarVelocity = 0;
     int m_lastEmittedGuitarNote = -2;
     double m_lastEmittedGuitarCents = 0.0;
     int m_lastEmittedVoiceNote = -2;

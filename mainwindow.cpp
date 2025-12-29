@@ -404,6 +404,16 @@ void MainWindow::createConnections() {
                 noteMonitorWidget, &NoteMonitorWidget::setGuitarNote);
         connect(m_midiProcessor, &MidiProcessor::voicePitchUpdated,
                 noteMonitorWidget, &NoteMonitorWidget::setVoiceNote);
+        connect(m_midiProcessor, &MidiProcessor::guitarHzUpdated,
+                noteMonitorWidget, &NoteMonitorWidget::setGuitarHz);
+        connect(m_midiProcessor, &MidiProcessor::voiceHzUpdated,
+                noteMonitorWidget, &NoteMonitorWidget::setVoiceHz);
+        connect(m_midiProcessor, &MidiProcessor::guitarAftertouchUpdated,
+                noteMonitorWidget, &NoteMonitorWidget::setGuitarAmplitude);
+        connect(m_midiProcessor, &MidiProcessor::voiceCc2Updated,
+                noteMonitorWidget, &NoteMonitorWidget::setVoiceAmplitude);
+        connect(m_midiProcessor, &MidiProcessor::guitarVelocityUpdated,
+                noteMonitorWidget, &NoteMonitorWidget::setGuitarVelocity);
     }
 }
 

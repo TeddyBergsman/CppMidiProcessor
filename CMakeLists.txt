@@ -31,6 +31,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   RtMidi.cpp
   NoteMonitorWidget.h
   NoteMonitorWidget.cpp
+  WaveVisualizer.h
+  WaveVisualizer.cpp
   resources.qrc
 )
 

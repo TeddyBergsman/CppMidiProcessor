@@ -1,9 +1,16 @@
 #include "NoteMonitorWidget.h"
+#include "WaveVisualizer.h"
 #include <QtWidgets>
 #include <cmath>
 
 NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     : QWidget(parent) {
+    // Black background for entire minimal UI
+    setAutoFillBackground(true);
+    QPalette pal = palette();
+    pal.setColor(QPalette::Window, Qt::black);
+    setPalette(pal);
+
     QVBoxLayout* root = new QVBoxLayout(this);
     root->setContentsMargins(16, 16, 16, 16);
     root->setSpacing(20);
@@ -37,6 +44,11 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     };
 
     makeSection("Guitar", m_guitarTitle, m_guitarNote, m_guitarCents);
+
+    // Insert wave visualizer between the sections
+    m_wave = new WaveVisualizer(this);
+    root->addWidget(m_wave);
+
     makeSection("Vocal", m_vocalTitle, m_vocalNote, m_vocalCents);
 
     // Hide initially
@@ -54,6 +66,26 @@ void NoteMonitorWidget::setGuitarNote(int midiNote, double cents) {
 
 void NoteMonitorWidget::setVoiceNote(int midiNote, double cents) {
     updateSection(m_vocalTitle, m_vocalNote, m_vocalCents, midiNote, cents);
+}
+
+void NoteMonitorWidget::setGuitarHz(double hz) {
+    if (m_wave) m_wave->setGuitarHz(hz);
+}
+
+void NoteMonitorWidget::setVoiceHz(double hz) {
+    if (m_wave) m_wave->setVoiceHz(hz);
+}
+
+void NoteMonitorWidget::setGuitarAmplitude(int aftertouch) {
+    if (m_wave) m_wave->setGuitarAmplitude(aftertouch);
+}
+
+void NoteMonitorWidget::setVoiceAmplitude(int cc2) {
+    if (m_wave) m_wave->setVoiceAmplitude(cc2);
+}
+
+void NoteMonitorWidget::setGuitarVelocity(int velocity) {
+    if (m_wave) m_wave->setGuitarVelocity(velocity);
 }
 
 void NoteMonitorWidget::updateSection(QLabel* titleLabel,

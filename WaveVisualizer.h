@@ -1,0 +1,59 @@
+#ifndef WAVEVISUALIZER_H
+#define WAVEVISUALIZER_H
+
+#include <QWidget>
+#include <QVector>
+
+class QLabel;
+
+class WaveCanvas : public QWidget {
+    Q_OBJECT
+public:
+    explicit WaveCanvas(QWidget* parent = nullptr);
+    QSize sizeHint() const override { return QSize(400, 120); }
+
+public slots:
+    void setGuitarHz(double hz);
+    void setVoiceHz(double hz);
+    void setGuitarAmplitude(int aftertouch01to127);
+    void setVoiceAmplitude(int cc201to127);
+    void setGuitarVelocity(int velocity01to127);
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+
+private:
+    void ensureBuffers(int width);
+
+    // State for rendering
+    double m_guitarHz = 0.0;
+    double m_voiceHz = 0.0;
+    double m_amp = 0.0;        // 0..1, shared (voice CC2)
+    double m_guitarVelocityAmp = 0.0; // 0..1, fallback when no voice amp
+
+    // Reusable point buffers
+    QVector<QPointF> m_pointsG;
+    QVector<QPointF> m_pointsV;
+};
+
+class WaveVisualizer : public QWidget {
+    Q_OBJECT
+public:
+    explicit WaveVisualizer(QWidget* parent = nullptr);
+
+public slots:
+    void setGuitarHz(double hz);
+    void setVoiceHz(double hz);
+    void setGuitarAmplitude(int val);
+    void setVoiceAmplitude(int val);
+    void setGuitarVelocity(int val);
+
+private:
+    QLabel* m_leftHz = nullptr;   // Guitar
+    QLabel* m_rightHz = nullptr;  // Voice
+    WaveCanvas* m_canvas = nullptr;
+};
+
+#endif // WAVEVISUALIZER_H
+

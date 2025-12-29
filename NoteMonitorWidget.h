@@ -2,6 +2,7 @@
 #define NOTEMONITORWIDGET_H
 
 #include <QWidget>
+class WaveVisualizer;
 
 class QLabel;
 class QVBoxLayout;
@@ -14,6 +15,11 @@ public:
 public slots:
     void setGuitarNote(int midiNote, double cents);
     void setVoiceNote(int midiNote, double cents);
+    void setGuitarHz(double hz);
+    void setVoiceHz(double hz);
+    void setGuitarAmplitude(int aftertouch);
+    void setVoiceAmplitude(int cc2);
+    void setGuitarVelocity(int velocity);
 
 private:
     static QString formatNoteName(int midiNote);
@@ -35,6 +41,9 @@ private:
     QLabel* m_vocalTitle = nullptr;
     QLabel* m_vocalNote = nullptr;
     QLabel* m_vocalCents = nullptr;
+
+    // Wave visualizer in between
+    WaveVisualizer* m_wave = nullptr;
 };
 
 #endif // NOTEMONITORWIDGET_H

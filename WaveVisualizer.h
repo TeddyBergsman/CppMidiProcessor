@@ -3,8 +3,10 @@
 
 #include <QWidget>
 #include <QVector>
+#include <QElapsedTimer>
 
 class QLabel;
+class QTimer;
 
 class WaveCanvas : public QWidget {
     Q_OBJECT
@@ -31,6 +33,10 @@ private:
     double m_voiceHz = 0.0;
     double m_amp = 0.0;        // 0..1, shared (voice CC2)
     double m_guitarVelocityAmp = 0.0; // 0..1, fallback when no voice amp
+    double m_guitarDecayAmp = 0.0;    // 0..1, decaying amplitude
+    double m_guitarTauSec = 0.8;      // decay time constant (sec), derived from velocity
+    QElapsedTimer m_decayElapsed;
+    QTimer* m_decayTimer = nullptr;
 
     // Reusable point buffers
     QVector<QPointF> m_pointsG;

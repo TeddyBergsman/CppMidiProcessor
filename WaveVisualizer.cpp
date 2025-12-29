@@ -1,5 +1,7 @@
 #include "WaveVisualizer.h"
 #include <QtWidgets>
+#include <QTimer>
+#include <QElapsedTimer>
 #include <cmath>
 
 // ---- WaveCanvas ----
@@ -8,6 +10,32 @@ WaveCanvas::WaveCanvas(QWidget* parent)
     : QWidget(parent) {
     setMinimumHeight(100);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    // Decay timer (stopped by default)
+    m_decayTimer = new QTimer(this);
+    m_decayTimer->setTimerType(Qt::PreciseTimer);
+    m_decayTimer->setInterval(16);
+    connect(m_decayTimer, &QTimer::timeout, this, [this]() {
+        // If voice amp present, do not decay; reset elapsed to avoid jumps when voice ends
+        if (m_amp > 0.0) {
+            m_decayElapsed.restart();
+            return;
+        }
+        if (m_guitarDecayAmp <= 0.0) {
+            m_decayTimer->stop();
+            return;
+        }
+        qint64 ms = m_decayElapsed.elapsed();
+        m_decayElapsed.restart();
+        if (ms <= 0) return;
+        double dt = ms * 0.001;
+        double tau = (m_guitarTauSec > 0.05) ? m_guitarTauSec : 0.05;
+        m_guitarDecayAmp *= std::exp(-dt / tau);
+        if (m_guitarDecayAmp < 0.005) {
+            m_guitarDecayAmp = 0.0;
+            m_decayTimer->stop();
+        }
+        update();
+    });
 }
 
 void WaveCanvas::setGuitarHz(double hz) {
@@ -33,6 +61,15 @@ void WaveCanvas::setVoiceAmplitude(int cc201to127) {
 void WaveCanvas::setGuitarVelocity(int velocity01to127) {
     int v = std::max(0, std::min(127, velocity01to127));
     m_guitarVelocityAmp = v / 127.0;
+    // Initialize decaying amplitude from velocity
+    m_guitarDecayAmp = m_guitarVelocityAmp;
+    // Map velocity to decay time constant (0.3s .. 1.6s)
+    double vn = m_guitarVelocityAmp; // 0..1
+    m_guitarTauSec = 0.3 + 1.3 * vn;
+    m_decayElapsed.restart();
+    if (!m_decayTimer->isActive()) {
+        m_decayTimer->start();
+    }
     update();
 }
 
@@ -77,8 +114,7 @@ void WaveCanvas::paintEvent(QPaintEvent* /*event*/) {
     // Compute guitar points if active
     if (m_guitarHz > 1.0) {
         const double cyclesAcross = m_guitarHz * T;
-        const double minGuitarAmp = 0.08; // baseline visibility
-        const double guitarAmpNorm = (m_amp > 0.0) ? m_amp : std::max(m_guitarVelocityAmp, minGuitarAmp);
+        const double guitarAmpNorm = (m_amp > 0.0) ? m_amp : m_guitarDecayAmp;
         const double ampPx = maxAmpPx * guitarAmpNorm;
         for (int x = 0; x < w; ++x) {
             double xn = static_cast<double>(x) / static_cast<double>(w - 1);

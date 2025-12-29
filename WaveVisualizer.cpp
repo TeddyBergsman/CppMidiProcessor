@@ -15,11 +15,6 @@ WaveCanvas::WaveCanvas(QWidget* parent)
     m_decayTimer->setTimerType(Qt::PreciseTimer);
     m_decayTimer->setInterval(16);
     connect(m_decayTimer, &QTimer::timeout, this, [this]() {
-        // If voice amp present, do not decay; reset elapsed to avoid jumps when voice ends
-        if (m_amp > 0.0) {
-            m_decayElapsed.restart();
-            return;
-        }
         if (m_guitarDecayAmp <= 0.0) {
             m_decayTimer->stop();
             return;
@@ -76,6 +71,7 @@ void WaveCanvas::setGuitarVelocity(int velocity01to127) {
 void WaveCanvas::ensureBuffers(int width) {
     if (m_pointsG.size() != width) {
         m_pointsG.resize(width);
+        m_pointsG2.resize(width);
         m_pointsV.resize(width);
     }
 }
@@ -114,16 +110,46 @@ void WaveCanvas::paintEvent(QPaintEvent* /*event*/) {
     // Compute guitar points if active
     if (m_guitarHz > 1.0) {
         const double cyclesAcross = m_guitarHz * T;
-        const double guitarAmpNorm = (m_amp > 0.0) ? m_amp : m_guitarDecayAmp;
-        const double ampPx = maxAmpPx * guitarAmpNorm;
-        for (int x = 0; x < w; ++x) {
-            double xn = static_cast<double>(x) / static_cast<double>(w - 1);
-            double phase = -twoPi * (cyclesAcross * xn);
-            double y = centerY - ampPx * std::sin(phase);
-            m_pointsG[x] = QPointF(x + 0.5, y);
+        // When voice amp is present, draw two guitar waves: voice-driven and decay-driven
+        if (m_amp > 0.0) {
+            // Voice-driven guitar wave
+            const double ampVoicePx = maxAmpPx * m_amp;
+            if (ampVoicePx > 0.5) {
+                for (int x = 0; x < w; ++x) {
+                    double xn = static_cast<double>(x) / static_cast<double>(w - 1);
+                    double phase = -twoPi * (cyclesAcross * xn);
+                    double y = centerY - ampVoicePx * std::sin(phase);
+                    m_pointsG[x] = QPointF(x + 0.5, y);
+                }
+                p.setPen(penG);
+                p.drawPolyline(m_pointsG.constData(), w);
+            }
+            // Decay-driven guitar wave
+            const double ampDecayPx = maxAmpPx * m_guitarDecayAmp;
+            if (ampDecayPx > 0.5) {
+                for (int x = 0; x < w; ++x) {
+                    double xn = static_cast<double>(x) / static_cast<double>(w - 1);
+                    double phase = -twoPi * (cyclesAcross * xn);
+                    double y = centerY - ampDecayPx * std::sin(phase);
+                    m_pointsG2[x] = QPointF(x + 0.5, y);
+                }
+                p.setPen(penG);
+                p.drawPolyline(m_pointsG2.constData(), w);
+            }
+        } else {
+            // No voice amp -> single decay-driven guitar wave
+            const double ampDecayPx = maxAmpPx * m_guitarDecayAmp;
+            if (ampDecayPx > 0.5) {
+                for (int x = 0; x < w; ++x) {
+                    double xn = static_cast<double>(x) / static_cast<double>(w - 1);
+                    double phase = -twoPi * (cyclesAcross * xn);
+                    double y = centerY - ampDecayPx * std::sin(phase);
+                    m_pointsG[x] = QPointF(x + 0.5, y);
+                }
+                p.setPen(penG);
+                p.drawPolyline(m_pointsG.constData(), w);
+            }
         }
-        p.setPen(penG);
-        p.drawPolyline(m_pointsG.constData(), w);
     }
 
     // Compute voice points if active

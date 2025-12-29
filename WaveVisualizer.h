@@ -40,6 +40,7 @@ private:
 
     // Reusable point buffers
     QVector<QPointF> m_pointsG;
+    QVector<QPointF> m_pointsG2;
     QVector<QPointF> m_pointsV;
 };
 

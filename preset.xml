@@ -5,8 +5,8 @@
         <InputPort name="GUITAR_IN">IAC Driver MG3 Guitar</InputPort>
         <InputPort name="VOICE_IN">IAC Driver MG3 Voice</InputPort>
         <OutputPort name="CONTROLLER_OUT">IAC Driver Controller</OutputPort>
-        <CommandNote>86</CommandNote>
-        <BackingTrackCommandNote>87</BackingTrackCommandNote>
+        <CommandNote>98</CommandNote>
+        <BackingTrackCommandNote>99</BackingTrackCommandNote>
         
         <!-- New settings for Voice Pitch Bend -->
         <PitchBendDeadZoneCents>50</PitchBendDeadZoneCents>
@@ -16,170 +16,27 @@
         <!-- This is the fallback state for toggles when a program doesn't specify them. -->
         <DefaultTrackStates>
             <DefaultState toggleId="track1" enabled="true" />
-            <DefaultState toggleId="track2" enabled="false" />
-            <DefaultState toggleId="track3" enabled="false" />
+            <DefaultState toggleId="track2" enabled="true" />
+            <DefaultState toggleId="track3" enabled="true" />
             <DefaultState toggleId="track4" enabled="true" />
             <DefaultState toggleId="track5" enabled="true" />
-            <DefaultState toggleId="track6" enabled="false" />
-            <DefaultState toggleId="track7" enabled="false" />
-            <DefaultState toggleId="track8" enabled="false" />
-            <DefaultState toggleId="track9" enabled="false" />
-            <DefaultState toggleId="track10" enabled="false" />
+            <DefaultState toggleId="track6" enabled="true" />
         </DefaultTrackStates>
 
         <!-- Path to backing tracks relative to the build directory -->
-        <BackingTrackDirectory>/Users/teddybergsman/Documents/Backing Tracks</BackingTrackDirectory>
+        <BackingTrackDirectory>/Users/teddybergsman/Documents</BackingTrackDirectory>
         
         <!-- Voice control settings -->
-        <VoiceControlEnabled>true</VoiceControlEnabled>
+        <VoiceControlEnabled>false</VoiceControlEnabled>
         <VoiceConfidenceThreshold>0.8</VoiceConfidenceThreshold>
         <RTSTTSocketPath>/tmp/rt-stt.sock</RTSTTSocketPath>
     </Settings>
 
     <Toggles>
-        <Toggle id="track1" name="Track 1: Chromatic"   note="0" channel="16" velocity="100"/>
-        <Toggle id="track2" name="Track 2: Guitar"      note="1" channel="16" velocity="100"/>
-        <Toggle id="track3" name="Track 3: Voice"       note="2" channel="16" velocity="100"/>
-        <Toggle id="track4" name="Track 4: Instruments" note="3" channel="16" velocity="100"/>
-        <Toggle id="track5" name="Track 5: Vocals"      note="4" channel="16" velocity="100"/>
-        <Toggle id="track6" name="Track 6: Votar"       note="5" channel="16" velocity="100"/>
-        <Toggle id="track7" name="Track 7: Guitar"  note="6" channel="16" velocity="100"/>
-        <Toggle id="track8" name="Track 8: Ducking"     note="7" channel="16" velocity="100"/>
-        <Toggle id="track9" name="Track 9: Alto Sax"    note="8" channel="16" velocity="100"/>
-        <Toggle id="track10" name="Track 10: Reverb Guitar"    note="9" channel="16" velocity="100"/>
     </Toggles>
 
     <Programs>
         <!-- This program explicitly defines all track states. -->
-        <Program name="Flügelhorn" quickSwitch="Alto Sax" triggerNote="85" programCC="119" programValue="0" volumeCC="7" volumeValue="127">
-            <Tags>
-                <Tag>trumpet</Tag>
-                <Tag>chet baker</Tag>
-                <Tag>flugelhorn</Tag>
-                <Tag>brass</Tag>
-            </Tags>
-            <InitialState toggleId="track1" enabled="false" />
-            <InitialState toggleId="track2" enabled="true" />
-            <InitialState toggleId="track3" enabled="true" />
-            <InitialState toggleId="track4" enabled="true" />
-            <InitialState toggleId="track5" enabled="true" />
-            <InitialState toggleId="track6" enabled="false" />
-            <InitialState toggleId="track7" enabled="false" />
-            <InitialState toggleId="track8" enabled="true" />
-            <InitialState toggleId="track9" enabled="false" />
-            <InitialState toggleId="track10" enabled="false" />
-        </Program>
-        <!-- This program only defines track 3. Tracks 1 and 2 will use the DefaultTrackStates. -->
-        <Program name="Martin" quickSwitch="Votar" triggerNote="84" programCC="119" programValue="1" volumeCC="7" volumeValue="96">
-            <!-- Martin J-40 -->
-            <Tags>
-                <Tag>acoustic</Tag>
-                <Tag>martin</Tag>
-            </Tags>
-            <InitialState toggleId="track1" enabled="false" />
-            <InitialState toggleId="track2" enabled="true" />
-            <InitialState toggleId="track3" enabled="false" />
-            <InitialState toggleId="track4" enabled="true" />
-            <InitialState toggleId="track5" enabled="true" />
-            <InitialState toggleId="track6" enabled="false" />
-            <InitialState toggleId="track7" enabled="false" />
-            <InitialState toggleId="track8" enabled="false" />
-            <InitialState toggleId="track9" enabled="false" />
-            <InitialState toggleId="track10" enabled="false" />
-        </Program>
-        <!-- This program defines no states, so all tracks will be set to their default state. -->
-        <Program name="EMP" quickSwitch="Guitar" triggerNote="83" programCC="119" programValue="2" volumeCC="7" volumeValue="112" >
-            <Tags>
-                <Tag>GMP</Tag>
-                <Tag>DMP</Tag>
-            </Tags>
-            <InitialState toggleId="track1" enabled="true" />
-            <InitialState toggleId="track2" enabled="false" />
-            <InitialState toggleId="track3" enabled="false" />
-            <InitialState toggleId="track4" enabled="true" />
-            <InitialState toggleId="track5" enabled="false" />
-            <InitialState toggleId="track6" enabled="false" />
-            <InitialState toggleId="track7" enabled="false" />
-            <InitialState toggleId="track8" enabled="false" />
-            <InitialState toggleId="track9" enabled="false" />
-            <InitialState toggleId="track10" enabled="false" />
-        </Program>
-        <!-- EMP Mark II (Wah) -->
-        <Program name="Votar" triggerNote="82" >
-            <InitialState toggleId="track1" enabled="false" />
-            <InitialState toggleId="track2" enabled="true" />
-            <InitialState toggleId="track3" enabled="false" />
-            <InitialState toggleId="track4" enabled="false" />
-            <InitialState toggleId="track5" enabled="false" />
-            <InitialState toggleId="track6" enabled="true" />
-            <InitialState toggleId="track7" enabled="false" />
-            <InitialState toggleId="track8" enabled="false" />
-            <InitialState toggleId="track9" enabled="false" />
-            <InitialState toggleId="track10" enabled="false" />
-        </Program>
-        <Program name="Guitar" quickSwitch="EMP" triggerNote="81">
-        <Tags>
-                <Tag>electric</Tag>
-            </Tags>
-            <InitialState toggleId="track1" enabled="false" />
-            <InitialState toggleId="track2" enabled="true" />
-            <InitialState toggleId="track3" enabled="true" />
-            <InitialState toggleId="track4" enabled="false" />
-            <InitialState toggleId="track5" enabled="false" />
-            <InitialState toggleId="track6" enabled="false" />
-            <InitialState toggleId="track7" enabled="true" />
-            <InitialState toggleId="track8" enabled="false" />
-            <InitialState toggleId="track9" enabled="false" />
-            <InitialState toggleId="track10" enabled="false" />
-        </Program>
-        <Program name="Alto Sax" quickSwitch="Flügelhorn" triggerNote="80" >
-            <Tags>
-                <Tag>sax</Tag>
-                <Tag>saxophone</Tag>
-                <Tag>alto</Tag>
-                <Tag>sucks</Tag>
-                <Tag>sex</Tag>
-            </Tags>
-            <InitialState toggleId="track1" enabled="false" />
-            <InitialState toggleId="track2" enabled="true" />
-            <InitialState toggleId="track3" enabled="true" />
-            <InitialState toggleId="track4" enabled="false" />
-            <InitialState toggleId="track5" enabled="true" />
-            <InitialState toggleId="track6" enabled="false" />
-            <InitialState toggleId="track7" enabled="false" />
-            <InitialState toggleId="track8" enabled="true" />
-            <InitialState toggleId="track9" enabled="true" />
-            <InitialState toggleId="track10" enabled="false" />
-        </Program>
-        <Program name="Flügelhorn + Alto Sax" triggerNote="79" programCC="119" programValue="0" volumeCC="7" volumeValue="127">
-            <InitialState toggleId="track1" enabled="false" />
-            <InitialState toggleId="track2" enabled="true" />
-            <InitialState toggleId="track3" enabled="true" />
-            <InitialState toggleId="track4" enabled="true" />
-            <InitialState toggleId="track5" enabled="true" />
-            <InitialState toggleId="track6" enabled="false" />
-            <InitialState toggleId="track7" enabled="false" />
-            <InitialState toggleId="track8" enabled="true" />
-            <InitialState toggleId="track9" enabled="true" />
-            <InitialState toggleId="track10" enabled="false" />
-        </Program>
-        <Program name="Reverb Guitar" triggerNote="78">
-        <Tags>
-                <Tag>reverb</Tag>
-            </Tags>
-            <InitialState toggleId="track1" enabled="false" />
-            <InitialState toggleId="track2" enabled="false" />
-            <InitialState toggleId="track3" enabled="false" />
-            <InitialState toggleId="track4" enabled="false" />
-            <InitialState toggleId="track5" enabled="true" />
-            <InitialState toggleId="track6" enabled="false" />
-            <InitialState toggleId="track7" enabled="false" />
-            <InitialState toggleId="track8" enabled="false" />
-            <InitialState toggleId="track9" enabled="false" />
-            <InitialState toggleId="track10" enabled="true" />
-        </Program>
-        <Program name="Program 9" triggerNote="77" programCC="119" programValue="8" volumeCC="7" volumeValue="125" />
-        <Program name="Program 10" triggerNote="76" programCC="119" programValue="9" volumeCC="7" volumeValue="125" />
     </Programs>
     
 </MidiProcessorPreset>

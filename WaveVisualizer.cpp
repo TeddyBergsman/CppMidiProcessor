@@ -245,9 +245,23 @@ void WaveVisualizer::setGuitarVelocity(int val) {
 
 void WaveVisualizer::setGuitarColor(const QColor& color) {
     m_canvas->setGuitarColor(color);
+    if (m_leftHz) {
+        QString style = QString("QLabel { color: rgba(%1,%2,%3,0.5); font-size: 12pt; }")
+            .arg(color.red())
+            .arg(color.green())
+            .arg(color.blue());
+        m_leftHz->setStyleSheet(style);
+    }
 }
 
 void WaveVisualizer::setVoiceColor(const QColor& color) {
     m_canvas->setVoiceColor(color);
+    if (m_rightHz) {
+        QString style = QString("QLabel { color: rgba(%1,%2,%3,0.5); font-size: 12pt; }")
+            .arg(color.red())
+            .arg(color.green())
+            .arg(color.blue());
+        m_rightHz->setStyleSheet(style);
+    }
 }
 

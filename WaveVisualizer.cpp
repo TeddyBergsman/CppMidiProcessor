@@ -120,7 +120,8 @@ void WaveCanvas::paintEvent(QPaintEvent* /*event*/) {
             if (ampVoicePx > 0.5) {
                 for (int x = 0; x < w; ++x) {
                     double xn = static_cast<double>(x) / static_cast<double>(w - 1);
-                    double phase = -twoPi * (cyclesAcross * xn);
+                    double xnf = 1.0 - xn; // flip horizontally so wave goes right -> left
+                    double phase = -twoPi * (cyclesAcross * xnf);
                     double y = centerY - ampVoicePx * std::sin(phase);
                     m_pointsG[x] = QPointF(x + 0.5, y);
                 }
@@ -132,7 +133,8 @@ void WaveCanvas::paintEvent(QPaintEvent* /*event*/) {
             if (ampDecayPx > 0.5) {
                 for (int x = 0; x < w; ++x) {
                     double xn = static_cast<double>(x) / static_cast<double>(w - 1);
-                    double phase = -twoPi * (cyclesAcross * xn);
+                    double xnf = 1.0 - xn; // flip horizontally so wave goes right -> left
+                    double phase = -twoPi * (cyclesAcross * xnf);
                     double y = centerY - ampDecayPx * std::sin(phase);
                     m_pointsG2[x] = QPointF(x + 0.5, y);
                 }
@@ -145,7 +147,8 @@ void WaveCanvas::paintEvent(QPaintEvent* /*event*/) {
             if (ampDecayPx > 0.5) {
                 for (int x = 0; x < w; ++x) {
                     double xn = static_cast<double>(x) / static_cast<double>(w - 1);
-                    double phase = -twoPi * (cyclesAcross * xn);
+                    double xnf = 1.0 - xn; // flip horizontally so wave goes right -> left
+                    double phase = -twoPi * (cyclesAcross * xnf);
                     double y = centerY - ampDecayPx * std::sin(phase);
                     m_pointsG[x] = QPointF(x + 0.5, y);
                 }
@@ -161,7 +164,8 @@ void WaveCanvas::paintEvent(QPaintEvent* /*event*/) {
         const double ampPx = maxAmpPx * m_amp;
         for (int x = 0; x < w; ++x) {
             double xn = static_cast<double>(x) / static_cast<double>(w - 1);
-            double phase = -twoPi * (cyclesAcross * xn);
+            double xnf = 1.0 - xn; // flip horizontally so wave goes right -> left
+            double phase = -twoPi * (cyclesAcross * xnf);
             double y = centerY - ampPx * std::sin(phase);
             m_pointsV[x] = QPointF(x + 0.5, y);
         }

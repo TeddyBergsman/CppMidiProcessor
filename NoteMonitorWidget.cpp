@@ -13,7 +13,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
 
     QVBoxLayout* root = new QVBoxLayout(this);
     root->setContentsMargins(16, 16, 16, 16);
-    root->setSpacing(20);
+    root->setSpacing(0);
 
     auto makeSection = [&](const QString& title,
                            QLabel*& titleLbl,
@@ -57,6 +57,8 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
         h->addStretch(1);
         noteRow->setLayout(h);
 
+        // Bottom-align note row within fixed-height section
+        v->addStretch(1);
         v->addWidget(noteRow);
 
         centsLbl = new QLabel("", section);
@@ -77,19 +79,29 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     QWidget* vocalSection = makeSection("Vocal", m_vocalTitle, m_vocalLetter, m_vocalAccidental, m_vocalOctave, m_vocalCents);
     vocalSection->setFixedHeight(60);
 
-    // Top row: left guitar note section, right vocal note section
+    // Top row: left guitar note section, right vocal note section (bottom-aligned over waves)
     QWidget* topRow = new QWidget(this);
     QHBoxLayout* topLayout = new QHBoxLayout(topRow);
     topLayout->setContentsMargins(0, 0, 0, 0);
     topLayout->setSpacing(0);
-    topLayout->addWidget(guitarSection, 0);
+    topLayout->addWidget(guitarSection, 0, Qt::AlignLeft | Qt::AlignBottom);
     topLayout->addStretch(1);
-    topLayout->addWidget(vocalSection, 0);
+    topLayout->addWidget(vocalSection, 0, Qt::AlignRight | Qt::AlignBottom);
     topRow->setLayout(topLayout);
 
-    // Add to root: top row just above wave visualizer
-    root->addWidget(topRow);
-    root->addWidget(m_wave);
+    // Block that holds notes above the waves; this whole block will be vertically centered
+    QWidget* waveBlock = new QWidget(this);
+    QVBoxLayout* blockLayout = new QVBoxLayout(waveBlock);
+    blockLayout->setContentsMargins(0, 0, 0, 0);
+    blockLayout->setSpacing(0);
+    blockLayout->addWidget(topRow, 0, Qt::AlignBottom);
+    blockLayout->addWidget(m_wave, 0);
+    waveBlock->setLayout(blockLayout);
+
+    // Center the combined block (notes + waves) vertically in the window
+    root->addStretch(1);
+    root->addWidget(waveBlock, 0, Qt::AlignVCenter);
+    root->addStretch(1);
 
     // Hide initially (keep section height fixed)
     m_guitarLetter->setVisible(false);

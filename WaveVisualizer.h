@@ -5,6 +5,7 @@
 #include <QVector>
 #include <QElapsedTimer>
 #include <QColor>
+#include <QString>
 
 class QLabel;
 class QTimer;
@@ -64,10 +65,14 @@ public slots:
     void setGuitarVelocity(int val);
     void setGuitarColor(const QColor& color);
     void setVoiceColor(const QColor& color);
+    void setGuitarCentsText(const QString& text);
+    void setVoiceCentsText(const QString& text);
 
 private:
-    QLabel* m_leftHz = nullptr;   // Guitar
-    QLabel* m_rightHz = nullptr;  // Voice
+    QLabel* m_leftHz = nullptr;     // Guitar
+    QLabel* m_leftCents = nullptr;  // Guitar cents
+    QLabel* m_rightHz = nullptr;    // Voice
+    QLabel* m_rightCents = nullptr; // Voice cents
     WaveCanvas* m_canvas = nullptr;
 };
 

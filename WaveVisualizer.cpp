@@ -193,23 +193,59 @@ WaveVisualizer::WaveVisualizer(QWidget* parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    m_leftHz = new QLabel("", this);
+    // Left side (guitar): Hz over cents
+    QVBoxLayout* leftBox = new QVBoxLayout();
+    leftBox->setContentsMargins(0, 0, 0, 0);
+    leftBox->setSpacing(0);
+    QWidget* leftWidget = new QWidget(this);
+    leftWidget->setLayout(leftBox);
+
+    m_leftHz = new QLabel("", leftWidget);
     m_leftHz->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    m_leftHz->setStyleSheet("QLabel { color: rgba(0,255,255,0.5); font-size: 12pt; }");
+    m_leftHz->setStyleSheet("QLabel { color: rgb(0,255,255); font-size: 12pt; }");
     m_leftHz->setFixedWidth(56);
     m_leftHz->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
 
+    m_leftCents = new QLabel("", leftWidget);
+    m_leftCents->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    m_leftCents->setStyleSheet("QLabel { color: rgb(0,255,255); font-size: 10pt; }");
+    m_leftCents->setFixedWidth(56);
+    m_leftCents->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+
+    leftBox->addStretch(1);
+    leftBox->addWidget(m_leftHz);
+    leftBox->addWidget(m_leftCents);
+    leftBox->addStretch(1);
+
     m_canvas = new WaveCanvas(this);
 
-    m_rightHz = new QLabel("", this);
+    // Right side (voice): Hz over cents
+    QVBoxLayout* rightBox = new QVBoxLayout();
+    rightBox->setContentsMargins(0, 0, 0, 0);
+    rightBox->setSpacing(0);
+    QWidget* rightWidget = new QWidget(this);
+    rightWidget->setLayout(rightBox);
+
+    m_rightHz = new QLabel("", rightWidget);
     m_rightHz->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_rightHz->setStyleSheet("QLabel { color: rgba(255,0,255,0.5); font-size: 12pt; }");
+    m_rightHz->setStyleSheet("QLabel { color: rgb(255,0,255); font-size: 12pt; }");
     m_rightHz->setFixedWidth(56);
     m_rightHz->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
 
-    layout->addWidget(m_leftHz);
+    m_rightCents = new QLabel("", rightWidget);
+    m_rightCents->setAlignment(Qt::AlignRight | Qt::AlignTop);
+    m_rightCents->setStyleSheet("QLabel { color: rgb(255,0,255); font-size: 10pt; }");
+    m_rightCents->setFixedWidth(56);
+    m_rightCents->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+
+    rightBox->addStretch(1);
+    rightBox->addWidget(m_rightHz);
+    rightBox->addWidget(m_rightCents);
+    rightBox->addStretch(1);
+
+    layout->addWidget(leftWidget);
     layout->addWidget(m_canvas, 1);
-    layout->addWidget(m_rightHz);
+    layout->addWidget(rightWidget);
     setLayout(layout);
 }
 
@@ -219,6 +255,7 @@ void WaveVisualizer::setGuitarHz(double hz) {
         m_leftHz->setText(QString::number(static_cast<int>(std::round(hz))) + " Hz");
     } else {
         m_leftHz->setText(QString());
+        m_leftCents->setText(QString());
     }
 }
 
@@ -228,6 +265,7 @@ void WaveVisualizer::setVoiceHz(double hz) {
         m_rightHz->setText(QString::number(static_cast<int>(std::round(hz))) + " Hz");
     } else {
         m_rightHz->setText(QString());
+        m_rightCents->setText(QString());
     }
 }
 
@@ -246,22 +284,40 @@ void WaveVisualizer::setGuitarVelocity(int val) {
 void WaveVisualizer::setGuitarColor(const QColor& color) {
     m_canvas->setGuitarColor(color);
     if (m_leftHz) {
-        QString style = QString("QLabel { color: rgba(%1,%2,%3,0.5); font-size: 12pt; }")
+        QString style = QString("QLabel { color: rgb(%1,%2,%3); font-size: 12pt; }")
             .arg(color.red())
             .arg(color.green())
             .arg(color.blue());
         m_leftHz->setStyleSheet(style);
+        QString styleSmall = QString("QLabel { color: rgb(%1,%2,%3); font-size: 10pt; }")
+            .arg(color.red())
+            .arg(color.green())
+            .arg(color.blue());
+        if (m_leftCents) m_leftCents->setStyleSheet(styleSmall);
     }
 }
 
 void WaveVisualizer::setVoiceColor(const QColor& color) {
     m_canvas->setVoiceColor(color);
     if (m_rightHz) {
-        QString style = QString("QLabel { color: rgba(%1,%2,%3,0.5); font-size: 12pt; }")
+        QString style = QString("QLabel { color: rgb(%1,%2,%3); font-size: 12pt; }")
             .arg(color.red())
             .arg(color.green())
             .arg(color.blue());
         m_rightHz->setStyleSheet(style);
+        QString styleSmall = QString("QLabel { color: rgb(%1,%2,%3); font-size: 10pt; }")
+            .arg(color.red())
+            .arg(color.green())
+            .arg(color.blue());
+        if (m_rightCents) m_rightCents->setStyleSheet(styleSmall);
     }
+}
+
+void WaveVisualizer::setGuitarCentsText(const QString& text) {
+    if (m_leftCents) m_leftCents->setText(text);
+}
+
+void WaveVisualizer::setVoiceCentsText(const QString& text) {
+    if (m_rightCents) m_rightCents->setText(text);
 }
 

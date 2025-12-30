@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QVector>
 #include <QElapsedTimer>
+#include <QColor>
 
 class QLabel;
 class QTimer;
@@ -20,6 +21,8 @@ public slots:
     void setGuitarAmplitude(int aftertouch01to127);
     void setVoiceAmplitude(int cc201to127);
     void setGuitarVelocity(int velocity01to127);
+    void setGuitarColor(const QColor& color);
+    void setVoiceColor(const QColor& color);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -38,6 +41,10 @@ private:
     QElapsedTimer m_decayElapsed;
     QTimer* m_decayTimer = nullptr;
 
+    // Colors (without alpha)
+    QColor m_guitarColor = QColor(0, 255, 0);
+    QColor m_voiceColor = QColor(0, 255, 0);
+
     // Reusable point buffers
     QVector<QPointF> m_pointsG;
     QVector<QPointF> m_pointsG2;
@@ -55,6 +62,8 @@ public slots:
     void setGuitarAmplitude(int val);
     void setVoiceAmplitude(int val);
     void setGuitarVelocity(int val);
+    void setGuitarColor(const QColor& color);
+    void setVoiceColor(const QColor& color);
 
 private:
     QLabel* m_leftHz = nullptr;   // Guitar

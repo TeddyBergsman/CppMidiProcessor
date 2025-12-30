@@ -62,10 +62,18 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
 
 void NoteMonitorWidget::setGuitarNote(int midiNote, double cents) {
     updateSection(m_guitarTitle, m_guitarNote, m_guitarCents, midiNote, cents);
+    if (midiNote >= 0 && m_wave) {
+        QColor c(colorForCents(cents));
+        m_wave->setGuitarColor(c);
+    }
 }
 
 void NoteMonitorWidget::setVoiceNote(int midiNote, double cents) {
     updateSection(m_vocalTitle, m_vocalNote, m_vocalCents, midiNote, cents);
+    if (midiNote >= 0 && m_wave) {
+        QColor c(colorForCents(cents));
+        m_wave->setVoiceColor(c);
+    }
 }
 
 void NoteMonitorWidget::setGuitarHz(double hz) {

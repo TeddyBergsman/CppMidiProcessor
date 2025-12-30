@@ -68,6 +68,16 @@ void WaveCanvas::setGuitarVelocity(int velocity01to127) {
     update();
 }
 
+void WaveCanvas::setGuitarColor(const QColor& color) {
+    m_guitarColor = color;
+    update();
+}
+
+void WaveCanvas::setVoiceColor(const QColor& color) {
+    m_voiceColor = color;
+    update();
+}
+
 void WaveCanvas::ensureBuffers(int width) {
     if (m_pointsG.size() != width) {
         m_pointsG.resize(width);
@@ -99,16 +109,17 @@ void WaveCanvas::paintEvent(QPaintEvent* /*event*/) {
     // Precompute 2π
     const double twoPi = 6.283185307179586;
 
-    // Prepare pens: 50% for primary, 25% for decay guitar
-    QColor cyan(0, 255, 255, int(0.5 * 255));
-    QColor cyanDecay(0, 255, 255, int(0.25 * 255));
-    QColor magenta(255, 0, 255, int(0.5 * 255));
-    QPen penG(cyan);
-    QPen penGDecay(cyanDecay);
-    QPen penV(magenta);
+    // Prepare pens from dynamic pitch colors:
+    QColor guitarPrimary = m_guitarColor; guitarPrimary.setAlphaF(0.5);
+    QColor guitarDecay   = m_guitarColor; guitarDecay.setAlphaF(0.25);
+    QColor voicePrimary  = m_voiceColor;  voicePrimary.setAlphaF(0.5);
+    QPen penG(guitarPrimary);
+    QPen penGDecay(guitarDecay);
+    QPen penV(voicePrimary);
     penG.setWidth(2);
     penGDecay.setWidth(2);
     penV.setWidth(2);
+    penV.setStyle(Qt::DotLine); // dotted voice wave to stand out
 
     // Compute guitar points if active
     if (m_guitarHz > 1.0) {
@@ -230,5 +241,13 @@ void WaveVisualizer::setVoiceAmplitude(int val) {
 
 void WaveVisualizer::setGuitarVelocity(int val) {
     m_canvas->setGuitarVelocity(val);
+}
+
+void WaveVisualizer::setGuitarColor(const QColor& color) {
+    m_canvas->setGuitarColor(color);
+}
+
+void WaveVisualizer::setVoiceColor(const QColor& color) {
+    m_canvas->setVoiceColor(color);
 }
 

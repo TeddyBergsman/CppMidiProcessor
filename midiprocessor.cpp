@@ -45,6 +45,7 @@ MidiProcessor::~MidiProcessor() {
     delete midiInGuitar;
     delete midiOut;
     delete midiInVoice;
+    delete midiInVoicePitch;
     delete m_player;
     delete m_audioOutput;
 }
@@ -53,6 +54,7 @@ bool MidiProcessor::initialize() {
     midiInGuitar = new RtMidiIn();
     midiOut = new RtMidiOut();
     midiInVoice = new RtMidiIn();
+    midiInVoicePitch = new RtMidiIn();
     m_player = new QMediaPlayer(this);
     m_audioOutput = new QAudioOutput(this);
     m_player->setAudioOutput(m_audioOutput);
@@ -66,6 +68,11 @@ bool MidiProcessor::initialize() {
 
     int guitarPort = find_port(*midiInGuitar, m_preset.settings.ports["GUITAR_IN"].toStdString());
     int voicePort = find_port(*midiInVoice, m_preset.settings.ports["VOICE_IN"].toStdString());
+    // Voice pitch port: prefer VOICE_PITCH_IN override; else try default literal
+    QString voicePitchName = m_preset.settings.ports.contains("VOICE_PITCH_IN")
+        ? m_preset.settings.ports["VOICE_PITCH_IN"]
+        : QString("IAC Driver MG3 Voice Pitch");
+    int voicePitchPort = find_port(*midiInVoicePitch, voicePitchName.toStdString());
     int outPort = find_port(*midiOut, m_preset.settings.ports["CONTROLLER_OUT"].toStdString());
 
     if (guitarPort == -1 || outPort == -1 || voicePort == -1) {
@@ -77,9 +84,23 @@ bool MidiProcessor::initialize() {
     midiInGuitar->openPort(guitarPort);
     midiOut->openPort(outPort);
     midiInVoice->openPort(voicePort);
+    if (voicePitchPort != -1) {
+        midiInVoicePitch->openPort(voicePitchPort);
+        m_voicePitchAvailable = true;
+    } else {
+        // Fallback: keep using VOICE_IN for pitch if separate pitch port not found
+        m_voicePitchAvailable = false;
+        {
+            std::lock_guard<std::mutex> lock(m_logMutex);
+            m_logQueue.push("WARN: VOICE_PITCH_IN port not found; using VOICE_IN for pitch.");
+        }
+    }
 
     midiInGuitar->setCallback(&MidiProcessor::guitarCallback, this);
-    midiInVoice->setCallback(&MidiProcessor::voiceCallback, this);
+    midiInVoice->setCallback(&MidiProcessor::voiceAmpCallback, this);
+    if (m_voicePitchAvailable) {
+        midiInVoicePitch->setCallback(&MidiProcessor::voicePitchCallback, this);
+    }
     
     // Connect player state changes to the main window
     connect(m_player, &QMediaPlayer::playbackStateChanged, this, &MidiProcessor::onPlayerStateChanged);
@@ -94,6 +115,9 @@ bool MidiProcessor::initialize() {
 
     midiInGuitar->ignoreTypes(false, true, true);
     midiInVoice->ignoreTypes(false, true, true);
+    if (m_voicePitchAvailable) {
+        midiInVoicePitch->ignoreTypes(false, true, true);
+    }
 
     precalculateRatios();
     m_isRunning = true;
@@ -114,32 +138,32 @@ bool MidiProcessor::initialize() {
 
 void MidiProcessor::applyProgram(int programIndex) {
     std::lock_guard<std::mutex> lock(m_eventMutex);
-    m_eventQueue.push({EventType::PROGRAM_CHANGE, {}, false, programIndex, ""});
+    m_eventQueue.push({EventType::PROGRAM_CHANGE, std::vector<unsigned char>(), MidiSource::Guitar, programIndex, ""});
     m_condition.notify_one();
 }
 
 void MidiProcessor::applyTranspose(int semitones) {
     std::lock_guard<std::mutex> lock(m_eventMutex);
     // Use programIndex field to carry semitone value for TRANSPOSE_CHANGE
-    m_eventQueue.push({EventType::TRANSPOSE_CHANGE, {}, false, semitones, ""});
+    m_eventQueue.push({EventType::TRANSPOSE_CHANGE, std::vector<unsigned char>(), MidiSource::Guitar, semitones, ""});
     m_condition.notify_one();
 }
 
 void MidiProcessor::toggleTrack(const std::string& trackId) {
     std::lock_guard<std::mutex> lock(m_eventMutex);
-    m_eventQueue.push({EventType::TRACK_TOGGLE, {}, false, -1, trackId});
+    m_eventQueue.push({EventType::TRACK_TOGGLE, std::vector<unsigned char>(), MidiSource::Guitar, -1, trackId});
     m_condition.notify_one();
 }
  
 void MidiProcessor::playTrack(int index) {
     std::lock_guard<std::mutex> lock(m_eventMutex);
-    m_eventQueue.push({EventType::PLAY_TRACK, {}, false, index, ""});
+    m_eventQueue.push({EventType::PLAY_TRACK, std::vector<unsigned char>(), MidiSource::Guitar, index, ""});
     m_condition.notify_one();
 }
 
 void MidiProcessor::pauseTrack() {
     std::lock_guard<std::mutex> lock(m_eventMutex);
-    m_eventQueue.push({EventType::PAUSE_TRACK, {}, false, -1, ""});
+    m_eventQueue.push({EventType::PAUSE_TRACK, std::vector<unsigned char>(), MidiSource::Guitar, -1, ""});
     m_condition.notify_one();
 }
 
@@ -209,17 +233,27 @@ void MidiProcessor::guitarCallback(double deltatime, std::vector<unsigned char>*
     if (!self->m_isRunning) return;
     {
         std::lock_guard<std::mutex> lock(self->m_eventMutex);
-        self->m_eventQueue.push({EventType::MIDI_MESSAGE, *message, true, -1, ""});
+        self->m_eventQueue.push({EventType::MIDI_MESSAGE, *message, MidiSource::Guitar, -1, ""});
     }
     self->m_condition.notify_one();
 }
 
-void MidiProcessor::voiceCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
+void MidiProcessor::voiceAmpCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
     MidiProcessor* self = static_cast<MidiProcessor*>(userData);
     if (!self->m_isRunning) return;
     {
         std::lock_guard<std::mutex> lock(self->m_eventMutex);
-        self->m_eventQueue.push({EventType::MIDI_MESSAGE, *message, false, -1, ""});
+        self->m_eventQueue.push({EventType::MIDI_MESSAGE, *message, MidiSource::VoiceAmp, -1, ""});
+    }
+    self->m_condition.notify_one();
+}
+
+void MidiProcessor::voicePitchCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
+    MidiProcessor* self = static_cast<MidiProcessor*>(userData);
+    if (!self->m_isRunning) return;
+    {
+        std::lock_guard<std::mutex> lock(self->m_eventMutex);
+        self->m_eventQueue.push({EventType::MIDI_MESSAGE, *message, MidiSource::VoicePitch, -1, ""});
     }
     self->m_condition.notify_one();
 }
@@ -248,7 +282,7 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                 const auto& message = event.message;
                 unsigned char status = message[0] & 0xF0;
 
-                if (event.isGuitar) {
+                if (event.source == MidiSource::Guitar) {
                     int inputNote = message.size() > 1 ? message[1] : 0;
                     int velocity = message.size() > 2 ? message[2] : 0;
                     if (status == 0x90 && velocity > 0) {
@@ -307,8 +341,9 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     
                     midiOut->sendMessage(&passthroughMsg);
                     
-                } else { // Voice
-                    if (status == 0xD0) { // Aftertouch
+                } else if (event.source == MidiSource::VoiceAmp) {
+                    // Handle aftertouch → CC2 and CC104; ignore voice notes here to avoid duplicates
+                    if (status == 0xD0 && message.size() > 1) { // Aftertouch
                         int value = message[1];
                         int breathValue = std::max(0, value - 16);
                         
@@ -323,9 +358,11 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                             m_lastVoiceCc2 = breathValue;
                             emit voiceCc2Updated(breathValue);
                         }
-                    } else if (status == 0x90 || status == 0x80) { // Note on/off for voice
-                        int inputNote = message.size() > 1 ? message[1] : 0;
-                        int velocity = message.size() > 2 ? message[2] : 0;
+                    }
+                    // Do not call updatePitch here; pitch comes from VoicePitch source
+                } else if (event.source == MidiSource::VoicePitch) {
+                    // Use accurate pitch notes for visualization and optionally for output
+                    if (status == 0x90 || status == 0x80) { // Note on/off for voice
                         std::vector<unsigned char> voiceMsg = message;
                         voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01; // Set to channel 2
                         
@@ -339,16 +376,23 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                             voiceMsg[1] = (unsigned char)transposedNote;
                         }
                         midiOut->sendMessage(&voiceMsg);
-                    } else {
-                        // Forward other voice messages as-is on channel 2
+                    } else if (status != 0xD0) {
+                        // Forward other non-aftertouch messages as-is on channel 2
                         std::vector<unsigned char> voiceMsg = message;
                         voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01;
                         midiOut->sendMessage(&voiceMsg);
                     }
                 }
 
+                // Update pitch for guitar always; for voice only from VoicePitch source
                 if (status == 0x90 || status == 0x80 || status == 0xE0) {
-                    updatePitch(message, event.isGuitar);
+                    if (event.source == MidiSource::Guitar) {
+                        updatePitch(message, true);
+                    } else if (event.source == MidiSource::VoicePitch) {
+                        updatePitch(message, false);
+                    } else {
+                        // VoiceAmp: skip pitch updates to avoid mixing inaccurate notes
+                    }
                 }
             }
             break;

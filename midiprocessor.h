@@ -75,10 +75,11 @@ signals:
 
 private:
     enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, PLAY_TRACK, PAUSE_TRACK, TRANSPOSE_CHANGE };
+    enum class MidiSource { Guitar, VoiceAmp, VoicePitch };
     struct MidiEvent {
         EventType type;
         std::vector<unsigned char> message;
-        bool isGuitar;
+        MidiSource source;
         int programIndex; // For PROGRAM_CHANGE/PLAY_TRACK this is index; for TRANSPOSE_CHANGE this is semitone amount
         std::string trackId;
     };
@@ -115,7 +116,9 @@ private:
     // --- MIDI Ports ---
     RtMidiIn* midiInGuitar = nullptr;
     RtMidiOut* midiOut = nullptr;
-    RtMidiIn* midiInVoice = nullptr;
+    RtMidiIn* midiInVoice = nullptr;       // Voice amplitude (aftertouch) source
+    RtMidiIn* midiInVoicePitch = nullptr;  // Voice accurate pitch/note source
+    bool m_voicePitchAvailable = false;
 
     // --- Audio Player ---
     QMediaPlayer* m_player = nullptr;
@@ -163,7 +166,8 @@ private:
 
     // --- Static Callbacks (Producers) ---
     static void guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData);
-    static void voiceCallback(double deltatime, std::vector<unsigned char>* message, void* userData);
+    static void voiceAmpCallback(double deltatime, std::vector<unsigned char>* message, void* userData);
+    static void voicePitchCallback(double deltatime, std::vector<unsigned char>* message, void* userData);
 };
 
 #endif // MIDIPROCESSOR_H

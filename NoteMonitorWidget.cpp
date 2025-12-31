@@ -349,8 +349,23 @@ void NoteMonitorWidget::repositionNotes() {
     if (semi > 6) semi -= 12;
     if (semi < -6) semi += 12;
 
-    // Total delta cents relative to guitar perfect pitch (clamp to [-100, 100])
-    double totalCents = semi * 100.0 + m_lastVoiceCents;
+    // Total delta cents relative to guitar perfect pitch (clamp to [-100, 100]).
+    // Determine direction by absolute note difference (incl. octaves) so higher notes never appear left of guitar.
+    int noteDiff = m_lastVoiceNote - m_lastGuitarNote; // signed semitones (incl. octaves)
+    double totalCents;
+    if (pcG == pcV) {
+        // Same pitch class (possibly different octaves) -> use cents only (overlap around 0)
+        totalCents = m_lastVoiceCents;
+    } else if (std::abs(noteDiff) >= 12) {
+        // Different pitch class and at least one octave away -> snap to extreme side by octave sign
+        totalCents = (noteDiff > 0) ? 100.0 : -100.0;
+    } else {
+        // Within an octave but different pitch class: base on wrapped semitone delta +/- cents,
+        // but make sure direction matches absolute noteDiff sign so higher never goes left.
+        totalCents = semi * 100.0 + m_lastVoiceCents;
+        if (noteDiff > 0 && totalCents < 0) totalCents = -totalCents;
+        if (noteDiff < 0 && totalCents > 0) totalCents = -totalCents;
+    }
     if (totalCents > 100.0) totalCents = 100.0;
     if (totalCents < -100.0) totalCents = -100.0;
 

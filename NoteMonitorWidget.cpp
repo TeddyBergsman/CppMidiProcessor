@@ -335,9 +335,11 @@ void NoteMonitorWidget::repositionNotes() {
     int gTop = H - gH;
     m_guitarSection->setGeometry(gLeft, gTop, gW, gH);
 
-    // If no voice note yet, place vocal on top of guitar (but keep opacity)
+    // If no guitar note (or no vocal yet), center the vocal section horizontally
     if (m_lastVoiceNote < 0 || m_lastGuitarNote < 0) {
-        m_vocalSection->setGeometry(gLeft, H - vH, vW, vH);
+        int vCenterXInit = W / 2;
+        int vLeftInit = vCenterXInit - vW / 2;
+        m_vocalSection->setGeometry(vLeftInit, H - vH, vW, vH);
         return;
     }
 

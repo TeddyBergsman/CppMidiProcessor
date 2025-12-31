@@ -38,6 +38,7 @@ private:
                        QLabel* centsLabel,
                        int midiNote,
                        double cents);
+    void repositionNotes();
 
     // Guitar section
     QLabel* m_guitarTitle = nullptr;
@@ -58,6 +59,19 @@ private:
 
     // Key center (for enharmonic spelling)
     QString m_keyCenter = "Eb major";
+
+    // Absolute-position overlay above waves
+    QWidget* m_notesOverlay = nullptr;
+    QWidget* m_guitarSection = nullptr;
+    QWidget* m_vocalSection = nullptr;
+
+    // Last state for positioning
+    int m_lastGuitarNote = -1;
+    int m_lastVoiceNote = -1;
+    double m_lastVoiceCents = 0.0;
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
 };
 
 #endif // NOTEMONITORWIDGET_H

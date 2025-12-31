@@ -2,6 +2,7 @@
 #include "WaveVisualizer.h"
 #include <QtWidgets>
 #include <cmath>
+#include <QGraphicsOpacityEffect>
 
 NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     : QWidget(parent) {
@@ -70,31 +71,35 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
         return section;
     };
 
-    QWidget* guitarSection = makeSection("Guitar", m_guitarTitle, m_guitarLetter, m_guitarAccidental, m_guitarOctave, m_guitarCents);
-    guitarSection->setFixedHeight(60);
+    m_guitarSection = makeSection("Guitar", m_guitarTitle, m_guitarLetter, m_guitarAccidental, m_guitarOctave, m_guitarCents);
+    m_guitarSection->setFixedHeight(60);
 
     // Insert wave visualizer between the sections
     m_wave = new WaveVisualizer(this);
 
-    QWidget* vocalSection = makeSection("Vocal", m_vocalTitle, m_vocalLetter, m_vocalAccidental, m_vocalOctave, m_vocalCents);
-    vocalSection->setFixedHeight(60);
+    m_vocalSection = makeSection("Vocal", m_vocalTitle, m_vocalLetter, m_vocalAccidental, m_vocalOctave, m_vocalCents);
+    m_vocalSection->setFixedHeight(60);
+    // 70% opacity for vocal section
+    {
+        auto* eff = new QGraphicsOpacityEffect(m_vocalSection);
+        eff->setOpacity(0.7);
+        m_vocalSection->setGraphicsEffect(eff);
+    }
 
-    // Top row: left guitar note section, right vocal note section (bottom-aligned over waves)
-    QWidget* topRow = new QWidget(this);
-    QHBoxLayout* topLayout = new QHBoxLayout(topRow);
-    topLayout->setContentsMargins(0, 0, 0, 0);
-    topLayout->setSpacing(0);
-    topLayout->addWidget(guitarSection, 0, Qt::AlignLeft | Qt::AlignBottom);
-    topLayout->addStretch(1);
-    topLayout->addWidget(vocalSection, 0, Qt::AlignRight | Qt::AlignBottom);
-    topRow->setLayout(topLayout);
+    // Top row: left (guitar, centered), right (vocal, right aligned), both bottom-aligned over waves
+    // Notes overlay (no layout); reparent sections into overlay for absolute positioning
+    m_notesOverlay = new QWidget(this);
+    m_notesOverlay->setFixedHeight(60);
+    m_notesOverlay->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_guitarSection->setParent(m_notesOverlay);
+    m_vocalSection->setParent(m_notesOverlay);
 
     // Block that holds notes above the waves; this whole block will be vertically centered
     QWidget* waveBlock = new QWidget(this);
     QVBoxLayout* blockLayout = new QVBoxLayout(waveBlock);
     blockLayout->setContentsMargins(0, 0, 0, 0);
     blockLayout->setSpacing(0);
-    blockLayout->addWidget(topRow, 0, Qt::AlignBottom);
+    blockLayout->addWidget(m_notesOverlay, 0, Qt::AlignBottom);
     blockLayout->addWidget(m_wave, 0);
     waveBlock->setLayout(blockLayout);
 
@@ -112,24 +117,32 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_vocalAccidental->setVisible(false);
     m_vocalOctave->setVisible(false);
     if (m_vocalCents) m_vocalCents->setVisible(false);
+
+    // Initial positioning
+    repositionNotes();
 }
 
 void NoteMonitorWidget::setGuitarNote(int midiNote, double cents) {
     updateNoteUISection(m_guitarTitle, m_guitarLetter, m_guitarAccidental, m_guitarOctave, m_guitarCents, midiNote, cents);
+    m_lastGuitarNote = midiNote;
     if (midiNote >= 0 && m_wave) {
         QColor c(colorForCents(cents));
         m_wave->setGuitarColor(c);
         m_wave->setGuitarCentsText(formatCentsText(cents));
     }
+    repositionNotes();
 }
 
 void NoteMonitorWidget::setVoiceNote(int midiNote, double cents) {
     updateNoteUISection(m_vocalTitle, m_vocalLetter, m_vocalAccidental, m_vocalOctave, m_vocalCents, midiNote, cents);
+    m_lastVoiceNote = midiNote;
+    m_lastVoiceCents = cents;
     if (midiNote >= 0 && m_wave) {
         QColor c(colorForCents(cents));
         m_wave->setVoiceColor(c);
         m_wave->setVoiceCentsText(formatCentsText(cents));
     }
+    repositionNotes();
 }
 
 void NoteMonitorWidget::setGuitarHz(double hz) {
@@ -292,5 +305,60 @@ void NoteMonitorWidget::updateNoteParts(QLabel* letterLbl, QLabel* accidentalLbl
     octaveLbl->setText(QString::number(octave));
     // Spelled accidental always visible if present
     accidentalLbl->setText(accidental.isNull() ? QString("") : QString(accidental));
+}
+
+void NoteMonitorWidget::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    if (!m_notesOverlay) return;
+    // Ensure overlay matches wave width
+    m_notesOverlay->setMinimumWidth(m_wave ? m_wave->width() : width());
+    repositionNotes();
+}
+
+void NoteMonitorWidget::repositionNotes() {
+    if (!m_notesOverlay || !m_guitarSection || !m_vocalSection) return;
+    int W = m_notesOverlay->width();
+    int H = m_notesOverlay->height();
+    if (W <= 0 || H <= 0) return;
+
+    // Ensure sections have proper size
+    m_guitarSection->adjustSize();
+    m_vocalSection->adjustSize();
+    int gW = m_guitarSection->sizeHint().width();
+    int vW = m_vocalSection->sizeHint().width();
+    int gH = m_guitarSection->height();
+    int vH = m_vocalSection->height();
+
+    // Center guitar
+    int gCenterX = W / 2;
+    int gLeft = gCenterX - gW / 2;
+    int gTop = H - gH;
+    m_guitarSection->setGeometry(gLeft, gTop, gW, gH);
+
+    // If no voice note yet, place vocal on top of guitar (but keep opacity)
+    if (m_lastVoiceNote < 0 || m_lastGuitarNote < 0) {
+        m_vocalSection->setGeometry(gLeft, H - vH, vW, vH);
+        return;
+    }
+
+    // Pitch-class delta in semitones ignoring octaves
+    auto norm = [](int x)->int { int r = x % 12; if (r < 0) r += 12; return r; };
+    int pcG = norm(m_lastGuitarNote);
+    int pcV = norm(m_lastVoiceNote);
+    int semi = pcV - pcG;
+    if (semi > 6) semi -= 12;
+    if (semi < -6) semi += 12;
+
+    // Total delta cents relative to guitar perfect pitch (clamp to [-100, 100])
+    double totalCents = semi * 100.0 + m_lastVoiceCents;
+    if (totalCents > 100.0) totalCents = 100.0;
+    if (totalCents < -100.0) totalCents = -100.0;
+
+    // Compute max center offset when edges just touch (0 overlap)
+    int edgeCenterOffset = (gW + vW) / 2;
+    int vCenterX = gCenterX + static_cast<int>(std::round((totalCents / 100.0) * edgeCenterOffset));
+    int vLeft = vCenterX - vW / 2;
+    int vTop = H - vH;
+    m_vocalSection->setGeometry(vLeft, vTop, vW, vH);
 }
 

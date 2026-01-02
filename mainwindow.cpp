@@ -50,6 +50,8 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
     if (noteMonitorWidget) {
         QString keyCenter = settings.value("ui/keyCenter", "Eb major").toString();
         noteMonitorWidget->setKeyCenter(keyCenter);
+        int pitchBpm = settings.value("ui/pitchMonitorBpm", 120).toInt();
+        noteMonitorWidget->setPitchMonitorBpm(pitchBpm);
     }
 }
 
@@ -1188,6 +1190,7 @@ void MainWindow::openPreferences() {
     QSettings settings;
     bool legacyOn = settings.value("ui/legacy", false).toBool();
     QString keyCenter = settings.value("ui/keyCenter", "Eb major").toString();
+    int pitchBpm = settings.value("ui/pitchMonitorBpm", 120).toInt();
 
     QDialog dlg(this);
     dlg.setWindowTitle("Preferences");
@@ -1212,6 +1215,16 @@ void MainWindow::openPreferences() {
     keyLayout->addWidget(keyCombo, 1);
     layout->addLayout(keyLayout);
 
+    // Pitch monitor BPM
+    QHBoxLayout* bpmLayout = new QHBoxLayout();
+    QLabel* bpmLbl = new QLabel("Pitch monitor BPM:", &dlg);
+    QSpinBox* bpmSpin = new QSpinBox(&dlg);
+    bpmSpin->setRange(30, 300);
+    bpmSpin->setValue(pitchBpm);
+    bpmLayout->addWidget(bpmLbl);
+    bpmLayout->addWidget(bpmSpin, 1);
+    layout->addLayout(bpmLayout);
+
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
@@ -1223,8 +1236,10 @@ void MainWindow::openPreferences() {
         applyLegacyUiSetting(legacy);
         QString selKey = keyCombo->currentText();
         settings.setValue("ui/keyCenter", selKey);
+        settings.setValue("ui/pitchMonitorBpm", bpmSpin->value());
         if (noteMonitorWidget) {
             noteMonitorWidget->setKeyCenter(selKey);
+            noteMonitorWidget->setPitchMonitorBpm(bpmSpin->value());
         }
     }
 }

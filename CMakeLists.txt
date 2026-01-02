@@ -31,6 +31,9 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   RtMidi.cpp
   NoteMonitorWidget.h
   NoteMonitorWidget.cpp
+  PitchMonitorWidget.h
+  PitchMonitorWidget.cpp
+  PitchColor.h
   WaveVisualizer.h
   WaveVisualizer.cpp
   resources.qrc
@@ -51,3 +54,6 @@ target_link_libraries(CppMidiProcessor
   "-framework CoreAudio"
   "-framework CoreFoundation"
 )
+
+# Ensure local headers are always discoverable (clangd / IDE tooling)
+target_include_directories(CppMidiProcessor PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")

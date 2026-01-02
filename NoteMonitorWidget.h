@@ -12,6 +12,7 @@ class NoteMonitorWidget : public QWidget {
 public:
     explicit NoteMonitorWidget(QWidget* parent = nullptr);
     void setKeyCenter(const QString& keyCenter);
+    void setPitchMonitorBpm(int bpm);
 
 public slots:
     void setGuitarNote(int midiNote, double cents);
@@ -25,7 +26,6 @@ public slots:
 private:
     static QString formatNoteName(int midiNote);
     static QString formatCentsText(double cents);
-    static QString colorForCents(double cents);
     void updateNoteParts(QLabel* letterLbl, QLabel* accidentalLbl, QLabel* octaveLbl,
                          int midiNote, double cents);
     void chooseSpellingForKey(int midiNote, QChar& letterOut, QChar& accidentalOut, int& octaveOut) const;
@@ -57,6 +57,7 @@ private:
 
     // Wave visualizer in between
     WaveVisualizer* m_wave = nullptr;
+    class PitchMonitorWidget* m_pitchMonitor = nullptr;
 
     // Key center (for enharmonic spelling)
     QString m_keyCenter = "Eb major";
@@ -74,7 +75,7 @@ private:
     int m_lastVocalX = -1; // Track last X position for trail detection
     
     // Trail optimization: limit number of ghosts
-    static constexpr int m_trailMaxGhosts = 25; // Increased for better trail visibility
+    static constexpr int m_trailMaxGhosts = 15; // Increased for better trail visibility
 
 protected:
     void resizeEvent(QResizeEvent* event) override;

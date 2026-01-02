@@ -1,5 +1,7 @@
 #include "NoteMonitorWidget.h"
 #include "WaveVisualizer.h"
+#include "PitchMonitorWidget.h"
+#include "PitchColor.h"
 #include <QtWidgets>
 #include <cmath>
 #include <QGraphicsOpacityEffect>
@@ -120,10 +122,18 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     blockLayout->addWidget(m_wave, 0);
     waveBlock->setLayout(blockLayout);
 
-    // Center the combined block (notes + waves) vertically in the window
+    // Layout goal:
+    // - Wave section (with notes overlay) visually centered vertically
+    // - Pitch monitor uses the remaining space below that (typically < 50% of window)
+    root->setSpacing(10);
+    // IMPORTANT: keep this stretch factor equal to the pitch monitor's stretch factor.
+    // This guarantees the wave block stays vertically centered in the full window.
     root->addStretch(1);
-    root->addWidget(waveBlock, 0, Qt::AlignVCenter);
-    root->addStretch(1);
+    root->addWidget(waveBlock, 0);
+
+    m_pitchMonitor = new PitchMonitorWidget(this);
+    m_pitchMonitor->setMinimumHeight(140);
+    root->addWidget(m_pitchMonitor, 1);
 
     // Hide initially (keep section height fixed)
     m_guitarLetter->setVisible(false);
@@ -143,9 +153,12 @@ void NoteMonitorWidget::setGuitarNote(int midiNote, double cents) {
     updateNoteUISection(m_guitarTitle, m_guitarLetter, m_guitarAccidental, m_guitarOctave, m_guitarCents, midiNote, cents);
     m_lastGuitarNote = midiNote;
     if (midiNote >= 0 && m_wave) {
-        QColor c(colorForCents(cents));
+        QColor c(pitchColorForCents(cents));
         m_wave->setGuitarColor(c);
         m_wave->setGuitarCentsText(formatCentsText(cents));
+    }
+    if (m_pitchMonitor) {
+        m_pitchMonitor->pushGuitar(midiNote, cents);
     }
     repositionNotes();
 }
@@ -155,9 +168,12 @@ void NoteMonitorWidget::setVoiceNote(int midiNote, double cents) {
     m_lastVoiceNote = midiNote;
     m_lastVoiceCents = cents;
     if (midiNote >= 0 && m_wave) {
-        QColor c(colorForCents(cents));
+        QColor c(pitchColorForCents(cents));
         m_wave->setVoiceColor(c);
         m_wave->setVoiceCentsText(formatCentsText(cents));
+    }
+    if (m_pitchMonitor) {
+        m_pitchMonitor->pushVocal(midiNote, cents);
     }
     repositionNotes();
 }
@@ -197,7 +213,7 @@ void NoteMonitorWidget::updateNoteUISection(QLabel* titleLabel,
     centsLabel->setVisible(show);
     if (!show) return;
 
-    QString color = colorForCents(cents);
+    QString color = pitchColorForCents(cents);
     updateNoteParts(letterLbl, accidentalLbl, octaveLbl, midiNote, cents);
     QString letterStyle = QString("QLabel { color: %1; font-size: 40pt; font-weight: bold; }").arg(color);
     QString accidentalStyle = QString("QLabel { color: %1; font-size: 28pt; font-weight: bold; }").arg(color);
@@ -230,55 +246,17 @@ QString NoteMonitorWidget::formatCentsText(double cents) {
     return QString("%1 cents").arg(rounded);
 }
 
-QString NoteMonitorWidget::colorForCents(double cents) {
-    // Continuous gradient:
-    // - Flat (cents < 0): green (#00ff00) -> blue (#0000ff) -> red (#ff0000) as |cents| grows to 50
-    // - Sharp (cents > 0): green (#00ff00) -> red (#ff0000) as cents grows to 50 (yellow in-between)
-    double t = std::min(1.0, std::fabs(cents) / 50.0);
-    int r = 0, g = 0, b = 0;
-    if (cents < 0) {
-        // green -> light blue (#00ccff) -> red
-        const int midR = 0, midG = 204, midB = 255;
-        if (t <= 0.5) {
-            double u = t / 0.5; // 0..1
-            r = 0;
-            g = static_cast<int>(std::round(255.0 * (1.0 - u) + midG * u));
-            b = static_cast<int>(std::round(0.0 * (1.0 - u) + midB * u));
-        } else {
-            double u = (t - 0.5) / 0.5; // 0..1
-            r = static_cast<int>(std::round(midR * (1.0 - u) + 255.0 * u));
-            g = static_cast<int>(std::round(midG * (1.0 - u) + 0.0 * u));
-            b = static_cast<int>(std::round(midB * (1.0 - u) + 0.0 * u));
-        }
-    } else if (cents > 0) {
-        // green -> vibrant orange (#ff9900) -> red
-        const int midR = 255, midG = 153, midB = 0;
-        if (t <= 0.5) {
-            double u = t / 0.5; // 0..1
-            r = static_cast<int>(std::round(0.0 * (1.0 - u) + midR * u));
-            g = static_cast<int>(std::round(255.0 * (1.0 - u) + midG * u));
-            b = static_cast<int>(std::round(0.0 * (1.0 - u) + midB * u));
-        } else {
-            double u = (t - 0.5) / 0.5; // 0..1
-            r = static_cast<int>(std::round(midR * (1.0 - u) + 255.0 * u));
-            g = static_cast<int>(std::round(midG * (1.0 - u) + 0.0 * u));
-            b = static_cast<int>(std::round(midB * (1.0 - u) + 0.0 * u));
-        }
-    } else {
-        // perfect
-        r = 0; g = 255; b = 0;
+void NoteMonitorWidget::setPitchMonitorBpm(int bpm) {
+    if (m_pitchMonitor) {
+        m_pitchMonitor->setBpm(bpm);
     }
-    r = std::max(0, std::min(255, r));
-    g = std::max(0, std::min(255, g));
-    b = std::max(0, std::min(255, b));
-    return QString("#%1%2%3")
-        .arg(r, 2, 16, QLatin1Char('0'))
-        .arg(g, 2, 16, QLatin1Char('0'))
-        .arg(b, 2, 16, QLatin1Char('0'));
 }
 
 void NoteMonitorWidget::setKeyCenter(const QString& keyCenter) {
     m_keyCenter = keyCenter;
+    if (m_pitchMonitor) {
+        m_pitchMonitor->setKeyCenter(keyCenter);
+    }
 }
 
 bool NoteMonitorWidget::preferFlats() const {

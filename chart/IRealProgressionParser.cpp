@@ -272,10 +272,17 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
                     t.remove(0, 2);
                     t = t.trimmed();
                 }
+                // Strip additional single-letter layout prefixes found in exports.
+                // - 'U' sometimes prefixes the first chord of a bar (e.g. UEb6) as a layout control.
+                if (t.size() >= 2 && t[0] == 'U' && t[1].isLetter()) {
+                    t.remove(0, 1);
+                }
                 if (t.startsWith('l') && t.size() > 1) {
                     // 'l' is a layout prefix in iReal streams; strip for display.
                     t.remove(0, 1);
                 }
+                // A standalone 'l' is a layout control (often appears before a barline as "l|").
+                if (t == "l") return QString();
 
                 // Display niceties / typography (match iReal Pro as closely as possible)
                 // Accidentals
@@ -310,17 +317,24 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
                 listToken.remove(0, 1);
             }
             const auto listParts = listToken.split(',', Qt::SkipEmptyParts);
-            if (listParts.size() > 1) {
+            // Filter out layout-only parts (e.g. trailing 'l' in sAb-7,Db7,l)
+            QVector<QString> filtered;
+            filtered.reserve(listParts.size());
+            for (const auto& part : listParts) {
+                const QString chord = normalizeChord(part);
+                if (chord.isEmpty()) continue;
+                filtered.push_back(chord);
+            }
+
+            if (filtered.size() > 1) {
                 // iReal harmonic rhythm placement heuristics (4/4):
                 // If the bar already has one chord in cell 0 and we now have two more chords,
                 // they should land on beats 3 and 4 (cells 2 and 3), leaving beat 2 empty.
-                if (model.timeSigNum == 4 && model.timeSigDen == 4 && cellInBar == 1 && listParts.size() == 2) {
+                if (model.timeSigNum == 4 && model.timeSigDen == 4 && cellInBar == 1 && filtered.size() == 2) {
                     ensureCellCount(currentBar, 2);
                     cellInBar = 2;
                 }
-                for (const QString& part : listParts) {
-                    const QString chord = normalizeChord(part);
-                    if (chord.isEmpty()) continue;
+                for (const QString& chord : filtered) {
                     ensureCellCount(currentBar, cellInBar + 1);
                     currentBar.cells[cellInBar].chord = chord;
                     currentBar.cells[cellInBar].isPlaceholder = (chord.trimmed() == "x");

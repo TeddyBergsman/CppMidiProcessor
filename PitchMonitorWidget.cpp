@@ -261,20 +261,24 @@ void PitchMonitorWidget::paintEvent(QPaintEvent* /*event*/) {
     const double now = nowSec();
     const double pps = pxPerSecond();
 
-    // Determine "current" played note based on the most recent sample (including note-off).
-    int currentNote = -1;
-    double currentCents = 0.0;
-    double currentT = -1.0;
+    // Determine "current" played notes per stream based on the most recent sample
+    // (including note-off). This lets us highlight guitar + vocal simultaneously.
+    int guitarNote = -1;
+    double guitarCents = 0.0;
+    int vocalNote = -1;
+    double vocalCents = 0.0;
     auto lastSample = [](const QVector<Sample>& v) -> Sample {
         return v.isEmpty() ? Sample{} : v.last();
     };
     Sample gLast = lastSample(m_guitar);
     Sample vLast = lastSample(m_vocal);
-    Sample last = (vLast.tSec > gLast.tSec) ? vLast : gLast;
-    if (last.tSec > 0.0 && (now - last.tSec) <= 0.75 && last.midiNote >= 0) {
-        currentNote = last.midiNote;
-        currentCents = last.cents;
-        currentT = last.tSec;
+    if (gLast.tSec > 0.0 && (now - gLast.tSec) <= 0.75 && gLast.midiNote >= 0) {
+        guitarNote = gLast.midiNote;
+        guitarCents = gLast.cents;
+    }
+    if (vLast.tSec > 0.0 && (now - vLast.tSec) <= 0.75 && vLast.midiNote >= 0) {
+        vocalNote = vLast.midiNote;
+        vocalCents = vLast.cents;
     }
 
     // Reserve a label gutter to the right so labels never overlap plotted lines.
@@ -290,7 +294,9 @@ void PitchMonitorWidget::paintEvent(QPaintEvent* /*event*/) {
         for (int m = midiBottom; m <= midiTop; ++m) {
             const int pc = ((m % 12) + 12) % 12;
             const bool inScale = isPitchClassInKeyMajorScale(pc);
-            if (!inScale && m != currentNote) continue;
+            const bool isG = (m == guitarNote);
+            const bool isV = (m == vocalNote);
+            if (!inScale && !isG && !isV) continue;
             maxW = std::max(maxW, fm.horizontalAdvance(formatNoteShort(m)));
         }
         // Tight fit: just enough room for the text + minimal padding.
@@ -349,17 +355,31 @@ void PitchMonitorWidget::paintEvent(QPaintEvent* /*event*/) {
             // Note labels: only show notes in the current key's major scale.
             // If we're currently playing a non-scale note, temporarily show it so it can be highlighted.
             const bool inScale = isPitchClassInKeyMajorScale(pc);
-            if (!inScale && m != currentNote) continue;
+            const bool isG = (m == guitarNote);
+            const bool isV = (m == vocalNote);
+            if (!inScale && !isG && !isV) continue;
 
             // Non-tonic (non-C within the grid) are lower opacity; the currently played note is highlighted.
             QRect r = labelRectTemplate;
             r.moveTop(static_cast<int>(y) - (r.height() / 2));
 
-            if (m == currentNote) {
-                QColor hl(pitchColorForCents(currentCents));
-                hl.setAlpha(255);
-                p.setPen(hl);
-                p.drawText(r, Qt::AlignLeft | Qt::AlignVCenter, formatNoteShort(m));
+            if (isG || isV) {
+                // Highlight all currently active notes. If both streams hit the same pitch,
+                // draw twice with a 1px offset so both colors are visible.
+                if (isG) {
+                    QColor hl(pitchColorForCents(guitarCents));
+                    hl.setAlpha(255);
+                    p.setPen(hl);
+                    p.drawText(r, Qt::AlignLeft | Qt::AlignVCenter, formatNoteShort(m));
+                }
+                if (isV) {
+                    QColor hl(pitchColorForCents(vocalCents));
+                    hl.setAlpha(255);
+                    p.setPen(hl);
+                    QRect r2 = r;
+                    if (isG) r2.translate(1, 0);
+                    p.drawText(r2, Qt::AlignLeft | Qt::AlignVCenter, formatNoteShort(m));
+                }
             } else {
                 QColor textColor(160, 160, 160);
                 // Dim non-root scale degrees a bit more (C is just a reference; not necessarily tonic for the key).

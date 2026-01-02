@@ -36,6 +36,7 @@ PitchMonitorWidget::PitchMonitorWidget(QWidget* parent)
     setMinimumHeight(140);
 
     m_clock.start();
+    m_decayElapsed.start();
 
     m_timer = new QTimer(this);
     m_timer->setTimerType(Qt::PreciseTimer);
@@ -54,18 +55,45 @@ void PitchMonitorWidget::setKeyCenter(const QString& keyCenter) {
     update();
 }
 
-void PitchMonitorWidget::pushSample(QVector<Sample>& stream, int midiNote, double cents,
-                                    double& lastAppendSec, int& lastMidi, double& lastCents) {
+void PitchMonitorWidget::setVoiceAmplitude(int cc2) {
+    int v = std::max(0, std::min(127, cc2));
+    m_voiceAmp = v / 127.0;
+}
+
+void PitchMonitorWidget::setGuitarVelocity(int velocity) {
+    int v = std::max(0, std::min(127, velocity));
+    m_guitarVelocityAmp = v / 127.0;
+    m_guitarDecayAmp = m_guitarVelocityAmp;
+    double vn = m_guitarVelocityAmp; // 0..1
+    m_guitarTauSec = 0.3 + 1.3 * vn;
+    m_decayElapsed.restart();
+}
+
+double PitchMonitorWidget::voiceAmpNow() const {
+    return std::max(0.0, std::min(1.0, m_voiceAmp));
+}
+
+double PitchMonitorWidget::guitarAmpNow() const {
+    // Match the wave visualizer logic:
+    // if voice amp is present, both waves are driven by it; otherwise guitar uses its decay.
+    if (m_voiceAmp > 0.0) return voiceAmpNow();
+    return std::max(0.0, std::min(1.0, m_guitarDecayAmp));
+}
+
+void PitchMonitorWidget::pushSample(QVector<Sample>& stream, int midiNote, double cents, double amp01,
+                                    double& lastAppendSec, int& lastMidi, double& lastCents, double& lastAmp) {
     const double t = nowSec();
     const double c = std::clamp(cents, -50.0, 50.0);
+    const double a = std::clamp(amp01, 0.0, 1.0);
 
     // Throttle samples aggressively unless something meaningful changed.
     const bool first = lastAppendSec < 0.0;
     const bool noteChanged = (midiNote != lastMidi);
     const bool centsChanged = std::fabs(c - lastCents) >= 0.6;
+    const bool ampChanged = std::fabs(a - lastAmp) >= 0.04;
     const bool timeOk = first || (t - lastAppendSec) >= m_minAppendIntervalSec;
 
-    if (!timeOk && !noteChanged && !centsChanged) {
+    if (!timeOk && !noteChanged && !centsChanged && !ampChanged) {
         return;
     }
 
@@ -83,11 +111,13 @@ void PitchMonitorWidget::pushSample(QVector<Sample>& stream, int midiNote, doubl
     s.tSec = t;
     s.midiNote = midiNote;
     s.cents = c;
+    s.amp01 = a;
     stream.push_back(s);
 
     lastAppendSec = t;
     lastMidi = midiNote;
     lastCents = c;
+    lastAmp = a;
 
     if (midiNote >= 0) {
         updateVerticalTargetForNote(midiNote);
@@ -95,11 +125,13 @@ void PitchMonitorWidget::pushSample(QVector<Sample>& stream, int midiNote, doubl
 }
 
 void PitchMonitorWidget::pushGuitar(int midiNote, double cents) {
-    pushSample(m_guitar, midiNote, cents, m_lastGuitarAppendSec, m_lastGuitarMidi, m_lastGuitarCents);
+    pushSample(m_guitar, midiNote, cents, guitarAmpNow(),
+               m_lastGuitarAppendSec, m_lastGuitarMidi, m_lastGuitarCents, m_lastGuitarAmp);
 }
 
 void PitchMonitorWidget::pushVocal(int midiNote, double cents) {
-    pushSample(m_vocal, midiNote, cents, m_lastVocalAppendSec, m_lastVocalMidi, m_lastVocalCents);
+    pushSample(m_vocal, midiNote, cents, voiceAmpNow(),
+               m_lastVocalAppendSec, m_lastVocalMidi, m_lastVocalCents, m_lastVocalAmp);
 }
 
 double PitchMonitorWidget::nowSec() const {
@@ -224,15 +256,27 @@ void PitchMonitorWidget::tick() {
     const double alpha = 0.18; // smoothing
     m_centerMidi += (m_targetCenterMidi - m_centerMidi) * alpha;
 
+    // Update guitar decay amplitude (same exponential behavior as WaveCanvas)
+    {
+        qint64 ms = m_decayElapsed.elapsed();
+        m_decayElapsed.restart();
+        if (ms > 0 && m_guitarDecayAmp > 0.0) {
+            double dt = ms * 0.001;
+            double tau = (m_guitarTauSec > 0.05) ? m_guitarTauSec : 0.05;
+            m_guitarDecayAmp *= std::exp(-dt / tau);
+            if (m_guitarDecayAmp < 0.005) m_guitarDecayAmp = 0.0;
+        }
+    }
+
     // Keep-alive sampling so held notes continue to draw even if upstream emits no changes.
     // MidiProcessor intentionally throttles pitch updates; this fills in the visual timeline.
     if (m_lastGuitarMidi >= 0) {
-        pushSample(m_guitar, m_lastGuitarMidi, m_lastGuitarCents,
-                   m_lastGuitarAppendSec, m_lastGuitarMidi, m_lastGuitarCents);
+        pushSample(m_guitar, m_lastGuitarMidi, m_lastGuitarCents, guitarAmpNow(),
+                   m_lastGuitarAppendSec, m_lastGuitarMidi, m_lastGuitarCents, m_lastGuitarAmp);
     }
     if (m_lastVocalMidi >= 0) {
-        pushSample(m_vocal, m_lastVocalMidi, m_lastVocalCents,
-                   m_lastVocalAppendSec, m_lastVocalMidi, m_lastVocalCents);
+        pushSample(m_vocal, m_lastVocalMidi, m_lastVocalCents, voiceAmpNow(),
+                   m_lastVocalAppendSec, m_lastVocalMidi, m_lastVocalCents, m_lastVocalAmp);
     }
 
     pruneOldSamples();
@@ -428,9 +472,18 @@ void PitchMonitorWidget::paintEvent(QPaintEvent* /*event*/) {
                 if (dt > 0.25 || dSemi >= 1.25) {
                     havePrev = false;
                 } else {
-                    pen.setColor(colorForCentsWithAlpha(s.cents, alpha));
-                    p.setPen(pen);
-                    p.drawLine(prevPt, pt);
+                    // Opacity scales with amplitude (same source signals as WaveCanvas).
+                    double a = std::clamp(s.amp01, 0.0, 1.0);
+                    // perceptual boost: make low amps more visible
+                    double aVis = std::sqrt(a);
+                    int effAlpha = static_cast<int>(std::round(alpha * aVis));
+                    if (effAlpha < 6) {
+                        havePrev = false;
+                    } else {
+                        pen.setColor(colorForCentsWithAlpha(s.cents, effAlpha));
+                        p.setPen(pen);
+                        p.drawLine(prevPt, pt);
+                    }
                 }
             }
 

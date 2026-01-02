@@ -14,6 +14,8 @@ public:
 public slots:
     void setBpm(int bpm);
     void setKeyCenter(const QString& keyCenter);
+    void setVoiceAmplitude(int cc2);
+    void setGuitarVelocity(int velocity);
     void pushGuitar(int midiNote, double cents);
     void pushVocal(int midiNote, double cents);
 
@@ -26,10 +28,14 @@ private:
         double tSec = 0.0;   // seconds since start
         int midiNote = -1;   // -1 => inactive/gap
         double cents = 0.0;  // [-50, 50]
+        double amp01 = 0.0;  // 0..1 (opacity driver)
     };
 
-    void pushSample(QVector<Sample>& stream, int midiNote, double cents,
-                    double& lastAppendSec, int& lastMidi, double& lastCents);
+    void pushSample(QVector<Sample>& stream, int midiNote, double cents, double amp01,
+                    double& lastAppendSec, int& lastMidi, double& lastCents, double& lastAmp);
+
+    double voiceAmpNow() const;
+    double guitarAmpNow() const;
 
     void tick();
     void pruneOldSamples();
@@ -66,6 +72,15 @@ private:
     int m_lastVocalMidi = -2;
     double m_lastGuitarCents = 0.0;
     double m_lastVocalCents = 0.0;
+    double m_lastGuitarAmp = 0.0;
+    double m_lastVocalAmp = 0.0;
+
+    // Amplitude state (mirrors WaveCanvas behavior)
+    double m_voiceAmp = 0.0;          // 0..1 from CC2
+    double m_guitarVelocityAmp = 0.0; // 0..1 from velocity
+    double m_guitarDecayAmp = 0.0;    // 0..1 decaying
+    double m_guitarTauSec = 0.8;      // decay constant (sec)
+    QElapsedTimer m_decayElapsed;
 
     // Vertical viewport (in MIDI notes)
     double m_centerMidi = 60.0;

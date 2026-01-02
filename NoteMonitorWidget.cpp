@@ -209,10 +209,12 @@ void NoteMonitorWidget::setGuitarAmplitude(int aftertouch) {
 
 void NoteMonitorWidget::setVoiceAmplitude(int cc2) {
     if (m_wave) m_wave->setVoiceAmplitude(cc2);
+    if (m_pitchMonitor) m_pitchMonitor->setVoiceAmplitude(cc2);
 }
 
 void NoteMonitorWidget::setGuitarVelocity(int velocity) {
     if (m_wave) m_wave->setGuitarVelocity(velocity);
+    if (m_pitchMonitor) m_pitchMonitor->setGuitarVelocity(velocity);
 }
 
 void NoteMonitorWidget::updateNoteUISection(QLabel* titleLabel,

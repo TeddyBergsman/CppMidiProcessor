@@ -59,6 +59,7 @@ private slots:
     void onTransposeToggled(bool checked);
     void openPreferences();
     void applyLegacyUiSetting(bool legacyOn);
+    void openIRealHtml();
 
 private:
     void createWidgets(const Preset& preset);

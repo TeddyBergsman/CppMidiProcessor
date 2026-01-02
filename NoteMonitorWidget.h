@@ -6,13 +6,22 @@ class WaveVisualizer;
 
 class QLabel;
 class QVBoxLayout;
+class QComboBox;
+class QPushButton;
+class QSpinBox;
+
+namespace ireal { struct Playlist; }
+namespace chart { class SongChartWidget; }
+namespace playback { class SilentPlaybackEngine; }
 
 class NoteMonitorWidget : public QWidget {
     Q_OBJECT
 public:
     explicit NoteMonitorWidget(QWidget* parent = nullptr);
+    ~NoteMonitorWidget() override;
     void setKeyCenter(const QString& keyCenter);
     void setPitchMonitorBpm(int bpm);
+    void setIRealPlaylist(const ireal::Playlist& playlist);
 
 public slots:
     void setGuitarNote(int midiNote, double cents);
@@ -67,6 +76,15 @@ private:
     QWidget* m_guitarSection = nullptr;
     QWidget* m_vocalSection = nullptr;
     QWidget* m_trailLayer = nullptr; // Layer for fading trail ghosts
+
+    // iReal chart UI (top half)
+    QWidget* m_chartContainer = nullptr;
+    chart::SongChartWidget* m_chartWidget = nullptr;
+    QComboBox* m_songCombo = nullptr;
+    QPushButton* m_playButton = nullptr;
+    QSpinBox* m_tempoSpin = nullptr;
+    playback::SilentPlaybackEngine* m_playback = nullptr;
+    ireal::Playlist* m_playlist = nullptr; // owned pointer to avoid header includes
 
     // Last state for positioning
     int m_lastGuitarNote = -1;

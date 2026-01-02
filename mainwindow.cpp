@@ -12,6 +12,7 @@
 #include <QMenuBar>
 #include <QDialog>
 #include "NoteMonitorWidget.h"
+#include "ireal/HtmlPlaylistParser.h"
 
 MainWindow::MainWindow(const Preset& preset, QWidget *parent) 
     : QMainWindow(parent) {
@@ -75,7 +76,26 @@ void MainWindow::createWidgets(const Preset& preset) {
     QAction* preferencesAction = new QAction("Preferences…", this);
     preferencesAction->setMenuRole(QAction::PreferencesRole);
     connect(preferencesAction, &QAction::triggered, this, &MainWindow::openPreferences);
+    
+    // Open iReal HTML action
+    QAction* openIRealAction = new QAction("Open iReal Pro HTML…", this);
+    openIRealAction->setMenuRole(QAction::NoRole);
+    connect(openIRealAction, &QAction::triggered, this, &MainWindow::openIRealHtml);
+
     if (menuBar()) {
+        // Ensure there is a File menu
+        QMenu* fileMenu = nullptr;
+        for (QAction* a : menuBar()->actions()) {
+            if (a->menu() && a->menu()->title() == "File") {
+                fileMenu = a->menu();
+                break;
+            }
+        }
+        if (!fileMenu) {
+            fileMenu = menuBar()->addMenu("File");
+        }
+        fileMenu->addAction(openIRealAction);
+
         QMenu* settingsMenu = nullptr;
         // Try to find an existing "Settings" menu to avoid duplicates
         for (QAction* a : menuBar()->actions()) {
@@ -1241,6 +1261,28 @@ void MainWindow::openPreferences() {
             noteMonitorWidget->setKeyCenter(selKey);
             noteMonitorWidget->setPitchMonitorBpm(bpmSpin->value());
         }
+    }
+}
+
+void MainWindow::openIRealHtml() {
+    const QString path = QFileDialog::getOpenFileName(
+        this,
+        "Open iReal Pro HTML Playlist",
+        QString(),
+        "HTML files (*.html *.htm);;All files (*)"
+    );
+    if (path.isEmpty()) return;
+
+    const ireal::Playlist pl = ireal::HtmlPlaylistParser::parseFile(path);
+    if (pl.songs.isEmpty()) {
+        QMessageBox::warning(this, "iReal Import", "No iReal Pro playlist link found or playlist contained no songs.");
+        return;
+    }
+
+    if (noteMonitorWidget) {
+        noteMonitorWidget->setIRealPlaylist(pl);
+        // Switch to minimal UI to show chart
+        applyLegacyUiSetting(false);
     }
 }
 

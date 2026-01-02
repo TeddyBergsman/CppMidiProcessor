@@ -36,6 +36,18 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   PitchColor.h
   WaveVisualizer.h
   WaveVisualizer.cpp
+  ireal/IRealTypes.h
+  ireal/IRealbCodec.h
+  ireal/IRealbCodec.cpp
+  ireal/HtmlPlaylistParser.h
+  ireal/HtmlPlaylistParser.cpp
+  chart/ChartModel.h
+  chart/IRealProgressionParser.h
+  chart/IRealProgressionParser.cpp
+  chart/SongChartWidget.h
+  chart/SongChartWidget.cpp
+  SilentPlaybackEngine.h
+  SilentPlaybackEngine.cpp
   resources.qrc
 )
 

@@ -12,3 +12,4 @@ build/*
 
 # User-specific files
 .vscode/
+fixtures/Favorites.html

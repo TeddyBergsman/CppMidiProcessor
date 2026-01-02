@@ -2,6 +2,10 @@
 #include "WaveVisualizer.h"
 #include "PitchMonitorWidget.h"
 #include "PitchColor.h"
+#include "chart/SongChartWidget.h"
+#include "chart/IRealProgressionParser.h"
+#include "ireal/IRealTypes.h"
+#include "SilentPlaybackEngine.h"
 #include <QtWidgets>
 #include <cmath>
 #include <QGraphicsOpacityEffect>
@@ -17,7 +21,52 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
 
     QVBoxLayout* root = new QVBoxLayout(this);
     root->setContentsMargins(16, 16, 16, 16);
-    root->setSpacing(0);
+    root->setSpacing(10);
+
+    // --- iReal chart container (top half) ---
+    m_chartContainer = new QWidget(this);
+    m_chartContainer->setAutoFillBackground(false);
+    QVBoxLayout* chartLayout = new QVBoxLayout(m_chartContainer);
+    chartLayout->setContentsMargins(0, 0, 0, 0);
+    chartLayout->setSpacing(6);
+
+    QWidget* chartHeader = new QWidget(m_chartContainer);
+    QHBoxLayout* headerLayout = new QHBoxLayout(chartHeader);
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setSpacing(8);
+
+    m_songCombo = new QComboBox(chartHeader);
+    m_songCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_songCombo->setEnabled(false);
+    m_songCombo->setStyleSheet("QComboBox { background-color: #111; color: #eee; padding: 4px; }");
+
+    m_playButton = new QPushButton("Play", chartHeader);
+    m_playButton->setEnabled(false);
+    m_playButton->setFixedWidth(70);
+
+    m_tempoSpin = new QSpinBox(chartHeader);
+    m_tempoSpin->setRange(30, 300);
+    m_tempoSpin->setValue(120);
+    m_tempoSpin->setSuffix(" bpm");
+    m_tempoSpin->setEnabled(false);
+    m_tempoSpin->setFixedWidth(110);
+
+    headerLayout->addWidget(m_songCombo, 1);
+    headerLayout->addWidget(m_tempoSpin, 0);
+    headerLayout->addWidget(m_playButton, 0);
+    chartHeader->setLayout(headerLayout);
+
+    m_chartWidget = new chart::SongChartWidget(m_chartContainer);
+    m_chartWidget->setMinimumHeight(180);
+
+    chartLayout->addWidget(chartHeader);
+    chartLayout->addWidget(m_chartWidget, 1);
+    m_chartContainer->setLayout(chartLayout);
+
+    // Silent playback engine
+    m_playback = new playback::SilentPlaybackEngine(this);
+    connect(m_playback, &playback::SilentPlaybackEngine::currentCellChanged,
+            m_chartWidget, &chart::SongChartWidget::setCurrentCellIndex);
 
     auto makeSection = [&](const QString& title,
                            QLabel*& titleLbl,
@@ -142,10 +191,8 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     // Layout goal:
     // - Wave section (with notes overlay) visually centered vertically
     // - Pitch monitor uses the remaining space below that (typically < 50% of window)
-    root->setSpacing(10);
-    // IMPORTANT: keep this stretch factor equal to the pitch monitor's stretch factor.
-    // This guarantees the wave block stays vertically centered in the full window.
-    root->addStretch(1);
+    // Put chart in the top half; keep wave + pitch monitor below.
+    root->addWidget(m_chartContainer, 1);
     root->addWidget(waveBlock, 0);
 
     m_pitchMonitor = new PitchMonitorWidget(this);
@@ -164,6 +211,71 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
 
     // Initial positioning
     repositionNotes();
+
+    // --- chart UI connections ---
+    connect(m_songCombo, &QComboBox::currentIndexChanged, this, [this](int idx) {
+        if (!m_playlist || idx < 0 || idx >= m_playlist->songs.size()) return;
+        const auto& song = m_playlist->songs[idx];
+        chart::ChartModel model = chart::parseIRealProgression(song.progression);
+        m_chartWidget->setChartModel(model);
+
+        // Tempo preference: song tempo if present, else current spin.
+        int bpm = song.actualTempoBpm > 0 ? song.actualTempoBpm : m_tempoSpin->value();
+        m_tempoSpin->blockSignals(true);
+        m_tempoSpin->setValue(bpm);
+        m_tempoSpin->blockSignals(false);
+
+        m_playback->setTempoBpm(bpm);
+        int totalBars = 0;
+        for (const auto& line : model.lines) totalBars += line.bars.size();
+        m_playback->setTotalCells(totalBars * 4);
+        m_playButton->setEnabled(true);
+    });
+
+    connect(m_tempoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int bpm) {
+        if (m_playback) m_playback->setTempoBpm(bpm);
+    });
+
+    connect(m_playButton, &QPushButton::clicked, this, [this]() {
+        if (!m_playback) return;
+        if (m_playback->isPlaying()) {
+            m_playback->stop();
+            m_playButton->setText("Play");
+        } else {
+            m_playback->play();
+            m_playButton->setText("Stop");
+        }
+    });
+}
+
+void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
+    // Replace stored playlist
+    delete m_playlist;
+    m_playlist = new ireal::Playlist(playlist);
+
+    m_songCombo->clear();
+    for (const auto& s : m_playlist->songs) {
+        m_songCombo->addItem(s.title);
+    }
+
+    const bool hasSongs = !m_playlist->songs.isEmpty();
+    m_songCombo->setEnabled(hasSongs);
+    m_tempoSpin->setEnabled(hasSongs);
+    m_playButton->setEnabled(false);
+
+    if (!hasSongs) {
+        if (m_chartWidget) m_chartWidget->clear();
+        if (m_playback) m_playback->stop();
+        m_playButton->setText("Play");
+        return;
+    }
+
+    m_songCombo->setCurrentIndex(0);
+}
+
+NoteMonitorWidget::~NoteMonitorWidget() {
+    delete m_playlist;
+    m_playlist = nullptr;
 }
 
 void NoteMonitorWidget::setGuitarNote(int midiNote, double cents) {

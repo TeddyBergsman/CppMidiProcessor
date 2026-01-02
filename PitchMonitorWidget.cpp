@@ -439,8 +439,7 @@ void PitchMonitorWidget::paintEvent(QPaintEvent* /*event*/) {
     auto drawStream = [&](const QVector<Sample>& v, bool dotted, int alpha) {
         if (v.size() < 2) return;
         QPen pen;
-        pen.setWidth(2);
-        pen.setCosmetic(true); // keep 1px regardless of scaling
+        pen.setCosmetic(true); // stroke width in device pixels
         pen.setCapStyle(Qt::RoundCap);
         pen.setJoinStyle(Qt::RoundJoin);
         pen.setStyle(dotted ? Qt::DotLine : Qt::SolidLine);
@@ -477,9 +476,13 @@ void PitchMonitorWidget::paintEvent(QPaintEvent* /*event*/) {
                     // perceptual boost: make low amps more visible
                     double aVis = std::sqrt(a);
                     int effAlpha = static_cast<int>(std::round(alpha * aVis));
-                    if (effAlpha < 6) {
+                    // Thickness scales with the same method:
+                    // amp=1 -> 4px, amp=0 -> 0px (skip draw)
+                    double widthPx = 8.0 * aVis;
+                    if (effAlpha < 6 || widthPx < 0.75) {
                         havePrev = false;
                     } else {
+                        pen.setWidthF(widthPx);
                         pen.setColor(colorForCentsWithAlpha(s.cents, effAlpha));
                         p.setPen(pen);
                         p.drawLine(prevPt, pt);

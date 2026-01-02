@@ -37,7 +37,9 @@ static void pushLine(ChartModel& model, Line& line) {
 
     auto barIsVisuallyEmpty = [](const Bar& b) {
         if (b.endingStart > 0 || b.endingEnd > 0) return false;
-        if (!b.barlineLeft.isEmpty() || !b.barlineRight.isEmpty()) return false;
+        if (!b.annotation.trimmed().isEmpty()) return false;
+        // Pure barline-only bars (even with repeat/final markers) should not be rendered as standalone measures.
+        // In iReal, such markers belong to adjacent bars; a bar with no chord/rest content is effectively padding.
         for (const auto& c : b.cells) {
             if (!c.chord.trimmed().isEmpty()) return false;
         }
@@ -78,6 +80,18 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
     const int barsPerLine = 4;
     int activeEnding = 0; // N1/N2 currently active ending number
 
+    auto barIsMeaningful = [&](const Bar& bar, int filledCells) -> bool {
+        // Only chord/rest/annotation/ending content should create a new bar.
+        // Barline-only "bars" are typically padding artifacts in decoded streams.
+        if (filledCells > 0) return true;
+        if (!bar.annotation.trimmed().isEmpty()) return true;
+        if (bar.endingStart > 0 || bar.endingEnd > 0) return true;
+        for (const auto& c : bar.cells) {
+            if (!c.chord.trimmed().isEmpty()) return true;
+        }
+        return false;
+    };
+
     auto applyDefaultHarmonicRhythm = [&](Bar& bar) {
         // iReal convention in 4/4: if there are exactly 2 chords in a bar and no explicit spacing,
         // place them on beats 1 and 3 (cells 0 and 2), not 1 and 2.
@@ -107,7 +121,7 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
     };
 
     auto finalizeBar = [&]() {
-        if (!currentBar.cells.isEmpty() || !currentBar.barlineLeft.isEmpty() || !currentBar.barlineRight.isEmpty() || cellInBar > 0) {
+        if (barIsMeaningful(currentBar, cellInBar)) {
             ensureCellCount(currentBar, cellInBar);
             applyDefaultHarmonicRhythm(currentBar);
             pushBar(currentLine, currentBar);
@@ -126,8 +140,61 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
         return false;
     };
 
+    auto hasChordAhead = [&](int fromIndex) -> bool {
+        // Look ahead for any upcoming chord token before end-of-stream.
+        // This is used to decide whether certain barline markers belong to a new (upcoming) bar
+        // or are dangling end-markers that should attach to the previous bar.
+        int j = fromIndex + 1;
+        while (j < s.size()) {
+            const QChar cc = s[j];
+            if (cc.isSpace() || cc == ',' || isBarToken(cc) || isControlToken(cc)) {
+                j += 1;
+                continue;
+            }
+            if (cc == '<') {
+                const int close = s.indexOf('>', j + 1);
+                if (close > j) { j = close + 1; continue; }
+                j += 1;
+                continue;
+            }
+            if (isChordChar(cc)) return true;
+            j += 1;
+        }
+        return false;
+    };
+
     while (i < s.size()) {
         const QChar c = s[i];
+
+        // Angle-bracket annotations can contain spaces (e.g. "<D.C. a' Fine>").
+        // Treat them as a single token and do NOT consume grid cells.
+        if (c == '<') {
+            const int close = s.indexOf('>', i + 1);
+            if (close > i) {
+                QString ann = s.mid(i + 1, close - i - 1).trimmed();
+                // Normalize common iReal shorthand
+                ann.replace("a'", "al");
+                ann.replace("a’", "al");
+                ann.replace("a´", "al");
+                ann.replace(QRegularExpression("\\s+"), " ");
+
+                if (!ann.isEmpty()) {
+                    if (ann.startsWith("D.C.", Qt::CaseInsensitive) || ann.startsWith("D.S.", Qt::CaseInsensitive)) {
+                        model.footerText = ann;
+                    } else if (ann.compare("Fine", Qt::CaseInsensitive) == 0) {
+                        currentBar.annotation = "Fine";
+                    } else {
+                        currentBar.annotation = ann;
+                    }
+                }
+
+                i = close + 1;
+                continue;
+            }
+            // If malformed, skip '<'
+            i += 1;
+            continue;
+        }
 
         // Standalone comma is a layout hint in many exports; ignore it.
         // Chord-list commas are consumed as part of chord tokens below.
@@ -176,22 +243,50 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
                 if (!currentBar.cells.isEmpty() || cellInBar > 0) {
                     finalizeBar();
                 }
-                currentBar.barlineLeft += c;
-            } else if (c == '}' || c == ']' || c == 'Z') {
-                // Ending typically closes at a repeat-end or section end.
-                if (activeEnding != 0) {
-                    currentBar.endingEnd = activeEnding;
+                // Special case: iReal streams can end with a dangling '[' to indicate an end-of-chart double barline.
+                // If there is no chord content ahead, attach this marker to the previous real bar instead of creating
+                // a barline-only bar (which we intentionally suppress).
+                if (c == '[' && currentBar.cells.isEmpty() && cellInBar == 0 && !currentLine.bars.isEmpty() && !hasChordAhead(i)) {
+                    currentLine.bars.last().barlineRight += ']';
+                } else {
+                    currentBar.barlineLeft += c;
                 }
-                currentBar.barlineRight += c;
-                finalizeBar();
-                if (activeEnding != 0) {
-                    activeEnding = 0;
+            } else if (c == '}' || c == ']' || c == 'Z') {
+                // Closing barline tokens should attach to the last *real* bar, not create a new empty bar.
+                // iReal decoded streams often end with a trailing ']' / 'Z' without additional chord content.
+                const bool curHasContent = barHasChordContent(currentBar, cellInBar) || !currentBar.annotation.trimmed().isEmpty()
+                    || currentBar.endingStart > 0 || currentBar.endingEnd > 0;
+                if (!curHasContent && !currentLine.bars.isEmpty()) {
+                    Bar& last = currentLine.bars.last();
+                    // Ending typically closes at a repeat-end or section end.
+                    if (activeEnding != 0) {
+                        last.endingEnd = activeEnding;
+                    }
+                    last.barlineRight += c;
+                    if (activeEnding != 0) {
+                        activeEnding = 0;
+                    }
+                } else {
+                    // Ending typically closes at a repeat-end or section end.
+                    if (activeEnding != 0) {
+                        currentBar.endingEnd = activeEnding;
+                    }
+                    currentBar.barlineRight += c;
+                    finalizeBar();
+                    if (activeEnding != 0) {
+                        activeEnding = 0;
+                    }
                 }
             } else if (c == '|') {
                 if (!currentBar.cells.isEmpty() || cellInBar > 0) {
                     finalizeBar();
                 } else {
-                    currentBar.barlineLeft += c;
+                    // A dangling '|' after a finalized bar belongs to the previous bar's right edge.
+                    if (!currentLine.bars.isEmpty()) {
+                        currentLine.bars.last().barlineRight += c;
+                    } else {
+                        currentBar.barlineLeft += c;
+                    }
                 }
             }
 
@@ -266,6 +361,11 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
             // Example from your chart: sEb^,Ab7,G-7,C7,
             auto normalizeChord = [](QString t) -> QString {
                 t = t.trimmed();
+                // Some exports leave trailing commas on chord tokens; drop them.
+                while (t.endsWith(',')) {
+                    t.chop(1);
+                    t = t.trimmed();
+                }
                 // Strip iReal control prefixes like *i, *v, *k that precede a chord.
                 // Keep section markers (*A, *B...) handled earlier.
                 while (t.size() >= 2 && t[0] == '*' && t[1].isLower()) {
@@ -365,7 +465,7 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
     }
 
     // Flush trailing bar/line
-    if (!currentBar.cells.isEmpty() || !currentBar.barlineLeft.isEmpty() || !currentBar.barlineRight.isEmpty()) {
+    if (barIsMeaningful(currentBar, cellInBar)) {
         ensureCellCount(currentBar, cellInBar);
         applyDefaultHarmonicRhythm(currentBar);
         pushBar(currentLine, currentBar);

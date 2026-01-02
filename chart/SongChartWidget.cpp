@@ -410,6 +410,9 @@ void SongChartWidget::paintEvent(QPaintEvent* /*event*/) {
             if (bar.barlineRight.contains('Z')) rightStyle = BarlineStyle::Final;
             else if (bar.barlineRight.contains('}')) rightStyle = BarlineStyle::RepeatEnd;
             else if (bar.barlineRight.contains(']')) rightStyle = BarlineStyle::Double;
+            // A trailing explicit '|' token is only present when the token stream encodes an end-of-song double barline ("||").
+            // Normal single barlines between measures are drawn implicitly and are NOT stored in barlineRight.
+            else if (bar.barlineRight.contains('|')) rightStyle = BarlineStyle::Double;
 
             // First/second endings bracket rendering (best-effort).
             if (bar.endingStart > 0) {
@@ -475,6 +478,18 @@ void SongChartWidget::paintEvent(QPaintEvent* /*event*/) {
                     globalCell++;
                 }
 
+                // Bar annotation like "Fine" (draw near right side of the bar)
+                if (!bar.annotation.isEmpty()) {
+                    QFont f = p.font();
+                    f.setBold(true);
+                    f.setPointSize(20);
+                    p.setFont(f);
+                    p.setPen(QColor(240, 240, 240));
+                    QRect annRect(barX + int(barW * 0.55), y + int(m_barHeight * 0.55), int(barW * 0.45) - 8, int(m_barHeight * 0.45));
+                    p.drawText(annRect, Qt::AlignRight | Qt::AlignVCenter, bar.annotation);
+                    p.setFont(chordFont);
+                }
+
                 // Endings: if this bar ends the ending, close it.
                 if (bar.endingEnd > 0 && endingActive > 0) {
                     const int bracketY = y - 10;
@@ -496,6 +511,18 @@ void SongChartWidget::paintEvent(QPaintEvent* /*event*/) {
         }
 
         y += m_lineHeight;
+    }
+
+    // Footer annotation (e.g. "D.C. al Fine") drawn at bottom-right like iReal.
+    if (!m_model.footerText.isEmpty()) {
+        QFont f = p.font();
+        f.setBold(true);
+        f.setPointSize(22);
+        p.setFont(f);
+        p.setPen(QColor(240, 240, 240));
+        const int footerY = y - int(m_lineHeight * 0.35);
+        const int usableW = std::max(0, contentW - (m_margin * 2));
+        p.drawText(QRect(m_margin, footerY, usableW, 40), Qt::AlignRight | Qt::AlignVCenter, m_model.footerText);
     }
 }
 

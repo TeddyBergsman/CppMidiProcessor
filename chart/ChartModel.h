@@ -21,6 +21,9 @@ struct Bar {
     // If endingStart>0, this bar begins an ending. If endingEnd>0, this bar ends the active ending.
     int endingStart = 0;
     int endingEnd = 0;
+
+    // Text annotations like "Fine" shown near the barline.
+    QString annotation;
 };
 
 struct Line {
@@ -33,6 +36,9 @@ struct ChartModel {
     QVector<Line> lines;
     int timeSigNum = 4;
     int timeSigDen = 4;
+
+    // Footer annotation such as "D.C. al Fine" shown at bottom right.
+    QString footerText;
 };
 
 } // namespace chart

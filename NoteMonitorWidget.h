@@ -39,6 +39,7 @@ private:
                        int midiNote,
                        double cents);
     void repositionNotes();
+    void addVocalTrailSnapshot(const QRect& oldGeo);
 
     // Guitar section
     QLabel* m_guitarTitle = nullptr;
@@ -64,11 +65,16 @@ private:
     QWidget* m_notesOverlay = nullptr;
     QWidget* m_guitarSection = nullptr;
     QWidget* m_vocalSection = nullptr;
+    QWidget* m_trailLayer = nullptr; // Layer for fading trail ghosts
 
     // Last state for positioning
     int m_lastGuitarNote = -1;
     int m_lastVoiceNote = -1;
     double m_lastVoiceCents = 0.0;
+    int m_lastVocalX = -1; // Track last X position for trail detection
+    
+    // Trail optimization: limit number of ghosts
+    static constexpr int m_trailMaxGhosts = 25; // Increased for better trail visibility
 
 protected:
     void resizeEvent(QResizeEvent* event) override;

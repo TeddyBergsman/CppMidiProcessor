@@ -3,6 +3,7 @@
 #include <QtWidgets>
 #include <cmath>
 #include <QGraphicsOpacityEffect>
+#include <QPropertyAnimation>
 
 NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     : QWidget(parent) {
@@ -23,6 +24,9 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
                            QLabel*& octaveLbl,
                            QLabel*& centsLbl) -> QWidget* {
         QWidget* section = new QWidget(this);
+        // Make section background transparent for trail effect
+        section->setAttribute(Qt::WA_TranslucentBackground, true);
+        section->setAutoFillBackground(false);
         QVBoxLayout* v = new QVBoxLayout(section);
         v->setContentsMargins(0, 0, 0, 0);
         v->setSpacing(2);
@@ -79,6 +83,9 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
 
     m_vocalSection = makeSection("Vocal", m_vocalTitle, m_vocalLetter, m_vocalAccidental, m_vocalOctave, m_vocalCents);
     m_vocalSection->setFixedHeight(60);
+    // Make vocal section background fully transparent for trail effect
+    m_vocalSection->setAttribute(Qt::WA_TranslucentBackground, true);
+    m_vocalSection->setAutoFillBackground(false);
     // 70% opacity for vocal section
     {
         auto* eff = new QGraphicsOpacityEffect(m_vocalSection);
@@ -93,6 +100,16 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_notesOverlay->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_guitarSection->setParent(m_notesOverlay);
     m_vocalSection->setParent(m_notesOverlay);
+    
+    // Trail layer (behind vocal section for fading ghosts)
+    m_trailLayer = new QWidget(m_notesOverlay);
+    m_trailLayer->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    m_trailLayer->setAttribute(Qt::WA_TranslucentBackground, true);
+    m_trailLayer->setAutoFillBackground(false);
+    m_trailLayer->setGeometry(0, 0, m_notesOverlay->width(), m_notesOverlay->height());
+    m_trailLayer->show(); // Explicitly show the trail layer
+    m_trailLayer->lower(); // Place behind vocal section
+    m_vocalSection->raise(); // Ensure vocal section stays on top
 
     // Block that holds notes above the waves; this whole block will be vertically centered
     QWidget* waveBlock = new QWidget(this);
@@ -312,6 +329,9 @@ void NoteMonitorWidget::resizeEvent(QResizeEvent* event) {
     if (!m_notesOverlay) return;
     // Ensure overlay matches wave width
     m_notesOverlay->setMinimumWidth(m_wave ? m_wave->width() : width());
+    if (m_trailLayer) {
+        m_trailLayer->setGeometry(0, 0, m_notesOverlay->width(), m_notesOverlay->height());
+    }
     repositionNotes();
 }
 
@@ -339,7 +359,13 @@ void NoteMonitorWidget::repositionNotes() {
     if (m_lastVoiceNote < 0 || m_lastGuitarNote < 0) {
         int vCenterXInit = W / 2;
         int vLeftInit = vCenterXInit - vW / 2;
-        m_vocalSection->setGeometry(vLeftInit, H - vH, vW, vH);
+        QRect oldGeo = m_vocalSection->geometry();
+        QRect newGeo(vLeftInit, H - vH, vW, vH);
+        if (oldGeo.isValid() && std::abs(oldGeo.x() - newGeo.x()) >= 1) {
+            addVocalTrailSnapshot(oldGeo);
+        }
+        m_vocalSection->setGeometry(newGeo);
+        m_lastVocalX = vLeftInit;
         return;
     }
 
@@ -376,6 +402,119 @@ void NoteMonitorWidget::repositionNotes() {
     int vCenterX = gCenterX + static_cast<int>(std::round((totalCents / 100.0) * edgeCenterOffset));
     int vLeft = vCenterX - vW / 2;
     int vTop = H - vH;
-    m_vocalSection->setGeometry(vLeft, vTop, vW, vH);
+    
+    // Create trail snapshot if position changed horizontally
+    QRect oldGeo = m_vocalSection->geometry();
+    QRect newGeo(vLeft, vTop, vW, vH);
+    
+    // Only create trail if:
+    // 1. We have valid geometry
+    // 2. Vocal note is actually being displayed (has content)
+    // 3. Vocal note pitch class matches guitar note pitch class (same note, ignoring octave)
+    // 4. Position actually changed by at least 1 pixel
+    // 5. Old position wasn't at origin (0,0) which indicates initial positioning
+    // Note: pcG and pcV are already calculated above for positioning logic
+    bool samePitchClass = (pcG == pcV);
+    bool shouldCreateTrail = oldGeo.isValid() && 
+                             oldGeo.width() > 0 && 
+                             oldGeo.height() > 0 &&
+                             m_lastVoiceNote >= 0 && // Vocal note is active
+                             m_lastGuitarNote >= 0 && // Guitar note is active
+                             samePitchClass && // Same pitch class (ignoring octave)
+                             std::abs(oldGeo.x() - newGeo.x()) >= 1 &&
+                             (oldGeo.x() != 0 || oldGeo.y() != 0); // Not at initial position
+    
+    if (shouldCreateTrail) {
+        // Capture snapshot BEFORE moving the widget
+        addVocalTrailSnapshot(oldGeo);
+    }
+    
+    m_vocalSection->setGeometry(newGeo);
+    m_lastVocalX = vLeft;
+    
+    // Ensure proper z-ordering: guitar section at bottom, trail layer in middle, vocal section on top
+    if (m_guitarSection) m_guitarSection->lower();
+    if (m_trailLayer) {
+        m_trailLayer->raise(); // Above guitar
+        m_trailLayer->lower(); // But below vocal
+    }
+    m_vocalSection->raise(); // Always on top
+}
+
+void NoteMonitorWidget::addVocalTrailSnapshot(const QRect& oldGeo) {
+    if (!m_trailLayer || !m_vocalSection || oldGeo.width() <= 0 || oldGeo.height() <= 0) return;
+    
+    // Ensure trail layer is properly sized
+    if (m_trailLayer->width() != m_notesOverlay->width() || 
+        m_trailLayer->height() != m_notesOverlay->height()) {
+        m_trailLayer->setGeometry(0, 0, m_notesOverlay->width(), m_notesOverlay->height());
+    }
+    
+    // Cap number of ghosts to avoid performance issues
+    const auto labels = m_trailLayer->findChildren<QLabel*>(QString(), Qt::FindDirectChildrenOnly);
+    if (labels.size() >= m_trailMaxGhosts) {
+        // Remove oldest (first in list)
+        QLabel* oldest = labels.first();
+        if (oldest) {
+            oldest->deleteLater();
+        }
+    }
+    
+    // Temporarily restore full opacity for snapshot (if opacity effect exists)
+    // This ensures the trail ghost has full detail before fading
+    QGraphicsOpacityEffect* opacityEff = qobject_cast<QGraphicsOpacityEffect*>(m_vocalSection->graphicsEffect());
+    double oldOpacity = 0.7;
+    if (opacityEff) {
+        oldOpacity = opacityEff->opacity();
+        opacityEff->setOpacity(1.0);
+    }
+    
+    // Ensure widget is visible and updated before grabbing
+    m_vocalSection->setVisible(true);
+    m_vocalSection->update();
+    
+    // Grab snapshot of vocal section at its current position (which is still oldGeo)
+    // Widget hasn't moved yet when this is called
+    // Use grab() without arguments to capture the entire widget
+    QPixmap pm = m_vocalSection->grab();
+    
+    // Restore original opacity immediately
+    if (opacityEff) {
+        opacityEff->setOpacity(oldOpacity);
+    }
+    
+    // Skip if pixmap is empty or invalid
+    if (pm.isNull() || pm.width() <= 0 || pm.height() <= 0) {
+        return;
+    }
+    
+    // Create ghost label with snapshot at old position
+    QLabel* ghost = new QLabel(m_trailLayer);
+    ghost->setPixmap(pm);
+    ghost->setGeometry(oldGeo);
+    ghost->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    ghost->setAttribute(Qt::WA_TranslucentBackground, true);
+    ghost->setAutoFillBackground(false);
+    ghost->setScaledContents(false); // Don't scale, use exact pixmap
+    ghost->show();
+    
+    // Force update of trail layer to ensure ghost is visible
+    m_trailLayer->update();
+    m_trailLayer->repaint();
+    
+    // Apply opacity effect for fading
+    // Start at full opacity for maximum visibility, then fade
+    auto* ghostEff = new QGraphicsOpacityEffect(ghost);
+    ghostEff->setOpacity(1.0); // Start at full opacity for maximum trail visibility
+    ghost->setGraphicsEffect(ghostEff);
+    
+    // Animate fade-out over 2500ms (longer for better trail visibility)
+    QPropertyAnimation* anim = new QPropertyAnimation(ghostEff, "opacity", ghost);
+    anim->setDuration(2500);
+    anim->setStartValue(0.1);
+    anim->setEndValue(0.0);
+    anim->setEasingCurve(QEasingCurve::OutQuad); // Smooth fade
+    connect(anim, &QPropertyAnimation::finished, ghost, &QObject::deleteLater);
+    anim->start(QAbstractAnimation::DeleteWhenStopped);
 }
 

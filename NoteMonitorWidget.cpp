@@ -100,6 +100,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_notesOverlay = new QWidget(this);
     m_notesOverlay->setFixedHeight(60);
     m_notesOverlay->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_notesOverlay->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     m_guitarSection->setParent(m_notesOverlay);
     m_vocalSection->setParent(m_notesOverlay);
     
@@ -113,14 +114,30 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_trailLayer->lower(); // Place behind vocal section
     m_vocalSection->raise(); // Ensure vocal section stays on top
 
-    // Block that holds notes above the waves; this whole block will be vertically centered
+    // Overlay the note visualization on top of the wave visualizer.
     QWidget* waveBlock = new QWidget(this);
-    QVBoxLayout* blockLayout = new QVBoxLayout(waveBlock);
+    QGridLayout* blockLayout = new QGridLayout(waveBlock);
     blockLayout->setContentsMargins(0, 0, 0, 0);
     blockLayout->setSpacing(0);
-    blockLayout->addWidget(m_notesOverlay, 0, Qt::AlignBottom);
-    blockLayout->addWidget(m_wave, 0);
+    blockLayout->addWidget(m_wave, 0, 0);
+    // Overlay the note visualization on top of the wavelength visualizer.
+    // Use a tiny visual bias upward (text baselines make perfect centering feel low).
+    QWidget* notesContainer = new QWidget(waveBlock);
+    notesContainer->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    notesContainer->setAutoFillBackground(false);
+    QVBoxLayout* notesLayout = new QVBoxLayout(notesContainer);
+    notesLayout->setContentsMargins(0, 0, 0, 0);
+    notesLayout->setSpacing(0);
+    notesLayout->addStretch(8);                // slightly less space above
+    // Do NOT horizontally center via alignment here; it would shrink the overlay to its sizeHint,
+    // causing the note visualization to be clipped. Let it expand to the full wave width.
+    notesLayout->addWidget(m_notesOverlay, 0);
+    notesLayout->addStretch(12);               // slightly more space below
+    notesContainer->setLayout(notesLayout);
+
+    blockLayout->addWidget(notesContainer, 0, 0);
     waveBlock->setLayout(blockLayout);
+    notesContainer->raise();
 
     // Layout goal:
     // - Wave section (with notes overlay) visually centered vertically

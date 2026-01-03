@@ -46,6 +46,7 @@ signals:
 
 private slots:
     void onTick();
+    void onDispatch();
 
 private:
     QVector<const chart::Bar*> flattenBars() const;
@@ -74,8 +75,20 @@ private:
     int m_lastPlayheadStep = -1;
     int m_nextScheduledStep = 0;
 
-    // Human scheduling
-    QVector<QTimer*> m_pendingTimers;
+    // ---- Scheduling (single timer + min-heap) ----
+    enum class PendingKind { NoteOn, NoteOff, AllNotesOff };
+    struct PendingEvent {
+        qint64 dueMs = 0; // absolute in m_clock.elapsed() ms
+        PendingKind kind = PendingKind::NoteOn;
+        int channel = 1;
+        int note = 0;
+        int velocity = 0;
+        bool emitLog = false;
+        QString logLine;
+    };
+    QVector<PendingEvent> m_eventHeap; // min-heap by dueMs (front = earliest)
+    QTimer m_dispatchTimer;
+
     QRandomGenerator m_timingRng;
     int m_driftMs = 0; // slow random-walk timing drift
 

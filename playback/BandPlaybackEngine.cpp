@@ -4,8 +4,8 @@
 
 #include <QtGlobal>
 #include <QHash>
-#include <functional>
 #include <cmath>
+#include <algorithm>
 
 namespace playback {
 namespace {
@@ -176,6 +176,10 @@ BandPlaybackEngine::BandPlaybackEngine(QObject* parent)
     // "generate exactly on the beat" (which is quantized by the tick interval).
     m_tickTimer.setInterval(10);
     connect(&m_tickTimer, &QTimer::timeout, this, &BandPlaybackEngine::onTick);
+
+    m_dispatchTimer.setSingleShot(true);
+    connect(&m_dispatchTimer, &QTimer::timeout, this, &BandPlaybackEngine::onDispatch);
+
     m_timingRng.seed(1u);
     m_driftMs = 0;
 }
@@ -199,23 +203,15 @@ void BandPlaybackEngine::setBassProfile(const music::BassProfile& p) {
 
     // If bass was disabled or channel changed during playback, hard-stop pending events + silence.
     if (m_playing && (wasEnabled && !m_bassProfile.enabled)) {
-        for (QTimer* t : m_pendingTimers) {
-            if (!t) continue;
-            t->stop();
-            t->deleteLater();
-        }
-        m_pendingTimers.clear();
+        m_eventHeap.clear();
+        m_dispatchTimer.stop();
         if (m_lastBassMidi >= 0) emit bassNoteOff(oldCh, m_lastBassMidi);
         emit bassAllNotesOff(oldCh);
         m_lastBassMidi = -1;
     } else if (m_playing && wasEnabled && m_bassProfile.enabled && oldCh != m_bassProfile.midiChannel) {
         // Channel change: stop old channel to avoid stuck notes.
-        for (QTimer* t : m_pendingTimers) {
-            if (!t) continue;
-            t->stop();
-            t->deleteLater();
-        }
-        m_pendingTimers.clear();
+        m_eventHeap.clear();
+        m_dispatchTimer.stop();
         if (m_lastBassMidi >= 0) emit bassNoteOff(oldCh, m_lastBassMidi);
         emit bassAllNotesOff(oldCh);
         m_lastBassMidi = -1;
@@ -235,12 +231,8 @@ void BandPlaybackEngine::setChartModel(const chart::ChartModel& model) {
     m_scheduledNoteOnsInBar.clear();
     m_driftMs = 0;
     // Clear any scheduled events.
-    for (QTimer* t : m_pendingTimers) {
-        if (!t) continue;
-        t->stop();
-        t->deleteLater();
-    }
-    m_pendingTimers.clear();
+    m_eventHeap.clear();
+    m_dispatchTimer.stop();
     m_bass.reset();
 }
 
@@ -358,6 +350,8 @@ void BandPlaybackEngine::play() {
     m_driftMs = 0;
     m_lastPlayheadStep = -1;
     m_nextScheduledStep = 0;
+    m_eventHeap.clear();
+    m_dispatchTimer.stop();
     m_tickTimer.start();
     // Let onTick emit the first cell (and first note) exactly once.
 }
@@ -368,12 +362,8 @@ void BandPlaybackEngine::stop() {
     m_tickTimer.stop();
 
     // Cancel pending scheduled note events.
-    for (QTimer* t : m_pendingTimers) {
-        if (!t) continue;
-        t->stop();
-        t->deleteLater();
-    }
-    m_pendingTimers.clear();
+    m_eventHeap.clear();
+    m_dispatchTimer.stop();
 
     // Release any held bass note and send all-notes-off.
     if (m_bassProfile.enabled) {
@@ -392,6 +382,45 @@ void BandPlaybackEngine::stop() {
     m_bass.reset();
 
     emit currentCellChanged(-1);
+}
+
+void BandPlaybackEngine::onDispatch() {
+    if (!m_playing) return;
+    const qint64 now = m_clock.elapsed();
+
+    auto heapLess = [](const PendingEvent& a, const PendingEvent& b) {
+        return a.dueMs > b.dueMs; // reversed for min-heap behavior with std::push_heap
+    };
+
+    // Execute all due events.
+    while (!m_eventHeap.isEmpty()) {
+        const PendingEvent& top = m_eventHeap.front();
+        if (top.dueMs > now) break;
+
+        PendingEvent ev = top;
+        std::pop_heap(m_eventHeap.begin(), m_eventHeap.end(), heapLess);
+        m_eventHeap.pop_back();
+
+        switch (ev.kind) {
+        case PendingKind::NoteOn:
+            if (ev.emitLog && !ev.logLine.isEmpty()) emit bassLogLine(ev.logLine);
+            emit bassNoteOn(ev.channel, ev.note, ev.velocity);
+            break;
+        case PendingKind::NoteOff:
+            emit bassNoteOff(ev.channel, ev.note);
+            break;
+        case PendingKind::AllNotesOff:
+            emit bassAllNotesOff(ev.channel);
+            break;
+        }
+    }
+
+    // Arm next wakeup.
+    if (!m_eventHeap.isEmpty()) {
+        const qint64 nextDue = m_eventHeap.front().dueMs;
+        const int delay = int(std::max<qint64>(0, nextDue - now));
+        m_dispatchTimer.start(delay);
+    }
 }
 
 void BandPlaybackEngine::onTick() {
@@ -426,18 +455,32 @@ void BandPlaybackEngine::onTick() {
     const int scheduleUntil = int((elapsedMs + kLookaheadMs) / beatMs);
     const int maxStepToSchedule = std::min(total - 1, scheduleUntil);
 
-    // Helpers
-    auto schedule = [&](int delay, std::function<void()> fn) {
-        if (delay < 0) delay = 0;
-        QTimer* t = new QTimer(this);
-        t->setSingleShot(true);
-        m_pendingTimers.push_back(t);
-        connect(t, &QTimer::timeout, this, [this, t, fn]() {
-            fn();
-            m_pendingTimers.removeOne(t);
-            t->deleteLater();
-        });
-        t->start(delay);
+    auto heapLess = [](const PendingEvent& a, const PendingEvent& b) {
+        return a.dueMs > b.dueMs; // reversed for min-heap
+    };
+
+    auto scheduleEvent = [&](qint64 dueAbsMs, PendingKind kind, int channel, int note, int velocity, bool emitLog, const QString& logLine) {
+        PendingEvent ev;
+        ev.dueMs = dueAbsMs;
+        ev.kind = kind;
+        ev.channel = channel;
+        ev.note = note;
+        ev.velocity = velocity;
+        ev.emitLog = emitLog;
+        ev.logLine = logLine;
+
+        const bool wasEmpty = m_eventHeap.isEmpty();
+        m_eventHeap.push_back(std::move(ev));
+        std::push_heap(m_eventHeap.begin(), m_eventHeap.end(), heapLess);
+
+        // If this is the earliest event, re-arm dispatcher.
+        const qint64 now = m_clock.elapsed();
+        if (wasEmpty || m_eventHeap.front().dueMs == dueAbsMs) {
+            const int delay = int(std::max<qint64>(0, m_eventHeap.front().dueMs - now));
+            if (!m_dispatchTimer.isActive() || delay < m_dispatchTimer.remainingTime()) {
+                m_dispatchTimer.start(delay);
+            }
+        }
     };
 
     auto midiName = [](int midi) -> QString {
@@ -478,12 +521,13 @@ void BandPlaybackEngine::onTick() {
             // Silence bass on N.C. (or missing harmony) at the moment it occurs.
             // Use an on-beat timing (no jitter) so this feels intentional and tight.
             const int delay = std::max(0, int(std::llround(beatStartMs - double(elapsedMs))));
+            const qint64 due = elapsedMs + delay;
             if (m_lastBassMidi >= 0) {
                 const int prev = m_lastBassMidi;
-                schedule(delay, [this, prev]() { emit bassNoteOff(m_bassProfile.midiChannel, prev); });
+                scheduleEvent(due, PendingKind::NoteOff, m_bassProfile.midiChannel, prev, 0, false, {});
                 m_lastBassMidi = -1;
             }
-            schedule(delay, [this]() { emit bassAllNotesOff(m_bassProfile.midiChannel); });
+            scheduleEvent(due, PendingKind::AllNotesOff, m_bassProfile.midiChannel, 0, 0, false, {});
             continue;
         }
 
@@ -605,7 +649,8 @@ void BandPlaybackEngine::onTick() {
             if (e.role == music::BassEvent::Role::MusicalNote && !e.allowOverlap) {
                 if (m_lastBassMidi >= 0 && m_lastBassMidi != note) {
                     const int prev = m_lastBassMidi;
-                    schedule(std::max(0, delayOn - 1), [this, prev]() { emit bassNoteOff(m_bassProfile.midiChannel, prev); });
+                    const int d = std::max(0, delayOn - 1);
+                    scheduleEvent(elapsedMs + d, PendingKind::NoteOff, m_bassProfile.midiChannel, prev, 0, false, {});
                 }
             }
 
@@ -636,11 +681,8 @@ void BandPlaybackEngine::onTick() {
                               .arg(why);
             }
 
-            schedule(delayOn, [this, note, vel, logOn, logLine]() {
-                if (logOn && !logLine.isEmpty()) emit bassLogLine(logLine);
-                emit bassNoteOn(m_bassProfile.midiChannel, note, vel);
-            });
-            schedule(delayOn + lenMs, [this, note]() { emit bassNoteOff(m_bassProfile.midiChannel, note); });
+            scheduleEvent(elapsedMs + delayOn, PendingKind::NoteOn, m_bassProfile.midiChannel, note, vel, logOn, logLine);
+            scheduleEvent(elapsedMs + delayOn + lenMs, PendingKind::NoteOff, m_bassProfile.midiChannel, note, 0, false, {});
 
             if (e.role == music::BassEvent::Role::MusicalNote) {
                 m_lastBassMidi = note;

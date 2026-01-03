@@ -52,7 +52,8 @@ template <> constexpr inline auto playback::BandPlaybackEngine::qt_create_metaob
         "line",
         "play",
         "stop",
-        "onTick"
+        "onTick",
+        "onDispatch"
     };
 
     QtMocHelpers::UintData qt_methods {
@@ -82,6 +83,8 @@ template <> constexpr inline auto playback::BandPlaybackEngine::qt_create_metaob
         QtMocHelpers::SlotData<void()>(13, 2, QMC::AccessPublic, QMetaType::Void),
         // Slot 'onTick'
         QtMocHelpers::SlotData<void()>(14, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'onDispatch'
+        QtMocHelpers::SlotData<void()>(15, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -113,6 +116,7 @@ void playback::BandPlaybackEngine::qt_static_metacall(QObject *_o, QMetaObject::
         case 5: _t->play(); break;
         case 6: _t->stop(); break;
         case 7: _t->onTick(); break;
+        case 8: _t->onDispatch(); break;
         default: ;
         }
     }
@@ -149,14 +153,14 @@ int playback::BandPlaybackEngine::qt_metacall(QMetaObject::Call _c, int _id, voi
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 8)
+        if (_id < 9)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 8;
+        _id -= 9;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 8)
+        if (_id < 9)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 8;
+        _id -= 9;
     }
     return _id;
 }

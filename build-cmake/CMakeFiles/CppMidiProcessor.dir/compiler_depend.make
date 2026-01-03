@@ -855,6 +855,7 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QJsonObject \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QList \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QMap \
+  /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QMetaObject \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QObject \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QProcess \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QRandomGenerator \
@@ -2422,8 +2423,12 @@ CMakeFiles/CppMidiProcessor.dir/BassStyleEditorDialog.cpp.o: /Users/teddybergsma
   /Library/Developer/CommandLineTools/usr/lib/clang/17/include/stddef.h \
   /Library/Developer/CommandLineTools/usr/lib/clang/17/include/stdint.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/BassStyleEditorDialog.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/chart/ChartModel.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/BassPresets.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/BassProfile.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordSymbol.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/WalkingBassGenerator.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BandPlaybackEngine.h \
   /opt/homebrew/include/QtCore/QDeadlineTimer \
   /opt/homebrew/include/QtCore/QEvent \
   /opt/homebrew/include/QtCore/QHash \
@@ -2885,9 +2890,23 @@ CMakeFiles/CppMidiProcessor.dir/BassStyleEditorDialog.cpp.o: /Users/teddybergsma
   /opt/homebrew/include/QtWidgets/qtwidgetsexports.h \
   /opt/homebrew/include/QtWidgets/qtwidgetsglobal.h \
   /opt/homebrew/include/QtWidgets/qwidget.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QElapsedTimer \
+  /opt/homebrew/lib/QtCore.framework/Headers/QHash \
+  /opt/homebrew/lib/QtCore.framework/Headers/QMetaObject \
+  /opt/homebrew/lib/QtCore.framework/Headers/QObject \
+  /opt/homebrew/lib/QtCore.framework/Headers/QRandomGenerator \
   /opt/homebrew/lib/QtCore.framework/Headers/QString \
+  /opt/homebrew/lib/QtCore.framework/Headers/QStringList \
+  /opt/homebrew/lib/QtCore.framework/Headers/QTimer \
   /opt/homebrew/lib/QtCore.framework/Headers/QVector \
+  /opt/homebrew/lib/QtCore.framework/Headers/qelapsedtimer.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/qhash.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/qobject.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/qobjectdefs.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/qrandom.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qstring.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/qstringlist.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/qtimer.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qvector.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/QDialog \
   /opt/homebrew/lib/QtWidgets.framework/Headers/QtWidgets \
@@ -4108,6 +4127,7 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
   /opt/homebrew/lib/QtCore.framework/Headers/QList \
   /opt/homebrew/lib/QtCore.framework/Headers/QMap \
+  /opt/homebrew/lib/QtCore.framework/Headers/QMetaObject \
   /opt/homebrew/lib/QtCore.framework/Headers/QObject \
   /opt/homebrew/lib/QtCore.framework/Headers/QProcess \
   /opt/homebrew/lib/QtCore.framework/Headers/QRandomGenerator \
@@ -4123,6 +4143,7 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /opt/homebrew/lib/QtCore.framework/Headers/qlist.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qmap.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qobject.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/qobjectdefs.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qprocess.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qrandom.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qstring.h \
@@ -5544,6 +5565,7 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: /Users/teddybergsman/Do
   /opt/homebrew/lib/QtCore.framework/Headers/QHash \
   /opt/homebrew/lib/QtCore.framework/Headers/QList \
   /opt/homebrew/lib/QtCore.framework/Headers/QMap \
+  /opt/homebrew/lib/QtCore.framework/Headers/QMetaObject \
   /opt/homebrew/lib/QtCore.framework/Headers/QObject \
   /opt/homebrew/lib/QtCore.framework/Headers/QPropertyAnimation \
   /opt/homebrew/lib/QtCore.framework/Headers/QRandomGenerator \
@@ -5558,6 +5580,7 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: /Users/teddybergsman/Do
   /opt/homebrew/lib/QtCore.framework/Headers/qlist.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qmap.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qobject.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/qobjectdefs.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qpropertyanimation.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qrandom.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qsettings.h \
@@ -28524,6 +28547,8 @@ CMakeFiles/CppMidiProcessor.dir/voicecontroller.cpp.o: /Users/teddybergsman/Docu
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/inttypes.h:
 
+/opt/homebrew/lib/QtCore.framework/Headers/QMetaObject:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreServices.framework/Frameworks/CarbonCore.framework/Headers/Aliases.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreFoundation.framework/Headers/CFXMLParser.h:
@@ -28634,11 +28659,7 @@ CMakeFiles/CppMidiProcessor.dir/voicecontroller.cpp.o: /Users/teddybergsman/Docu
 
 /opt/homebrew/lib/QtMultimedia.framework/Headers/qmediaplayer.h:
 
-/opt/homebrew/lib/QtCore.framework/Headers/qtimer.h:
-
 /opt/homebrew/lib/QtCore.framework/Headers/qthread.h:
-
-/opt/homebrew/lib/QtCore.framework/Headers/qrandom.h:
 
 /opt/homebrew/lib/QtCore.framework/Headers/qmap.h:
 
@@ -28648,19 +28669,9 @@ CMakeFiles/CppMidiProcessor.dir/voicecontroller.cpp.o: /Users/teddybergsman/Docu
 
 /opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h:
 
-/opt/homebrew/lib/QtCore.framework/Headers/qhash.h:
-
-/opt/homebrew/lib/QtCore.framework/Headers/qelapsedtimer.h:
-
-/opt/homebrew/lib/QtCore.framework/Headers/QObject:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/ranges_construct_at.h:
 
 /opt/homebrew/lib/QtCore.framework/Headers/QJsonObject:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/promote.h:
-
-/opt/homebrew/lib/QtCore.framework/Headers/QHash:
 
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6QCocoaIntegrationPluginTargets.cmake:
 
@@ -28862,11 +28873,25 @@ CppMidiProcessor_autogen/QDVNTGK2R4/moc_BandPlaybackEngine.cpp:
 
 /opt/homebrew/lib/QtCore.framework/Headers/qvector.h:
 
+/opt/homebrew/lib/QtCore.framework/Headers/qtimer.h:
+
 /opt/homebrew/lib/QtCore.framework/Headers/qstring.h:
+
+/opt/homebrew/lib/QtCore.framework/Headers/qrandom.h:
+
+/opt/homebrew/lib/QtCore.framework/Headers/qhash.h:
+
+/opt/homebrew/lib/QtCore.framework/Headers/qelapsedtimer.h:
 
 /opt/homebrew/lib/QtCore.framework/Headers/QVector:
 
 /opt/homebrew/lib/QtCore.framework/Headers/QString:
+
+/opt/homebrew/lib/QtCore.framework/Headers/QObject:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/promote.h:
+
+/opt/homebrew/lib/QtCore.framework/Headers/QHash:
 
 /opt/homebrew/include/QtCore/qresource.h:
 
@@ -31186,6 +31211,8 @@ CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/is_permutation.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/is_partitioned.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/perfect_forward.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/string_view:
@@ -31824,11 +31851,11 @@ CppMidiProcessor_autogen/EWIEGA46WW/moc_WaveVisualizer.cpp:
 
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6QJpegPluginConfig.cmake:
 
-/opt/homebrew/lib/QtCore.framework/Headers/QRandomGenerator:
-
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qtwidgetsexports.h:
 
 CppMidiProcessor_autogen/EWIEGA46WW/moc_mainwindow.cpp:
+
+/opt/homebrew/lib/QtCore.framework/Headers/QRandomGenerator:
 
 /opt/homebrew/share/cmake/Modules/Compiler/IBMClang-C-DetermineCompiler.cmake:
 
@@ -33286,12 +33313,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /opt/homebrew/share/cmake/Modules/FindOpenGL.cmake:
 
-/opt/homebrew/include/QtGui/qrgbafloat.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/istream.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Headers/IconsCore.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_nothrow_destructible.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__utility/no_destroy.h:
@@ -33341,8 +33362,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qforeach.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/functional:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/is_partitioned.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/dispatch/group.h:
 
@@ -33407,6 +33426,12 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/array:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Headers/IconsCore.h:
+
+/opt/homebrew/include/QtGui/qrgbafloat.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/istream.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__utility/exchange.h:
 
@@ -34000,6 +34025,8 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/find_segment_if.h:
 
+/opt/homebrew/lib/QtCore.framework/Headers/qobjectdefs.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/result_of.h:
 
 /opt/homebrew/lib/QtWidgets.framework/Headers/qdrawutil.h:
@@ -34503,6 +34530,8 @@ CppMidiProcessor_autogen/EWIEGA46WW/moc_BassStyleEditorDialog.cpp:
 /opt/homebrew/lib/QtWidgets.framework/Headers/qabstractscrollarea.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/ostream.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QMetaObject:
 
 /opt/homebrew/include/QtGui/qaccessible_base.h:
 

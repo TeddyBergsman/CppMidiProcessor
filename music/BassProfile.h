@@ -10,7 +10,7 @@ namespace music {
 // Per-song “human musician” configuration for the walking bass generator.
 // Versioned and persisted via QSettings.
 struct BassProfile {
-    int version = 2;
+    int version = 3;
     QString name; // optional label, e.g. "Default Walking"
 
     // Routing / range
@@ -131,6 +131,11 @@ struct BassProfile {
     double wApproachChromatic = 0.60;
     double wApproachDiatonic = 0.30;
     double wApproachEnclosure = 0.10;
+
+    // --- Explainability / UI ---
+    // When enabled, the engine emits a human-readable explanation for each played event.
+    // Keep this OFF by default to avoid extra allocations and UI churn.
+    bool reasoningLogEnabled = false;
 };
 
 BassProfile defaultBassProfile();

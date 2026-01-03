@@ -5,6 +5,7 @@
 #include <QRandomGenerator>
 #include <QTimer>
 #include <QVector>
+#include <QHash>
 
 #include "chart/ChartModel.h"
 #include "music/WalkingBassGenerator.h"
@@ -39,6 +40,10 @@ signals:
     void bassNoteOff(int channel, int note);
     void bassAllNotesOff(int channel);
 
+    // Human-readable log line explaining why an event was played.
+    // Emitted only when BassProfile::reasoningLogEnabled is true.
+    void bassLogLine(const QString& line);
+
 private slots:
     void onTick();
 
@@ -66,6 +71,8 @@ private:
     int m_lastBassMidi = -1;
     int m_lastStep = -1;
     int m_lastEmittedCell = -1;
+    int m_lastPlayheadStep = -1;
+    int m_nextScheduledStep = 0;
 
     // Human scheduling
     QVector<QTimer*> m_pendingTimers;
@@ -77,7 +84,7 @@ private:
 
     // Safety/validation
     int m_lastBarIndex = -1;
-    int m_noteOnsInBar = 0;
+    QHash<int, int> m_scheduledNoteOnsInBar; // barIndex -> note-ons scheduled (for sanity)
 };
 
 } // namespace playback

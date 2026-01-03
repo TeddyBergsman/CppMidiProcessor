@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QDialog>
+#include <QMetaObject>
+#include <QStringList>
 
 #include "music/BassProfile.h"
 
@@ -11,11 +13,16 @@ class QDialogButtonBox;
 class QGroupBox;
 class QComboBox;
 class QPushButton;
+class QListWidget;
+
+namespace playback { class BandPlaybackEngine; }
 
 class BassStyleEditorDialog : public QDialog {
     Q_OBJECT
 public:
-    explicit BassStyleEditorDialog(const music::BassProfile& initial, QWidget* parent = nullptr);
+    explicit BassStyleEditorDialog(const music::BassProfile& initial,
+                                   playback::BandPlaybackEngine* playback = nullptr,
+                                   QWidget* parent = nullptr);
 
 signals:
     // Fires on any control change for live preview (does NOT imply persistence).
@@ -28,8 +35,15 @@ private:
     void setUiFromProfile(const music::BassProfile& p);
     music::BassProfile profileFromUi() const;
     void emitPreview();
+    void appendLiveLogLine(const QString& line);
+    void setLiveLogActive(bool active);
+    void flushPendingLog();
 
     music::BassProfile m_initial;
+    playback::BandPlaybackEngine* m_playback = nullptr; // not owned
+    QMetaObject::Connection m_logConn;
+    QStringList m_pendingLog;
+    class QTimer* m_logFlushTimer = nullptr;
 
     // Presets
     QComboBox* m_presetCombo = nullptr;
@@ -125,5 +139,10 @@ private:
     QCheckBox* m_fxSlideDown3 = nullptr;
 
     QDialogButtonBox* m_buttons = nullptr;
+
+    // Live explainability log (bounded, UI-only; must not affect playback timing).
+    QCheckBox* m_reasoningLogEnabled = nullptr;
+    QPushButton* m_clearLogBtn = nullptr;
+    QListWidget* m_liveLog = nullptr;
 };
 

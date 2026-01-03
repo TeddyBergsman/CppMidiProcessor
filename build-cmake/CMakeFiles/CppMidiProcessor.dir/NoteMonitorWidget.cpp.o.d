@@ -1033,9 +1033,9 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/student_t_distribution.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/weibull_distribution.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/WalkingBassGenerator.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QHash \
   /opt/homebrew/lib/QtCore.framework/Headers/qhash.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/WalkingBassGenerator.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordSymbol.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/midiprocessor.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/thread \
@@ -1086,6 +1086,8 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/BassStyleEditorDialog.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/QDialog \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qdialog.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QMetaObject \
+  /opt/homebrew/lib/QtCore.framework/Headers/qobjectdefs.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/QtWidgets \
   /opt/homebrew/include/QtWidgets/QtWidgetsDepends \
   /opt/homebrew/include/QtCore/QtCore \

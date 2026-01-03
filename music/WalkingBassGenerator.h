@@ -37,6 +37,12 @@ struct BassEvent {
     // If true, the engine should NOT clamp this note shorter to avoid overlap with the next musical event.
     // Used for legato/overlap articulations (e.g., E0/F0-based legato).
     bool allowOverlap = false;
+
+    // --- Optional explainability fields (only populated when BassProfile::reasoningLogEnabled is true) ---
+    // Human-readable musical role, e.g. "Root", "3rd", "Approach (chromatic)", "Ghost", "FX hit", "Keyswitch".
+    QString function;
+    // Human-readable reasoning, e.g. "New chord arrival → anchor root on the downbeat."
+    QString reasoning;
 };
 
 struct BassBeatContext {

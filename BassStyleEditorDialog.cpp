@@ -1,12 +1,16 @@
 #include "BassStyleEditorDialog.h"
 
 #include "music/BassPresets.h"
+#include "playback/BandPlaybackEngine.h"
 
 #include <QtWidgets>
 
-BassStyleEditorDialog::BassStyleEditorDialog(const music::BassProfile& initial, QWidget* parent)
+BassStyleEditorDialog::BassStyleEditorDialog(const music::BassProfile& initial,
+                                             playback::BandPlaybackEngine* playback,
+                                             QWidget* parent)
     : QDialog(parent),
-      m_initial(initial) {
+      m_initial(initial),
+      m_playback(playback) {
     setWindowTitle("Bass Style");
     setModal(true);
     buildUi();
@@ -304,6 +308,65 @@ void BassStyleEditorDialog::buildUi() {
     scroll->setWidget(content);
     root->addWidget(scroll, 1);
 
+    // --- Live output reasoning log (learning aid) ---
+    {
+        auto* box = new QGroupBox("Live output log (what/why the bass just played)");
+        auto* v = new QVBoxLayout(box);
+        v->setContentsMargins(10, 8, 10, 10);
+        v->setSpacing(6);
+
+        auto* top = new QWidget(box);
+        auto* h = new QHBoxLayout(top);
+        h->setContentsMargins(0, 0, 0, 0);
+        h->setSpacing(8);
+
+        m_reasoningLogEnabled = new QCheckBox("Enable live reasoning log", top);
+        m_reasoningLogEnabled->setToolTip("When enabled, the bass engine emits a human-readable explanation\n"
+                                          "for each played note/event. Keep this off if you don't need it.");
+        m_clearLogBtn = new QPushButton("Clear", top);
+        m_clearLogBtn->setFixedWidth(64);
+
+        h->addWidget(m_reasoningLogEnabled, 0);
+        h->addStretch(1);
+        h->addWidget(m_clearLogBtn, 0);
+        top->setLayout(h);
+
+        // IMPORTANT: use a list-based log (no text-edit/pasteboard integration).
+        // This avoids a macOS AppKit crash seen when opening the dialog with a text-edit control.
+        m_liveLog = new QListWidget(box);
+        m_liveLog->setSelectionMode(QAbstractItemView::NoSelection);
+        m_liveLog->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+        m_liveLog->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        m_liveLog->setWordWrap(false);
+        m_liveLog->setMinimumHeight(140);
+        QFont f = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+        f.setPointSize(std::max(9, f.pointSize()));
+        m_liveLog->setFont(f);
+        m_liveLog->setStyleSheet("QListWidget { background-color: #0b0b0b; color: #e6e6e6; border: 1px solid #333; }");
+
+        v->addWidget(top);
+        v->addWidget(m_liveLog, 1);
+        box->setLayout(v);
+
+        root->addWidget(box, 0);
+
+        // Flush timer batches UI updates to avoid hammering CoreAnimation.
+        m_logFlushTimer = new QTimer(this);
+        m_logFlushTimer->setInterval(50);
+        m_logFlushTimer->setSingleShot(false);
+        connect(m_logFlushTimer, &QTimer::timeout, this, &BassStyleEditorDialog::flushPendingLog);
+
+        connect(m_clearLogBtn, &QPushButton::clicked, this, [this]() {
+            if (m_liveLog) m_liveLog->clear();
+        });
+
+        // IMPORTANT: only connect to the playback engine when the user enables logging,
+        // and disconnect when disabled. This prevents bursts of UI work during dialog show/CA commit.
+        connect(m_reasoningLogEnabled, &QCheckBox::toggled, this, [this](bool on) {
+            setLiveLogActive(on);
+        });
+    }
+
     m_buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::Apply);
     root->addWidget(m_buttons);
 
@@ -455,6 +518,10 @@ void BassStyleEditorDialog::setUiFromProfile(const music::BassProfile& p) {
     if (m_fxSlideTurn3) m_fxSlideTurn3->setChecked(p.fxSlideTurn3);
     if (m_fxSlideDown4) m_fxSlideDown4->setChecked(p.fxSlideDown4);
     if (m_fxSlideDown3) m_fxSlideDown3->setChecked(p.fxSlideDown3);
+
+    if (m_reasoningLogEnabled) m_reasoningLogEnabled->setChecked(p.reasoningLogEnabled);
+    // Ensure connection state matches the checkbox (without forcing it on).
+    setLiveLogActive(p.reasoningLogEnabled);
 }
 
 music::BassProfile BassStyleEditorDialog::profileFromUi() const {
@@ -552,10 +619,60 @@ music::BassProfile BassStyleEditorDialog::profileFromUi() const {
     if (m_fxSlideDown4) p.fxSlideDown4 = m_fxSlideDown4->isChecked();
     if (m_fxSlideDown3) p.fxSlideDown3 = m_fxSlideDown3->isChecked();
 
+    if (m_reasoningLogEnabled) p.reasoningLogEnabled = m_reasoningLogEnabled->isChecked();
+
     return p;
 }
 
 void BassStyleEditorDialog::emitPreview() {
     emit profilePreview(profileFromUi());
+}
+
+void BassStyleEditorDialog::appendLiveLogLine(const QString& line) {
+    // Do not touch UI here; this may be delivered during sensitive CA transactions.
+    if (!m_reasoningLogEnabled || !m_reasoningLogEnabled->isChecked()) return;
+    const QString t = line.trimmed();
+    if (t.isEmpty()) return;
+    m_pendingLog.push_back(t);
+}
+
+void BassStyleEditorDialog::setLiveLogActive(bool active) {
+    // Disconnect first to be safe.
+    if (m_logConn) {
+        QObject::disconnect(m_logConn);
+        m_logConn = QMetaObject::Connection{};
+    }
+    if (m_logFlushTimer) {
+        if (!active) m_logFlushTimer->stop();
+        else if (!m_logFlushTimer->isActive()) m_logFlushTimer->start();
+    }
+    if (!active) {
+        m_pendingLog.clear();
+        return;
+    }
+    if (!m_playback) return;
+    // Connect only while enabled.
+    m_logConn = connect(m_playback, &playback::BandPlaybackEngine::bassLogLine,
+                        this, &BassStyleEditorDialog::appendLiveLogLine, Qt::QueuedConnection);
+}
+
+void BassStyleEditorDialog::flushPendingLog() {
+    if (!m_liveLog || !m_reasoningLogEnabled || !m_reasoningLogEnabled->isChecked()) return;
+    if (m_pendingLog.isEmpty()) return;
+
+    // Drain at most N lines per tick to keep UI smooth.
+    constexpr int kMaxDrain = 40;
+    const int n = std::min<int>(kMaxDrain, int(m_pendingLog.size()));
+    for (int i = 0; i < n; ++i) {
+        m_liveLog->addItem(m_pendingLog[i]);
+    }
+    m_pendingLog.erase(m_pendingLog.begin(), m_pendingLog.begin() + n);
+
+    // Keep bounded history (avoid memory growth).
+    constexpr int kMaxLines = 300;
+    while (m_liveLog->count() > kMaxLines) {
+        delete m_liveLog->takeItem(0);
+    }
+    m_liveLog->scrollToBottom();
 }
 

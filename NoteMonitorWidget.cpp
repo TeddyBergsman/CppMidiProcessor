@@ -678,7 +678,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     connect(m_bassEditButton, &QPushButton::clicked, this, [this]() {
         if (!m_playback || m_currentSongId.isEmpty()) return;
         const music::BassProfile snapshot = m_bassProfile;
-        BassStyleEditorDialog dlg(m_bassProfile, this);
+        BassStyleEditorDialog dlg(m_bassProfile, m_playback, this);
 
         connect(&dlg, &BassStyleEditorDialog::profilePreview, this, [this](const music::BassProfile& p) {
             m_bassProfile = p;

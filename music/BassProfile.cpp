@@ -129,6 +129,9 @@ BassProfile loadBassProfile(QSettings& settings, const QString& prefix) {
     p.wApproachDiatonic = clampD(readD(settings, base + "/wApproachDiatonic", p.wApproachDiatonic), 0.0, 1.0);
     p.wApproachEnclosure = clampD(readD(settings, base + "/wApproachEnclosure", p.wApproachEnclosure), 0.0, 1.0);
 
+    // Explainability / UI
+    p.reasoningLogEnabled = readB(settings, base + "/reasoningLogEnabled", p.reasoningLogEnabled);
+
     return p;
 }
 
@@ -233,6 +236,8 @@ void saveBassProfile(QSettings& settings, const QString& prefix, const BassProfi
     settings.setValue(base + "/wApproachChromatic", p.wApproachChromatic);
     settings.setValue(base + "/wApproachDiatonic", p.wApproachDiatonic);
     settings.setValue(base + "/wApproachEnclosure", p.wApproachEnclosure);
+
+    settings.setValue(base + "/reasoningLogEnabled", p.reasoningLogEnabled);
 }
 
 } // namespace music

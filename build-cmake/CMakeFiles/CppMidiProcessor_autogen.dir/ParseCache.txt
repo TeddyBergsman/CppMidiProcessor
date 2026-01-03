@@ -2,15 +2,15 @@
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BandPlaybackEngine.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/BassPresets.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/ireal/HtmlPlaylistParser.cpp
-/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PresetLoader.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/Pitch.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/SilentPlaybackEngine.cpp
-/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ScaleLibrary.cpp
-/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/chart/IRealProgressionParser.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PresetData.h
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/main.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/ireal/IRealbCodec.h
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/voicecontroller.cpp
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PresetLoader.cpp
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/chart/IRealProgressionParser.cpp
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ScaleLibrary.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/BassStyleEditorDialog.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PitchMonitorWidget.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/WalkingBassGenerator.h
@@ -1797,10 +1797,10 @@
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/SelfTest.h
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/WalkingBassGenerator.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/chart/ChartModel.h
-/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/WaveVisualizer.cpp
-/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/chart/SongChartWidget.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordSymbol.h
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ScaleLibrary.h
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/WaveVisualizer.cpp
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/chart/SongChartWidget.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/RtMidi.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/WaveVisualizer.h
  mmc:Q_OBJECT
@@ -5282,7 +5282,9 @@
  mdp:/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/BassStyleEditorDialog.h
  mdp:/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/moc_predefs.h
  mdp:/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/BassProfile.h
+ mdp:/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QMetaObject
  mdp:/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QString
+ mdp:/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QStringList
  mdp:/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QVector
  mdp:/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q17memory.h
  mdp:/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q20functional.h

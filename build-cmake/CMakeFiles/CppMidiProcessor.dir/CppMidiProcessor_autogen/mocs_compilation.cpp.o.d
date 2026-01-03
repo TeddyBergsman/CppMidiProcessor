@@ -968,6 +968,10 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /opt/homebrew/include/QtWidgets/qsizepolicy.h \
   /opt/homebrew/include/QtGui/qcursor.h \
   /opt/homebrew/include/QtGui/qbitmap.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QMetaObject \
+  /opt/homebrew/lib/QtCore.framework/Headers/qobjectdefs.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QStringList \
+  /opt/homebrew/lib/QtCore.framework/Headers/qstringlist.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../music/BassProfile.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QString \
   /opt/homebrew/lib/QtCore.framework/Headers/qstring.h \
@@ -1049,8 +1053,6 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /opt/homebrew/include/QtMultimedia/qtmultimediaexports.h \
   /opt/homebrew/include/QtMultimedia/qtaudio.h \
   /opt/homebrew/include/QtMultimedia/qaudio.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QStringList \
-  /opt/homebrew/lib/QtCore.framework/Headers/qstringlist.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../RtMidi.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/iostream \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../PresetData.h \
@@ -1119,9 +1121,9 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/student_t_distribution.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/weibull_distribution.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/WalkingBassGenerator.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QHash \
   /opt/homebrew/lib/QtCore.framework/Headers/qhash.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/WalkingBassGenerator.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordSymbol.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/BassProfile.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_voicecontroller.cpp

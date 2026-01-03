@@ -48,6 +48,8 @@ template <> constexpr inline auto playback::BandPlaybackEngine::qt_create_metaob
         "velocity",
         "bassNoteOff",
         "bassAllNotesOff",
+        "bassLogLine",
+        "line",
         "play",
         "stop",
         "onTick"
@@ -70,12 +72,16 @@ template <> constexpr inline auto playback::BandPlaybackEngine::qt_create_metaob
         QtMocHelpers::SignalData<void(int)>(9, 2, QMC::AccessPublic, QMetaType::Void, {{
             { QMetaType::Int, 5 },
         }}),
+        // Signal 'bassLogLine'
+        QtMocHelpers::SignalData<void(const QString &)>(10, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 11 },
+        }}),
         // Slot 'play'
-        QtMocHelpers::SlotData<void()>(10, 2, QMC::AccessPublic, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(12, 2, QMC::AccessPublic, QMetaType::Void),
         // Slot 'stop'
-        QtMocHelpers::SlotData<void()>(11, 2, QMC::AccessPublic, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(13, 2, QMC::AccessPublic, QMetaType::Void),
         // Slot 'onTick'
-        QtMocHelpers::SlotData<void()>(12, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(14, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -103,9 +109,10 @@ void playback::BandPlaybackEngine::qt_static_metacall(QObject *_o, QMetaObject::
         case 1: _t->bassNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3]))); break;
         case 2: _t->bassNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
         case 3: _t->bassAllNotesOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 4: _t->play(); break;
-        case 5: _t->stop(); break;
-        case 6: _t->onTick(); break;
+        case 4: _t->bassLogLine((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
+        case 5: _t->play(); break;
+        case 6: _t->stop(); break;
+        case 7: _t->onTick(); break;
         default: ;
         }
     }
@@ -117,6 +124,8 @@ void playback::BandPlaybackEngine::qt_static_metacall(QObject *_o, QMetaObject::
         if (QtMocHelpers::indexOfMethod<void (BandPlaybackEngine::*)(int , int )>(_a, &BandPlaybackEngine::bassNoteOff, 2))
             return;
         if (QtMocHelpers::indexOfMethod<void (BandPlaybackEngine::*)(int )>(_a, &BandPlaybackEngine::bassAllNotesOff, 3))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (BandPlaybackEngine::*)(const QString & )>(_a, &BandPlaybackEngine::bassLogLine, 4))
             return;
     }
 }
@@ -140,14 +149,14 @@ int playback::BandPlaybackEngine::qt_metacall(QMetaObject::Call _c, int _id, voi
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 7)
+        if (_id < 8)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 7;
+        _id -= 8;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 7)
+        if (_id < 8)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 7;
+        _id -= 8;
     }
     return _id;
 }
@@ -174,5 +183,11 @@ void playback::BandPlaybackEngine::bassNoteOff(int _t1, int _t2)
 void playback::BandPlaybackEngine::bassAllNotesOff(int _t1)
 {
     QMetaObject::activate<void>(this, &staticMetaObject, 3, nullptr, _t1);
+}
+
+// SIGNAL 4
+void playback::BandPlaybackEngine::bassLogLine(const QString & _t1)
+{
+    QMetaObject::activate<void>(this, &staticMetaObject, 4, nullptr, _t1);
 }
 QT_WARNING_POP

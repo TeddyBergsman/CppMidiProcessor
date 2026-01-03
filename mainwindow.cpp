@@ -14,6 +14,10 @@
 #include "NoteMonitorWidget.h"
 #include "ireal/HtmlPlaylistParser.h"
 
+namespace {
+static const char* kIRealLastHtmlPathKey = "ireal/lastHtmlPath";
+}
+
 MainWindow::MainWindow(const Preset& preset, QWidget *parent) 
     : QMainWindow(parent) {
 
@@ -53,6 +57,13 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
         noteMonitorWidget->setKeyCenter(keyCenter);
         int pitchBpm = settings.value("ui/pitchMonitorBpm", 120).toInt();
         noteMonitorWidget->setPitchMonitorBpm(pitchBpm);
+    }
+
+    // Auto-load last opened iReal HTML (persisted between sessions).
+    const QString lastIReal = settings.value(kIRealLastHtmlPathKey, QString()).toString();
+    if (!lastIReal.isEmpty()) {
+        // Do not show warnings on startup; just ignore if missing/corrupt.
+        loadIRealHtmlFile(lastIReal, /*showErrors=*/false);
     }
 }
 
@@ -1265,24 +1276,19 @@ void MainWindow::openPreferences() {
 }
 
 void MainWindow::openIRealHtml() {
+    QSettings settings;
+    const QString lastPath = settings.value(kIRealLastHtmlPathKey, QString()).toString();
+    const QString startDir = lastPath.isEmpty() ? QString() : QFileInfo(lastPath).absolutePath();
     const QString path = QFileDialog::getOpenFileName(
         this,
         "Open iReal Pro HTML Playlist",
-        QString(),
+        startDir,
         "HTML files (*.html *.htm);;All files (*)"
     );
     if (path.isEmpty()) return;
 
-    const ireal::Playlist pl = ireal::HtmlPlaylistParser::parseFile(path);
-    if (pl.songs.isEmpty()) {
-        QMessageBox::warning(this, "iReal Import", "No iReal Pro playlist link found or playlist contained no songs.");
-        return;
-    }
-
-    if (noteMonitorWidget) {
-        noteMonitorWidget->setIRealPlaylist(pl);
-        // Switch to minimal UI to show chart
-        applyLegacyUiSetting(false);
+    if (loadIRealHtmlFile(path, /*showErrors=*/true)) {
+        settings.setValue(kIRealLastHtmlPathKey, path);
     }
 }
 
@@ -1290,4 +1296,29 @@ void MainWindow::applyLegacyUiSetting(bool legacyOn) {
     if (!rootStack) return;
     // index 0 = legacy (existing UI), index 1 = new minimal UI
     rootStack->setCurrentIndex(legacyOn ? 0 : 1);
+}
+
+bool MainWindow::loadIRealHtmlFile(const QString& path, bool showErrors) {
+    if (path.trimmed().isEmpty()) return false;
+    if (!QFileInfo::exists(path)) {
+        if (showErrors) {
+            QMessageBox::warning(this, "iReal Import", "The selected file no longer exists.");
+        }
+        return false;
+    }
+
+    const ireal::Playlist pl = ireal::HtmlPlaylistParser::parseFile(path);
+    if (pl.songs.isEmpty()) {
+        if (showErrors) {
+            QMessageBox::warning(this, "iReal Import", "No iReal Pro playlist link found or playlist contained no songs.");
+        }
+        return false;
+    }
+
+    if (noteMonitorWidget) {
+        noteMonitorWidget->setIRealPlaylist(pl);
+        // Ensure the chart is visible when an iReal file is loaded.
+        applyLegacyUiSetting(false);
+    }
+    return true;
 }

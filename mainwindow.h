@@ -67,6 +67,7 @@ private:
     void createConnections();
     QString formatTranscriptionWithColors(const QString& text, const QStringList& triggers, const QStringList& targets);
     void rebuildSectionMarkers();
+    bool loadIRealHtmlFile(const QString& path, bool showErrors);
     
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;

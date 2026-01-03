@@ -3,6 +3,9 @@
 #include <QObject>
 #include <QElapsedTimer>
 #include <QTimer>
+#include <QVector>
+
+#include "chart/ChartModel.h"
 
 namespace playback {
 
@@ -16,6 +19,7 @@ public:
     void setTempoBpm(int bpm);
     void setTotalCells(int totalCells);
     void setRepeats(int repeats);
+    void setChartModel(const chart::ChartModel& model);
 
     bool isPlaying() const { return m_playing; }
 
@@ -33,6 +37,7 @@ private:
     int m_bpm = 120;
     int m_totalCells = 0;
     int m_repeats = 3;
+    QVector<int> m_sequence; // flattened cell indices in playback order (one "song pass")
 
     bool m_playing = false;
     QElapsedTimer m_clock;

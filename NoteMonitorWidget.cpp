@@ -608,7 +608,9 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
             if (srcPc >= 0 && dstPc >= 0) {
                 const int delta = (dstPc - srcPc + 12) % 12;
                 const bool flats = preferFlatsForKeyCenter(sel);
-                m_chartWidget->setChartModel(transposeChartModel(m_baseChartModel, delta, flats));
+                const chart::ChartModel m = transposeChartModel(m_baseChartModel, delta, flats);
+                m_chartWidget->setChartModel(m);
+                if (m_playback) m_playback->setChartModel(m);
             }
         }
     });
@@ -676,7 +678,9 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
         const int dstPc = pitchClassFromKeyCenter(selectedKeyCenter);
         const int delta = (srcPc >= 0 && dstPc >= 0) ? ((dstPc - srcPc + 12) % 12) : 0;
         const bool flats = preferFlatsForKeyCenter(selectedKeyCenter);
-        m_chartWidget->setChartModel(transposeChartModel(m_baseChartModel, delta, flats));
+        const chart::ChartModel m = transposeChartModel(m_baseChartModel, delta, flats);
+        m_chartWidget->setChartModel(m);
+        if (m_playback) m_playback->setChartModel(m);
     }
 
     // Tempo preference: song tempo if present, else current spin.

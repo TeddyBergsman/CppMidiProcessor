@@ -20,7 +20,7 @@ static QString normalizeKeyCenter(const QString& s) {
 
 static QString stripDefaultSuffix(QString s) {
     s = s.trimmed();
-    static const QString suffix = " (default)";
+    static const QString suffix = " (*)";
     if (s.endsWith(suffix)) {
         s.chop(suffix.size());
         s = s.trimmed();
@@ -90,6 +90,21 @@ static QStringList keyCentersForMode(bool isMinor) {
     return isMinor ? orderedMinorKeyCenters() : orderedMajorKeyCenters();
 }
 
+static void updateComboPopupToShowAllItems(QComboBox* combo) {
+    if (!combo) return;
+    const int n = combo->count();
+    if (n <= 0) return;
+
+    combo->setMaxVisibleItems(n);
+    if (auto* v = combo->view()) {
+        // Try to eliminate scrolling by sizing the popup to fit all items.
+        const int rowH = std::max(18, v->sizeHintForRow(0));
+        const int frame = 6;
+        v->setMinimumHeight(rowH * n + frame);
+        v->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    }
+}
+
 static void populateKeyCombo(QComboBox* combo,
                              bool isMinorSong,
                              const QString& detectedDefaultKeyCenter,
@@ -104,7 +119,7 @@ static void populateKeyCombo(QComboBox* combo,
     for (const QString& k : keys) {
         QString label = shortKeyLabelFromKeyCenter(k);
         if (!defNorm.isEmpty() && normalizeKeyCenter(k) == defNorm) {
-            label += " (default)";
+            label += " (*)";
         }
         combo->addItem(label);
         combo->setItemData(combo->count() - 1, k, Qt::UserRole); // store canonical key (no suffix)
@@ -124,7 +139,7 @@ static void populateKeyCombo(QComboBox* combo,
         // If the detected/overridden key isn't in our list (rare), prepend it (still mode-consistent).
         QString label = selectedKeyCenter;
         if (!defNorm.isEmpty() && normalizeKeyCenter(selectedKeyCenter) == defNorm) {
-            label += " (default)";
+            label += " (*)";
         }
         combo->insertItem(0, label);
         combo->setItemData(0, selectedKeyCenter, Qt::UserRole);
@@ -141,6 +156,7 @@ static void populateKeyCombo(QComboBox* combo,
         combo->lineEdit()->setText(shortLabel);
     }
 
+    updateComboPopupToShowAllItems(combo);
     combo->blockSignals(prevSignals);
 }
 
@@ -384,7 +400,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
 
     m_keyCombo = new QComboBox(chartHeader);
     m_keyCombo->setEnabled(false);
-    m_keyCombo->setFixedWidth(120);
+    m_keyCombo->setFixedWidth(76);
     m_keyCombo->setStyleSheet("QComboBox { background-color: #111; color: #eee; padding: 4px; }");
     // On macOS, the native combo popup ignores custom delegates.
     // We instead encode "(default)" into the popup item text, while keeping the closed label clean
@@ -405,7 +421,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_tempoSpin->setValue(120);
     m_tempoSpin->setSuffix(" bpm");
     m_tempoSpin->setEnabled(false);
-    m_tempoSpin->setFixedWidth(110);
+    m_tempoSpin->setFixedWidth(84);
 
     m_repeatsSpin = new QSpinBox(chartHeader);
     m_repeatsSpin->setRange(1, 16);
@@ -413,7 +429,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_repeatsSpin->setSuffix("x");
     m_repeatsSpin->setToolTip("Repeats");
     m_repeatsSpin->setEnabled(false);
-    m_repeatsSpin->setFixedWidth(60);
+    m_repeatsSpin->setFixedWidth(44);
 
     headerLayout->addWidget(m_songCombo, 1);
     headerLayout->addWidget(m_keyCombo, 0);

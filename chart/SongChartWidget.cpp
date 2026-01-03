@@ -12,6 +12,146 @@ enum class BarlineStyle { Normal, Double, RepeatStart, RepeatEnd, Final };
 // Single source of truth for chord sizing (no dynamic scaling).
 static constexpr int kChordRootPointSize = 20;
 
+struct KeyInfo {
+    bool valid = false;
+    int pc = 0;        // 0..11
+    bool isMajor = true;
+};
+
+static int normalizeSignedSemitones(int x) {
+    // Normalize to [-6, +6] for nearest accidental preference.
+    x %= 12;
+    if (x > 6) x -= 12;
+    if (x < -6) x += 12;
+    return x;
+}
+
+static int pitchClassFromSpelling(const QString& letter, const QString& accidental) {
+    if (letter.isEmpty()) return -1;
+    const QChar c = letter[0].toUpper();
+    int pc = -1;
+    switch (c.unicode()) {
+        case 'C': pc = 0; break;
+        case 'D': pc = 2; break;
+        case 'E': pc = 4; break;
+        case 'F': pc = 5; break;
+        case 'G': pc = 7; break;
+        case 'A': pc = 9; break;
+        case 'B': pc = 11; break;
+        default: return -1;
+    }
+    if (!accidental.isEmpty()) {
+        const QChar a = accidental[0];
+        if (a == QChar('#') || a == QChar(0x266F)) pc += 1;      // # / ♯
+        else if (a == QChar('b') || a == QChar(0x266D)) pc -= 1; // b / ♭
+    }
+    pc %= 12;
+    if (pc < 0) pc += 12;
+    return pc;
+}
+
+static KeyInfo parseKeyCenter(const QString& keyCenter) {
+    KeyInfo k;
+    const QString trimmed = keyCenter.trimmed();
+    if (trimmed.isEmpty()) return k;
+
+    const QString lower = trimmed.toLower();
+    k.isMajor = !lower.contains("minor");
+
+    const QString token = trimmed.split(' ', Qt::SkipEmptyParts).value(0);
+    if (token.isEmpty()) return k;
+
+    QString letter = token.left(1);
+    QString acc;
+    if (token.size() >= 2) {
+        const QChar a = token[1];
+        if (a == QChar('#') || a == QChar('b') || a == QChar(0x266F) || a == QChar(0x266D)) {
+            acc = token.mid(1, 1);
+        }
+    }
+    const int pc = pitchClassFromSpelling(letter, acc);
+    if (pc < 0) return k;
+    k.valid = true;
+    k.pc = pc;
+    return k;
+}
+
+enum class TriadQuality { Major, Minor, Diminished, HalfDiminished, Unknown };
+
+static TriadQuality inferTriadQuality(const QString& suffix) {
+    const QString s = suffix.trimmed();
+    const QString lower = s.toLower();
+    // iReal conventions: "-" often means minor (e.g. "D-"), "ø" half-diminished, "o"/"°"/"dim" diminished.
+    if (s.startsWith('-') || lower.startsWith("m")) return TriadQuality::Minor;
+    if (s.contains(QChar(0x00F8))) return TriadQuality::HalfDiminished; // ø
+    if (s.contains(QChar(0x00B0)) || lower.contains("dim") || lower.contains('o')) return TriadQuality::Diminished; // ° / dim / o
+    // Treat dominant/maj/6/etc as major-function for casing purposes.
+    return TriadQuality::Major;
+}
+
+static QString romanForDegree(int degree /*1..7*/) {
+    switch (degree) {
+        case 1: return "I";
+        case 2: return "II";
+        case 3: return "III";
+        case 4: return "IV";
+        case 5: return "V";
+        case 6: return "VI";
+        case 7: return "VII";
+        default: return {};
+    }
+}
+
+static QString accidentalPrefixForDiff(int diff) {
+    if (diff == -2) return QString(QChar(0x266D)) + QChar(0x266D); // ♭♭
+    if (diff == -1) return QString(QChar(0x266D));                // ♭
+    if (diff == 1) return QString(QChar(0x266F));                 // ♯
+    if (diff == 2) return QString(QChar(0x266F)) + QChar(0x266F); // ♯♯
+    return {};
+}
+
+static QString romanNumeralForChord(int chordPc, TriadQuality q, const KeyInfo& key) {
+    if (!key.valid || chordPc < 0) return {};
+    const int interval = (chordPc - key.pc + 12) % 12;
+
+    const int majorScale[7] = {0, 2, 4, 5, 7, 9, 11};
+    const int minorScale[7] = {0, 2, 3, 5, 7, 8, 10};
+    const int* scale = key.isMajor ? majorScale : minorScale;
+
+    int bestDeg = -1;
+    int bestDiff = 99;
+    for (int i = 0; i < 7; ++i) {
+        const int diff = normalizeSignedSemitones(interval - scale[i]);
+        const int ad = std::abs(diff);
+        if (ad < std::abs(bestDiff)) {
+            bestDeg = i + 1;
+            bestDiff = diff;
+        }
+    }
+    if (bestDeg < 1 || bestDeg > 7) return {};
+    if (std::abs(bestDiff) > 2) return {}; // too chromatic to label cleanly
+
+    QString r = accidentalPrefixForDiff(bestDiff) + romanForDegree(bestDeg);
+
+    // Apply quality casing/symbol.
+    switch (q) {
+        case TriadQuality::Minor:
+            r = r.toLower();
+            break;
+        case TriadQuality::Diminished:
+            r = r.toLower() + QString(QChar(0x00B0)); // °
+            break;
+        case TriadQuality::HalfDiminished:
+            r = r.toLower() + QString(QChar(0x00F8)); // ø
+            break;
+        case TriadQuality::Major:
+        case TriadQuality::Unknown:
+            // Keep uppercase.
+            break;
+    }
+    return r;
+}
+
 static int chordLeftInsetForLeftBarline(BarlineStyle style) {
     // Extra padding so chord text never collides with repeat-start dots/lines.
     switch (style) {
@@ -96,7 +236,7 @@ static void drawRepeatCellMark(QPainter& p, const QRect& r) {
     p.drawEllipse(QPointF(r.left() + r.width() * 0.58, r.top() + r.height() * 0.65), 3.0, 3.0);
 }
 
-static void drawChordPretty(QPainter& p, const QRect& cellRect, const QString& chordText) {
+static void drawChordPretty(QPainter& p, const QRect& cellRect, const QString& chordText, const KeyInfo& key) {
     QString t = chordText.trimmed();
     if (t.isEmpty()) return;
 
@@ -199,6 +339,16 @@ static void drawChordPretty(QPainter& p, const QRect& cellRect, const QString& c
         const int bassBase = baseline + int(rootFont.pointSize() * 0.15);
         p.drawText(QPoint(x + 4, bassBase), slashText);
     }
+
+    // Roman numeral function under the chord (same font + size as chord root).
+    const int chordPc = pitchClassFromSpelling(root, accidental);
+    const TriadQuality q = inferTriadQuality(rest);
+    const QString roman = romanNumeralForChord(chordPc, q, key);
+    if (!roman.isEmpty()) {
+        p.setFont(rootFont);
+        const int romanBaseline = baseline + int(rootFont.pointSize() * 0.95);
+        p.drawText(QPoint(x0, romanBaseline), roman);
+    }
 }
 
 } // namespace
@@ -211,6 +361,11 @@ SongChartWidget::SongChartWidget(QWidget* parent)
     pal.setColor(QPalette::Window, Qt::black);
     setPalette(pal);
     viewport()->setAutoFillBackground(true);
+}
+
+void SongChartWidget::setKeyCenter(const QString& keyCenter) {
+    m_keyCenter = keyCenter;
+    viewport()->update();
 }
 
 void SongChartWidget::clear() {
@@ -334,6 +489,8 @@ void SongChartWidget::paintEvent(QPaintEvent* /*event*/) {
     chordFont.setPointSize(kChordRootPointSize);
     chordFont.setBold(true);
     p.setFont(chordFont);
+
+    const KeyInfo key = parseKeyCenter(m_keyCenter);
 
     int globalCell = 0;
     int y = m_margin;
@@ -494,7 +651,7 @@ void SongChartWidget::paintEvent(QPaintEvent* /*event*/) {
                         if (c == 0) {
                             chordRect.adjust(chordLeftInsetForLeftBarline(leftStyle), 0, 0, 0);
                         }
-                        drawChordPretty(p, chordRect, bar.cells[c].chord);
+                        drawChordPretty(p, chordRect, bar.cells[c].chord, key);
                     }
 
                     globalCell++;

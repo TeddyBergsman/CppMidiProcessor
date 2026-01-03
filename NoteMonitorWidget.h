@@ -2,6 +2,7 @@
 #define NOTEMONITORWIDGET_H
 
 #include <QWidget>
+#include "chart/ChartModel.h"
 class WaveVisualizer;
 
 class QLabel;
@@ -71,6 +72,11 @@ private:
 
     // Key center (for enharmonic spelling)
     QString m_keyCenter = "Eb major";
+    QString m_detectedSongKeyCenter;     // key parsed from iReal song metadata
+    QString m_currentSongId;             // stable ID used for per-song overrides
+    chart::ChartModel m_baseChartModel;  // untransposed model (as parsed from iReal)
+    bool m_hasBaseChartModel = false;
+    bool m_isApplyingSongState = false;  // guards preference writes during programmatic updates
 
     // Absolute-position overlay above waves
     QWidget* m_notesOverlay = nullptr;
@@ -82,6 +88,7 @@ private:
     QWidget* m_chartContainer = nullptr;
     chart::SongChartWidget* m_chartWidget = nullptr;
     QComboBox* m_songCombo = nullptr;
+    QComboBox* m_keyCombo = nullptr;
     QPushButton* m_playButton = nullptr;
     QSpinBox* m_tempoSpin = nullptr;
     playback::SilentPlaybackEngine* m_playback = nullptr;

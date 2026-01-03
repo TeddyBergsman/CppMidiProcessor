@@ -10,6 +10,221 @@
 #include <cmath>
 #include <QGraphicsOpacityEffect>
 #include <QPropertyAnimation>
+#include <QCryptographicHash>
+#include <QSettings>
+
+namespace {
+static QString keyFieldToKeyCenter(const QString& keyField) {
+    // iReal song key field examples: "Eb", "F#", "G-" (minor).
+    QString k = keyField.trimmed();
+    if (k.isEmpty()) return {};
+    const bool isMinor = k.endsWith('-');
+    if (isMinor) k.chop(1);
+    if (k.isEmpty()) return {};
+    return k + (isMinor ? " minor" : " major");
+}
+
+static QStringList defaultKeyCenters() {
+    // Include common major + relative minor keys (circle-of-fifths style).
+    return {
+        "C major","A minor",
+        "G major","E minor",
+        "D major","B minor",
+        "A major","F# minor",
+        "E major","C# minor",
+        "B major","G# minor",
+        "F# major","D# minor",
+        "C# major","A# minor",
+        "F major","D minor",
+        "Bb major","G minor",
+        "Eb major","C minor",
+        "Ab major","F minor",
+        "Db major","Bb minor",
+        "Gb major","Eb minor",
+        "Cb major","Ab minor"
+    };
+}
+
+static QStringList keyCentersForMode(bool isMinor) {
+    QStringList all = defaultKeyCenters();
+    QStringList out;
+    out.reserve(all.size());
+    for (const QString& k : all) {
+        const bool kMinor = k.toLower().contains("minor");
+        if (kMinor == isMinor) out.push_back(k);
+    }
+    return out;
+}
+
+static int pitchClassFromSpelling(const QString& letter, const QString& accidental) {
+    if (letter.isEmpty()) return -1;
+    const QChar c = letter[0].toUpper();
+    int pc = -1;
+    switch (c.unicode()) {
+        case 'C': pc = 0; break;
+        case 'D': pc = 2; break;
+        case 'E': pc = 4; break;
+        case 'F': pc = 5; break;
+        case 'G': pc = 7; break;
+        case 'A': pc = 9; break;
+        case 'B': pc = 11; break;
+        default: return -1;
+    }
+    if (!accidental.isEmpty()) {
+        const QChar a = accidental[0];
+        if (a == QChar('#') || a == QChar(0x266F)) pc += 1;      // # / ♯
+        else if (a == QChar('b') || a == QChar(0x266D)) pc -= 1; // b / ♭
+    }
+    pc %= 12;
+    if (pc < 0) pc += 12;
+    return pc;
+}
+
+static int pitchClassFromKeyCenter(const QString& keyCenter, bool* isMinorOut = nullptr) {
+    const QString trimmed = keyCenter.trimmed();
+    if (trimmed.isEmpty()) return -1;
+    const QString lower = trimmed.toLower();
+    const bool isMinor = lower.contains("minor");
+    if (isMinorOut) *isMinorOut = isMinor;
+
+    const QString token = trimmed.split(' ', Qt::SkipEmptyParts).value(0);
+    if (token.isEmpty()) return -1;
+    const QString letter = token.left(1);
+    QString acc;
+    if (token.size() >= 2) {
+        const QChar a = token[1];
+        if (a == QChar('#') || a == QChar('b') || a == QChar(0x266F) || a == QChar(0x266D)) {
+            acc = token.mid(1, 1);
+        }
+    }
+    return pitchClassFromSpelling(letter, acc);
+}
+
+static bool preferFlatsForKeyCenter(const QString& keyCenter) {
+    const QString k = keyCenter.toLower();
+    // Flat keys: F, Bb, Eb, Ab, Db, Gb, Cb (+ relative minors)
+    static const QStringList flatKeys = {
+        "f major","bb major","b♭ major","eb major","e♭ major","ab major","a♭ major","db major","d♭ major","gb major","g♭ major","cb major","c♭ major",
+        "d minor","g minor","c minor","f minor","bb minor","b♭ minor","eb minor","e♭ minor","ab minor","a♭ minor"
+    };
+    for (const QString& fk : flatKeys) {
+        if (k == fk) return true;
+    }
+    // Heuristic: any 'b'/'♭' in the tonic implies flat spelling.
+    if (k.contains("b ") || k.contains(QChar(0x266D))) return true;
+    return false;
+}
+
+static QString noteNameFromPitchClass(int pc, bool preferFlats) {
+    const QChar sharp(0x266F);
+    const QChar flat(0x266D);
+    pc %= 12;
+    if (pc < 0) pc += 12;
+    static const QString sharpNames[12] = {
+        "C", "C" + QString(sharp), "D", "D" + QString(sharp), "E", "F",
+        "F" + QString(sharp), "G", "G" + QString(sharp), "A", "A" + QString(sharp), "B"
+    };
+    static const QString flatNames[12] = {
+        "C", "D" + QString(flat), "D", "E" + QString(flat), "E", "F",
+        "G" + QString(flat), "G", "A" + QString(flat), "A", "B" + QString(flat), "B"
+    };
+    return preferFlats ? flatNames[pc] : sharpNames[pc];
+}
+
+static QString transposeChordText(const QString& chordText, int semitoneDelta, bool preferFlats) {
+    QString t = chordText.trimmed();
+    if (t.isEmpty()) return chordText;
+    if (t == "x") return chordText;
+
+    // Split slash chords
+    QString main = t;
+    QString bass;
+    const int slash = t.indexOf('/');
+    if (slash >= 0) {
+        main = t.left(slash);
+        bass = t.mid(slash + 1);
+    }
+
+    // Extract parenthetical alternatives, e.g. Ao7(Bb7sus)
+    QString paren;
+    const int lp = main.indexOf('(');
+    const int rp = main.lastIndexOf(')');
+    if (lp >= 0 && rp > lp) {
+        paren = main.mid(lp, rp - lp + 1);
+        main = main.left(lp);
+    }
+
+    // Parse main root letter + accidental
+    QString root;
+    QString accidental;
+    QString rest;
+    if (!main.isEmpty() && main[0].isLetter()) {
+        root = main.left(1);
+        int pos = 1;
+        if (pos < main.size() && (main[pos] == QChar(0x266D) || main[pos] == QChar(0x266F) || main[pos] == QChar('b') || main[pos] == QChar('#'))) {
+            accidental = main.mid(pos, 1);
+            pos += 1;
+        }
+        rest = main.mid(pos);
+    } else {
+        // Unknown format; leave unchanged
+        return chordText;
+    }
+
+    const int pc = pitchClassFromSpelling(root, accidental);
+    if (pc < 0) return chordText;
+    const QString newRoot = noteNameFromPitchClass(pc + semitoneDelta, preferFlats);
+
+    // Bass note (if present)
+    QString newBass = bass;
+    if (!bass.isEmpty() && bass[0].isLetter()) {
+        QString bRoot = bass.left(1);
+        QString bAcc;
+        int pos = 1;
+        if (pos < bass.size() && (bass[pos] == QChar(0x266D) || bass[pos] == QChar(0x266F) || bass[pos] == QChar('b') || bass[pos] == QChar('#'))) {
+            bAcc = bass.mid(pos, 1);
+        }
+        const int bpc = pitchClassFromSpelling(bRoot, bAcc);
+        if (bpc >= 0) {
+            // Preserve any trailing characters after accidental (rare) by slicing remainder.
+            QString bRemainder;
+            if (!bAcc.isEmpty()) bRemainder = bass.mid(2);
+            else bRemainder = bass.mid(1);
+            newBass = noteNameFromPitchClass(bpc + semitoneDelta, preferFlats) + bRemainder;
+        }
+    }
+
+    QString out = newRoot + rest + paren;
+    if (!bass.isEmpty()) out += "/" + newBass;
+    return out;
+}
+
+static chart::ChartModel transposeChartModel(const chart::ChartModel& in, int semitoneDelta, bool preferFlats) {
+    if (semitoneDelta % 12 == 0) return in;
+    chart::ChartModel out = in;
+    for (auto& line : out.lines) {
+        for (auto& bar : line.bars) {
+            for (auto& cell : bar.cells) {
+                if (!cell.chord.isEmpty()) {
+                    cell.chord = transposeChordText(cell.chord, semitoneDelta, preferFlats);
+                }
+            }
+        }
+    }
+    return out;
+}
+
+static QString songStableId(const ireal::Song& song) {
+    // Stable across sessions and resistant to duplicate titles by including progression.
+    const QString key = song.title + "|" + song.composer + "|" + song.style + "|" + song.key + "|" + song.progression;
+    const QByteArray hash = QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha1).toHex();
+    return QString::fromUtf8(hash);
+}
+
+static QString overrideGroupForSongId(const QString& songId) {
+    return "ireal/songOverrides/" + songId;
+}
+} // namespace
 
 NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     : QWidget(parent) {
@@ -40,6 +255,12 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_songCombo->setEnabled(false);
     m_songCombo->setStyleSheet("QComboBox { background-color: #111; color: #eee; padding: 4px; }");
 
+    m_keyCombo = new QComboBox(chartHeader);
+    m_keyCombo->setEnabled(false);
+    m_keyCombo->setFixedWidth(120);
+    m_keyCombo->setStyleSheet("QComboBox { background-color: #111; color: #eee; padding: 4px; }");
+    m_keyCombo->addItems(defaultKeyCenters());
+
     m_playButton = new QPushButton("Play", chartHeader);
     m_playButton->setEnabled(false);
     m_playButton->setFixedWidth(70);
@@ -52,6 +273,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_tempoSpin->setFixedWidth(110);
 
     headerLayout->addWidget(m_songCombo, 1);
+    headerLayout->addWidget(m_keyCombo, 0);
     headerLayout->addWidget(m_tempoSpin, 0);
     headerLayout->addWidget(m_playButton, 0);
     chartHeader->setLayout(headerLayout);
@@ -217,8 +439,35 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
         loadSongAtIndex(idx);
     });
 
+    connect(m_keyCombo, &QComboBox::currentIndexChanged, this, [this](int /*idx*/) {
+        if (!m_keyCombo) return;
+        const QString sel = m_keyCombo->currentText().trimmed();
+        if (!sel.isEmpty()) setKeyCenter(sel);
+
+        // Persist per-song key override.
+        if (!m_isApplyingSongState && !m_currentSongId.isEmpty()) {
+            QSettings s;
+            s.setValue(overrideGroupForSongId(m_currentSongId) + "/keyCenter", sel);
+        }
+
+        // Transpose chart relative to detected song key.
+        if (m_hasBaseChartModel && !m_detectedSongKeyCenter.isEmpty()) {
+            const int srcPc = pitchClassFromKeyCenter(m_detectedSongKeyCenter);
+            const int dstPc = pitchClassFromKeyCenter(sel);
+            if (srcPc >= 0 && dstPc >= 0) {
+                const int delta = (dstPc - srcPc + 12) % 12;
+                const bool flats = preferFlatsForKeyCenter(sel);
+                m_chartWidget->setChartModel(transposeChartModel(m_baseChartModel, delta, flats));
+            }
+        }
+    });
+
     connect(m_tempoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int bpm) {
         if (m_playback) m_playback->setTempoBpm(bpm);
+        if (!m_isApplyingSongState && !m_currentSongId.isEmpty()) {
+            QSettings s;
+            s.setValue(overrideGroupForSongId(m_currentSongId) + "/tempoBpm", bpm);
+        }
     });
 
     connect(m_playButton, &QPushButton::clicked, this, [this]() {
@@ -241,18 +490,56 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
     if (m_playButton) m_playButton->setText("Play");
 
     const auto& song = m_playlist->songs[idx];
-    chart::ChartModel model = chart::parseIRealProgression(song.progression);
-    m_chartWidget->setChartModel(model);
+    m_currentSongId = songStableId(song);
+    m_detectedSongKeyCenter = keyFieldToKeyCenter(song.key);
+    m_baseChartModel = chart::parseIRealProgression(song.progression);
+    m_hasBaseChartModel = true;
+
+    // Key center from the song metadata (iReal HTML).
+    QSettings settings;
+    const QString group = overrideGroupForSongId(m_currentSongId);
+    const QString overriddenKeyCenter = settings.value(group + "/keyCenter", QString()).toString();
+    const QString selectedKeyCenter = overriddenKeyCenter.isEmpty() ? m_detectedSongKeyCenter : overriddenKeyCenter;
+
+    bool isMinorSong = false;
+    (void)pitchClassFromKeyCenter(m_detectedSongKeyCenter, &isMinorSong);
+    if (m_keyCombo) {
+        m_isApplyingSongState = true;
+        const bool prev = m_keyCombo->blockSignals(true);
+        m_keyCombo->clear();
+        m_keyCombo->addItems(keyCentersForMode(isMinorSong));
+        int kidx = m_keyCombo->findText(selectedKeyCenter);
+        if (kidx < 0 && !selectedKeyCenter.isEmpty()) {
+            // If the detected/overridden key isn't in our list (rare), prepend it (still mode-consistent).
+            m_keyCombo->insertItem(0, selectedKeyCenter);
+            kidx = 0;
+        }
+        if (kidx >= 0) m_keyCombo->setCurrentIndex(kidx);
+        m_keyCombo->blockSignals(prev);
+        m_isApplyingSongState = false;
+    }
+    if (!selectedKeyCenter.isEmpty()) setKeyCenter(selectedKeyCenter);
+
+    // Apply transposition (or identity) to the chart model.
+    {
+        const int srcPc = pitchClassFromKeyCenter(m_detectedSongKeyCenter);
+        const int dstPc = pitchClassFromKeyCenter(selectedKeyCenter);
+        const int delta = (srcPc >= 0 && dstPc >= 0) ? ((dstPc - srcPc + 12) % 12) : 0;
+        const bool flats = preferFlatsForKeyCenter(selectedKeyCenter);
+        m_chartWidget->setChartModel(transposeChartModel(m_baseChartModel, delta, flats));
+    }
 
     // Tempo preference: song tempo if present, else current spin.
     int bpm = song.actualTempoBpm > 0 ? song.actualTempoBpm : m_tempoSpin->value();
+    const int overriddenTempo = settings.value(group + "/tempoBpm", 0).toInt();
+    if (overriddenTempo > 0) bpm = overriddenTempo;
     m_tempoSpin->blockSignals(true);
     m_tempoSpin->setValue(bpm);
     m_tempoSpin->blockSignals(false);
 
     m_playback->setTempoBpm(bpm);
     int totalBars = 0;
-    for (const auto& line : model.lines) totalBars += line.bars.size();
+    for (const auto& line : m_baseChartModel.lines) totalBars += line.bars.size();
     m_playback->setTotalCells(totalBars * 4);
 
     m_playButton->setEnabled(true);
@@ -274,6 +561,7 @@ void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
     const bool hasSongs = !m_playlist->songs.isEmpty();
     m_songCombo->setEnabled(hasSongs);
     m_tempoSpin->setEnabled(hasSongs);
+    if (m_keyCombo) m_keyCombo->setEnabled(hasSongs);
     m_playButton->setEnabled(false);
 
     if (!hasSongs) {
@@ -402,6 +690,9 @@ void NoteMonitorWidget::setKeyCenter(const QString& keyCenter) {
     m_keyCenter = keyCenter;
     if (m_pitchMonitor) {
         m_pitchMonitor->setKeyCenter(keyCenter);
+    }
+    if (m_chartWidget) {
+        m_chartWidget->setKeyCenter(keyCenter);
     }
 }
 

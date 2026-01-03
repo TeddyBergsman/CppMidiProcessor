@@ -51,10 +51,7 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
     QSettings settings;
     bool legacyOn = settings.value("ui/legacy", false).toBool();
     applyLegacyUiSetting(legacyOn);
-    // Apply key center preference (default Eb major)
     if (noteMonitorWidget) {
-        QString keyCenter = settings.value("ui/keyCenter", "Eb major").toString();
-        noteMonitorWidget->setKeyCenter(keyCenter);
         int pitchBpm = settings.value("ui/pitchMonitorBpm", 120).toInt();
         noteMonitorWidget->setPitchMonitorBpm(pitchBpm);
     }
@@ -1220,7 +1217,6 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event) {
 void MainWindow::openPreferences() {
     QSettings settings;
     bool legacyOn = settings.value("ui/legacy", false).toBool();
-    QString keyCenter = settings.value("ui/keyCenter", "Eb major").toString();
     int pitchBpm = settings.value("ui/pitchMonitorBpm", 120).toInt();
 
     QDialog dlg(this);
@@ -1229,22 +1225,6 @@ void MainWindow::openPreferences() {
     QCheckBox* legacyCheck = new QCheckBox("Legacy UI", &dlg);
     legacyCheck->setChecked(legacyOn);
     layout->addWidget(legacyCheck);
-
-    // Key center dropdown
-    QHBoxLayout* keyLayout = new QHBoxLayout();
-    QLabel* keyLbl = new QLabel("Key center:", &dlg);
-    QComboBox* keyCombo = new QComboBox(&dlg);
-    QStringList majorKeys = {
-        "C major","G major","D major","A major","E major","B major","F# major","C# major",
-        "F major","Bb major","Eb major","Ab major","Db major","Gb major","Cb major"
-    };
-    keyCombo->addItems(majorKeys);
-    int idx = keyCombo->findText(keyCenter);
-    if (idx < 0) idx = keyCombo->findText("Eb major");
-    if (idx >= 0) keyCombo->setCurrentIndex(idx);
-    keyLayout->addWidget(keyLbl);
-    keyLayout->addWidget(keyCombo, 1);
-    layout->addLayout(keyLayout);
 
     // Pitch monitor BPM
     QHBoxLayout* bpmLayout = new QHBoxLayout();
@@ -1265,11 +1245,8 @@ void MainWindow::openPreferences() {
         bool legacy = legacyCheck->isChecked();
         settings.setValue("ui/legacy", legacy);
         applyLegacyUiSetting(legacy);
-        QString selKey = keyCombo->currentText();
-        settings.setValue("ui/keyCenter", selKey);
         settings.setValue("ui/pitchMonitorBpm", bpmSpin->value());
         if (noteMonitorWidget) {
-            noteMonitorWidget->setKeyCenter(selKey);
             noteMonitorWidget->setPitchMonitorBpm(bpmSpin->value());
         }
     }

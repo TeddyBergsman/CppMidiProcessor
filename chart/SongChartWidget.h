@@ -18,6 +18,8 @@ public:
 public slots:
     // Highlights a flattened cell index (0..bars*4-1).
     void setCurrentCellIndex(int cellIndex);
+    // Used to display Roman numeral chord functions (e.g. ii–V–I) relative to the key.
+    void setKeyCenter(const QString& keyCenter);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -39,6 +41,9 @@ private:
     // Flattened cell rects in content coordinates (not viewport coords)
     QVector<QRect> m_cellRects;
     int m_currentCell = -1;
+
+    // Key center string like "Eb major" (drives Roman numeral display).
+    QString m_keyCenter = "Eb major";
 };
 
 } // namespace chart

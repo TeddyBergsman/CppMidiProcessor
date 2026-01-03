@@ -539,13 +539,16 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
         // Choose a strong-beat target that reflects chord character:
         // - beat 1: root or 3rd (ballad likes 3rd on non-tonic chords)
         // - beat 3: guide tone (3rd/7th), preferably voice-leading toward next chord.
-        auto chooseTargetPc = [&](const ChordSymbol& c, const ChordSymbol* next, int beatInBar, int prevPc) -> int {
+        auto chooseTargetPc = [&](const ChordSymbol& c, const ChordSymbol* next, int beatInBar, int prevPc, bool chordChange) -> int {
             const bool isBeat1 = (beatInBar == 0);
             const bool isBeat3 = (beatInBar == 2);
             const int rootPc = normalizePc(ChordDictionary::bassRootPc(c));
             const int thirdPc = normalizePc(c.rootPc + thirdIntervalForQuality(c.quality));
             const int sevInt = seventhIntervalForChord(c);
             const int seventhPc = (sevInt != 0) ? normalizePc(c.rootPc + sevInt) : -1;
+
+            // Tune-recognition invariant: on beat 1 chord changes, land on root.
+            if (chordChange && isBeat1) return rootPc;
 
             QVector<int> cand;
             cand.push_back(rootPc);
@@ -559,6 +562,13 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
             double bestS = -1e9;
             for (int pc : cand) {
                 double s = 0.0;
+                // If the harmony changes on this beat, bias toward the root so the tune stays recognizable.
+                // (Still allows guide-tone landings sometimes, especially on beat 3.)
+                if (chordChange) {
+                    if (pc == rootPc) s += isBeat1 ? 4.0 : 2.8;
+                    if (pc == thirdPc) s += isBeat1 ? 0.6 : 1.0;
+                    if (seventhPc >= 0 && pc == seventhPc) s += isBeat1 ? 0.6 : 1.0;
+                }
                 if (isBeat1) {
                     if (pc == rootPc) s += 2.6;
                     if (pc == thirdPc) s += (m_profile.feelStyle == BassFeelStyle::BalladSwing) ? 2.0 : 1.2;
@@ -621,31 +631,72 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
         int prevPc = normalizePc(prevMidi % 12);
 
         // Choose a rhythmic motif for the two bars (ballad: anticipations/pickups; walking: occasional offbeats).
-        // We’ll encode per-beat pattern: 0=onbeat only, 1=add "and" (0.5), 2=two 8ths (0 and 0.5), 3=anticipate next (0.5 only).
+        // We’ll encode per-beat pattern:
+        // 0 = onbeat only
+        // 1 = onbeat + "and" (0.5)
+        // 2 = two 8ths (0 and 0.5)
+        // 3 = anticipation only (0.5)
+        // 4 = tied anticipation across barline (beat 4): upbeat note that sustains into next downbeat; next beat is rest
+        // 5 = delayed resolution (beat 4): approach on "&4" held into barline, then root resolves late on beat 1 (e.g. 0.25)
         int patternBallad[8] = {0, 3, 0, 2, 0, 0, 0, 2};
+
+        auto sameHarmony = [](const ChordSymbol& a, const ChordSymbol& b) -> bool {
+            if (a.noChord || b.noChord) return false;
+            if (a.placeholder || b.placeholder) return false;
+            if (a.rootPc != b.rootPc) return false;
+            if (a.bassPc != b.bassPc) return false;
+            if (a.quality != b.quality) return false;
+            if (a.seventh != b.seventh) return false;
+            if (a.extension != b.extension) return false;
+            if (a.alt != b.alt) return false;
+            if (a.alterations.size() != b.alterations.size()) return false;
+            for (int i = 0; i < a.alterations.size(); ++i) {
+                const auto& x = a.alterations[i];
+                const auto& y = b.alterations[i];
+                if (x.degree != y.degree || x.delta != y.delta || x.add != y.add) return false;
+            }
+            return true;
+        };
+
         if (m_profile.feelStyle == BassFeelStyle::BalladSwing) {
             // Choose between a couple ballad “sentences”.
             const int v = int(rng.bounded(3));
             if (v == 0) { int t[8] = {0, 3, 0, 2, 0, 0, 0, 2}; std::copy(t, t+8, patternBallad); }
             else if (v == 1) { int t[8] = {0, 0, 0, 2, 0, 3, 0, 2}; std::copy(t, t+8, patternBallad); }
             else { int t[8] = {0, 3, 0, 0, 0, 3, 0, 2}; std::copy(t, t+8, patternBallad); }
+
+            // Occasionally use a tied anticipation at the end of bar 1 if bar 2 starts a new chord.
+            if (ctx.lookaheadChords.size() >= 5 &&
+                chordIsValid(ctx.lookaheadChords[3]) &&
+                chordIsValid(ctx.lookaheadChords[4]) &&
+                !sameHarmony(ctx.lookaheadChords[3], ctx.lookaheadChords[4])) {
+                // Choose between two classic ballad devices at the barline.
+                const double pTieAnt = 0.14 + 0.18 * slowBoost;
+                const double pDelay = 0.10 + 0.16 * slowBoost;
+                const double r = rng.generateDouble();
+                if (r < pDelay) patternBallad[3] = 5;
+                else if (r < pDelay + pTieAnt) patternBallad[3] = 4;
+            }
         } else {
             // Walking: mostly onbeats with some upbeat connectors.
             int t[8] = {0, 1, 0, 2, 0, 1, 0, 2};
             std::copy(t, t+8, patternBallad);
         }
 
+        int skipUntil = -1;
         for (int b = 0; b < 8 && b < ctx.lookaheadChords.size(); ++b) {
+            if (b == skipUntil) continue;
             const ChordSymbol& c0 = ctx.lookaheadChords[b];
             if (!chordIsValid(c0)) continue;
             const ChordSymbol* cNext = (b + 1 < ctx.lookaheadChords.size() && chordIsValid(ctx.lookaheadChords[b + 1])) ? &ctx.lookaheadChords[b + 1] : nullptr;
 
             const int beatInBar = b % 4;
             const bool strong = (beatInBar == 0 || beatInBar == 2);
+            const bool chordChange = (b == 0) ? true : (!chordIsValid(ctx.lookaheadChords[b - 1]) ? false : !sameHarmony(ctx.lookaheadChords[b - 1], c0));
 
             int targetPc = prevPc;
             if (strong) {
-                targetPc = chooseTargetPc(c0, cNext, beatInBar, prevPc);
+                targetPc = chooseTargetPc(c0, cNext, beatInBar, prevPc, chordChange);
             } else {
                 // Weak beats: move between strong-beat targets using scale color.
                 // Estimate destination as the next strong beat within the 2-bar window.
@@ -658,7 +709,8 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
                         const ChordSymbol& cj = ctx.lookaheadChords[j];
                         if (chordIsValid(cj)) {
                             const ChordSymbol* cjNext = (j + 1 < ctx.lookaheadChords.size() && chordIsValid(ctx.lookaheadChords[j + 1])) ? &ctx.lookaheadChords[j + 1] : nullptr;
-                            destPc = chooseTargetPc(cj, cjNext, bi, prevPc);
+                            const bool cc = !sameHarmony(c0, cj);
+                            destPc = chooseTargetPc(cj, cjNext, bi, prevPc, cc);
                         }
                         break;
                     }
@@ -700,6 +752,52 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
                 emitNote(targetPc, 0.0, 0.45, strong ? 0.92 : 0.82, "Planned tone", QString("Rhythmic motif: two 8ths to create forward motion. Scale: %1.").arg(scName));
                 const int passPc = choosePassingPc(c0, prevPc, normalizePc(ChordDictionary::bassRootPc(c0)));
                 emitNote(passPc, 0.5, 0.40, 0.70, "Planned color/approach", QString("Second 8th: chord-scale color/approach tone to shape the phrase. Scale: %1.").arg(scName));
+            } else if (pat == 4) {
+                // Tied anticipation across the barline: anticipate the next chord's root on the "and of 4"
+                // and hold slightly into the next downbeat, then rest on the downbeat to avoid double articulation.
+                if (beatInBar == 3 && cNext && chordIsValid(*cNext)) {
+                    const int nextRoot = normalizePc(ChordDictionary::bassRootPc(*cNext));
+                    emitNote(nextRoot, 0.5, 1.10, 0.72,
+                             "Tied anticipation (root)",
+                             "Tied anticipation: play the next chord's root on the 'and of 4' and hold into the barline (classic jazz phrasing).");
+                    m_planned.insert(startGlobalBeat + b + 1, {});
+                    skipUntil = b + 1;
+                } else {
+                    const int passPc = choosePassingPc(c0, prevPc, targetPc);
+                    emitNote(passPc, 0.5, 0.40, 0.68, "Anticipation", QString("Anticipation: upbeat idea to lead into the next strong beat (phrase-level rhythm). Scale: %1.").arg(scName));
+                }
+            } else if (pat == 5) {
+                // Delayed resolution: play an approach tone on "&4" into the next chord,
+                // hold it slightly into the barline, then resolve to the NEXT chord's root with a late attack on beat 1.
+                if (beatInBar == 3 && cNext && chordIsValid(*cNext)) {
+                    const int nextRoot = normalizePc(ChordDictionary::bassRootPc(*cNext));
+                    // Chromatic approach to the next root (classic).
+                    const int up = normalizePc(nextRoot + 1);
+                    const int dn = normalizePc(nextRoot - 1);
+                    const int approachPc = (pcDistance(prevPc, up) <= pcDistance(prevPc, dn)) ? up : dn;
+
+                    // "&4" approach, held into the barline (0.5 + 0.35 ~= 0.85 beats total from onset).
+                    emitNote(approachPc, 0.5, 0.85, 0.70,
+                             "Delayed resolution (approach)",
+                             "Delayed resolution: approach the next chord on the '&4' and hold tension through the barline.");
+
+                    // Next downbeat: resolve late (e.g. on the 'e' of 1 / 16th-ish) to create a laid-back, pro ballad feel.
+                    BassEvent rEv;
+                    rEv.midiNote = pickMidiNear(nextRoot, prevMidi);
+                    rEv.velocity = clampVelocity(int(std::round(double(m_profile.baseVelocity) * 0.92)));
+                    rEv.offsetBeats = 0.25;
+                    rEv.lengthBeats = 1.70;
+                    rEv.allowOverlap = true; // don't pre-cut the approach; let its length control the release
+                    if (explainLocal) {
+                        rEv.function = "Delayed resolution (root)";
+                        rEv.reasoning = "Delayed resolution: resolve to the new chord's root slightly late (after beat 1) for a relaxed but intentional feel.";
+                    }
+                    m_planned.insert(startGlobalBeat + b + 1, {rEv});
+                    skipUntil = b + 1;
+                } else {
+                    const int passPc = choosePassingPc(c0, prevPc, targetPc);
+                    emitNote(passPc, 0.5, 0.40, 0.68, "Anticipation", QString("Anticipation: upbeat idea to lead into the next strong beat (phrase-level rhythm). Scale: %1.").arg(scName));
+                }
             } else { // pat == 3 (anticipation only)
                 const int passPc = choosePassingPc(c0, prevPc, targetPc);
                 emitNote(passPc, 0.5, 0.40, 0.68, "Anticipation", QString("Anticipation: upbeat idea to lead into the next strong beat (phrase-level rhythm). Scale: %1.").arg(scName));

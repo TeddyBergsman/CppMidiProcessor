@@ -9,6 +9,9 @@ namespace {
 
 enum class BarlineStyle { Normal, Double, RepeatStart, RepeatEnd, Final };
 
+// Single source of truth for chord sizing (no dynamic scaling).
+static constexpr int kChordRootPointSize = 20;
+
 static void drawBarline(QPainter& p, int x, int y, int h, BarlineStyle style) {
     switch (style) {
         case BarlineStyle::Normal: {
@@ -135,12 +138,12 @@ static void drawChordPretty(QPainter& p, const QRect& cellRect, const QString& c
     QFont bassFont = rootFont;
     QFont parenFont = rootFont;
 
-    const int baseRoot = std::max(20, rootFont.pointSize());
+    const int baseRoot = kChordRootPointSize;
     rootFont.setPointSize(baseRoot);
-    supFont.setPointSize(std::max(12, int(baseRoot * 0.55)));
-    accFont.setPointSize(std::max(12, int(baseRoot * 0.55)));
-    bassFont.setPointSize(std::max(12, int(baseRoot * 0.60)));
-    parenFont.setPointSize(std::max(11, int(baseRoot * 0.50)));
+    supFont.setPointSize(std::max(10, int(baseRoot * 0.55)));
+    accFont.setPointSize(std::max(10, int(baseRoot * 0.55)));
+    bassFont.setPointSize(std::max(10, int(baseRoot * 0.60)));
+    parenFont.setPointSize(std::max(9, int(baseRoot * 0.50)));
 
     rootFont.setBold(true);
     supFont.setBold(true);
@@ -153,30 +156,6 @@ static void drawChordPretty(QPainter& p, const QRect& cellRect, const QString& c
 
     int x = x0;
     int baseline = y0 + int(rootFont.pointSize() * 1.2);
-
-    // Auto-scale down if chord doesn't fit cell width.
-    auto measureWidth = [&](const QFont& rF, const QFont& aF, const QFont& sF, const QFont& bF, const QFont& pF) -> int {
-        int w = 0;
-        if (!root.isEmpty()) w += QFontMetrics(rF).horizontalAdvance(root);
-        if (!accidental.isEmpty()) w += QFontMetrics(aF).horizontalAdvance(accidental);
-        if (!rest.isEmpty()) w += 2 + QFontMetrics(sF).horizontalAdvance(rest);
-        if (!paren.isEmpty()) w += 2 + QFontMetrics(pF).horizontalAdvance(paren);
-        if (!bass.isEmpty()) w += 4 + QFontMetrics(bF).horizontalAdvance("/" + bass);
-        return w;
-    };
-
-    const int avail = cellRect.width() - 18;
-    int needed = measureWidth(rootFont, accFont, supFont, bassFont, parenFont);
-    if (needed > avail && avail > 10) {
-        const double ratio = double(avail) / double(needed);
-        const int newRoot = std::max(14, int(baseRoot * ratio));
-        rootFont.setPointSize(newRoot);
-        supFont.setPointSize(std::max(10, int(newRoot * 0.55)));
-        accFont.setPointSize(std::max(10, int(newRoot * 0.55)));
-        bassFont.setPointSize(std::max(10, int(newRoot * 0.60)));
-        parenFont.setPointSize(std::max(9, int(newRoot * 0.50)));
-        baseline = y0 + int(rootFont.pointSize() * 1.2);
-    }
 
     // Root
     if (!root.isEmpty()) {
@@ -343,7 +322,8 @@ void SongChartWidget::paintEvent(QPaintEvent* /*event*/) {
     p.setPen(penWhite);
 
     QFont chordFont = p.font();
-    chordFont.setPointSize(34);
+    // Keep a single, static chord font size. Individual chords must not scale.
+    chordFont.setPointSize(kChordRootPointSize);
     chordFont.setBold(true);
     p.setFont(chordFont);
 

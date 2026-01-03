@@ -537,8 +537,8 @@ void BandPlaybackEngine::onTick() {
         m_noteOnsInBar += 1;
     }
 
-    // Updated sanity: allow up to 16 note-ons per bar (accounts for 8ths + ghosts).
-    if (m_noteOnsInBar > 16) {
+    // Updated sanity: allow up to 24 note-ons per bar (accounts for runs + ghosts).
+    if (m_noteOnsInBar > 24) {
         qWarning("Bass sanity: too many notes in bar %d (count=%d). Silencing bass.",
                  m_lastBarIndex, m_noteOnsInBar);
         for (QTimer* t : m_pendingTimers) {

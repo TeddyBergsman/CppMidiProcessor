@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QString>
+#include <QHash>
 
 #include "music/ChordSymbol.h"
 #include "music/BassProfile.h"
@@ -61,6 +62,10 @@ private:
     // Evolving state
     double m_intensity = 0.35; // 0..1
     quint32 m_lastSectionHash = 0;
+
+    // Multi-beat planning and resolution targeting
+    QHash<int, QVector<BassEvent>> m_planned; // globalBeat -> events
+    int m_forcedStrongPc = -1;               // if set, prefer this pc on next strong beat
 };
 
 } // namespace music

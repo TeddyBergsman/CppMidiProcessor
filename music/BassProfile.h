@@ -66,6 +66,11 @@ struct BassProfile {
     double fillProbPhraseEnd = 0.22;    // additional fill chance at phrase ends (beat 4)
     double syncopationProb = 0.10;      // 0..1 occasional offbeat placement (within beat)
 
+    // More “human musician” features
+    double twoBeatRunProb = 0.10;       // 2-beat 8th-note run spanning beats 3–4
+    double enclosureProb = 0.12;        // 2-note enclosure into next bar target (beat 4)
+    double sectionIntroRestraint = 0.55; // 0..1 reduces intensity in first bar after section change
+
     // Target chord-tone weights for strong beats (1 & 3): root/3rd/5th/7th
     double wRoot = 1.00;
     double wThird = 0.75;

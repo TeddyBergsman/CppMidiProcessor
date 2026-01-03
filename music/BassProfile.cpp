@@ -77,6 +77,9 @@ BassProfile loadBassProfile(QSettings& settings, const QString& prefix) {
     p.pickup8thProb = clampD(readD(settings, base + "/pickup8thProb", p.pickup8thProb), 0.0, 1.0);
     p.fillProbPhraseEnd = clampD(readD(settings, base + "/fillProbPhraseEnd", p.fillProbPhraseEnd), 0.0, 1.0);
     p.syncopationProb = clampD(readD(settings, base + "/syncopationProb", p.syncopationProb), 0.0, 1.0);
+    p.twoBeatRunProb = clampD(readD(settings, base + "/twoBeatRunProb", p.twoBeatRunProb), 0.0, 1.0);
+    p.enclosureProb = clampD(readD(settings, base + "/enclosureProb", p.enclosureProb), 0.0, 1.0);
+    p.sectionIntroRestraint = clampD(readD(settings, base + "/sectionIntroRestraint", p.sectionIntroRestraint), 0.0, 1.0);
 
     p.wRoot = clampD(readD(settings, base + "/wRoot", p.wRoot), 0.0, 3.0);
     p.wThird = clampD(readD(settings, base + "/wThird", p.wThird), 0.0, 3.0);
@@ -142,6 +145,9 @@ void saveBassProfile(QSettings& settings, const QString& prefix, const BassProfi
     settings.setValue(base + "/pickup8thProb", p.pickup8thProb);
     settings.setValue(base + "/fillProbPhraseEnd", p.fillProbPhraseEnd);
     settings.setValue(base + "/syncopationProb", p.syncopationProb);
+    settings.setValue(base + "/twoBeatRunProb", p.twoBeatRunProb);
+    settings.setValue(base + "/enclosureProb", p.enclosureProb);
+    settings.setValue(base + "/sectionIntroRestraint", p.sectionIntroRestraint);
 
     settings.setValue(base + "/wRoot", p.wRoot);
     settings.setValue(base + "/wThird", p.wThird);

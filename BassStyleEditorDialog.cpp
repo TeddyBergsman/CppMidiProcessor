@@ -91,7 +91,7 @@ void BassStyleEditorDialog::buildUi() {
     // --- Advanced evolution / variation ---
     m_advBox = new QGroupBox("Advanced: Evolution & Variation");
     m_advBox->setCheckable(true);
-    m_advBox->setChecked(false);
+    m_advBox->setChecked(true);
     auto* advForm = new QFormLayout(m_advBox);
     m_intensityBase = makeD(0.0, 1.0, 0.01, 2);
     m_intensityVar = makeD(0.0, 1.0, 0.01, 2);
@@ -104,6 +104,13 @@ void BassStyleEditorDialog::buildUi() {
     m_pickup8thProb = makeD(0.0, 1.0, 0.01, 2);
     m_fillPhraseEnd = makeD(0.0, 1.0, 0.01, 2);
     m_syncopProb = makeD(0.0, 1.0, 0.01, 2);
+    // Extra human features
+    auto* twoBeatRun = makeD(0.0, 1.0, 0.01, 2);
+    twoBeatRun->setObjectName("twoBeatRunProb");
+    auto* enclosure = makeD(0.0, 1.0, 0.01, 2);
+    enclosure->setObjectName("enclosureProb");
+    auto* introRestraint = makeD(0.0, 1.0, 0.01, 2);
+    introRestraint->setObjectName("sectionIntroRestraint");
     advForm->addRow("Intensity base", m_intensityBase);
     advForm->addRow("Intensity variance", m_intensityVar);
     advForm->addRow("Evolution rate", m_evolutionRate);
@@ -115,6 +122,9 @@ void BassStyleEditorDialog::buildUi() {
     advForm->addRow("Pickup 8th probability", m_pickup8thProb);
     advForm->addRow("Phrase-end fill boost", m_fillPhraseEnd);
     advForm->addRow("Syncopation probability", m_syncopProb);
+    advForm->addRow("2-beat run probability (beats 3–4)", twoBeatRun);
+    advForm->addRow("Enclosure probability (beat 4)", enclosure);
+    advForm->addRow("Section intro restraint", introRestraint);
 
     auto* weightsBox = new QGroupBox("Chord-tone target weights (beats 1 & 3)");
     auto* weightsForm = new QFormLayout(weightsBox);
@@ -148,7 +158,15 @@ void BassStyleEditorDialog::buildUi() {
     grid->addWidget(m_advBox, 3, 0, 1, 2);
 
     root->addWidget(m_enabled);
-    root->addLayout(grid, 1);
+
+    // Make the editor scrollable (it can be taller than the screen).
+    QWidget* content = new QWidget(this);
+    content->setLayout(grid);
+    auto* scroll = new QScrollArea(this);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidget(content);
+    root->addWidget(scroll, 1);
 
     m_buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::Apply);
     root->addWidget(m_buttons);
@@ -212,6 +230,9 @@ void BassStyleEditorDialog::setUiFromProfile(const music::BassProfile& p) {
     if (m_pickup8thProb) m_pickup8thProb->setValue(p.pickup8thProb);
     if (m_fillPhraseEnd) m_fillPhraseEnd->setValue(p.fillProbPhraseEnd);
     if (m_syncopProb) m_syncopProb->setValue(p.syncopationProb);
+    if (auto* w = findChild<QDoubleSpinBox*>("twoBeatRunProb")) w->setValue(p.twoBeatRunProb);
+    if (auto* w = findChild<QDoubleSpinBox*>("enclosureProb")) w->setValue(p.enclosureProb);
+    if (auto* w = findChild<QDoubleSpinBox*>("sectionIntroRestraint")) w->setValue(p.sectionIntroRestraint);
 
     m_wRoot->setValue(p.wRoot);
     m_wThird->setValue(p.wThird);
@@ -263,6 +284,9 @@ music::BassProfile BassStyleEditorDialog::profileFromUi() const {
     if (m_pickup8thProb) p.pickup8thProb = m_pickup8thProb->value();
     if (m_fillPhraseEnd) p.fillProbPhraseEnd = m_fillPhraseEnd->value();
     if (m_syncopProb) p.syncopationProb = m_syncopProb->value();
+    if (auto* w = findChild<QDoubleSpinBox*>("twoBeatRunProb")) p.twoBeatRunProb = w->value();
+    if (auto* w = findChild<QDoubleSpinBox*>("enclosureProb")) p.enclosureProb = w->value();
+    if (auto* w = findChild<QDoubleSpinBox*>("sectionIntroRestraint")) p.sectionIntroRestraint = w->value();
 
     p.wRoot = m_wRoot->value();
     p.wThird = m_wThird->value();

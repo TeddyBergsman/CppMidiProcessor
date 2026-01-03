@@ -214,22 +214,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
 
     // --- chart UI connections ---
     connect(m_songCombo, &QComboBox::currentIndexChanged, this, [this](int idx) {
-        if (!m_playlist || idx < 0 || idx >= m_playlist->songs.size()) return;
-        const auto& song = m_playlist->songs[idx];
-        chart::ChartModel model = chart::parseIRealProgression(song.progression);
-        m_chartWidget->setChartModel(model);
-
-        // Tempo preference: song tempo if present, else current spin.
-        int bpm = song.actualTempoBpm > 0 ? song.actualTempoBpm : m_tempoSpin->value();
-        m_tempoSpin->blockSignals(true);
-        m_tempoSpin->setValue(bpm);
-        m_tempoSpin->blockSignals(false);
-
-        m_playback->setTempoBpm(bpm);
-        int totalBars = 0;
-        for (const auto& line : model.lines) totalBars += line.bars.size();
-        m_playback->setTotalCells(totalBars * 4);
-        m_playButton->setEnabled(true);
+        loadSongAtIndex(idx);
     });
 
     connect(m_tempoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int bpm) {
@@ -248,15 +233,43 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     });
 }
 
+void NoteMonitorWidget::loadSongAtIndex(int idx) {
+    if (!m_playlist || idx < 0 || idx >= m_playlist->songs.size()) return;
+
+    // Stop playback when switching songs.
+    if (m_playback) m_playback->stop();
+    if (m_playButton) m_playButton->setText("Play");
+
+    const auto& song = m_playlist->songs[idx];
+    chart::ChartModel model = chart::parseIRealProgression(song.progression);
+    m_chartWidget->setChartModel(model);
+
+    // Tempo preference: song tempo if present, else current spin.
+    int bpm = song.actualTempoBpm > 0 ? song.actualTempoBpm : m_tempoSpin->value();
+    m_tempoSpin->blockSignals(true);
+    m_tempoSpin->setValue(bpm);
+    m_tempoSpin->blockSignals(false);
+
+    m_playback->setTempoBpm(bpm);
+    int totalBars = 0;
+    for (const auto& line : model.lines) totalBars += line.bars.size();
+    m_playback->setTotalCells(totalBars * 4);
+
+    m_playButton->setEnabled(true);
+}
+
 void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
     // Replace stored playlist
     delete m_playlist;
     m_playlist = new ireal::Playlist(playlist);
 
+    // Prevent mid-population index signals from toggling Play state.
+    const bool prev = m_songCombo->blockSignals(true);
     m_songCombo->clear();
     for (const auto& s : m_playlist->songs) {
         m_songCombo->addItem(s.title);
     }
+    m_songCombo->blockSignals(prev);
 
     const bool hasSongs = !m_playlist->songs.isEmpty();
     m_songCombo->setEnabled(hasSongs);
@@ -270,7 +283,9 @@ void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
         return;
     }
 
+    // Force-load first song so Play is enabled immediately (even on startup auto-load).
     m_songCombo->setCurrentIndex(0);
+    loadSongAtIndex(0);
 }
 
 NoteMonitorWidget::~NoteMonitorWidget() {

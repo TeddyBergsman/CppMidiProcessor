@@ -49,6 +49,7 @@ private:
                        double cents);
     void repositionNotes();
     void addVocalTrailSnapshot(const QRect& oldGeo);
+    void loadSongAtIndex(int idx);
 
     // Guitar section
     QLabel* m_guitarTitle = nullptr;

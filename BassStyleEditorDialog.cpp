@@ -1,5 +1,7 @@
 #include "BassStyleEditorDialog.h"
 
+#include "music/BassPresets.h"
+
 #include <QtWidgets>
 
 BassStyleEditorDialog::BassStyleEditorDialog(const music::BassProfile& initial, QWidget* parent)
@@ -32,6 +34,40 @@ void BassStyleEditorDialog::buildUi() {
 
     m_enabled = new QCheckBox("Enable bass");
 
+    // Presets row
+    {
+        auto* presetsRow = new QWidget(this);
+        auto* h = new QHBoxLayout(presetsRow);
+        h->setContentsMargins(0, 0, 0, 0);
+        h->setSpacing(8);
+
+        auto* presetLbl = new QLabel("Preset:", presetsRow);
+        presetLbl->setStyleSheet("QLabel { color: #ddd; }");
+        m_presetCombo = new QComboBox(presetsRow);
+        m_presetCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+        const auto presets = music::BassPresets::all();
+        for (const auto& p : presets) {
+            m_presetCombo->addItem(p.name, p.id);
+        }
+
+        m_loadPresetBtn = new QPushButton("Load", presetsRow);
+        m_loadPresetBtn->setFixedWidth(64);
+        m_keepRouting = new QCheckBox("Keep routing/range", presetsRow);
+        m_keepRouting->setChecked(true);
+        m_keepEnable = new QCheckBox("Keep enable/channel", presetsRow);
+        m_keepEnable->setChecked(true);
+
+        h->addWidget(presetLbl, 0);
+        h->addWidget(m_presetCombo, 1);
+        h->addWidget(m_loadPresetBtn, 0);
+        h->addWidget(m_keepRouting, 0);
+        h->addWidget(m_keepEnable, 0);
+
+        presetsRow->setLayout(h);
+        root->addWidget(presetsRow);
+    }
+
     // --- Routing / range ---
     auto* rangeBox = new QGroupBox("Routing & Range");
     auto* rangeForm = new QFormLayout(rangeBox);
@@ -56,11 +92,15 @@ void BassStyleEditorDialog::buildUi() {
     m_pushMs = makeSpin(-50, 50);
     m_noteLengthMs = makeSpin(0, 2000);
     m_gatePct = makeD(0.05, 1.0, 0.01, 2);
+    m_swingAmount = makeD(0.0, 1.0, 0.01, 2);
+    m_swingRatio = makeD(1.2, 4.0, 0.05, 2);
     feelForm->addRow("Micro jitter (ms +/-)", m_jitterMs);
     feelForm->addRow("Laid back (ms)", m_laidBackMs);
     feelForm->addRow("Push (ms)", m_pushMs);
     feelForm->addRow("Note length (ms; 0=gate)", m_noteLengthMs);
     feelForm->addRow("Gate (% of beat)", m_gatePct);
+    feelForm->addRow("Swing amount", m_swingAmount);
+    feelForm->addRow("Swing ratio (e.g. 2.0=2:1)", m_swingRatio);
 
     // --- Dynamics ---
     auto* dynBox = new QGroupBox("Dynamics");
@@ -191,9 +231,49 @@ void BassStyleEditorDialog::buildUi() {
         const auto p = profileFromUi();
         emit profileCommitted(p);
     });
+
+    connect(m_loadPresetBtn, &QPushButton::clicked, this, [this]() {
+        if (!m_presetCombo) return;
+        const QString id = m_presetCombo->currentData().toString();
+        music::BassPreset preset;
+        if (!music::BassPresets::getById(id, preset)) return;
+
+        // Merge preset into current UI state based on “keep” toggles.
+        music::BassProfile cur = profileFromUi();
+        music::BassProfile p = preset.profile;
+        p.name = preset.name;
+
+        // Keep deterministic per-song randomness unless explicitly changed by user.
+        p.humanizeSeed = cur.humanizeSeed;
+
+        if (m_keepEnable && m_keepEnable->isChecked()) {
+            p.enabled = cur.enabled;
+            p.midiChannel = cur.midiChannel;
+        }
+        if (m_keepRouting && m_keepRouting->isChecked()) {
+            p.minMidiNote = cur.minMidiNote;
+            p.maxMidiNote = cur.maxMidiNote;
+            p.registerCenterMidi = cur.registerCenterMidi;
+            p.registerRange = cur.registerRange;
+            p.maxLeap = cur.maxLeap;
+        }
+
+        // Apply to UI + preview.
+        setUiFromProfile(p);
+        emitPreview();
+    });
 }
 
 void BassStyleEditorDialog::setUiFromProfile(const music::BassProfile& p) {
+    // Align preset dropdown if names match.
+    if (m_presetCombo) {
+        music::BassPreset found;
+        if (music::BassPresets::getByName(p.name, found)) {
+            const int idx = m_presetCombo->findData(found.id);
+            if (idx >= 0) m_presetCombo->setCurrentIndex(idx);
+        }
+    }
+
     m_enabled->setChecked(p.enabled);
     m_channel->setValue(p.midiChannel);
     m_minNote->setValue(p.minMidiNote);
@@ -214,6 +294,8 @@ void BassStyleEditorDialog::setUiFromProfile(const music::BassProfile& p) {
     m_pushMs->setValue(p.pushMs);
     m_noteLengthMs->setValue(p.noteLengthMs);
     m_gatePct->setValue(p.gatePct);
+    if (m_swingAmount) m_swingAmount->setValue(p.swingAmount);
+    if (m_swingRatio) m_swingRatio->setValue(p.swingRatio);
 
     m_chromaticism->setValue(p.chromaticism);
     m_honorSlash->setChecked(p.honorSlashBass);
@@ -268,6 +350,8 @@ music::BassProfile BassStyleEditorDialog::profileFromUi() const {
     p.pushMs = m_pushMs->value();
     p.noteLengthMs = m_noteLengthMs->value();
     p.gatePct = m_gatePct->value();
+    if (m_swingAmount) p.swingAmount = m_swingAmount->value();
+    if (m_swingRatio) p.swingRatio = m_swingRatio->value();
 
     p.chromaticism = m_chromaticism->value();
     p.honorSlashBass = m_honorSlash->isChecked();
@@ -287,6 +371,11 @@ music::BassProfile BassStyleEditorDialog::profileFromUi() const {
     if (auto* w = findChild<QDoubleSpinBox*>("twoBeatRunProb")) p.twoBeatRunProb = w->value();
     if (auto* w = findChild<QDoubleSpinBox*>("enclosureProb")) p.enclosureProb = w->value();
     if (auto* w = findChild<QDoubleSpinBox*>("sectionIntroRestraint")) p.sectionIntroRestraint = w->value();
+
+    // Update label to match preset dropdown (if present).
+    if (m_presetCombo) {
+        p.name = m_presetCombo->currentText().trimmed();
+    }
 
     p.wRoot = m_wRoot->value();
     p.wThird = m_wThird->value();

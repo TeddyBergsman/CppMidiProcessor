@@ -9,6 +9,8 @@ class QSpinBox;
 class QDoubleSpinBox;
 class QDialogButtonBox;
 class QGroupBox;
+class QComboBox;
+class QPushButton;
 
 class BassStyleEditorDialog : public QDialog {
     Q_OBJECT
@@ -28,6 +30,12 @@ private:
     void emitPreview();
 
     music::BassProfile m_initial;
+
+    // Presets
+    QComboBox* m_presetCombo = nullptr;
+    QPushButton* m_loadPresetBtn = nullptr;
+    QCheckBox* m_keepRouting = nullptr;
+    QCheckBox* m_keepEnable = nullptr;
 
     QCheckBox* m_enabled = nullptr;
     QSpinBox* m_channel = nullptr;
@@ -49,6 +57,8 @@ private:
     QSpinBox* m_pushMs = nullptr;
     QSpinBox* m_noteLengthMs = nullptr;
     QDoubleSpinBox* m_gatePct = nullptr;
+    QDoubleSpinBox* m_swingAmount = nullptr;
+    QDoubleSpinBox* m_swingRatio = nullptr;
 
     QDoubleSpinBox* m_chromaticism = nullptr;
     QCheckBox* m_honorSlash = nullptr;

@@ -425,6 +425,8 @@ void BandPlaybackEngine::onTick() {
     ctx.barIndex = barIndex;
     ctx.beatInBar = beatInBar;
     ctx.isNewBar = (beatInBar == 0);
+    ctx.songPass = (seqLen > 0) ? (step / seqLen) : 0;
+    ctx.totalPasses = std::max(1, m_repeats);
     ctx.phraseLengthBars = std::max(1, m_bassProfile.phraseLengthBars);
     const QString sec = (barIndex >= 0 && barIndex < m_barSections.size()) ? m_barSections[barIndex] : QString();
     ctx.sectionHash = (quint32)qHash(sec);

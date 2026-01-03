@@ -60,6 +60,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   music/ChordDictionary.cpp
   music/BassProfile.h
   music/BassProfile.cpp
+  music/BassPresets.h
+  music/BassPresets.cpp
   music/ScaleLibrary.h
   music/ScaleLibrary.cpp
   music/WalkingBassGenerator.h

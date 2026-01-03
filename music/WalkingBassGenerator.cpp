@@ -2,6 +2,7 @@
 
 #include "music/ChordDictionary.h"
 #include "music/Pitch.h"
+#include "music/ScaleLibrary.h"
 
 #include <QRandomGenerator>
 #include <algorithm>
@@ -98,6 +99,13 @@ static double weightedChoice(QRandomGenerator& rng, const QVector<double>& weigh
 
 static int clampVelocity(int v) { return std::max(1, std::min(127, v)); }
 
+static int pcDistance(int a, int b) {
+    a = normalizePc(a);
+    b = normalizePc(b);
+    int d = std::abs(a - b);
+    return std::min(d, 12 - d);
+}
+
 } // namespace
 
 WalkingBassGenerator::WalkingBassGenerator() = default;
@@ -118,6 +126,7 @@ void WalkingBassGenerator::reset() {
     m_lastSectionHash = 0;
     m_planned.clear();
     m_forcedStrongPc = -1;
+    m_phraseMode = 1;
 }
 
 BassDecision WalkingBassGenerator::nextNote(int beatInBar, const ChordSymbol* currentChord, const ChordSymbol* nextChord) {
@@ -141,6 +150,18 @@ BassDecision WalkingBassGenerator::nextNote(int beatInBar, const ChordSymbol* cu
         : curRoot;
 
     // Build chord-tone pitch classes (for strong beats).
+    // Next-chord guide tones (for voice-leading decisions).
+    QVector<int> nextGuidePcs;
+    if (nextChord && nextChord->rootPc >= 0 && !nextChord->noChord && !nextChord->placeholder) {
+        const int nThird = normalizePc(nextChord->rootPc + thirdIntervalForQuality(nextChord->quality));
+        const int nSevInt = seventhIntervalForChord(*nextChord);
+        const int nSev = (nSevInt != 0) ? normalizePc(nextChord->rootPc + nSevInt) : -1;
+        nextGuidePcs = { normalizePc(nextRoot), nThird };
+        if (nSev >= 0) nextGuidePcs.push_back(nSev);
+    } else {
+        nextGuidePcs = { normalizePc(nextRoot) };
+    }
+
     const int thirdPc = normalizePc(currentChord->rootPc + thirdIntervalForQuality(currentChord->quality));
     const int fifthPc = normalizePc(currentChord->rootPc + fifthIntervalForQuality(currentChord->quality));
     const int sevInt = seventhIntervalForChord(*currentChord);
@@ -192,8 +213,23 @@ BassDecision WalkingBassGenerator::nextNote(int beatInBar, const ChordSymbol* cu
             if ((beatInBar == 0 || beatInBar == 2) && m_forcedStrongPc >= 0 && normalizePc(pc) == normalizePc(m_forcedStrongPc)) {
                 s += 6.5;
             }
+            // Avoid boring repeated roots on strong beats.
+            if ((beatInBar == 0 || beatInBar == 2) && m_lastMidi >= 0) {
+                const int lastPc = normalizePc(m_lastMidi % 12);
+                const int rootPc = normalizePc(curRoot);
+                if (normalizePc(pc) == rootPc && lastPc == rootPc) {
+                    s -= 5.0 * (0.5 + 0.5 * m_profile.repetitionPenalty);
+                }
+            }
+            // Voice-leading: prefer tones close to next chord's guide tones.
+            if (!nextGuidePcs.isEmpty()) {
+                int bestD = 99;
+                for (int ng : nextGuidePcs) bestD = std::min(bestD, pcDistance(pc, ng));
+                s += (6 - std::min(6, bestD)) * 0.9; // 0..5.4
+            }
             // A touch of randomness to avoid robotic repetition.
-            s += (rng.generateDouble() - 0.5) * 0.6;
+            // Keep this subtle; “creativity” comes from phrase planning/fills, not random note choice.
+            s += (rng.generateDouble() - 0.5) * 0.18;
             if (s > bestScore) { bestScore = s; bestMidi = midi; }
         }
         return bestMidi;
@@ -232,13 +268,41 @@ BassDecision WalkingBassGenerator::nextNote(int beatInBar, const ChordSymbol* cu
             chosenMidi = bestCandidateFromPcs(sample);
         }
     } else if (beatInBar == 1) {
-        // Weak beat: stepwise motion is king. Prefer chord tones and neighbors.
-        QVector<int> pcs = targetTonePcs();
-        // Add chromatic neighbors around current root/third/seventh to create motion.
+        // Weak beat: stepwise motion toward the next chord is king.
+        QVector<int> pcs;
+        pcs.reserve(16);
+
+        // Use a suggested chord scale to pick more musical passing tones.
+        const auto suggested = ScaleLibrary::suggestForChord(*currentChord);
+        const auto scaleType = !suggested.isEmpty() ? suggested.first() : ScaleType::Ionian;
+        const auto& scale = ScaleLibrary::get(scaleType);
+        for (int iv : scale.intervals) {
+            pcs.push_back(normalizePc(currentChord->rootPc + iv));
+        }
+
+        // Also include chord tones and chromatic neighbors (for approach feel).
         for (int pc : targetTonePcs()) {
+            pcs.push_back(pc);
             pcs.push_back(normalizePc(pc - 1));
             pcs.push_back(normalizePc(pc + 1));
         }
+
+        // Bias toward moving toward the next root (or next guide tone).
+        if (m_lastMidi >= 0 && !nextGuidePcs.isEmpty()) {
+            const int lastPc = normalizePc(m_lastMidi % 12);
+            int targetPc = nextGuidePcs.first();
+            // choose the closest guide tone as “destination”
+            int bestD = 99;
+            for (int ng : nextGuidePcs) {
+                const int d = pcDistance(lastPc, ng);
+                if (d < bestD) { bestD = d; targetPc = ng; }
+            }
+            // Add intermediate step options
+            const int dir = (normalizePc(targetPc - lastPc) <= normalizePc(lastPc - targetPc)) ? 1 : -1;
+            pcs.push_back(normalizePc(lastPc + dir * 1));
+            pcs.push_back(normalizePc(lastPc + dir * 2));
+        }
+
         chosenMidi = bestCandidateFromPcs(pcs);
     } else if (beatInBar == 3) {
         // Approach into next chord: target next root/3rd/7th.
@@ -331,6 +395,24 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
     const quint32 advance = rng.generate();
     m_rngState = advance ? advance : (m_rngState + 1u);
 
+    // Phrase-level planner:
+    // - Choose a phrase “mode” (sparse/normal/busy) at phrase starts
+    // - Drift density up on later song passes
+    // - Vary slightly per section (stable via sectionHash)
+    const int phraseLen = std::max(1, ctx.phraseLengthBars);
+    const int barInPhrase = (ctx.barInSection >= 0) ? (ctx.barInSection % phraseLen) : 0;
+    const bool isPhraseStartBar = ctx.isNewBar && (barInPhrase == 0);
+    if (isPhraseStartBar) {
+        // Base mode selection from current intensity and song pass.
+        const double passBoost = (ctx.totalPasses > 1) ? (double(ctx.songPass) / double(std::max(1, ctx.totalPasses - 1))) : 0.0;
+        const double sectionBias = ((ctx.sectionHash % 101u) / 100.0) - 0.5; // [-0.5..0.5]
+        const double desire = std::max(0.0, std::min(1.0, m_intensity + 0.20 * passBoost + 0.10 * sectionBias));
+        const double r = rng.generateDouble();
+        if (r < 0.22 - 0.15 * desire) m_phraseMode = 0; // sparse
+        else if (r > 0.78 - 0.10 * desire) m_phraseMode = 2; // busy
+        else m_phraseMode = 1; // normal
+    }
+
     // Evolve intensity on bar boundaries.
     if (ctx.isNewBar) {
         // Reset-ish on section change, but keep continuity.
@@ -361,6 +443,16 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
         const int ref = (m_lastMidi >= 0) ? m_lastMidi : m_profile.registerCenterMidi;
         return pickMidiForPcNear(pc, ref, m_profile.minMidiNote, m_profile.maxMidiNote);
     };
+
+    // Compute per-beat “effective intensity” including phrase mode + pass arc.
+    const double passArc = (ctx.totalPasses > 1) ? (double(ctx.songPass) / double(std::max(1, ctx.totalPasses - 1))) : 0.0;
+    double modeMult = 1.0;
+    if (m_phraseMode == 0) modeMult = 0.75;
+    else if (m_phraseMode == 2) modeMult = 1.35;
+    const double phraseArc = (phraseLen > 1) ? (double(barInPhrase) / double(phraseLen - 1)) : 0.0; // build within phrase
+    double eff = m_intensity * modeMult + 0.18 * passArc + 0.10 * phraseArc;
+    eff = std::max(0.0, std::min(1.0, eff));
+    const double swing = std::max(0.0, std::min(1.0, m_profile.swingAmount));
 
     auto planTwoBeatRun = [&](int startBeat, int targetPc) {
         // Create a simple 4x8th run across beats 3 & 4 that leads into targetPc next bar.
@@ -406,7 +498,7 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
 
     // Syncopation: occasionally place the note slightly late/early within the beat.
     double mainOffset = 0.0;
-    if (rng.generateDouble() < (m_profile.syncopationProb * (0.30 + 0.70 * m_intensity))) {
+    if (rng.generateDouble() < (m_profile.syncopationProb * (0.25 + 0.75 * eff))) {
         // 16th-ish placement
         mainOffset = (rng.bounded(2) == 0) ? 0.25 : 0.125;
     }
@@ -420,7 +512,7 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
     // Ghost notes on weak beats (2 and 4 typically).
     const bool weakBeat = (ctx.beatInBar == 1 || ctx.beatInBar == 3);
     if (weakBeat) {
-        const double gProb = m_profile.ghostNoteProb * (0.25 + 0.75 * m_intensity);
+        const double gProb = m_profile.ghostNoteProb * (0.45 + 0.55 * eff) * (0.60 + 0.40 * swing);
         if (rng.generateDouble() < gProb) {
             BassEvent g;
             g.ghost = true;
@@ -432,9 +524,27 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
         }
     }
 
+    // If swing is high, add an occasional upbeat anticipation (audible swing even without explicit fills).
+    if (weakBeat && swing > 0.55 && nextChord && nextChord->rootPc >= 0) {
+        const double p = (0.06 + 0.22 * eff) * swing;
+        if (rng.generateDouble() < p) {
+            const int targetPc = normalizePc(nextChord->rootPc);
+            const bool chrom = (rng.generateDouble() < m_profile.chromaticism);
+            const int stepPc = chrom
+                ? normalizePc(targetPc + (rng.bounded(2) == 0 ? -1 : +1))
+                : normalizePc(targetPc + (rng.bounded(2) == 0 ? -2 : +2));
+            BassEvent a;
+            a.midiNote = pickMidi(stepPc);
+            a.velocity = clampVelocity(int(std::round(double(main.velocity) * 0.60)));
+            a.offsetBeats = 0.5;
+            a.lengthBeats = 0.35;
+            out.push_back(a);
+        }
+    }
+
     // Multi-beat run fill: start on beat 3 (index 2), spans beats 3–4.
     if (ctx.beatInBar == 2 && nextChord && nextChord->rootPc >= 0) {
-        const double p = m_profile.twoBeatRunProb * (0.20 + 0.80 * m_intensity) + (ctx.isPhraseEnd ? 0.10 : 0.0);
+        const double p = m_profile.twoBeatRunProb * (0.25 + 0.75 * eff) + (ctx.isPhraseEnd ? 0.14 : 0.0);
         if (rng.generateDouble() < p) {
             const int targetPc = normalizePc(nextChord->rootPc);
             out = planTwoBeatRun(globalBeat, targetPc);
@@ -445,7 +555,7 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
     // Beat-4 options: enclosure into next bar, or classic pickup 8ths.
     if (ctx.beatInBar == 3 && nextChord && nextChord->rootPc >= 0) {
         const double phraseBoost = ctx.isPhraseEnd ? m_profile.fillProbPhraseEnd : 0.0;
-        const double enclosureP = (m_profile.enclosureProb + phraseBoost * 0.6) * (0.25 + 0.75 * m_intensity);
+        const double enclosureP = (m_profile.enclosureProb + phraseBoost * 0.7) * (0.35 + 0.65 * eff);
         if (rng.generateDouble() < enclosureP) {
             const int targetPc = normalizePc(nextChord->rootPc);
             const int above = normalizePc(targetPc + 1 + (rng.bounded(2) == 0 ? 0 : 1)); // +1 or +2
@@ -467,7 +577,7 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
             m_forcedStrongPc = targetPc;
         } else {
             const double base = m_profile.pickup8thProb;
-            const double p = (base + phraseBoost) * (0.25 + 0.75 * m_intensity);
+            const double p = (base + phraseBoost) * (0.35 + 0.65 * eff);
             if (rng.generateDouble() < p) {
                 const int targetPc = normalizePc(nextChord->rootPc);
                 const int approachPc = normalizePc(targetPc + (rng.bounded(2) == 0 ? -1 : +1));

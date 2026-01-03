@@ -33,6 +33,8 @@ struct BassBeatContext {
     bool isPhraseEnd = false;
     int phraseLengthBars = 4;
     quint32 sectionHash = 0;
+    int songPass = 0;     // 0..(totalPasses-1)
+    int totalPasses = 1;
 };
 
 class WalkingBassGenerator {
@@ -66,6 +68,9 @@ private:
     // Multi-beat planning and resolution targeting
     QHash<int, QVector<BassEvent>> m_planned; // globalBeat -> events
     int m_forcedStrongPc = -1;               // if set, prefer this pc on next strong beat
+
+    // Phrase-level planner state (so it doesn't feel static)
+    int m_phraseMode = 1; // 0=sparse, 1=normal, 2=busy
 };
 
 } // namespace music

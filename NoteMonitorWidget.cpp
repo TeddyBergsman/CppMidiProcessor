@@ -18,6 +18,38 @@ static QString normalizeKeyCenter(const QString& s) {
     return s.trimmed().toLower();
 }
 
+static QString stripDefaultSuffix(QString s) {
+    s = s.trimmed();
+    static const QString suffix = " (default)";
+    if (s.endsWith(suffix)) {
+        s.chop(suffix.size());
+        s = s.trimmed();
+    }
+    return s;
+}
+
+static QString shortKeyLabelFromKeyCenter(const QString& keyCenter) {
+    // "Bb major" -> "Bb", "G minor" -> "G-"
+    const QString trimmed = keyCenter.trimmed();
+    if (trimmed.isEmpty()) return {};
+    const QString lower = trimmed.toLower();
+    const bool isMinor = lower.contains("minor");
+    const QString tonic = trimmed.split(' ', Qt::SkipEmptyParts).value(0);
+    if (tonic.isEmpty()) return {};
+    return isMinor ? (tonic + "-") : tonic;
+}
+
+static QString keyCenterFromShortLabel(const QString& shortLabel) {
+    // "Bb" -> "Bb major", "G-" -> "G minor"
+    QString s = shortLabel.trimmed();
+    if (s.isEmpty()) return {};
+    const bool isMinor = s.endsWith('-');
+    if (isMinor) s.chop(1);
+    s = s.trimmed();
+    if (s.isEmpty()) return {};
+    return s + (isMinor ? " minor" : " major");
+}
+
 static QStringList orderedMajorKeyCenters() {
     // Requested ordering: C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B
     return {
@@ -58,28 +90,59 @@ static QStringList keyCentersForMode(bool isMinor) {
     return isMinor ? orderedMinorKeyCenters() : orderedMajorKeyCenters();
 }
 
-class KeyDefaultSuffixDelegate final : public QStyledItemDelegate {
-public:
-    explicit KeyDefaultSuffixDelegate(QObject* parent = nullptr)
-        : QStyledItemDelegate(parent) {}
+static void populateKeyCombo(QComboBox* combo,
+                             bool isMinorSong,
+                             const QString& detectedDefaultKeyCenter,
+                             const QString& selectedKeyCenter) {
+    if (!combo) return;
+    const QString defNorm = normalizeKeyCenter(detectedDefaultKeyCenter);
 
-    void setDefaultKeyCenter(const QString& keyCenter) {
-        m_default = normalizeKeyCenter(keyCenter);
-    }
+    const bool prevSignals = combo->blockSignals(true);
+    combo->clear();
 
-    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
-        QStyleOptionViewItem opt(option);
-        initStyleOption(&opt, index);
-        const QString text = index.data(Qt::DisplayRole).toString();
-        if (!m_default.isEmpty() && normalizeKeyCenter(text) == m_default) {
-            opt.text = text + " (default)";
+    const QStringList keys = keyCentersForMode(isMinorSong);
+    for (const QString& k : keys) {
+        QString label = shortKeyLabelFromKeyCenter(k);
+        if (!defNorm.isEmpty() && normalizeKeyCenter(k) == defNorm) {
+            label += " (default)";
         }
-        QStyledItemDelegate::paint(painter, opt, index);
+        combo->addItem(label);
+        combo->setItemData(combo->count() - 1, k, Qt::UserRole); // store canonical key (no suffix)
     }
 
-private:
-    QString m_default;
-};
+    auto findIndexByValue = [&](const QString& value) -> int {
+        for (int i = 0; i < combo->count(); ++i) {
+            if (normalizeKeyCenter(combo->itemData(i, Qt::UserRole).toString()) == normalizeKeyCenter(value)) {
+                return i;
+            }
+        }
+        return -1;
+    };
+
+    int idx = findIndexByValue(selectedKeyCenter);
+    if (idx < 0 && !selectedKeyCenter.isEmpty()) {
+        // If the detected/overridden key isn't in our list (rare), prepend it (still mode-consistent).
+        QString label = selectedKeyCenter;
+        if (!defNorm.isEmpty() && normalizeKeyCenter(selectedKeyCenter) == defNorm) {
+            label += " (default)";
+        }
+        combo->insertItem(0, label);
+        combo->setItemData(0, selectedKeyCenter, Qt::UserRole);
+        idx = 0;
+    }
+    if (idx >= 0) combo->setCurrentIndex(idx);
+
+    // Keep the closed combo label clean (no "(default)").
+    if (combo->isEditable() && combo->lineEdit()) {
+        const QString value = combo->currentData(Qt::UserRole).toString();
+        const QString shortLabel = value.isEmpty()
+            ? stripDefaultSuffix(combo->currentText())
+            : shortKeyLabelFromKeyCenter(value);
+        combo->lineEdit()->setText(shortLabel);
+    }
+
+    combo->blockSignals(prevSignals);
+}
 
 static int pitchClassFromSpelling(const QString& letter, const QString& accidental) {
     if (letter.isEmpty()) return -1;
@@ -323,8 +386,15 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_keyCombo->setEnabled(false);
     m_keyCombo->setFixedWidth(120);
     m_keyCombo->setStyleSheet("QComboBox { background-color: #111; color: #eee; padding: 4px; }");
-    m_keyCombo->addItems(orderedMajorKeyCenters());
-    m_keyCombo->setItemDelegate(new KeyDefaultSuffixDelegate(m_keyCombo));
+    // On macOS, the native combo popup ignores custom delegates.
+    // We instead encode "(default)" into the popup item text, while keeping the closed label clean
+    // by using an editable+read-only line edit showing the canonical key value.
+    m_keyCombo->setEditable(true);
+    if (m_keyCombo->lineEdit()) {
+        m_keyCombo->lineEdit()->setReadOnly(true);
+        m_keyCombo->lineEdit()->setStyleSheet("QLineEdit { background: transparent; border: none; color: #eee; padding: 0px; }");
+    }
+    populateKeyCombo(m_keyCombo, /*isMinorSong=*/false, /*default=*/{}, /*selected=*/"C major");
 
     m_playButton = new QPushButton("Play", chartHeader);
     m_playButton->setEnabled(false);
@@ -506,7 +576,14 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
 
     connect(m_keyCombo, &QComboBox::currentIndexChanged, this, [this](int /*idx*/) {
         if (!m_keyCombo) return;
-        const QString sel = m_keyCombo->currentText().trimmed();
+        QString sel = m_keyCombo->currentData(Qt::UserRole).toString().trimmed();
+        if (sel.isEmpty()) {
+            const QString shortLabel = stripDefaultSuffix(m_keyCombo->currentText());
+            sel = keyCenterFromShortLabel(shortLabel);
+        }
+        if (m_keyCombo->isEditable() && m_keyCombo->lineEdit()) {
+            m_keyCombo->lineEdit()->setText(shortKeyLabelFromKeyCenter(sel));
+        }
         if (!sel.isEmpty()) setKeyCenter(sel);
 
         // Persist per-song key override.
@@ -570,20 +647,7 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
     (void)pitchClassFromKeyCenter(m_detectedSongKeyCenter, &isMinorSong);
     if (m_keyCombo) {
         m_isApplyingSongState = true;
-        const bool prev = m_keyCombo->blockSignals(true);
-        m_keyCombo->clear();
-        m_keyCombo->addItems(keyCentersForMode(isMinorSong));
-        if (auto* d = dynamic_cast<KeyDefaultSuffixDelegate*>(m_keyCombo->itemDelegate())) {
-            d->setDefaultKeyCenter(m_detectedSongKeyCenter);
-        }
-        int kidx = m_keyCombo->findText(selectedKeyCenter);
-        if (kidx < 0 && !selectedKeyCenter.isEmpty()) {
-            // If the detected/overridden key isn't in our list (rare), prepend it (still mode-consistent).
-            m_keyCombo->insertItem(0, selectedKeyCenter);
-            kidx = 0;
-        }
-        if (kidx >= 0) m_keyCombo->setCurrentIndex(kidx);
-        m_keyCombo->blockSignals(prev);
+        populateKeyCombo(m_keyCombo, isMinorSong, m_detectedSongKeyCenter, selectedKeyCenter);
         m_isApplyingSongState = false;
     }
     if (!selectedKeyCenter.isEmpty()) setKeyCenter(selectedKeyCenter);

@@ -175,6 +175,7 @@ BandPlaybackEngine::BandPlaybackEngine(QObject* parent)
     m_tickTimer.setInterval(25);
     connect(&m_tickTimer, &QTimer::timeout, this, &BandPlaybackEngine::onTick);
     m_timingRng.seed(1u);
+    m_driftMs = 0;
 }
 
 void BandPlaybackEngine::setTempoBpm(int bpm) {
@@ -230,6 +231,7 @@ void BandPlaybackEngine::setChartModel(const chart::ChartModel& model) {
     m_lastEmittedCell = -1;
     m_lastBarIndex = -1;
     m_noteOnsInBar = 0;
+    m_driftMs = 0;
     // Clear any scheduled events.
     for (QTimer* t : m_pendingTimers) {
         if (!t) continue;
@@ -333,6 +335,7 @@ void BandPlaybackEngine::play() {
     m_lastEmittedCell = -1;
     m_lastBarIndex = -1;
     m_noteOnsInBar = 0;
+    m_driftMs = 0;
     m_tickTimer.start();
     // Let onTick emit the first cell (and first note) exactly once.
 }
@@ -361,6 +364,7 @@ void BandPlaybackEngine::stop() {
     m_lastEmittedCell = -1;
     m_lastBarIndex = -1;
     m_noteOnsInBar = 0;
+    m_driftMs = 0;
     m_bass.reset();
 
     emit currentCellChanged(-1);
@@ -400,6 +404,17 @@ void BandPlaybackEngine::onTick() {
     if (barIndex != m_lastBarIndex) {
         m_lastBarIndex = barIndex;
         m_noteOnsInBar = 0;
+
+        // Update slow timing drift once per bar (random-walk).
+        if (m_bassProfile.driftMaxMs > 0 && m_bassProfile.driftRate > 0.0) {
+            const int stepMax = std::max(1, int(std::round(double(m_bassProfile.driftMaxMs) * m_bassProfile.driftRate)));
+            const int delta = int(m_timingRng.bounded(stepMax * 2 + 1)) - stepMax;
+            m_driftMs += delta;
+            if (m_driftMs > m_bassProfile.driftMaxMs) m_driftMs = m_bassProfile.driftMaxMs;
+            if (m_driftMs < -m_bassProfile.driftMaxMs) m_driftMs = -m_bassProfile.driftMaxMs;
+        } else {
+            m_driftMs = 0;
+        }
     }
 
     const int beatInBar = cellIndex % 4;
@@ -453,6 +468,9 @@ void BandPlaybackEngine::onTick() {
     const int jitter = (m_bassProfile.microJitterMs > 0)
         ? (int(m_timingRng.bounded(m_bassProfile.microJitterMs * 2 + 1)) - m_bassProfile.microJitterMs)
         : 0;
+    const int attackVar = (m_bassProfile.attackVarianceMs > 0)
+        ? (int(m_timingRng.bounded(m_bassProfile.attackVarianceMs * 2 + 1)) - m_bassProfile.attackVarianceMs)
+        : 0;
     const int push = m_bassProfile.pushMs;
     const int laidBack = m_bassProfile.laidBackMs;
 
@@ -468,7 +486,7 @@ void BandPlaybackEngine::onTick() {
             const double deltaFrac = (ratio / (ratio + 1.0)) - 0.5; // e.g. 2:1 => 0.1666...
             swingMsLocal = int(std::round(beatMs * deltaFrac * m_bassProfile.swingAmount));
         }
-        return laidBack - push + jitter + swingMsLocal;
+        return laidBack - push + jitter + attackVar + m_driftMs + swingMsLocal;
     };
 
     auto schedule = [&](int delay, std::function<void()> fn) {
@@ -483,13 +501,6 @@ void BandPlaybackEngine::onTick() {
         });
         t->start(delay);
     };
-
-    // Ensure monophonic behavior: turn off previous beat's last note before first event.
-    if (m_lastBassMidi >= 0) {
-        const int prev = m_lastBassMidi;
-        schedule(0, [this, prev]() { emit bassNoteOff(m_bassProfile.midiChannel, prev); });
-        m_lastBassMidi = -1;
-    }
 
     // Sort by offset (generator should already do this).
     QVector<music::BassEvent> ev = events;
@@ -519,7 +530,7 @@ void BandPlaybackEngine::onTick() {
         if (e.ghost) {
             lenMs = int(std::round(std::max(20.0, beatMs * m_bassProfile.ghostGatePct)));
         }
-        lenMs = std::max(20, std::min(2000, lenMs));
+        lenMs = std::max(20, std::min(8000, lenMs));
 
         // Prevent overlap with next event-on.
         if (i + 1 < ev.size()) {
@@ -530,8 +541,16 @@ void BandPlaybackEngine::onTick() {
             lenMs = std::min(lenMs, std::max(10, nextDelayOn - delayOn - 1));
         }
 
-        const int note = e.midiNote;
+        int note = e.midiNote + m_bassProfile.transposeSemitones;
+        if (note < 0) note = 0;
+        if (note > 127) note = 127;
         const int vel = e.velocity;
+
+        // Monophonic behavior: release previous note right before new note-on.
+        if (m_lastBassMidi >= 0 && m_lastBassMidi != note) {
+            const int prev = m_lastBassMidi;
+            schedule(std::max(0, delayOn - 1), [this, prev]() { emit bassNoteOff(m_bassProfile.midiChannel, prev); });
+        }
         schedule(delayOn, [this, note, vel]() { emit bassNoteOn(m_bassProfile.midiChannel, note, vel); });
         schedule(delayOn + lenMs, [this, note]() { emit bassNoteOff(m_bassProfile.midiChannel, note); });
 

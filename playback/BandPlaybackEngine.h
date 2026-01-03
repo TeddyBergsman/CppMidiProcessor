@@ -70,6 +70,7 @@ private:
     // Human scheduling
     QVector<QTimer*> m_pendingTimers;
     QRandomGenerator m_timingRng;
+    int m_driftMs = 0; // slow random-walk timing drift
 
     QElapsedTimer m_clock;
     QTimer m_tickTimer;

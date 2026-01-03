@@ -24,6 +24,9 @@ QVector<BassPreset> BassPresets::all() {
         p.swingRatio = 2.2;
         p.laidBackMs = 4;
         p.microJitterMs = 3;
+        p.driftMaxMs = 10;
+        p.driftRate = 0.15;
+        p.attackVarianceMs = 4;
         p.baseVelocity = 86;
         p.velocityVariance = 10;
         p.chromaticism = 0.55;
@@ -38,6 +41,13 @@ QVector<BassPreset> BassPresets::all() {
         p.evolutionRate = 0.18;
         p.sectionRampStrength = 0.25;
         p.phraseLengthBars = 4;
+        p.twoFeelPhraseProb = 0.18;
+        p.brokenTimePhraseProb = 0.12;
+        p.restProb = 0.10;
+        p.tieProb = 0.22;
+        p.motifProb = 0.35;
+        p.motifStrength = 0.45;
+        p.motifVariation = 0.25;
         out.push_back({"default_modern", p.name, p});
     }
 
@@ -48,6 +58,9 @@ QVector<BassPreset> BassPresets::all() {
         p.swingRatio = 2.0;
         p.laidBackMs = 2;
         p.microJitterMs = 2;
+        p.driftMaxMs = 6;
+        p.driftRate = 0.10;
+        p.attackVarianceMs = 3;
         p.baseVelocity = 92;
         p.velocityVariance = 8;
         p.accentBeat1 = 1.10;
@@ -63,6 +76,13 @@ QVector<BassPreset> BassPresets::all() {
         p.intensityVariance = 0.20;
         p.evolutionRate = 0.14;
         p.sectionRampStrength = 0.18;
+        p.twoFeelPhraseProb = 0.10;
+        p.brokenTimePhraseProb = 0.06;
+        p.restProb = 0.06;
+        p.tieProb = 0.18;
+        p.motifProb = 0.20;
+        p.motifStrength = 0.25;
+        p.motifVariation = 0.15;
         out.push_back({"ray_brown", p.name, p});
     }
 
@@ -73,6 +93,9 @@ QVector<BassPreset> BassPresets::all() {
         p.swingRatio = 2.4;
         p.laidBackMs = 3;
         p.microJitterMs = 3;
+        p.driftMaxMs = 10;
+        p.driftRate = 0.18;
+        p.attackVarianceMs = 4;
         p.baseVelocity = 84;
         p.velocityVariance = 12;
         p.chromaticism = 0.70;
@@ -86,6 +109,13 @@ QVector<BassPreset> BassPresets::all() {
         p.intensityVariance = 0.35;
         p.evolutionRate = 0.22;
         p.sectionRampStrength = 0.30;
+        p.twoFeelPhraseProb = 0.16;
+        p.brokenTimePhraseProb = 0.10;
+        p.restProb = 0.08;
+        p.tieProb = 0.22;
+        p.motifProb = 0.40;
+        p.motifStrength = 0.55;
+        p.motifVariation = 0.30;
         out.push_back({"paul_chambers", p.name, p});
     }
 
@@ -96,6 +126,9 @@ QVector<BassPreset> BassPresets::all() {
         p.swingRatio = 2.1;
         p.laidBackMs = 6;
         p.microJitterMs = 2;
+        p.driftMaxMs = 12;
+        p.driftRate = 0.18;
+        p.attackVarianceMs = 4;
         p.baseVelocity = 80;
         p.velocityVariance = 10;
         p.chromaticism = 0.45;
@@ -114,6 +147,13 @@ QVector<BassPreset> BassPresets::all() {
         p.wRoot = 0.85;
         p.wThird = 0.95;
         p.wSeventh = 1.05;
+        p.twoFeelPhraseProb = 0.28;
+        p.brokenTimePhraseProb = 0.20;
+        p.restProb = 0.14;
+        p.tieProb = 0.30;
+        p.motifProb = 0.38;
+        p.motifStrength = 0.50;
+        p.motifVariation = 0.22;
         out.push_back({"ron_carter", p.name, p});
     }
 
@@ -125,6 +165,9 @@ QVector<BassPreset> BassPresets::all() {
         p.laidBackMs = 0;
         p.pushMs = 2;
         p.microJitterMs = 3;
+        p.driftMaxMs = 8;
+        p.driftRate = 0.20;
+        p.attackVarianceMs = 6;
         p.baseVelocity = 94;
         p.velocityVariance = 14;
         p.chromaticism = 0.55;
@@ -141,6 +184,13 @@ QVector<BassPreset> BassPresets::all() {
         p.evolutionRate = 0.24;
         p.sectionRampStrength = 0.18;
         p.phraseLengthBars = 2;
+        p.twoFeelPhraseProb = 0.05;
+        p.brokenTimePhraseProb = 0.05;
+        p.restProb = 0.05;
+        p.tieProb = 0.10;
+        p.motifProb = 0.55;
+        p.motifStrength = 0.70;
+        p.motifVariation = 0.30;
         out.push_back({"jamerson", p.name, p});
     }
 

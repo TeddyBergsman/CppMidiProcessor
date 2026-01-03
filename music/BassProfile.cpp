@@ -38,6 +38,7 @@ BassProfile loadBassProfile(QSettings& settings, const QString& prefix) {
     p.registerCenterMidi = clampInt(readInt(settings, base + "/registerCenterMidi", p.registerCenterMidi), 0, 127);
     p.registerRange = clampInt(readInt(settings, base + "/registerRange", p.registerRange), 0, 60);
     p.maxLeap = clampInt(readInt(settings, base + "/maxLeap", p.maxLeap), 0, 24);
+    p.transposeSemitones = clampInt(readInt(settings, base + "/transposeSemitones", p.transposeSemitones), -36, 36);
 
     p.honorSlashBass = readB(settings, base + "/honorSlashBass", p.honorSlashBass);
     p.slashBassProb = clampD(readD(settings, base + "/slashBassProb", p.slashBassProb), 0.0, 1.0);
@@ -48,6 +49,9 @@ BassProfile loadBassProfile(QSettings& settings, const QString& prefix) {
     p.microJitterMs = clampInt(readInt(settings, base + "/microJitterMs", p.microJitterMs), 0, 50);
     p.laidBackMs = clampInt(readInt(settings, base + "/laidBackMs", p.laidBackMs), -50, 50);
     p.pushMs = clampInt(readInt(settings, base + "/pushMs", p.pushMs), -50, 50);
+    p.driftMaxMs = clampInt(readInt(settings, base + "/driftMaxMs", p.driftMaxMs), 0, 80);
+    p.driftRate = clampD(readD(settings, base + "/driftRate", p.driftRate), 0.0, 1.0);
+    p.attackVarianceMs = clampInt(readInt(settings, base + "/attackVarianceMs", p.attackVarianceMs), 0, 40);
     p.noteLengthMs = clampInt(readInt(settings, base + "/noteLengthMs", p.noteLengthMs), 0, 2000);
     p.gatePct = clampD(readD(settings, base + "/gatePct", p.gatePct), 0.05, 1.0);
     p.humanizeSeed = readU32(settings, base + "/humanizeSeed", p.humanizeSeed);
@@ -60,6 +64,8 @@ BassProfile loadBassProfile(QSettings& settings, const QString& prefix) {
     p.accentBeat3 = clampD(readD(settings, base + "/accentBeat3", p.accentBeat3), 0.1, 2.0);
     p.accentBeat4 = clampD(readD(settings, base + "/accentBeat4", p.accentBeat4), 0.1, 2.0);
     p.phraseContourStrength = clampD(readD(settings, base + "/phraseContourStrength", p.phraseContourStrength), 0.0, 1.0);
+    p.phraseArcStrength = clampD(readD(settings, base + "/phraseArcStrength", p.phraseArcStrength), 0.0, 1.0);
+    p.sectionArcStrength = clampD(readD(settings, base + "/sectionArcStrength", p.sectionArcStrength), 0.0, 1.0);
 
     p.chromaticism = clampD(readD(settings, base + "/chromaticism", p.chromaticism), 0.0, 1.0);
     p.leapPenalty = clampD(readD(settings, base + "/leapPenalty", p.leapPenalty), 0.0, 1.0);
@@ -70,6 +76,10 @@ BassProfile loadBassProfile(QSettings& settings, const QString& prefix) {
     p.evolutionRate = clampD(readD(settings, base + "/evolutionRate", p.evolutionRate), 0.0, 1.0);
     p.sectionRampStrength = clampD(readD(settings, base + "/sectionRampStrength", p.sectionRampStrength), 0.0, 1.0);
     p.phraseLengthBars = clampInt(readInt(settings, base + "/phraseLengthBars", p.phraseLengthBars), 1, 16);
+    p.twoFeelPhraseProb = clampD(readD(settings, base + "/twoFeelPhraseProb", p.twoFeelPhraseProb), 0.0, 1.0);
+    p.brokenTimePhraseProb = clampD(readD(settings, base + "/brokenTimePhraseProb", p.brokenTimePhraseProb), 0.0, 1.0);
+    p.restProb = clampD(readD(settings, base + "/restProb", p.restProb), 0.0, 1.0);
+    p.tieProb = clampD(readD(settings, base + "/tieProb", p.tieProb), 0.0, 1.0);
 
     p.ghostNoteProb = clampD(readD(settings, base + "/ghostNoteProb", p.ghostNoteProb), 0.0, 1.0);
     p.ghostVelocity = clampInt(readInt(settings, base + "/ghostVelocity", p.ghostVelocity), 1, 60);
@@ -80,6 +90,9 @@ BassProfile loadBassProfile(QSettings& settings, const QString& prefix) {
     p.twoBeatRunProb = clampD(readD(settings, base + "/twoBeatRunProb", p.twoBeatRunProb), 0.0, 1.0);
     p.enclosureProb = clampD(readD(settings, base + "/enclosureProb", p.enclosureProb), 0.0, 1.0);
     p.sectionIntroRestraint = clampD(readD(settings, base + "/sectionIntroRestraint", p.sectionIntroRestraint), 0.0, 1.0);
+    p.motifProb = clampD(readD(settings, base + "/motifProb", p.motifProb), 0.0, 1.0);
+    p.motifStrength = clampD(readD(settings, base + "/motifStrength", p.motifStrength), 0.0, 1.0);
+    p.motifVariation = clampD(readD(settings, base + "/motifVariation", p.motifVariation), 0.0, 1.0);
 
     p.wRoot = clampD(readD(settings, base + "/wRoot", p.wRoot), 0.0, 3.0);
     p.wThird = clampD(readD(settings, base + "/wThird", p.wThird), 0.0, 3.0);
@@ -107,6 +120,7 @@ void saveBassProfile(QSettings& settings, const QString& prefix, const BassProfi
     settings.setValue(base + "/registerCenterMidi", p.registerCenterMidi);
     settings.setValue(base + "/registerRange", p.registerRange);
     settings.setValue(base + "/maxLeap", p.maxLeap);
+    settings.setValue(base + "/transposeSemitones", p.transposeSemitones);
 
     settings.setValue(base + "/honorSlashBass", p.honorSlashBass);
     settings.setValue(base + "/slashBassProb", p.slashBassProb);
@@ -117,6 +131,9 @@ void saveBassProfile(QSettings& settings, const QString& prefix, const BassProfi
     settings.setValue(base + "/microJitterMs", p.microJitterMs);
     settings.setValue(base + "/laidBackMs", p.laidBackMs);
     settings.setValue(base + "/pushMs", p.pushMs);
+    settings.setValue(base + "/driftMaxMs", p.driftMaxMs);
+    settings.setValue(base + "/driftRate", p.driftRate);
+    settings.setValue(base + "/attackVarianceMs", p.attackVarianceMs);
     settings.setValue(base + "/noteLengthMs", p.noteLengthMs);
     settings.setValue(base + "/gatePct", p.gatePct);
     settings.setValue(base + "/humanizeSeed", (qulonglong)p.humanizeSeed);
@@ -128,6 +145,8 @@ void saveBassProfile(QSettings& settings, const QString& prefix, const BassProfi
     settings.setValue(base + "/accentBeat3", p.accentBeat3);
     settings.setValue(base + "/accentBeat4", p.accentBeat4);
     settings.setValue(base + "/phraseContourStrength", p.phraseContourStrength);
+    settings.setValue(base + "/phraseArcStrength", p.phraseArcStrength);
+    settings.setValue(base + "/sectionArcStrength", p.sectionArcStrength);
 
     settings.setValue(base + "/chromaticism", p.chromaticism);
     settings.setValue(base + "/leapPenalty", p.leapPenalty);
@@ -138,6 +157,10 @@ void saveBassProfile(QSettings& settings, const QString& prefix, const BassProfi
     settings.setValue(base + "/evolutionRate", p.evolutionRate);
     settings.setValue(base + "/sectionRampStrength", p.sectionRampStrength);
     settings.setValue(base + "/phraseLengthBars", p.phraseLengthBars);
+    settings.setValue(base + "/twoFeelPhraseProb", p.twoFeelPhraseProb);
+    settings.setValue(base + "/brokenTimePhraseProb", p.brokenTimePhraseProb);
+    settings.setValue(base + "/restProb", p.restProb);
+    settings.setValue(base + "/tieProb", p.tieProb);
 
     settings.setValue(base + "/ghostNoteProb", p.ghostNoteProb);
     settings.setValue(base + "/ghostVelocity", p.ghostVelocity);
@@ -148,6 +171,9 @@ void saveBassProfile(QSettings& settings, const QString& prefix, const BassProfi
     settings.setValue(base + "/twoBeatRunProb", p.twoBeatRunProb);
     settings.setValue(base + "/enclosureProb", p.enclosureProb);
     settings.setValue(base + "/sectionIntroRestraint", p.sectionIntroRestraint);
+    settings.setValue(base + "/motifProb", p.motifProb);
+    settings.setValue(base + "/motifStrength", p.motifStrength);
+    settings.setValue(base + "/motifVariation", p.motifVariation);
 
     settings.setValue(base + "/wRoot", p.wRoot);
     settings.setValue(base + "/wThird", p.wThird);

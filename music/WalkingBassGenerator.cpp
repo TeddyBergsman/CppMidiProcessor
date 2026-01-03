@@ -127,6 +127,9 @@ void WalkingBassGenerator::reset() {
     m_planned.clear();
     m_forcedStrongPc = -1;
     m_phraseMode = 1;
+    m_motifSteps.clear();
+    m_motifIndex = 0;
+    m_hasMotif = false;
 }
 
 BassDecision WalkingBassGenerator::nextNote(int beatInBar, const ChordSymbol* currentChord, const ChordSymbol* nextChord) {
@@ -408,9 +411,25 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
         const double sectionBias = ((ctx.sectionHash % 101u) / 100.0) - 0.5; // [-0.5..0.5]
         const double desire = std::max(0.0, std::min(1.0, m_intensity + 0.20 * passBoost + 0.10 * sectionBias));
         const double r = rng.generateDouble();
-        if (r < 0.22 - 0.15 * desire) m_phraseMode = 0; // sparse
+        if (r < 0.22 - 0.15 * desire) m_phraseMode = 0; // sparse/broken tendency
         else if (r > 0.78 - 0.10 * desire) m_phraseMode = 2; // busy
         else m_phraseMode = 1; // normal
+    }
+
+    // Phrase style selection: walking vs 2-feel vs broken time.
+    // Determined once per phrase start, stored in m_phraseMode:
+    // 0 = broken time, 1 = walking, 2 = busy walking, 3 = 2-feel.
+    if (isPhraseStartBar) {
+        const double passBoost = (ctx.totalPasses > 1) ? (double(ctx.songPass) / double(std::max(1, ctx.totalPasses - 1))) : 0.0;
+        const double desire = std::max(0.0, std::min(1.0, m_intensity + 0.20 * passBoost));
+        const double r = rng.generateDouble();
+
+        const double pTwo = m_profile.twoFeelPhraseProb * (0.65 + 0.35 * (1.0 - desire));
+        const double pBroken = m_profile.brokenTimePhraseProb * (0.75 + 0.25 * (1.0 - desire));
+        if (r < pBroken) m_phraseMode = 0;
+        else if (r < pBroken + pTwo) m_phraseMode = 3;
+        else if (r > 0.72 - 0.20 * desire) m_phraseMode = 2;
+        else m_phraseMode = 1;
     }
 
     // Evolve intensity on bar boundaries.
@@ -447,12 +466,45 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
     // Compute per-beat “effective intensity” including phrase mode + pass arc.
     const double passArc = (ctx.totalPasses > 1) ? (double(ctx.songPass) / double(std::max(1, ctx.totalPasses - 1))) : 0.0;
     double modeMult = 1.0;
-    if (m_phraseMode == 0) modeMult = 0.75;
-    else if (m_phraseMode == 2) modeMult = 1.35;
+    if (m_phraseMode == 0) modeMult = 0.70;      // broken time = more space
+    else if (m_phraseMode == 2) modeMult = 1.35; // busy
+    else if (m_phraseMode == 3) modeMult = 0.85; // 2-feel: fewer notes but strong shape
     const double phraseArc = (phraseLen > 1) ? (double(barInPhrase) / double(phraseLen - 1)) : 0.0; // build within phrase
     double eff = m_intensity * modeMult + 0.18 * passArc + 0.10 * phraseArc;
     eff = std::max(0.0, std::min(1.0, eff));
     const double swing = std::max(0.0, std::min(1.0, m_profile.swingAmount));
+
+    // Motif: choose/refresh at phrase start so the line has identity and development.
+    if (isPhraseStartBar) {
+        const double motifP = m_profile.motifProb * (0.45 + 0.55 * eff);
+        if (!m_hasMotif && rng.generateDouble() < motifP) {
+            // Pick a small step motif (direction + small intervals).
+            const int dir = (rng.bounded(2) == 0) ? 1 : -1;
+            const int variant = int(rng.bounded(3));
+            m_motifSteps.clear();
+            if (variant == 0) m_motifSteps = {dir * 2, dir * 2, dir * 1};
+            else if (variant == 1) m_motifSteps = {dir * 2, dir * 1, dir * 2};
+            else m_motifSteps = {dir * 1, dir * 2, dir * 1, dir * -1};
+            m_motifIndex = 0;
+            m_hasMotif = true;
+        } else if (m_hasMotif) {
+            // Mutate slightly on later passes/sections.
+            const double mutateP = m_profile.motifVariation * (0.20 + 0.80 * passArc);
+            if (rng.generateDouble() < mutateP && !m_motifSteps.isEmpty()) {
+                const int i = int(rng.bounded(m_motifSteps.size()));
+                const int delta = (rng.bounded(2) == 0) ? -1 : +1;
+                m_motifSteps[i] = std::max(-3, std::min(3, m_motifSteps[i] + delta));
+            }
+            // Occasionally drop motif to avoid overuse.
+            if (rng.generateDouble() < 0.10 * (1.0 - m_profile.motifStrength)) {
+                m_hasMotif = false;
+                m_motifSteps.clear();
+                m_motifIndex = 0;
+            }
+        }
+    }
+
+    // 2-feel / broken time gating happens after we decide the main note.
 
     auto planTwoBeatRun = [&](int startBeat, int targetPc) {
         // Create a simple 4x8th run across beats 3 & 4 that leads into targetPc next bar.
@@ -507,7 +559,75 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
     e.midiNote = main.midiNote;
     e.velocity = main.velocity;
     e.offsetBeats = mainOffset;
-    out.push_back(e);
+
+    // 2-feel: articulate on beats 1 and 3, sustain across the following weak beat.
+    if (m_phraseMode == 3) {
+        if (ctx.beatInBar == 0 || ctx.beatInBar == 2) {
+            e.lengthBeats = 2.0; // sustain for 2 beats
+            out.push_back(e);
+        } else if (ctx.beatInBar == 1) {
+            return {}; // rest
+        } else {
+            // beat 4: optionally do a pickup/enclosure; else rest.
+            const double phraseBoost = ctx.isPhraseEnd ? m_profile.fillProbPhraseEnd : 0.0;
+            const double p = (m_profile.pickup8thProb + phraseBoost) * (0.20 + 0.80 * eff);
+            if (rng.generateDouble() < p && nextChord && nextChord->rootPc >= 0) {
+                out.push_back(e); // will be replaced by pickup/enclosure logic below
+            } else {
+                return {};
+            }
+        }
+    } else {
+        out.push_back(e);
+    }
+
+    // Apply phrase/section dynamic arc to the main note (and later to fills as well).
+    // Phrase arc: build slightly toward the end; Section arc: later passes are a touch stronger.
+    const double phraseEnv = 1.0 + (phraseArc - 0.5) * 2.0 * m_profile.phraseArcStrength * 0.25;
+    const double sectionEnv = 1.0 + passArc * m_profile.sectionArcStrength * 0.20;
+    for (auto& ev : out) {
+        double v = double(ev.velocity) * phraseEnv * sectionEnv;
+        ev.velocity = clampVelocity(int(std::round(v)));
+    }
+
+    // Broken time: probabilistically rest on weak beats; tie by extending strong beat note into next beat.
+    if (m_phraseMode == 0) {
+        const bool weak = (ctx.beatInBar == 1 || ctx.beatInBar == 3);
+        if (weak) {
+            const double pRest = m_profile.restProb * (0.40 + 0.60 * (1.0 - eff));
+            if (rng.generateDouble() < pRest) {
+                return {}; // rest
+            }
+            // if not resting, keep the note but slightly late for “laid-back broken time”
+            out[0].offsetBeats = std::max(out[0].offsetBeats, 0.125);
+        } else {
+            // Strong beat: sometimes tie over the following weak beat by extending length.
+            const double pTie = m_profile.tieProb * (0.25 + 0.75 * (1.0 - eff));
+            if (rng.generateDouble() < pTie) {
+                out[0].lengthBeats = std::max(out[0].lengthBeats, 2.0);
+                // Plan next beat as empty so we don't re-articulate.
+                m_planned.insert(globalBeat + 1, {});
+            }
+        }
+    }
+
+    // Motif influence: on beat 2 (index 1) and passing contexts, bias toward a motif step.
+    if (m_hasMotif && !m_motifSteps.isEmpty() && (ctx.beatInBar == 1 || ctx.beatInBar == 2) && rng.generateDouble() < m_profile.motifStrength) {
+        const int refMidi = (m_lastMidi >= 0) ? m_lastMidi : out.first().midiNote;
+        const int refPc = normalizePc(refMidi % 12);
+        const int step = m_motifSteps[m_motifIndex % m_motifSteps.size()];
+        m_motifIndex = (m_motifIndex + 1) % std::max(1, int(m_motifSteps.size()));
+        const int targetPc = normalizePc(refPc + step);
+        // Insert a quiet passing tone on the upbeat if we are otherwise “square”.
+        if (rng.generateDouble() < 0.35 + 0.35 * eff) {
+            BassEvent m;
+            m.midiNote = pickMidi(targetPc);
+            m.velocity = clampVelocity(int(std::round(double(out.first().velocity) * 0.65)));
+            m.offsetBeats = 0.5;
+            m.lengthBeats = 0.40;
+            out.push_back(m);
+        }
+    }
 
     // Ghost notes on weak beats (2 and 4 typically).
     const bool weakBeat = (ctx.beatInBar == 1 || ctx.beatInBar == 3);

@@ -77,12 +77,14 @@ void BassStyleEditorDialog::buildUi() {
     m_registerCenter = makeSpin(0, 127);
     m_registerRange = makeSpin(0, 60);
     m_maxLeap = makeSpin(0, 24);
+    m_transposeSemis = makeSpin(-36, 36);
     rangeForm->addRow("MIDI channel", m_channel);
     rangeForm->addRow("Min MIDI note", m_minNote);
     rangeForm->addRow("Max MIDI note", m_maxNote);
     rangeForm->addRow("Register center", m_registerCenter);
     rangeForm->addRow("Register range (+/-)", m_registerRange);
     rangeForm->addRow("Max leap (semitones)", m_maxLeap);
+    rangeForm->addRow("Output transpose (semitones)", m_transposeSemis);
 
     // --- Feel ---
     auto* feelBox = new QGroupBox("Timing / Articulation");
@@ -90,6 +92,9 @@ void BassStyleEditorDialog::buildUi() {
     m_jitterMs = makeSpin(0, 50);
     m_laidBackMs = makeSpin(-50, 50);
     m_pushMs = makeSpin(-50, 50);
+    m_driftMaxMs = makeSpin(0, 80);
+    m_driftRate = makeD(0.0, 1.0, 0.01, 2);
+    m_attackVarMs = makeSpin(0, 40);
     m_noteLengthMs = makeSpin(0, 2000);
     m_gatePct = makeD(0.05, 1.0, 0.01, 2);
     m_swingAmount = makeD(0.0, 1.0, 0.01, 2);
@@ -97,6 +102,9 @@ void BassStyleEditorDialog::buildUi() {
     feelForm->addRow("Micro jitter (ms +/-)", m_jitterMs);
     feelForm->addRow("Laid back (ms)", m_laidBackMs);
     feelForm->addRow("Push (ms)", m_pushMs);
+    feelForm->addRow("Timing drift max (ms)", m_driftMaxMs);
+    feelForm->addRow("Timing drift rate", m_driftRate);
+    feelForm->addRow("Attack variance (ms +/-)", m_attackVarMs);
     feelForm->addRow("Note length (ms; 0=gate)", m_noteLengthMs);
     feelForm->addRow("Gate (% of beat)", m_gatePct);
     feelForm->addRow("Swing amount", m_swingAmount);
@@ -111,12 +119,16 @@ void BassStyleEditorDialog::buildUi() {
     m_accent2 = makeD(0.1, 2.0, 0.02, 2);
     m_accent3 = makeD(0.1, 2.0, 0.02, 2);
     m_accent4 = makeD(0.1, 2.0, 0.02, 2);
+    m_phraseArc = makeD(0.0, 1.0, 0.01, 2);
+    m_sectionArc = makeD(0.0, 1.0, 0.01, 2);
     dynForm->addRow("Base velocity", m_baseVelocity);
     dynForm->addRow("Velocity variance (+/-)", m_velocityVariance);
     dynForm->addRow("Accent beat 1", m_accent1);
     dynForm->addRow("Accent beat 2", m_accent2);
     dynForm->addRow("Accent beat 3", m_accent3);
     dynForm->addRow("Accent beat 4", m_accent4);
+    dynForm->addRow("Phrase arc strength", m_phraseArc);
+    dynForm->addRow("Section arc strength", m_sectionArc);
 
     // --- Musical line ---
     auto* lineBox = new QGroupBox("Line & Harmony");
@@ -144,6 +156,13 @@ void BassStyleEditorDialog::buildUi() {
     m_pickup8thProb = makeD(0.0, 1.0, 0.01, 2);
     m_fillPhraseEnd = makeD(0.0, 1.0, 0.01, 2);
     m_syncopProb = makeD(0.0, 1.0, 0.01, 2);
+    m_twoFeelProb = makeD(0.0, 1.0, 0.01, 2);
+    m_brokenTimeProb = makeD(0.0, 1.0, 0.01, 2);
+    m_restProb = makeD(0.0, 1.0, 0.01, 2);
+    m_tieProb = makeD(0.0, 1.0, 0.01, 2);
+    m_motifProb = makeD(0.0, 1.0, 0.01, 2);
+    m_motifStrength = makeD(0.0, 1.0, 0.01, 2);
+    m_motifVariation = makeD(0.0, 1.0, 0.01, 2);
     // Extra human features
     auto* twoBeatRun = makeD(0.0, 1.0, 0.01, 2);
     twoBeatRun->setObjectName("twoBeatRunProb");
@@ -162,6 +181,13 @@ void BassStyleEditorDialog::buildUi() {
     advForm->addRow("Pickup 8th probability", m_pickup8thProb);
     advForm->addRow("Phrase-end fill boost", m_fillPhraseEnd);
     advForm->addRow("Syncopation probability", m_syncopProb);
+    advForm->addRow("2-feel phrase probability", m_twoFeelProb);
+    advForm->addRow("Broken-time phrase probability", m_brokenTimeProb);
+    advForm->addRow("Broken-time rest probability", m_restProb);
+    advForm->addRow("Broken-time tie probability", m_tieProb);
+    advForm->addRow("Motif probability", m_motifProb);
+    advForm->addRow("Motif strength", m_motifStrength);
+    advForm->addRow("Motif variation", m_motifVariation);
     advForm->addRow("2-beat run probability (beats 3–4)", twoBeatRun);
     advForm->addRow("Enclosure probability (beat 4)", enclosure);
     advForm->addRow("Section intro restraint", introRestraint);
@@ -256,6 +282,7 @@ void BassStyleEditorDialog::buildUi() {
             p.registerCenterMidi = cur.registerCenterMidi;
             p.registerRange = cur.registerRange;
             p.maxLeap = cur.maxLeap;
+            p.transposeSemitones = cur.transposeSemitones;
         }
 
         // Apply to UI + preview.
@@ -281,6 +308,7 @@ void BassStyleEditorDialog::setUiFromProfile(const music::BassProfile& p) {
     m_registerCenter->setValue(p.registerCenterMidi);
     m_registerRange->setValue(p.registerRange);
     m_maxLeap->setValue(p.maxLeap);
+    if (m_transposeSemis) m_transposeSemis->setValue(p.transposeSemitones);
 
     m_baseVelocity->setValue(p.baseVelocity);
     m_velocityVariance->setValue(p.velocityVariance);
@@ -288,10 +316,15 @@ void BassStyleEditorDialog::setUiFromProfile(const music::BassProfile& p) {
     m_accent2->setValue(p.accentBeat2);
     m_accent3->setValue(p.accentBeat3);
     m_accent4->setValue(p.accentBeat4);
+    if (m_phraseArc) m_phraseArc->setValue(p.phraseArcStrength);
+    if (m_sectionArc) m_sectionArc->setValue(p.sectionArcStrength);
 
     m_jitterMs->setValue(p.microJitterMs);
     m_laidBackMs->setValue(p.laidBackMs);
     m_pushMs->setValue(p.pushMs);
+    if (m_driftMaxMs) m_driftMaxMs->setValue(p.driftMaxMs);
+    if (m_driftRate) m_driftRate->setValue(p.driftRate);
+    if (m_attackVarMs) m_attackVarMs->setValue(p.attackVarianceMs);
     m_noteLengthMs->setValue(p.noteLengthMs);
     m_gatePct->setValue(p.gatePct);
     if (m_swingAmount) m_swingAmount->setValue(p.swingAmount);
@@ -312,6 +345,13 @@ void BassStyleEditorDialog::setUiFromProfile(const music::BassProfile& p) {
     if (m_pickup8thProb) m_pickup8thProb->setValue(p.pickup8thProb);
     if (m_fillPhraseEnd) m_fillPhraseEnd->setValue(p.fillProbPhraseEnd);
     if (m_syncopProb) m_syncopProb->setValue(p.syncopationProb);
+    if (m_twoFeelProb) m_twoFeelProb->setValue(p.twoFeelPhraseProb);
+    if (m_brokenTimeProb) m_brokenTimeProb->setValue(p.brokenTimePhraseProb);
+    if (m_restProb) m_restProb->setValue(p.restProb);
+    if (m_tieProb) m_tieProb->setValue(p.tieProb);
+    if (m_motifProb) m_motifProb->setValue(p.motifProb);
+    if (m_motifStrength) m_motifStrength->setValue(p.motifStrength);
+    if (m_motifVariation) m_motifVariation->setValue(p.motifVariation);
     if (auto* w = findChild<QDoubleSpinBox*>("twoBeatRunProb")) w->setValue(p.twoBeatRunProb);
     if (auto* w = findChild<QDoubleSpinBox*>("enclosureProb")) w->setValue(p.enclosureProb);
     if (auto* w = findChild<QDoubleSpinBox*>("sectionIntroRestraint")) w->setValue(p.sectionIntroRestraint);
@@ -337,6 +377,7 @@ music::BassProfile BassStyleEditorDialog::profileFromUi() const {
     p.registerCenterMidi = m_registerCenter->value();
     p.registerRange = m_registerRange->value();
     p.maxLeap = m_maxLeap->value();
+    if (m_transposeSemis) p.transposeSemitones = m_transposeSemis->value();
 
     p.baseVelocity = m_baseVelocity->value();
     p.velocityVariance = m_velocityVariance->value();
@@ -344,10 +385,15 @@ music::BassProfile BassStyleEditorDialog::profileFromUi() const {
     p.accentBeat2 = m_accent2->value();
     p.accentBeat3 = m_accent3->value();
     p.accentBeat4 = m_accent4->value();
+    if (m_phraseArc) p.phraseArcStrength = m_phraseArc->value();
+    if (m_sectionArc) p.sectionArcStrength = m_sectionArc->value();
 
     p.microJitterMs = m_jitterMs->value();
     p.laidBackMs = m_laidBackMs->value();
     p.pushMs = m_pushMs->value();
+    if (m_driftMaxMs) p.driftMaxMs = m_driftMaxMs->value();
+    if (m_driftRate) p.driftRate = m_driftRate->value();
+    if (m_attackVarMs) p.attackVarianceMs = m_attackVarMs->value();
     p.noteLengthMs = m_noteLengthMs->value();
     p.gatePct = m_gatePct->value();
     if (m_swingAmount) p.swingAmount = m_swingAmount->value();
@@ -368,6 +414,13 @@ music::BassProfile BassStyleEditorDialog::profileFromUi() const {
     if (m_pickup8thProb) p.pickup8thProb = m_pickup8thProb->value();
     if (m_fillPhraseEnd) p.fillProbPhraseEnd = m_fillPhraseEnd->value();
     if (m_syncopProb) p.syncopationProb = m_syncopProb->value();
+    if (m_twoFeelProb) p.twoFeelPhraseProb = m_twoFeelProb->value();
+    if (m_brokenTimeProb) p.brokenTimePhraseProb = m_brokenTimeProb->value();
+    if (m_restProb) p.restProb = m_restProb->value();
+    if (m_tieProb) p.tieProb = m_tieProb->value();
+    if (m_motifProb) p.motifProb = m_motifProb->value();
+    if (m_motifStrength) p.motifStrength = m_motifStrength->value();
+    if (m_motifVariation) p.motifVariation = m_motifVariation->value();
     if (auto* w = findChild<QDoubleSpinBox*>("twoBeatRunProb")) p.twoBeatRunProb = w->value();
     if (auto* w = findChild<QDoubleSpinBox*>("enclosureProb")) p.enclosureProb = w->value();
     if (auto* w = findChild<QDoubleSpinBox*>("sectionIntroRestraint")) p.sectionIntroRestraint = w->value();

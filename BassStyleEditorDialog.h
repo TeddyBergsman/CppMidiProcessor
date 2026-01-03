@@ -44,6 +44,7 @@ private:
     QSpinBox* m_registerCenter = nullptr;
     QSpinBox* m_registerRange = nullptr;
     QSpinBox* m_maxLeap = nullptr;
+    QSpinBox* m_transposeSemis = nullptr;
 
     QSpinBox* m_baseVelocity = nullptr;
     QSpinBox* m_velocityVariance = nullptr;
@@ -51,10 +52,15 @@ private:
     QDoubleSpinBox* m_accent2 = nullptr;
     QDoubleSpinBox* m_accent3 = nullptr;
     QDoubleSpinBox* m_accent4 = nullptr;
+    QDoubleSpinBox* m_phraseArc = nullptr;
+    QDoubleSpinBox* m_sectionArc = nullptr;
 
     QSpinBox* m_jitterMs = nullptr;
     QSpinBox* m_laidBackMs = nullptr;
     QSpinBox* m_pushMs = nullptr;
+    QSpinBox* m_driftMaxMs = nullptr;
+    QDoubleSpinBox* m_driftRate = nullptr;
+    QSpinBox* m_attackVarMs = nullptr;
     QSpinBox* m_noteLengthMs = nullptr;
     QDoubleSpinBox* m_gatePct = nullptr;
     QDoubleSpinBox* m_swingAmount = nullptr;
@@ -77,6 +83,13 @@ private:
     QDoubleSpinBox* m_pickup8thProb = nullptr;
     QDoubleSpinBox* m_fillPhraseEnd = nullptr;
     QDoubleSpinBox* m_syncopProb = nullptr;
+    QDoubleSpinBox* m_twoFeelProb = nullptr;
+    QDoubleSpinBox* m_brokenTimeProb = nullptr;
+    QDoubleSpinBox* m_restProb = nullptr;
+    QDoubleSpinBox* m_tieProb = nullptr;
+    QDoubleSpinBox* m_motifProb = nullptr;
+    QDoubleSpinBox* m_motifStrength = nullptr;
+    QDoubleSpinBox* m_motifVariation = nullptr;
 
     QDoubleSpinBox* m_wRoot = nullptr;
     QDoubleSpinBox* m_wThird = nullptr;

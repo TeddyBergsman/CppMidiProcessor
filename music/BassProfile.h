@@ -21,6 +21,7 @@ struct BassProfile {
     int registerCenterMidi = 36; // C2-ish center
     int registerRange = 12;      // +/- semitones around center
     int maxLeap = 7;             // semitones; larger leaps get penalized
+    int transposeSemitones = 12; // output transpose (default +12 = 1 octave up)
 
     // Harmony interpretation
     bool honorSlashBass = true;
@@ -33,6 +34,9 @@ struct BassProfile {
     int microJitterMs = 3;       // +/- ms random timing (pros are tight)
     int laidBackMs = 5;          // constant behind-the-beat
     int pushMs = 0;              // constant ahead-of-the-beat (negative feel)
+    int driftMaxMs = 10;         // slow timing drift max (+/-) across bars (human feel)
+    double driftRate = 0.15;     // 0..1 random-walk rate per bar
+    int attackVarianceMs = 4;    // additional per-note attack variance (+/-)
     int noteLengthMs = 0;        // 0 => derived from gatePct
     double gatePct = 0.85;       // 0..1 of beat length
     quint32 humanizeSeed = 1;    // stable per-song randomness
@@ -45,6 +49,8 @@ struct BassProfile {
     double accentBeat3 = 0.88;
     double accentBeat4 = 0.78;
     double phraseContourStrength = 0.15; // 0..1 bar-level contour
+    double phraseArcStrength = 0.25;     // 0..1 phrase-level cresc/decresc
+    double sectionArcStrength = 0.20;    // 0..1 across section / song passes
 
     // Musical line shaping
     double chromaticism = 0.55;  // 0..1 overall
@@ -58,6 +64,12 @@ struct BassProfile {
     double sectionRampStrength = 0.25;  // 0..1 ramp within section
     int phraseLengthBars = 4;           // typical jazz phrasing
 
+    // Broken time / space (to avoid “every beat forever”)
+    double twoFeelPhraseProb = 0.18;      // probability a phrase switches to 2-feel (half notes)
+    double brokenTimePhraseProb = 0.12;   // probability a phrase uses broken time (rests/ties)
+    double restProb = 0.10;               // chance of resting on a weak beat in broken time
+    double tieProb = 0.22;                // chance to tie/sustain across the next beat in broken time
+
     // Rhythmic variation (walking-oriented)
     double ghostNoteProb = 0.18;        // probability of dead/ghost note on weak beats
     int ghostVelocity = 18;             // 1..50 typical
@@ -70,6 +82,11 @@ struct BassProfile {
     double twoBeatRunProb = 0.18;       // 2-beat 8th-note run spanning beats 3–4
     double enclosureProb = 0.20;        // 2-note enclosure into next bar target (beat 4)
     double sectionIntroRestraint = 0.55; // 0..1 reduces intensity in first bar after section change
+
+    // Motif / development (phrase-level melodic identity)
+    double motifProb = 0.35;           // probability a phrase adopts a motif
+    double motifStrength = 0.45;       // 0..1 how strongly it influences passing tones/fills
+    double motifVariation = 0.25;      // 0..1 how much the motif mutates across repeats/passes
 
     // Target chord-tone weights for strong beats (1 & 3): root/3rd/5th/7th
     double wRoot = 1.00;

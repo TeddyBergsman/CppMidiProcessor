@@ -22,6 +22,10 @@ struct BassEvent {
     double lengthBeats = 0.0;
     // If true, treat as “dead/ghost” note (short, quiet).
     bool ghost = false;
+    // If true, do not re-articulate if same note continues (tie across beats).
+    bool tie = false;
+    // If true, explicit rest (no note). This event is ignored by the engine.
+    bool rest = false;
 };
 
 struct BassBeatContext {
@@ -71,6 +75,11 @@ private:
 
     // Phrase-level planner state (so it doesn't feel static)
     int m_phraseMode = 1; // 0=sparse, 1=normal, 2=busy
+
+    // Motif memory (phrase-level melodic identity)
+    QVector<int> m_motifSteps; // semitone steps (in pitch classes, signed)
+    int m_motifIndex = 0;
+    bool m_hasMotif = false;
 };
 
 } // namespace music

@@ -90,6 +90,7 @@ private:
     QComboBox* m_keyCombo = nullptr;
     QPushButton* m_playButton = nullptr;
     QSpinBox* m_tempoSpin = nullptr;
+    QSpinBox* m_repeatsSpin = nullptr;
     playback::SilentPlaybackEngine* m_playback = nullptr;
     ireal::Playlist* m_playlist = nullptr; // owned pointer to avoid header includes
 

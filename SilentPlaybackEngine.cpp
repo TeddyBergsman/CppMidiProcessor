@@ -18,6 +18,10 @@ void SilentPlaybackEngine::setTotalCells(int totalCells) {
     m_totalCells = qMax(0, totalCells);
 }
 
+void SilentPlaybackEngine::setRepeats(int repeats) {
+    m_repeats = qMax(1, repeats);
+}
+
 void SilentPlaybackEngine::play() {
     if (m_totalCells <= 0) return;
     m_playing = true;
@@ -41,11 +45,12 @@ void SilentPlaybackEngine::onTick() {
     const qint64 elapsedMs = m_clock.elapsed();
     const int cell = int(elapsedMs / beatMs);
 
-    if (cell >= m_totalCells) {
+    const int total = m_totalCells * qMax(1, m_repeats);
+    if (cell >= total) {
         stop();
         return;
     }
-    emit currentCellChanged(cell);
+    emit currentCellChanged(cell % m_totalCells);
 }
 
 } // namespace playback

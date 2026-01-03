@@ -407,9 +407,18 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_tempoSpin->setEnabled(false);
     m_tempoSpin->setFixedWidth(110);
 
+    m_repeatsSpin = new QSpinBox(chartHeader);
+    m_repeatsSpin->setRange(1, 16);
+    m_repeatsSpin->setValue(3);
+    m_repeatsSpin->setSuffix("x");
+    m_repeatsSpin->setToolTip("Repeats");
+    m_repeatsSpin->setEnabled(false);
+    m_repeatsSpin->setFixedWidth(60);
+
     headerLayout->addWidget(m_songCombo, 1);
     headerLayout->addWidget(m_keyCombo, 0);
     headerLayout->addWidget(m_tempoSpin, 0);
+    headerLayout->addWidget(m_repeatsSpin, 0);
     headerLayout->addWidget(m_playButton, 0);
     chartHeader->setLayout(headerLayout);
 
@@ -613,6 +622,14 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
         }
     });
 
+    connect(m_repeatsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int reps) {
+        if (m_playback) m_playback->setRepeats(reps);
+        if (!m_isApplyingSongState && !m_currentSongId.isEmpty()) {
+            QSettings s;
+            s.setValue(overrideGroupForSongId(m_currentSongId) + "/repeats", reps);
+        }
+    });
+
     connect(m_playButton, &QPushButton::clicked, this, [this]() {
         if (!m_playback) return;
         if (m_playback->isPlaying()) {
@@ -672,6 +689,18 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
 
     m_playback->setTempoBpm(bpm);
     if (m_pitchMonitor) m_pitchMonitor->setBpm(bpm);
+
+    // Repeats preference: song metadata if present, else default 3; overridable per-song.
+    int reps = song.actualRepeats > 0 ? song.actualRepeats : 3;
+    const int overriddenReps = settings.value(group + "/repeats", 0).toInt();
+    if (overriddenReps > 0) reps = overriddenReps;
+    if (m_repeatsSpin) {
+        m_repeatsSpin->blockSignals(true);
+        m_repeatsSpin->setValue(reps);
+        m_repeatsSpin->blockSignals(false);
+    }
+    if (m_playback) m_playback->setRepeats(reps);
+
     int totalBars = 0;
     for (const auto& line : m_baseChartModel.lines) totalBars += line.bars.size();
     m_playback->setTotalCells(totalBars * 4);
@@ -695,6 +724,7 @@ void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
     const bool hasSongs = !m_playlist->songs.isEmpty();
     m_songCombo->setEnabled(hasSongs);
     m_tempoSpin->setEnabled(hasSongs);
+    if (m_repeatsSpin) m_repeatsSpin->setEnabled(hasSongs);
     if (m_keyCombo) m_keyCombo->setEnabled(hasSongs);
     m_playButton->setEnabled(false);
 

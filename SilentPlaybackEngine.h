@@ -15,6 +15,7 @@ public:
 
     void setTempoBpm(int bpm);
     void setTotalCells(int totalCells);
+    void setRepeats(int repeats);
 
     bool isPlaying() const { return m_playing; }
 
@@ -31,6 +32,7 @@ private slots:
 private:
     int m_bpm = 120;
     int m_totalCells = 0;
+    int m_repeats = 3;
 
     bool m_playing = false;
     QElapsedTimer m_clock;

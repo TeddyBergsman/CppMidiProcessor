@@ -45,6 +45,7 @@ private slots:
 private:
     QVector<const chart::Bar*> flattenBars() const;
     QVector<int> buildPlaybackSequence() const;
+    QVector<QString> buildBarSections() const;
 
     const chart::Cell* cellForFlattenedIndex(int cellIndex) const;
     bool chordForCellIndex(int cellIndex, music::ChordSymbol& outChord, bool& isNewChord);
@@ -56,6 +57,7 @@ private:
 
     chart::ChartModel m_model;
     QVector<int> m_sequence;
+    QVector<QString> m_barSections; // barIndex -> section label ("" if unknown)
 
     music::WalkingBassGenerator m_bass;
     music::BassProfile m_bassProfile;

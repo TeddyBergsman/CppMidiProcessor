@@ -8,6 +8,7 @@ class QCheckBox;
 class QSpinBox;
 class QDoubleSpinBox;
 class QDialogButtonBox;
+class QGroupBox;
 
 class BassStyleEditorDialog : public QDialog {
     Q_OBJECT
@@ -52,6 +53,20 @@ private:
     QDoubleSpinBox* m_chromaticism = nullptr;
     QCheckBox* m_honorSlash = nullptr;
     QDoubleSpinBox* m_slashProb = nullptr;
+
+    // Evolution/variation (advanced)
+    QGroupBox* m_advBox = nullptr;
+    QDoubleSpinBox* m_intensityBase = nullptr;
+    QDoubleSpinBox* m_intensityVar = nullptr;
+    QDoubleSpinBox* m_evolutionRate = nullptr;
+    QDoubleSpinBox* m_sectionRamp = nullptr;
+    QSpinBox* m_phraseBars = nullptr;
+    QDoubleSpinBox* m_ghostProb = nullptr;
+    QSpinBox* m_ghostVel = nullptr;
+    QDoubleSpinBox* m_ghostGate = nullptr;
+    QDoubleSpinBox* m_pickup8thProb = nullptr;
+    QDoubleSpinBox* m_fillPhraseEnd = nullptr;
+    QDoubleSpinBox* m_syncopProb = nullptr;
 
     QDoubleSpinBox* m_wRoot = nullptr;
     QDoubleSpinBox* m_wThird = nullptr;

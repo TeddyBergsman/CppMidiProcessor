@@ -88,6 +88,34 @@ void BassStyleEditorDialog::buildUi() {
     lineForm->addRow(m_honorSlash);
     lineForm->addRow("Slash probability", m_slashProb);
 
+    // --- Advanced evolution / variation ---
+    m_advBox = new QGroupBox("Advanced: Evolution & Variation");
+    m_advBox->setCheckable(true);
+    m_advBox->setChecked(false);
+    auto* advForm = new QFormLayout(m_advBox);
+    m_intensityBase = makeD(0.0, 1.0, 0.01, 2);
+    m_intensityVar = makeD(0.0, 1.0, 0.01, 2);
+    m_evolutionRate = makeD(0.0, 1.0, 0.01, 2);
+    m_sectionRamp = makeD(0.0, 1.0, 0.01, 2);
+    m_phraseBars = makeSpin(1, 16);
+    m_ghostProb = makeD(0.0, 1.0, 0.01, 2);
+    m_ghostVel = makeSpin(1, 60);
+    m_ghostGate = makeD(0.05, 0.8, 0.01, 2);
+    m_pickup8thProb = makeD(0.0, 1.0, 0.01, 2);
+    m_fillPhraseEnd = makeD(0.0, 1.0, 0.01, 2);
+    m_syncopProb = makeD(0.0, 1.0, 0.01, 2);
+    advForm->addRow("Intensity base", m_intensityBase);
+    advForm->addRow("Intensity variance", m_intensityVar);
+    advForm->addRow("Evolution rate", m_evolutionRate);
+    advForm->addRow("Section ramp", m_sectionRamp);
+    advForm->addRow("Phrase length (bars)", m_phraseBars);
+    advForm->addRow("Ghost note probability", m_ghostProb);
+    advForm->addRow("Ghost velocity", m_ghostVel);
+    advForm->addRow("Ghost gate (% beat)", m_ghostGate);
+    advForm->addRow("Pickup 8th probability", m_pickup8thProb);
+    advForm->addRow("Phrase-end fill boost", m_fillPhraseEnd);
+    advForm->addRow("Syncopation probability", m_syncopProb);
+
     auto* weightsBox = new QGroupBox("Chord-tone target weights (beats 1 & 3)");
     auto* weightsForm = new QFormLayout(weightsBox);
     m_wRoot = makeD(0.0, 3.0, 0.05, 2);
@@ -117,6 +145,7 @@ void BassStyleEditorDialog::buildUi() {
     grid->addWidget(lineBox, 1, 1);
     grid->addWidget(weightsBox, 2, 0);
     grid->addWidget(appBox, 2, 1);
+    grid->addWidget(m_advBox, 3, 0, 1, 2);
 
     root->addWidget(m_enabled);
     root->addLayout(grid, 1);
@@ -172,6 +201,18 @@ void BassStyleEditorDialog::setUiFromProfile(const music::BassProfile& p) {
     m_honorSlash->setChecked(p.honorSlashBass);
     m_slashProb->setValue(p.slashBassProb);
 
+    if (m_intensityBase) m_intensityBase->setValue(p.intensityBase);
+    if (m_intensityVar) m_intensityVar->setValue(p.intensityVariance);
+    if (m_evolutionRate) m_evolutionRate->setValue(p.evolutionRate);
+    if (m_sectionRamp) m_sectionRamp->setValue(p.sectionRampStrength);
+    if (m_phraseBars) m_phraseBars->setValue(p.phraseLengthBars);
+    if (m_ghostProb) m_ghostProb->setValue(p.ghostNoteProb);
+    if (m_ghostVel) m_ghostVel->setValue(p.ghostVelocity);
+    if (m_ghostGate) m_ghostGate->setValue(p.ghostGatePct);
+    if (m_pickup8thProb) m_pickup8thProb->setValue(p.pickup8thProb);
+    if (m_fillPhraseEnd) m_fillPhraseEnd->setValue(p.fillProbPhraseEnd);
+    if (m_syncopProb) m_syncopProb->setValue(p.syncopationProb);
+
     m_wRoot->setValue(p.wRoot);
     m_wThird->setValue(p.wThird);
     m_wFifth->setValue(p.wFifth);
@@ -210,6 +251,18 @@ music::BassProfile BassStyleEditorDialog::profileFromUi() const {
     p.chromaticism = m_chromaticism->value();
     p.honorSlashBass = m_honorSlash->isChecked();
     p.slashBassProb = m_slashProb->value();
+
+    if (m_intensityBase) p.intensityBase = m_intensityBase->value();
+    if (m_intensityVar) p.intensityVariance = m_intensityVar->value();
+    if (m_evolutionRate) p.evolutionRate = m_evolutionRate->value();
+    if (m_sectionRamp) p.sectionRampStrength = m_sectionRamp->value();
+    if (m_phraseBars) p.phraseLengthBars = m_phraseBars->value();
+    if (m_ghostProb) p.ghostNoteProb = m_ghostProb->value();
+    if (m_ghostVel) p.ghostVelocity = m_ghostVel->value();
+    if (m_ghostGate) p.ghostGatePct = m_ghostGate->value();
+    if (m_pickup8thProb) p.pickup8thProb = m_pickup8thProb->value();
+    if (m_fillPhraseEnd) p.fillProbPhraseEnd = m_fillPhraseEnd->value();
+    if (m_syncopProb) p.syncopationProb = m_syncopProb->value();
 
     p.wRoot = m_wRoot->value();
     p.wThird = m_wThird->value();

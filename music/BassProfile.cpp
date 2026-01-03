@@ -65,6 +65,19 @@ BassProfile loadBassProfile(QSettings& settings, const QString& prefix) {
     p.leapPenalty = clampD(readD(settings, base + "/leapPenalty", p.leapPenalty), 0.0, 1.0);
     p.repetitionPenalty = clampD(readD(settings, base + "/repetitionPenalty", p.repetitionPenalty), 0.0, 1.0);
 
+    p.intensityBase = clampD(readD(settings, base + "/intensityBase", p.intensityBase), 0.0, 1.0);
+    p.intensityVariance = clampD(readD(settings, base + "/intensityVariance", p.intensityVariance), 0.0, 1.0);
+    p.evolutionRate = clampD(readD(settings, base + "/evolutionRate", p.evolutionRate), 0.0, 1.0);
+    p.sectionRampStrength = clampD(readD(settings, base + "/sectionRampStrength", p.sectionRampStrength), 0.0, 1.0);
+    p.phraseLengthBars = clampInt(readInt(settings, base + "/phraseLengthBars", p.phraseLengthBars), 1, 16);
+
+    p.ghostNoteProb = clampD(readD(settings, base + "/ghostNoteProb", p.ghostNoteProb), 0.0, 1.0);
+    p.ghostVelocity = clampInt(readInt(settings, base + "/ghostVelocity", p.ghostVelocity), 1, 60);
+    p.ghostGatePct = clampD(readD(settings, base + "/ghostGatePct", p.ghostGatePct), 0.05, 0.8);
+    p.pickup8thProb = clampD(readD(settings, base + "/pickup8thProb", p.pickup8thProb), 0.0, 1.0);
+    p.fillProbPhraseEnd = clampD(readD(settings, base + "/fillProbPhraseEnd", p.fillProbPhraseEnd), 0.0, 1.0);
+    p.syncopationProb = clampD(readD(settings, base + "/syncopationProb", p.syncopationProb), 0.0, 1.0);
+
     p.wRoot = clampD(readD(settings, base + "/wRoot", p.wRoot), 0.0, 3.0);
     p.wThird = clampD(readD(settings, base + "/wThird", p.wThird), 0.0, 3.0);
     p.wFifth = clampD(readD(settings, base + "/wFifth", p.wFifth), 0.0, 3.0);
@@ -116,6 +129,19 @@ void saveBassProfile(QSettings& settings, const QString& prefix, const BassProfi
     settings.setValue(base + "/chromaticism", p.chromaticism);
     settings.setValue(base + "/leapPenalty", p.leapPenalty);
     settings.setValue(base + "/repetitionPenalty", p.repetitionPenalty);
+
+    settings.setValue(base + "/intensityBase", p.intensityBase);
+    settings.setValue(base + "/intensityVariance", p.intensityVariance);
+    settings.setValue(base + "/evolutionRate", p.evolutionRate);
+    settings.setValue(base + "/sectionRampStrength", p.sectionRampStrength);
+    settings.setValue(base + "/phraseLengthBars", p.phraseLengthBars);
+
+    settings.setValue(base + "/ghostNoteProb", p.ghostNoteProb);
+    settings.setValue(base + "/ghostVelocity", p.ghostVelocity);
+    settings.setValue(base + "/ghostGatePct", p.ghostGatePct);
+    settings.setValue(base + "/pickup8thProb", p.pickup8thProb);
+    settings.setValue(base + "/fillProbPhraseEnd", p.fillProbPhraseEnd);
+    settings.setValue(base + "/syncopationProb", p.syncopationProb);
 
     settings.setValue(base + "/wRoot", p.wRoot);
     settings.setValue(base + "/wThird", p.wThird);

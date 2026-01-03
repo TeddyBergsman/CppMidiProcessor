@@ -153,6 +153,21 @@ static QVector<int> buildPlaybackSequenceFrom(const chart::ChartModel& model) {
     return seq;
 }
 
+static QVector<QString> buildBarSectionsFrom(const chart::ChartModel& model) {
+    QVector<QString> sections;
+    sections.reserve(256);
+    QString current;
+    for (const auto& line : model.lines) {
+        if (!line.sectionLabel.trimmed().isEmpty()) {
+            current = line.sectionLabel.trimmed();
+        }
+        for (int i = 0; i < line.bars.size(); ++i) {
+            sections.push_back(current);
+        }
+    }
+    return sections;
+}
+
 } // namespace
 
 BandPlaybackEngine::BandPlaybackEngine(QObject* parent)
@@ -207,6 +222,7 @@ void BandPlaybackEngine::setBassProfile(const music::BassProfile& p) {
 void BandPlaybackEngine::setChartModel(const chart::ChartModel& model) {
     m_model = model;
     m_sequence = buildPlaybackSequenceFrom(m_model);
+    m_barSections = buildBarSectionsFrom(m_model);
     m_lastChord = music::ChordSymbol{};
     m_hasLastChord = false;
     m_lastBassMidi = -1;
@@ -404,8 +420,31 @@ void BandPlaybackEngine::onTick() {
     bool haveNext = chordForNextCellIndex(cellIndex, next);
     const music::ChordSymbol* nextPtr = haveNext ? &next : &cur;
 
-    const auto decision = m_bass.nextNote(beatInBar, &cur, nextPtr);
-    if (decision.midiNote < 0 || decision.velocity <= 0) return;
+    // Build beat context for evolving performance.
+    music::BassBeatContext ctx;
+    ctx.barIndex = barIndex;
+    ctx.beatInBar = beatInBar;
+    ctx.isNewBar = (beatInBar == 0);
+    ctx.phraseLengthBars = std::max(1, m_bassProfile.phraseLengthBars);
+    const QString sec = (barIndex >= 0 && barIndex < m_barSections.size()) ? m_barSections[barIndex] : QString();
+    ctx.sectionHash = (quint32)qHash(sec);
+    // Detect section change based on previous bar.
+    if (ctx.isNewBar) {
+        const QString prevSec = (barIndex - 1 >= 0 && barIndex - 1 < m_barSections.size()) ? m_barSections[barIndex - 1] : QString();
+        ctx.isSectionChange = (sec != prevSec) && (!sec.isEmpty() || !prevSec.isEmpty());
+        // barInSection: count backwards until section changes.
+        int count = 0;
+        for (int b = barIndex; b >= 0; --b) {
+            const QString s = (b >= 0 && b < m_barSections.size()) ? m_barSections[b] : QString();
+            if (s != sec) break;
+            count++;
+        }
+        ctx.barInSection = std::max(0, count - 1);
+        ctx.isPhraseEnd = (((ctx.barInSection + 1) % ctx.phraseLengthBars) == 0);
+    }
+
+    const auto events = m_bass.nextBeat(ctx, &cur, nextPtr);
+    if (events.isEmpty()) return;
 
     // Human timing: schedule note events within the beat.
     const double beatStartMs = double(step) * beatMs;
@@ -415,20 +454,20 @@ void BandPlaybackEngine::onTick() {
     const int push = m_bassProfile.pushMs;
     const int laidBack = m_bassProfile.laidBackMs;
 
-    // Minimal swing feel on off-beats (subtle; true swing comes later with subdivisions).
-    const int offbeat = (beatInBar % 2 == 1) ? 1 : 0;
-    const int swingMs = offbeat ? int(std::round(6.0 * m_bassProfile.swingAmount)) : 0;
-
-    const int timingOffsetMs = laidBack - push + jitter + swingMs;
-    int delayOn = int(std::round(beatStartMs + double(timingOffsetMs) - double(elapsedMs)));
-    if (delayOn < 0) delayOn = 0;
-
-    int noteLen = m_bassProfile.noteLengthMs;
-    if (noteLen <= 0) {
-        noteLen = int(std::round(beatMs * m_bassProfile.gatePct));
-    }
-    noteLen = std::max(30, std::min(2000, noteLen));
-    const int delayOff = delayOn + noteLen;
+    // Schedule events (possibly multiple per beat).
+    auto calcBaseOffsetMs = [&](double offsetBeats) -> int {
+        // Swing feel: delay upbeat 8ths proportionally when swingAmount>0.
+        int swingMsLocal = 0;
+        const double frac = offsetBeats - std::floor(offsetBeats);
+        const bool isUpbeat8th = std::fabs(frac - 0.5) < 0.001;
+        if (isUpbeat8th) {
+            // Convert swingRatio into extra delay of the upbeat (0..~60ms typical at medium tempi).
+            const double ratio = std::max(1.2, std::min(4.0, m_bassProfile.swingRatio));
+            const double deltaFrac = (ratio / (ratio + 1.0)) - 0.5; // e.g. 2:1 => 0.1666...
+            swingMsLocal = int(std::round(beatMs * deltaFrac * m_bassProfile.swingAmount));
+        }
+        return laidBack - push + jitter + swingMsLocal;
+    };
 
     auto schedule = [&](int delay, std::function<void()> fn) {
         if (delay < 0) delay = 0;
@@ -443,29 +482,65 @@ void BandPlaybackEngine::onTick() {
         t->start(delay);
     };
 
-    // Ensure monophonic behavior: schedule previous note off at (or before) this note-on.
+    // Ensure monophonic behavior: turn off previous beat's last note before first event.
     if (m_lastBassMidi >= 0) {
         const int prev = m_lastBassMidi;
-        schedule(std::max(0, delayOn - 1), [this, prev]() {
-            emit bassNoteOff(m_bassProfile.midiChannel, prev);
-        });
+        schedule(0, [this, prev]() { emit bassNoteOff(m_bassProfile.midiChannel, prev); });
+        m_lastBassMidi = -1;
     }
 
-    const int note = decision.midiNote;
-    const int vel = decision.velocity;
-    schedule(delayOn, [this, note, vel]() {
-        emit bassNoteOn(m_bassProfile.midiChannel, note, vel);
-    });
-    schedule(delayOff, [this, note]() {
-        emit bassNoteOff(m_bassProfile.midiChannel, note);
+    // Sort by offset (generator should already do this).
+    QVector<music::BassEvent> ev = events;
+    std::sort(ev.begin(), ev.end(), [](const music::BassEvent& a, const music::BassEvent& b) {
+        return a.offsetBeats < b.offsetBeats;
     });
 
-    m_lastBassMidi = note;
-    m_noteOnsInBar += 1;
-    if (m_noteOnsInBar > 6) {
+    // Schedule note-ons/offs. Clamp note lengths so events don't overlap (strict monophonic).
+    for (int i = 0; i < ev.size(); ++i) {
+        const auto& e = ev[i];
+        if (e.midiNote < 0 || e.velocity <= 0) continue;
+
+        const double offset = std::max(0.0, std::min(0.95, e.offsetBeats));
+        const double tOnMs = beatStartMs + offset * beatMs;
+        int delayOn = int(std::round(tOnMs + double(calcBaseOffsetMs(offset)) - double(elapsedMs)));
+        if (delayOn < 0) delayOn = 0;
+
+        // Determine desired length.
+        int lenMs = 0;
+        if (e.lengthBeats > 0.0) {
+            lenMs = int(std::round(beatMs * e.lengthBeats));
+        } else if (m_bassProfile.noteLengthMs > 0) {
+            lenMs = m_bassProfile.noteLengthMs;
+        } else {
+            lenMs = int(std::round(beatMs * m_bassProfile.gatePct));
+        }
+        if (e.ghost) {
+            lenMs = int(std::round(std::max(20.0, beatMs * m_bassProfile.ghostGatePct)));
+        }
+        lenMs = std::max(20, std::min(2000, lenMs));
+
+        // Prevent overlap with next event-on.
+        if (i + 1 < ev.size()) {
+            const double nextOffset = std::max(0.0, std::min(0.95, ev[i + 1].offsetBeats));
+            const double nextOnMs = beatStartMs + nextOffset * beatMs;
+            int nextDelayOn = int(std::round(nextOnMs + double(calcBaseOffsetMs(nextOffset)) - double(elapsedMs)));
+            if (nextDelayOn < 0) nextDelayOn = 0;
+            lenMs = std::min(lenMs, std::max(10, nextDelayOn - delayOn - 1));
+        }
+
+        const int note = e.midiNote;
+        const int vel = e.velocity;
+        schedule(delayOn, [this, note, vel]() { emit bassNoteOn(m_bassProfile.midiChannel, note, vel); });
+        schedule(delayOn + lenMs, [this, note]() { emit bassNoteOff(m_bassProfile.midiChannel, note); });
+
+        m_lastBassMidi = note;
+        m_noteOnsInBar += 1;
+    }
+
+    // Updated sanity: allow up to 16 note-ons per bar (accounts for 8ths + ghosts).
+    if (m_noteOnsInBar > 16) {
         qWarning("Bass sanity: too many notes in bar %d (count=%d). Silencing bass.",
                  m_lastBarIndex, m_noteOnsInBar);
-        // Fail safe: cancel pending events and send all-notes-off for bass channel.
         for (QTimer* t : m_pendingTimers) {
             if (!t) continue;
             t->stop();

@@ -51,6 +51,21 @@ struct BassProfile {
     double leapPenalty = 0.25;   // 0..1
     double repetitionPenalty = 0.35; // 0..1
 
+    // Evolution / creativity (so the “musician” changes over the song)
+    double intensityBase = 0.35;        // 0..1 average intensity
+    double intensityVariance = 0.35;    // 0..1 random-walk amplitude
+    double evolutionRate = 0.18;        // 0..1 how quickly intensity drifts
+    double sectionRampStrength = 0.25;  // 0..1 ramp within section
+    int phraseLengthBars = 4;           // typical jazz phrasing
+
+    // Rhythmic variation (walking-oriented)
+    double ghostNoteProb = 0.10;        // probability of dead/ghost note on weak beats
+    int ghostVelocity = 18;             // 1..50 typical
+    double ghostGatePct = 0.20;         // short length for dead notes
+    double pickup8thProb = 0.12;        // 8th-note pickup on beat 4 (two notes in beat)
+    double fillProbPhraseEnd = 0.22;    // additional fill chance at phrase ends (beat 4)
+    double syncopationProb = 0.10;      // 0..1 occasional offbeat placement (within beat)
+
     // Target chord-tone weights for strong beats (1 & 3): root/3rd/5th/7th
     double wRoot = 1.00;
     double wThird = 0.75;

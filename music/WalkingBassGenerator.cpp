@@ -114,6 +114,8 @@ void WalkingBassGenerator::reset() {
     m_lastBarBeat = -1;
     m_lastStepPc = -1;
     m_rngState = (m_profile.humanizeSeed == 0) ? 1u : m_profile.humanizeSeed;
+    m_intensity = std::max(0.0, std::min(1.0, m_profile.intensityBase));
+    m_lastSectionHash = 0;
 }
 
 BassDecision WalkingBassGenerator::nextNote(int beatInBar, const ChordSymbol* currentChord, const ChordSymbol* nextChord) {
@@ -301,6 +303,115 @@ BassDecision WalkingBassGenerator::nextNote(int beatInBar, const ChordSymbol* cu
     }
     d.velocity = clampVelocity(int(std::round(vel)));
     return d;
+}
+
+QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, const ChordSymbol* currentChord, const ChordSymbol* nextChord) {
+    QVector<BassEvent> out;
+    if (!m_profile.enabled) return out;
+    if (!currentChord || currentChord->noChord || currentChord->placeholder || currentChord->rootPc < 0) return out;
+
+    // Stable RNG.
+    QRandomGenerator rng(m_rngState);
+    const quint32 advance = rng.generate();
+    m_rngState = advance ? advance : (m_rngState + 1u);
+
+    // Evolve intensity on bar boundaries.
+    if (ctx.isNewBar) {
+        // Reset-ish on section change, but keep continuity.
+        if (ctx.isSectionChange && ctx.sectionHash != 0 && ctx.sectionHash != m_lastSectionHash) {
+            // Start new section closer to base intensity.
+            m_intensity = 0.65 * m_intensity + 0.35 * m_profile.intensityBase;
+            m_lastSectionHash = ctx.sectionHash;
+        }
+
+        // Section ramp: slowly increases within section.
+        const double ramp = (ctx.phraseLengthBars > 0)
+            ? (double(ctx.barInSection % std::max(1, ctx.phraseLengthBars)) / double(std::max(1, ctx.phraseLengthBars - 1)))
+            : 0.0;
+        const double target = std::max(0.0, std::min(1.0, m_profile.intensityBase + m_profile.sectionRampStrength * 0.35 * ramp));
+
+        // Random-walk noise (bounded).
+        const double noise = (rng.generateDouble() - 0.5) * 2.0 * m_profile.intensityVariance * 0.20;
+        m_intensity += (target - m_intensity) * m_profile.evolutionRate + noise;
+        m_intensity = std::max(0.0, std::min(1.0, m_intensity));
+    }
+
+    // Always produce at least one “main” note for the beat.
+    const BassDecision main = nextNote(ctx.beatInBar, currentChord, nextChord);
+    if (main.midiNote < 0 || main.velocity <= 0) return out;
+
+    // Syncopation: occasionally place the note slightly late/early within the beat.
+    double mainOffset = 0.0;
+    if (rng.generateDouble() < (m_profile.syncopationProb * (0.30 + 0.70 * m_intensity))) {
+        // 16th-ish placement
+        mainOffset = (rng.bounded(2) == 0) ? 0.25 : 0.125;
+    }
+
+    BassEvent e;
+    e.midiNote = main.midiNote;
+    e.velocity = main.velocity;
+    e.offsetBeats = mainOffset;
+    out.push_back(e);
+
+    // Ghost notes on weak beats (2 and 4 typically).
+    const bool weakBeat = (ctx.beatInBar == 1 || ctx.beatInBar == 3);
+    if (weakBeat) {
+        const double gProb = m_profile.ghostNoteProb * (0.25 + 0.75 * m_intensity);
+        if (rng.generateDouble() < gProb) {
+            BassEvent g;
+            g.ghost = true;
+            g.midiNote = main.midiNote; // dead note at same pitch (feels percussive)
+            g.velocity = std::max(1, std::min(60, m_profile.ghostVelocity + int((rng.generateDouble() - 0.5) * 8.0)));
+            g.offsetBeats = 0.5;        // upbeat 8th
+            g.lengthBeats = std::max(0.05, std::min(0.5, m_profile.ghostGatePct));
+            out.push_back(g);
+        }
+    }
+
+    // Phrase-end / beat-4 pickups (two 8ths) for creativity.
+    if (ctx.beatInBar == 3) {
+        const double base = m_profile.pickup8thProb;
+        const double phraseBoost = ctx.isPhraseEnd ? m_profile.fillProbPhraseEnd : 0.0;
+        const double p = (base + phraseBoost) * (0.25 + 0.75 * m_intensity);
+        if (rng.generateDouble() < p && nextChord && nextChord->rootPc >= 0) {
+            // Build a small fill: first an 8th-note passing tone, then the approach tone we already chose.
+            // We reuse nextNote scoring by temporarily setting beat=3 logic via nextNote() and then derive a passing tone.
+            const int targetPc = normalizePc(nextChord->rootPc);
+            const int approachPc = normalizePc(targetPc + (rng.bounded(2) == 0 ? -1 : +1));
+            const int passingPc = normalizePc(approachPc + (rng.bounded(2) == 0 ? -2 : +2));
+
+            auto pickMidi = [&](int pc) {
+                const int ref = (m_lastMidi >= 0) ? m_lastMidi : m_profile.registerCenterMidi;
+                return pickMidiForPcNear(pc, ref, m_profile.minMidiNote, m_profile.maxMidiNote);
+            };
+
+            BassEvent p1;
+            p1.midiNote = pickMidi(passingPc);
+            p1.velocity = clampVelocity(int(std::round(double(main.velocity) * 0.85)));
+            p1.offsetBeats = 0.0;
+            p1.lengthBeats = 0.45;
+
+            BassEvent p2;
+            p2.midiNote = pickMidi(approachPc);
+            p2.velocity = clampVelocity(int(std::round(double(main.velocity) * 0.95)));
+            p2.offsetBeats = 0.5;
+            p2.lengthBeats = 0.45;
+
+            // Replace the on-beat main note with the two-8th pickup on beat 4.
+            out.clear();
+            out.push_back(p1);
+            out.push_back(p2);
+            // Update last midi to end on the approach note.
+            m_lastMidi = p2.midiNote;
+        }
+    }
+
+    // Ensure deterministic ordering by offset.
+    std::sort(out.begin(), out.end(), [](const BassEvent& a, const BassEvent& b) {
+        return a.offsetBeats < b.offsetBeats;
+    });
+
+    return out;
 }
 
 } // namespace music

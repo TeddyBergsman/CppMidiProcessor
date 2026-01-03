@@ -5,7 +5,10 @@
 #include "chart/SongChartWidget.h"
 #include "chart/IRealProgressionParser.h"
 #include "ireal/IRealTypes.h"
-#include "SilentPlaybackEngine.h"
+#include "playback/BandPlaybackEngine.h"
+#include "midiprocessor.h"
+#include "music/BassProfile.h"
+#include "BassStyleEditorDialog.h"
 #include <QtWidgets>
 #include <cmath>
 #include <QGraphicsOpacityEffect>
@@ -435,6 +438,18 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     headerLayout->addWidget(m_keyCombo, 0);
     headerLayout->addWidget(m_tempoSpin, 0);
     headerLayout->addWidget(m_repeatsSpin, 0);
+
+    m_bassToggle = new QCheckBox("Bass", chartHeader);
+    m_bassToggle->setEnabled(false);
+    m_bassToggle->setChecked(false);
+    m_bassToggle->setStyleSheet("QCheckBox { color: #eee; }");
+    headerLayout->addWidget(m_bassToggle, 0);
+
+    m_bassEditButton = new QPushButton("Bass…", chartHeader);
+    m_bassEditButton->setEnabled(false);
+    m_bassEditButton->setFixedWidth(64);
+    headerLayout->addWidget(m_bassEditButton, 0);
+
     headerLayout->addWidget(m_playButton, 0);
     chartHeader->setLayout(headerLayout);
 
@@ -445,9 +460,9 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     chartLayout->addWidget(m_chartWidget, 1);
     m_chartContainer->setLayout(chartLayout);
 
-    // Silent playback engine
-    m_playback = new playback::SilentPlaybackEngine(this);
-    connect(m_playback, &playback::SilentPlaybackEngine::currentCellChanged,
+    // Band playback engine (drives highlighting + virtual musicians)
+    m_playback = new playback::BandPlaybackEngine(this);
+    connect(m_playback, &playback::BandPlaybackEngine::currentCellChanged,
             m_chartWidget, &chart::SongChartWidget::setCurrentCellIndex);
 
     auto makeSection = [&](const QString& title,
@@ -648,6 +663,61 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
         }
     });
 
+    connect(m_bassToggle, &QCheckBox::toggled, this, [this](bool enabled) {
+        if (!m_playback) return;
+        m_bassProfile.enabled = enabled;
+        m_playback->setBassProfile(m_bassProfile);
+
+        if (!m_isApplyingSongState && !m_currentSongId.isEmpty()) {
+            QSettings s;
+            const QString prefix = overrideGroupForSongId(m_currentSongId) + "/bassProfile";
+            music::saveBassProfile(s, prefix, m_bassProfile);
+        }
+    });
+
+    connect(m_bassEditButton, &QPushButton::clicked, this, [this]() {
+        if (!m_playback || m_currentSongId.isEmpty()) return;
+        const music::BassProfile snapshot = m_bassProfile;
+        BassStyleEditorDialog dlg(m_bassProfile, this);
+
+        connect(&dlg, &BassStyleEditorDialog::profilePreview, this, [this](const music::BassProfile& p) {
+            m_bassProfile = p;
+            if (m_bassToggle) {
+                const bool prev = m_isApplyingSongState;
+                m_isApplyingSongState = true;
+                m_bassToggle->setChecked(m_bassProfile.enabled);
+                m_isApplyingSongState = prev;
+            }
+            if (m_playback) m_playback->setBassProfile(m_bassProfile);
+        });
+        connect(&dlg, &BassStyleEditorDialog::profileCommitted, this, [this](const music::BassProfile& p) {
+            m_bassProfile = p;
+            if (m_playback) m_playback->setBassProfile(m_bassProfile);
+            if (m_bassToggle) {
+                const bool prev = m_isApplyingSongState;
+                m_isApplyingSongState = true;
+                m_bassToggle->setChecked(m_bassProfile.enabled);
+                m_isApplyingSongState = prev;
+            }
+            QSettings s;
+            const QString prefix = overrideGroupForSongId(m_currentSongId) + "/bassProfile";
+            music::saveBassProfile(s, prefix, m_bassProfile);
+        });
+
+        const int rc = dlg.exec();
+        if (rc != QDialog::Accepted) {
+            // Cancel restores the snapshot.
+            m_bassProfile = snapshot;
+            if (m_playback) m_playback->setBassProfile(m_bassProfile);
+            if (m_bassToggle) {
+                const bool prev = m_isApplyingSongState;
+                m_isApplyingSongState = true;
+                m_bassToggle->setChecked(m_bassProfile.enabled);
+                m_isApplyingSongState = prev;
+            }
+        }
+    });
+
     connect(m_playButton, &QPushButton::clicked, this, [this]() {
         if (!m_playback) return;
         if (m_playback->isPlaying()) {
@@ -658,6 +728,19 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
             m_playButton->setText("Stop");
         }
     });
+}
+
+void NoteMonitorWidget::setMidiProcessor(MidiProcessor* processor) {
+    m_midiProcessor = processor;
+    if (!m_playback || !m_midiProcessor) return;
+
+    // Route virtual bass MIDI events through MidiProcessor's thread-safe enqueuing slots.
+    connect(m_playback, &playback::BandPlaybackEngine::bassNoteOn,
+            m_midiProcessor, &MidiProcessor::sendVirtualNoteOn, Qt::UniqueConnection);
+    connect(m_playback, &playback::BandPlaybackEngine::bassNoteOff,
+            m_midiProcessor, &MidiProcessor::sendVirtualNoteOff, Qt::UniqueConnection);
+    connect(m_playback, &playback::BandPlaybackEngine::bassAllNotesOff,
+            m_midiProcessor, &MidiProcessor::sendVirtualAllNotesOff, Qt::UniqueConnection);
 }
 
 void NoteMonitorWidget::loadSongAtIndex(int idx) {
@@ -699,6 +782,37 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
         if (m_playback) m_playback->setChartModel(m);
     }
 
+    // Apply per-song bass settings.
+    if (m_bassToggle && m_playback) {
+        const QString prefix = group + "/bassProfile";
+        const bool hasProfile = settings.contains(prefix + "/version") || settings.contains(prefix + "/enabled");
+
+        music::BassProfile p;
+        if (hasProfile) {
+            p = music::loadBassProfile(settings, prefix);
+        } else {
+            // Back-compat: import old simple bass settings if present.
+            const QString bg = group + "/bass";
+            p = music::defaultBassProfile();
+            p.enabled = settings.value(bg + "/enabled", false).toBool();
+            p.midiChannel = settings.value(bg + "/channel", 3).toInt();
+            p.baseVelocity = settings.value(bg + "/velocity", 90).toInt();
+            p.minMidiNote = settings.value(bg + "/minNote", 28).toInt();
+            p.maxMidiNote = settings.value(bg + "/maxNote", 48).toInt();
+            p.honorSlashBass = settings.value(bg + "/honorSlash", true).toBool();
+            p.chromaticism = settings.value(bg + "/chromaticism", 0.6).toDouble();
+            // Derive a stable per-song seed if none was persisted.
+            p.humanizeSeed = (quint32)qHash(m_currentSongId);
+            if (p.humanizeSeed == 0) p.humanizeSeed = 1;
+        }
+
+        m_bassProfile = p;
+        m_isApplyingSongState = true;
+        m_bassToggle->setChecked(m_bassProfile.enabled);
+        m_isApplyingSongState = false;
+        m_playback->setBassProfile(m_bassProfile);
+    }
+
     // Tempo preference: song tempo if present, else current spin.
     int bpm = song.actualTempoBpm > 0 ? song.actualTempoBpm : m_tempoSpin->value();
     const int overriddenTempo = settings.value(group + "/tempoBpm", 0).toInt();
@@ -721,10 +835,6 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
     }
     if (m_playback) m_playback->setRepeats(reps);
 
-    int totalBars = 0;
-    for (const auto& line : m_baseChartModel.lines) totalBars += line.bars.size();
-    m_playback->setTotalCells(totalBars * 4);
-
     m_playButton->setEnabled(true);
 }
 
@@ -746,12 +856,15 @@ void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
     m_tempoSpin->setEnabled(hasSongs);
     if (m_repeatsSpin) m_repeatsSpin->setEnabled(hasSongs);
     if (m_keyCombo) m_keyCombo->setEnabled(hasSongs);
+    if (m_bassToggle) m_bassToggle->setEnabled(hasSongs);
+    if (m_bassEditButton) m_bassEditButton->setEnabled(hasSongs);
     m_playButton->setEnabled(false);
 
     if (!hasSongs) {
         if (m_chartWidget) m_chartWidget->clear();
         if (m_playback) m_playback->stop();
         m_playButton->setText("Play");
+        if (m_bassToggle) m_bassToggle->setChecked(false);
         return;
     }
 

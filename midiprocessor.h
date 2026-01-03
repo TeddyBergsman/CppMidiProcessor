@@ -38,6 +38,10 @@ public slots:
     void setTranspose(int semitones);
     void applyTranspose(int semitones);
     void loadTrackTimeline(int index);
+    // Virtual musician MIDI (thread-safe; enqueued to worker thread)
+    void sendVirtualNoteOn(int channel, int note, int velocity);
+    void sendVirtualNoteOff(int channel, int note);
+    void sendVirtualAllNotesOff(int channel);
 
 private slots:
     void pollLogQueue();
@@ -75,7 +79,7 @@ signals:
 
 private:
     enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, PLAY_TRACK, PAUSE_TRACK, TRANSPOSE_CHANGE };
-    enum class MidiSource { Guitar, VoiceAmp, VoicePitch };
+    enum class MidiSource { Guitar, VoiceAmp, VoicePitch, VirtualBand };
     struct MidiEvent {
         EventType type;
         std::vector<unsigned char> message;

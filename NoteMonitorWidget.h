@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include "chart/ChartModel.h"
+#include "music/BassProfile.h"
 class WaveVisualizer;
 
 class QLabel;
@@ -10,10 +11,12 @@ class QVBoxLayout;
 class QComboBox;
 class QPushButton;
 class QSpinBox;
+class QCheckBox;
 
 namespace ireal { struct Playlist; }
 namespace chart { class SongChartWidget; }
-namespace playback { class SilentPlaybackEngine; }
+namespace playback { class BandPlaybackEngine; }
+class MidiProcessor;
 
 class NoteMonitorWidget : public QWidget {
     Q_OBJECT
@@ -22,6 +25,7 @@ public:
     ~NoteMonitorWidget() override;
     void setKeyCenter(const QString& keyCenter);
     void setIRealPlaylist(const ireal::Playlist& playlist);
+    void setMidiProcessor(MidiProcessor* processor);
 
 public slots:
     void setGuitarNote(int midiNote, double cents);
@@ -89,10 +93,17 @@ private:
     QComboBox* m_songCombo = nullptr;
     QComboBox* m_keyCombo = nullptr;
     QPushButton* m_playButton = nullptr;
+    QCheckBox* m_bassToggle = nullptr;
+    QPushButton* m_bassEditButton = nullptr;
     QSpinBox* m_tempoSpin = nullptr;
     QSpinBox* m_repeatsSpin = nullptr;
-    playback::SilentPlaybackEngine* m_playback = nullptr;
+    playback::BandPlaybackEngine* m_playback = nullptr;
     ireal::Playlist* m_playlist = nullptr; // owned pointer to avoid header includes
+
+    MidiProcessor* m_midiProcessor = nullptr; // not owned
+
+    // Current per-song bass profile (mirrored for UI/editor convenience)
+    music::BassProfile m_bassProfile;
 
     // Last state for positioning
     int m_lastGuitarNote = -1;

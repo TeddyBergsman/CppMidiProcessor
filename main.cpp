@@ -9,6 +9,7 @@
 
 #include "ireal/HtmlPlaylistParser.h"
 #include "chart/IRealProgressionParser.h"
+#include "music/SelfTest.h"
 
 int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
@@ -16,6 +17,12 @@ int main(int argc, char *argv[]) {
     // QSettings identity (needed for Preferences persistence)
     QCoreApplication::setOrganizationName("TeddyBergsman");
     QCoreApplication::setApplicationName("CppMidiProcessor");
+
+    // Optional debug-only self tests for music theory utilities.
+    // Run only when explicitly requested to avoid aborting startup on assertion failures.
+    if (QCoreApplication::arguments().contains("--music-selftest")) {
+        music::runMusicSelfTests();
+    }
 
     // Debug/dump mode: parse an iReal HTML and print chart/barline info, then exit.
     // Usage:

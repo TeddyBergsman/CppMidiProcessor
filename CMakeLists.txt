@@ -31,6 +31,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   RtMidi.cpp
   NoteMonitorWidget.h
   NoteMonitorWidget.cpp
+  BassStyleEditorDialog.h
+  BassStyleEditorDialog.cpp
   PitchMonitorWidget.h
   PitchMonitorWidget.cpp
   PitchColor.h
@@ -48,6 +50,22 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   chart/SongChartWidget.cpp
   SilentPlaybackEngine.h
   SilentPlaybackEngine.cpp
+  playback/BandPlaybackEngine.h
+  playback/BandPlaybackEngine.cpp
+  music/Pitch.h
+  music/Pitch.cpp
+  music/ChordSymbol.h
+  music/ChordSymbol.cpp
+  music/ChordDictionary.h
+  music/ChordDictionary.cpp
+  music/BassProfile.h
+  music/BassProfile.cpp
+  music/ScaleLibrary.h
+  music/ScaleLibrary.cpp
+  music/WalkingBassGenerator.h
+  music/WalkingBassGenerator.cpp
+  music/SelfTest.h
+  music/SelfTest.cpp
   resources.qrc
 )
 

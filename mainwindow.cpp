@@ -74,6 +74,7 @@ void MainWindow::createWidgets(const Preset& preset) {
 
     // Minimal note-only UI
     noteMonitorWidget = new NoteMonitorWidget(this);
+    noteMonitorWidget->setMidiProcessor(m_midiProcessor);
     rootStack->addWidget(noteMonitorWidget);
 
     // Preferences action in a Settings menu (PreferencesRole => macOS App menu)

@@ -1,0 +1,81 @@
+#pragma once
+
+#include <QObject>
+#include <QElapsedTimer>
+#include <QRandomGenerator>
+#include <QTimer>
+#include <QVector>
+
+#include "chart/ChartModel.h"
+#include "music/WalkingBassGenerator.h"
+#include "music/BassProfile.h"
+
+namespace playback {
+
+// Playback engine that drives the chart playhead AND emits virtual musician MIDI events.
+// v1: one cell per beat (quarter note), 4 cells per bar.
+class BandPlaybackEngine : public QObject {
+    Q_OBJECT
+public:
+    explicit BandPlaybackEngine(QObject* parent = nullptr);
+
+    void setTempoBpm(int bpm);
+    void setRepeats(int repeats);
+    void setChartModel(const chart::ChartModel& model);
+    void setBassProfile(const music::BassProfile& p);
+    const music::BassProfile& bassProfile() const { return m_bassProfile; }
+
+    bool isPlaying() const { return m_playing; }
+
+public slots:
+    void play();
+    void stop();
+
+signals:
+    void currentCellChanged(int cellIndex);
+
+    // Virtual bass MIDI events (1-based channel)
+    void bassNoteOn(int channel, int note, int velocity);
+    void bassNoteOff(int channel, int note);
+    void bassAllNotesOff(int channel);
+
+private slots:
+    void onTick();
+
+private:
+    QVector<const chart::Bar*> flattenBars() const;
+    QVector<int> buildPlaybackSequence() const;
+
+    const chart::Cell* cellForFlattenedIndex(int cellIndex) const;
+    bool chordForCellIndex(int cellIndex, music::ChordSymbol& outChord, bool& isNewChord);
+    bool chordForNextCellIndex(int cellIndex, music::ChordSymbol& outChord);
+
+    int m_bpm = 120;
+    int m_repeats = 3;
+    bool m_playing = false;
+
+    chart::ChartModel m_model;
+    QVector<int> m_sequence;
+
+    music::WalkingBassGenerator m_bass;
+    music::BassProfile m_bassProfile;
+    music::ChordSymbol m_lastChord; // last non-empty/non-placeholder chord encountered
+    bool m_hasLastChord = false;
+    int m_lastBassMidi = -1;
+    int m_lastStep = -1;
+    int m_lastEmittedCell = -1;
+
+    // Human scheduling
+    QVector<QTimer*> m_pendingTimers;
+    QRandomGenerator m_timingRng;
+
+    QElapsedTimer m_clock;
+    QTimer m_tickTimer;
+
+    // Safety/validation
+    int m_lastBarIndex = -1;
+    int m_noteOnsInBar = 0;
+};
+
+} // namespace playback
+

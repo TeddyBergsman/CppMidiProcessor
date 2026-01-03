@@ -149,6 +149,43 @@ void MidiProcessor::applyTranspose(int semitones) {
     m_condition.notify_one();
 }
 
+void MidiProcessor::sendVirtualNoteOn(int channel, int note, int velocity) {
+    if (channel < 1 || channel > 16) return;
+    if (note < 0) note = 0;
+    if (note > 127) note = 127;
+    if (velocity < 1) velocity = 1;
+    if (velocity > 127) velocity = 127;
+    const unsigned char chan = (unsigned char)(channel - 1);
+    std::vector<unsigned char> msg = { (unsigned char)(0x90 | chan), (unsigned char)note, (unsigned char)velocity };
+    std::lock_guard<std::mutex> lock(m_eventMutex);
+    m_eventQueue.push({EventType::MIDI_MESSAGE, msg, MidiSource::VirtualBand, -1, ""});
+    m_condition.notify_one();
+}
+
+void MidiProcessor::sendVirtualNoteOff(int channel, int note) {
+    if (channel < 1 || channel > 16) return;
+    if (note < 0) note = 0;
+    if (note > 127) note = 127;
+    const unsigned char chan = (unsigned char)(channel - 1);
+    std::vector<unsigned char> msg = { (unsigned char)(0x80 | chan), (unsigned char)note, 0 };
+    std::lock_guard<std::mutex> lock(m_eventMutex);
+    m_eventQueue.push({EventType::MIDI_MESSAGE, msg, MidiSource::VirtualBand, -1, ""});
+    m_condition.notify_one();
+}
+
+void MidiProcessor::sendVirtualAllNotesOff(int channel) {
+    if (channel < 1 || channel > 16) return;
+    const unsigned char chan = (unsigned char)(channel - 1);
+    std::vector<unsigned char> sustainOff = { (unsigned char)(0xB0 | chan), 64, 0 };
+    std::vector<unsigned char> allNotesOff = { (unsigned char)(0xB0 | chan), 123, 0 };
+    std::vector<unsigned char> allSoundOff = { (unsigned char)(0xB0 | chan), 120, 0 };
+    std::lock_guard<std::mutex> lock(m_eventMutex);
+    m_eventQueue.push({EventType::MIDI_MESSAGE, sustainOff, MidiSource::VirtualBand, -1, ""});
+    m_eventQueue.push({EventType::MIDI_MESSAGE, allNotesOff, MidiSource::VirtualBand, -1, ""});
+    m_eventQueue.push({EventType::MIDI_MESSAGE, allSoundOff, MidiSource::VirtualBand, -1, ""});
+    m_condition.notify_one();
+}
+
 void MidiProcessor::toggleTrack(const std::string& trackId) {
     std::lock_guard<std::mutex> lock(m_eventMutex);
     m_eventQueue.push({EventType::TRACK_TOGGLE, std::vector<unsigned char>(), MidiSource::Guitar, -1, trackId});
@@ -382,6 +419,9 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                         voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01;
                         midiOut->sendMessage(&voiceMsg);
                     }
+                } else if (event.source == MidiSource::VirtualBand) {
+                    // Virtual musicians: forward as-is (no transpose, no channel remap).
+                    midiOut->sendMessage(&event.message);
                 }
 
                 // Update pitch for guitar always; for voice only from VoicePitch source

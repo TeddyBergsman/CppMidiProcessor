@@ -51,10 +51,6 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
     QSettings settings;
     bool legacyOn = settings.value("ui/legacy", false).toBool();
     applyLegacyUiSetting(legacyOn);
-    if (noteMonitorWidget) {
-        int pitchBpm = settings.value("ui/pitchMonitorBpm", 120).toInt();
-        noteMonitorWidget->setPitchMonitorBpm(pitchBpm);
-    }
 
     // Auto-load last opened iReal HTML (persisted between sessions).
     const QString lastIReal = settings.value(kIRealLastHtmlPathKey, QString()).toString();
@@ -1217,7 +1213,6 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event) {
 void MainWindow::openPreferences() {
     QSettings settings;
     bool legacyOn = settings.value("ui/legacy", false).toBool();
-    int pitchBpm = settings.value("ui/pitchMonitorBpm", 120).toInt();
 
     QDialog dlg(this);
     dlg.setWindowTitle("Preferences");
@@ -1225,16 +1220,6 @@ void MainWindow::openPreferences() {
     QCheckBox* legacyCheck = new QCheckBox("Legacy UI", &dlg);
     legacyCheck->setChecked(legacyOn);
     layout->addWidget(legacyCheck);
-
-    // Pitch monitor BPM
-    QHBoxLayout* bpmLayout = new QHBoxLayout();
-    QLabel* bpmLbl = new QLabel("Pitch monitor BPM:", &dlg);
-    QSpinBox* bpmSpin = new QSpinBox(&dlg);
-    bpmSpin->setRange(30, 300);
-    bpmSpin->setValue(pitchBpm);
-    bpmLayout->addWidget(bpmLbl);
-    bpmLayout->addWidget(bpmSpin, 1);
-    layout->addLayout(bpmLayout);
 
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     layout->addWidget(buttons);
@@ -1245,10 +1230,6 @@ void MainWindow::openPreferences() {
         bool legacy = legacyCheck->isChecked();
         settings.setValue("ui/legacy", legacy);
         applyLegacyUiSetting(legacy);
-        settings.setValue("ui/pitchMonitorBpm", bpmSpin->value());
-        if (noteMonitorWidget) {
-            noteMonitorWidget->setPitchMonitorBpm(bpmSpin->value());
-        }
     }
 }
 

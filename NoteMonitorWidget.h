@@ -21,7 +21,6 @@ public:
     explicit NoteMonitorWidget(QWidget* parent = nullptr);
     ~NoteMonitorWidget() override;
     void setKeyCenter(const QString& keyCenter);
-    void setPitchMonitorBpm(int bpm);
     void setIRealPlaylist(const ireal::Playlist& playlist);
 
 public slots:

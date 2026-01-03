@@ -606,6 +606,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
 
     connect(m_tempoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int bpm) {
         if (m_playback) m_playback->setTempoBpm(bpm);
+        if (m_pitchMonitor) m_pitchMonitor->setBpm(bpm);
         if (!m_isApplyingSongState && !m_currentSongId.isEmpty()) {
             QSettings s;
             s.setValue(overrideGroupForSongId(m_currentSongId) + "/tempoBpm", bpm);
@@ -670,6 +671,7 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
     m_tempoSpin->blockSignals(false);
 
     m_playback->setTempoBpm(bpm);
+    if (m_pitchMonitor) m_pitchMonitor->setBpm(bpm);
     int totalBars = 0;
     for (const auto& line : m_baseChartModel.lines) totalBars += line.bars.size();
     m_playback->setTotalCells(totalBars * 4);
@@ -810,12 +812,6 @@ QString NoteMonitorWidget::formatCentsText(double cents) {
     if (rounded == 0) return "0 cents";
     if (rounded > 0) return QString("+%1 cents").arg(rounded);
     return QString("%1 cents").arg(rounded);
-}
-
-void NoteMonitorWidget::setPitchMonitorBpm(int bpm) {
-    if (m_pitchMonitor) {
-        m_pitchMonitor->setBpm(bpm);
-    }
 }
 
 void NoteMonitorWidget::setKeyCenter(const QString& keyCenter) {

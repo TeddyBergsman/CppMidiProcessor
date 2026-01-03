@@ -91,6 +91,9 @@ void BassStyleEditorDialog::buildUi() {
     // --- Feel ---
     auto* feelBox = new QGroupBox("Timing / Articulation");
     auto* feelForm = new QFormLayout(feelBox);
+    m_feelStyle = new QComboBox(feelBox);
+    m_feelStyle->addItem("Ballad swing (2-feel default)", (int)music::BassFeelStyle::BalladSwing);
+    m_feelStyle->addItem("Walking swing (4-to-the-bar)", (int)music::BassFeelStyle::WalkingSwing);
     m_jitterMs = makeSpin(0, 50);
     m_laidBackMs = makeSpin(-50, 50);
     m_pushMs = makeSpin(-50, 50);
@@ -101,6 +104,7 @@ void BassStyleEditorDialog::buildUi() {
     m_gatePct = makeD(0.05, 1.0, 0.01, 2);
     m_swingAmount = makeD(0.0, 1.0, 0.01, 2);
     m_swingRatio = makeD(1.2, 4.0, 0.05, 2);
+    feelForm->addRow("Feel style", m_feelStyle);
     feelForm->addRow("Micro jitter (ms +/-)", m_jitterMs);
     feelForm->addRow("Laid back (ms)", m_laidBackMs);
     feelForm->addRow("Push (ms)", m_pushMs);
@@ -371,6 +375,9 @@ void BassStyleEditorDialog::buildUi() {
     root->addWidget(m_buttons);
 
     auto hook = [this]() { emitPreview(); };
+    if (m_feelStyle) {
+        connect(m_feelStyle, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { emitPreview(); });
+    }
     const auto widgets = findChildren<QWidget*>();
     for (QWidget* w : widgets) {
         if (auto* sb = qobject_cast<QSpinBox*>(w)) connect(sb, QOverload<int>::of(&QSpinBox::valueChanged), this, hook);
@@ -440,6 +447,11 @@ void BassStyleEditorDialog::setUiFromProfile(const music::BassProfile& p) {
     m_registerCenter->setValue(p.registerCenterMidi);
     m_registerRange->setValue(p.registerRange);
     m_maxLeap->setValue(p.maxLeap);
+
+    if (m_feelStyle) {
+        const int idx = m_feelStyle->findData((int)p.feelStyle);
+        if (idx >= 0) m_feelStyle->setCurrentIndex(idx);
+    }
 
     m_baseVelocity->setValue(p.baseVelocity);
     m_velocityVariance->setValue(p.velocityVariance);
@@ -541,6 +553,10 @@ music::BassProfile BassStyleEditorDialog::profileFromUi() const {
     p.registerCenterMidi = m_registerCenter->value();
     p.registerRange = m_registerRange->value();
     p.maxLeap = m_maxLeap->value();
+
+    if (m_feelStyle) {
+        p.feelStyle = (music::BassFeelStyle)m_feelStyle->currentData().toInt();
+    }
 
     p.baseVelocity = m_baseVelocity->value();
     p.velocityVariance = m_velocityVariance->value();

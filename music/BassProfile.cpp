@@ -8,6 +8,8 @@ namespace {
 
 static int clampInt(int v, int lo, int hi) { return std::max(lo, std::min(hi, v)); }
 static double clampD(double v, double lo, double hi) { return std::max(lo, std::min(hi, v)); }
+static int toInt(BassFeelStyle s) { return (s == BassFeelStyle::WalkingSwing) ? 1 : 0; }
+static BassFeelStyle feelFromInt(int v) { return (v == 1) ? BassFeelStyle::WalkingSwing : BassFeelStyle::BalladSwing; }
 
 static int readInt(QSettings& s, const QString& k, int def) { return s.value(k, def).toInt(); }
 static double readD(QSettings& s, const QString& k, double def) { return s.value(k, def).toDouble(); }
@@ -18,7 +20,46 @@ static quint32 readU32(QSettings& s, const QString& k, quint32 def) { return (qu
 } // namespace
 
 BassProfile defaultBassProfile() {
-    return BassProfile{};
+    // Default should feel like a supportive ballad bassist:
+    // clear chord arrivals, mostly 2-feel, longer notes, and very tight time.
+    BassProfile p;
+    p.name = "Ballad Swing (Default)";
+    p.feelStyle = BassFeelStyle::BalladSwing;
+
+    // Timing: tighter than walking presets; “laid back” without sounding sloppy.
+    p.swingAmount = 0.55;
+    p.swingRatio = 2.2;
+    p.microJitterMs = 1;
+    p.attackVarianceMs = 1;
+    p.laidBackMs = 4;
+    p.pushMs = 0;
+    p.driftMaxMs = 4;
+    p.driftRate = 0.10;
+
+    // Sustain/shape.
+    p.gatePct = 0.92;
+
+    // Musical density: strongly favor 2-feel and fewer “busy” artifacts.
+    p.twoFeelPhraseProb = 0.75;
+    p.brokenTimePhraseProb = 0.10;
+    p.restProb = 0.10;
+    p.tieProb = 0.26;
+
+    // Reduce “muted notes” perception in ballad default.
+    p.ghostNoteProb = 0.06;
+    p.pickup8thProb = 0.12;
+    p.twoBeatRunProb = 0.06;
+    p.enclosureProb = 0.22;
+    p.fillProbPhraseEnd = 0.16;
+    p.syncopationProb = 0.03;
+
+    // Harmony readability: a touch more guide-tone emphasis.
+    p.wRoot = 0.95;
+    p.wThird = 0.85;
+    p.wFifth = 0.55;
+    p.wSeventh = 1.00;
+
+    return p;
 }
 
 BassProfile loadBassProfile(QSettings& settings, const QString& prefix) {
@@ -27,6 +68,7 @@ BassProfile loadBassProfile(QSettings& settings, const QString& prefix) {
 
     p.version = readInt(settings, base + "/version", p.version);
     p.name = readS(settings, base + "/name", p.name);
+    p.feelStyle = feelFromInt(clampInt(readInt(settings, base + "/feelStyle", toInt(p.feelStyle)), 0, 1));
 
     p.enabled = readB(settings, base + "/enabled", p.enabled);
     p.midiChannel = clampInt(readInt(settings, base + "/midiChannel", p.midiChannel), 1, 16);
@@ -140,6 +182,7 @@ void saveBassProfile(QSettings& settings, const QString& prefix, const BassProfi
 
     settings.setValue(base + "/version", p.version);
     settings.setValue(base + "/name", p.name);
+    settings.setValue(base + "/feelStyle", toInt(p.feelStyle));
 
     settings.setValue(base + "/enabled", p.enabled);
     settings.setValue(base + "/midiChannel", p.midiChannel);

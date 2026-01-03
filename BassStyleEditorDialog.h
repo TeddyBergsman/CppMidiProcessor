@@ -59,6 +59,8 @@ private:
     QSpinBox* m_registerRange = nullptr;
     QSpinBox* m_maxLeap = nullptr;
 
+    QComboBox* m_feelStyle = nullptr;
+
     QSpinBox* m_baseVelocity = nullptr;
     QSpinBox* m_velocityVariance = nullptr;
     QDoubleSpinBox* m_accent1 = nullptr;

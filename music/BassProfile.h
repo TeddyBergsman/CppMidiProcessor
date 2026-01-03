@@ -7,11 +7,21 @@ class QSettings;
 
 namespace music {
 
+// High-level musical feel selector (in addition to the detailed knobs below).
+// - BalladSwing: default to 2-feel / long tones, clear chord arrivals, sparse fills.
+// - WalkingSwing: default to quarter-note walking, more continuous forward motion.
+enum class BassFeelStyle {
+    BalladSwing = 0,
+    WalkingSwing = 1,
+};
+
 // Per-song “human musician” configuration for the walking bass generator.
 // Versioned and persisted via QSettings.
 struct BassProfile {
-    int version = 3;
+    int version = 4;
     QString name; // optional label, e.g. "Default Walking"
+
+    BassFeelStyle feelStyle = BassFeelStyle::BalladSwing;
 
     // Routing / range
     bool enabled = false;

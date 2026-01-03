@@ -535,10 +535,26 @@ void BandPlaybackEngine::onTick() {
         const bool haveNext = chordForNextCellIndex(cellIndex, next);
         const music::ChordSymbol* nextPtr = haveNext ? &next : &cur;
 
+        // Build a small beat-aligned harmonic lookahead without mutating the engine's chord-tracking state.
+        // This enables multi-beat phrase planning in the bass generator.
+        auto parseCellChordNoState = [&](int anyCellIndex, const music::ChordSymbol& fallback, bool* outIsExplicit = nullptr) -> music::ChordSymbol {
+            if (outIsExplicit) *outIsExplicit = false;
+            const chart::Cell* c = cellForFlattenedIndex(anyCellIndex);
+            if (!c) return fallback;
+            const QString t = c->chord.trimmed();
+            if (t.isEmpty()) return fallback;
+            music::ChordSymbol parsed;
+            if (!music::parseChordSymbol(t, parsed)) return fallback;
+            if (parsed.placeholder) return fallback;
+            if (outIsExplicit) *outIsExplicit = true;
+            return parsed;
+        };
+
         // Beat context for evolving performance.
         music::BassBeatContext ctx;
         ctx.barIndex = barIndex;
         ctx.beatInBar = beatInBar;
+        ctx.tempoBpm = m_bpm;
         ctx.isNewBar = (beatInBar == 0);
         ctx.isNewChord = isNewChord;
         ctx.songPass = (seqLen > 0) ? (step / seqLen) : 0;
@@ -559,6 +575,21 @@ void BandPlaybackEngine::onTick() {
             ctx.isPhraseEnd = (((ctx.barInSection + 1) % ctx.phraseLengthBars) == 0);
         }
 
+        // Lookahead chords: current beat + next 7 beats (2 bars).
+        // Use local "last-known" fallback while scanning.
+        ctx.lookaheadChords.clear();
+        ctx.lookaheadChords.reserve(8);
+        music::ChordSymbol laLast = cur;
+        ctx.lookaheadChords.push_back(cur);
+        for (int o = 1; o < 8; ++o) {
+            const int step2 = step + o;
+            if (step2 >= total) break;
+            const int cell2 = m_sequence[step2 % seqLen];
+            music::ChordSymbol parsed = parseCellChordNoState(cell2, laLast);
+            laLast = parsed;
+            ctx.lookaheadChords.push_back(parsed);
+        }
+
         // Generate events for this beat (possibly multiple per beat).
         QVector<music::BassEvent> ev = m_bass.nextBeat(ctx, &cur, nextPtr);
         if (ev.isEmpty()) continue;
@@ -567,14 +598,29 @@ void BandPlaybackEngine::onTick() {
         });
 
         // Human timing for this scheduled beat (stable per-song).
-        const int jitter = (m_bassProfile.microJitterMs > 0)
+        // IMPORTANT: a pro bassist is *tight* on chord arrivals and structural beats.
+        // Randomness there reads like mistakes (“drunken”).
+        const bool strongBeat = (beatInBar == 0 || beatInBar == 2);
+        const bool structural = strongBeat || isNewChord;
+
+        int jitter = (m_bassProfile.microJitterMs > 0)
             ? (int(m_timingRng.bounded(m_bassProfile.microJitterMs * 2 + 1)) - m_bassProfile.microJitterMs)
             : 0;
-        const int attackVar = (m_bassProfile.attackVarianceMs > 0)
+        int attackVar = (m_bassProfile.attackVarianceMs > 0)
             ? (int(m_timingRng.bounded(m_bassProfile.attackVarianceMs * 2 + 1)) - m_bassProfile.attackVarianceMs)
             : 0;
-        const int push = m_bassProfile.pushMs;
-        const int laidBack = m_bassProfile.laidBackMs;
+        int push = m_bassProfile.pushMs;
+        int laidBack = m_bassProfile.laidBackMs;
+        int driftLocal = m_driftMs;
+
+        if (structural) {
+            jitter = 0;
+            attackVar = 0;
+            // Keep the “feel” but make structural moments precise.
+            push = int(std::llround(double(push) * 0.35));
+            laidBack = int(std::llround(double(laidBack) * 0.35));
+            driftLocal = int(std::llround(double(driftLocal) * 0.30));
+        }
 
         auto calcBaseOffsetMs = [&](double offsetBeats) -> int {
             int swingMsLocal = 0;
@@ -585,9 +631,10 @@ void BandPlaybackEngine::onTick() {
                 const double deltaFrac = (ratio / (ratio + 1.0)) - 0.5;
                 swingMsLocal = int(std::round(beatMs * deltaFrac * m_bassProfile.swingAmount));
             }
-            int base = laidBack - push + jitter + attackVar + m_driftMs + swingMsLocal;
-            // Safety clamp: even with wild settings, don't allow "mistake-level" timing errors.
-            base = std::max(-80, std::min(80, base));
+            int base = laidBack - push + jitter + attackVar + driftLocal + swingMsLocal;
+            // Safety clamp: keep the player feeling professional (not "drunken").
+            const int clampMs = structural ? 16 : 28;
+            base = std::max(-clampMs, std::min(clampMs, base));
             return base;
         };
 

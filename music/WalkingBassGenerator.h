@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QHash>
+#include <QVector>
 
 #include "music/ChordSymbol.h"
 #include "music/BassProfile.h"
@@ -48,6 +49,10 @@ struct BassEvent {
 struct BassBeatContext {
     int barIndex = 0;
     int beatInBar = 0; // 0..3
+    int tempoBpm = 120; // informational (used for feel selection)
+    // Short harmonic lookahead (beat-aligned) to enable phrase planning.
+    // Entry 0 corresponds to the current beat; subsequent entries are upcoming beats.
+    QVector<ChordSymbol> lookaheadChords;
     int barInSection = 0;
     bool isNewBar = false;
     bool isSectionChange = false;

@@ -17,9 +17,48 @@ QVector<BassPreset> BassPresets::all() {
     QVector<BassPreset> out;
     out.reserve(8);
 
+    // Default: ballad swing / 2-feel oriented.
+    {
+        BassProfile p = baseEnabledFalse("Ballad Swing (Default)");
+        p.feelStyle = BassFeelStyle::BalladSwing;
+        p.swingAmount = 0.55;
+        p.swingRatio = 2.2;
+        p.laidBackMs = 4;
+        p.microJitterMs = 1;
+        p.driftMaxMs = 4;
+        p.driftRate = 0.10;
+        p.attackVarianceMs = 1;
+        p.gatePct = 0.92;
+        p.baseVelocity = 84;
+        p.velocityVariance = 10;
+        p.chromaticism = 0.40;
+        p.ghostNoteProb = 0.06;
+        p.pickup8thProb = 0.12;
+        p.enclosureProb = 0.22;
+        p.twoBeatRunProb = 0.06;
+        p.fillProbPhraseEnd = 0.16;
+        p.syncopationProb = 0.03;
+        p.intensityBase = 0.45;
+        p.intensityVariance = 0.18;
+        p.evolutionRate = 0.14;
+        p.sectionRampStrength = 0.16;
+        p.phraseLengthBars = 4;
+        p.twoFeelPhraseProb = 0.75;
+        p.brokenTimePhraseProb = 0.10;
+        p.restProb = 0.10;
+        p.tieProb = 0.26;
+        // guide-tone bias
+        p.wRoot = 0.95;
+        p.wThird = 0.85;
+        p.wFifth = 0.55;
+        p.wSeventh = 1.00;
+        out.push_back({"default_ballad", p.name, p});
+    }
+
     // A sane modern “pro walking” baseline.
     {
-        BassProfile p = baseEnabledFalse("Modern Walking (Default)");
+        BassProfile p = baseEnabledFalse("Modern Walking");
+        p.feelStyle = BassFeelStyle::WalkingSwing;
         p.swingAmount = 0.55;
         p.swingRatio = 2.2;
         p.laidBackMs = 4;
@@ -54,6 +93,7 @@ QVector<BassPreset> BassPresets::all() {
     // Ray Brown-ish: very time-forward, authoritative quarter note, fewer busy fills, strong beat 1.
     {
         BassProfile p = baseEnabledFalse("Ray Brown (Straight-Ahead)");
+        p.feelStyle = BassFeelStyle::WalkingSwing;
         p.swingAmount = 0.50;
         p.swingRatio = 2.0;
         p.laidBackMs = 2;
@@ -89,6 +129,7 @@ QVector<BassPreset> BassPresets::all() {
     // Paul Chambers-ish: more chromatic approaches and enclosures, more pickups, still tight time.
     {
         BassProfile p = baseEnabledFalse("Paul Chambers (Bop)");
+        p.feelStyle = BassFeelStyle::WalkingSwing;
         p.swingAmount = 0.60;
         p.swingRatio = 2.4;
         p.laidBackMs = 3;
@@ -122,6 +163,7 @@ QVector<BassPreset> BassPresets::all() {
     // Ron Carter-ish: more space and shape, less constant busyness, more guide-tone focus.
     {
         BassProfile p = baseEnabledFalse("Ron Carter (Modern, Spacious)");
+        p.feelStyle = BassFeelStyle::WalkingSwing;
         p.swingAmount = 0.45;
         p.swingRatio = 2.1;
         p.laidBackMs = 6;
@@ -160,6 +202,7 @@ QVector<BassPreset> BassPresets::all() {
     // Jamerson-ish (Motown): not truly “walking”, but emulate busier syncopation + ghosted articulation.
     {
         BassProfile p = baseEnabledFalse("James Jamerson (Motown-ish)");
+        p.feelStyle = BassFeelStyle::WalkingSwing;
         p.swingAmount = 0.10;
         p.swingRatio = 2.0;
         p.laidBackMs = 0;

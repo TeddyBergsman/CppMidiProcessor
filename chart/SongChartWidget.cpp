@@ -12,6 +12,14 @@ enum class BarlineStyle { Normal, Double, RepeatStart, RepeatEnd, Final };
 // Single source of truth for chord sizing (no dynamic scaling).
 static constexpr int kChordRootPointSize = 20;
 
+static int chordLeftInsetForLeftBarline(BarlineStyle style) {
+    // Extra padding so chord text never collides with repeat-start dots/lines.
+    switch (style) {
+        case BarlineStyle::RepeatStart: return 6;
+        default: return 0;
+    }
+}
+
 static void drawBarline(QPainter& p, int x, int y, int h, BarlineStyle style) {
     switch (style) {
         case BarlineStyle::Normal: {
@@ -340,6 +348,9 @@ void SongChartWidget::paintEvent(QPaintEvent* /*event*/) {
         const int barW = usableW / barsPerLine;
         const int cellW = barW / cellsPerBar;
         const int x0 = m_margin + m_sectionGutter;
+        const int gutterX = m_margin;
+        const bool hasLabel = !line.sectionLabel.isEmpty();
+        const int labelH = hasLabel ? 22 : 0;
 
         bool hasSecondEnding = false;
         for (const auto& b : line.bars) {
@@ -351,11 +362,11 @@ void SongChartWidget::paintEvent(QPaintEvent* /*event*/) {
         const int xOffset = offsetBars * barW;
 
         // Section label
-        if (!line.sectionLabel.isEmpty()) {
+        if (hasLabel) {
             QFont secFont = chordFont;
             secFont.setPointSize(18);
             p.setFont(secFont);
-            p.drawText(QRect(m_margin, y, m_sectionGutter - 6, m_barHeight),
+            p.drawText(QRect(gutterX, y, m_sectionGutter - 6, labelH),
                        Qt::AlignLeft | Qt::AlignTop, line.sectionLabel);
             p.setFont(chordFont);
         }
@@ -364,15 +375,42 @@ void SongChartWidget::paintEvent(QPaintEvent* /*event*/) {
         if (!drewTimeSig) {
             drewTimeSig = true;
             QFont tsFont = chordFont;
-            tsFont.setPointSize(22);
+            // Time signature should not dominate the section label.
+            tsFont.setPointSize(16);
             tsFont.setBold(true);
             p.setFont(tsFont);
+            const QFontMetrics tsFm(tsFont);
             const QString top = QString::number(m_model.timeSigNum);
             const QString bot = QString::number(m_model.timeSigDen);
-            p.drawText(QRect(m_margin + 22, y + 4, 40, 34), Qt::AlignLeft | Qt::AlignVCenter, top);
-            p.drawText(QRect(m_margin + 22, y + 36, 40, 34), Qt::AlignLeft | Qt::AlignVCenter, bot);
+            // Render the time signature beneath the section label (tighter spacing + divider line).
+            const int tsTopY = y + (hasLabel ? (labelH + 1) : 6);
+            const int tsBlockW = std::max(18, m_sectionGutter - 8);
+            const int kTsNumH = tsFm.height();
+            const int kTsGap = 3;
+            const int kTsDenH = tsFm.height();
+
+            const QRect numRect(gutterX, tsTopY, tsBlockW, kTsNumH);
+            const QRect denRect(gutterX, tsTopY + kTsNumH + kTsGap, tsBlockW, kTsDenH);
+            p.drawText(numRect, Qt::AlignLeft | Qt::AlignTop, top);
+            p.drawText(denRect, Qt::AlignLeft | Qt::AlignTop, bot);
+
+            // iReal-style fraction divider line between numerator and denominator.
+            QPen fracPen(QColor(240, 240, 240));
+            fracPen.setWidthF(2.0);
+            p.setPen(fracPen);
+            const int lineY = tsTopY + kTsNumH + (kTsGap / 2);
+            const int digitW = std::max(tsFm.horizontalAdvance(top), tsFm.horizontalAdvance(bot));
+            const int lineW = qBound(6, digitW - 2, 10); // shorter/tighter than before
+            p.drawLine(gutterX + 1, lineY, gutterX + 1 + std::min(lineW, tsBlockW - 3), lineY);
+
             p.setFont(chordFont);
+            p.setPen(penWhite);
         }
+
+        // Shorter barlines look less heavy and match chord height better.
+        static constexpr int kBarlineVPad = 10;
+        const int barlineY = y + kBarlineVPad;
+        const int barlineH = std::max(12, m_barHeight - 2 * kBarlineVPad);
 
         // Draw bars
         for (int b = 0; b < barsPerLine; ++b) {
@@ -409,8 +447,8 @@ void SongChartWidget::paintEvent(QPaintEvent* /*event*/) {
                 }
             }
 
-            drawBarline(p, barX, y, m_barHeight, leftStyle);
-            drawBarline(p, barX + barW, y, m_barHeight, rightStyle);
+            drawBarline(p, barX, barlineY, barlineH, leftStyle);
+            drawBarline(p, barX + barW, barlineY, barlineH, rightStyle);
 
             // Ending bracket segment for this bar (draw over bars while active)
             if (endingActive > 0) {
@@ -452,7 +490,11 @@ void SongChartWidget::paintEvent(QPaintEvent* /*event*/) {
 
                     if (c < bar.cells.size() && !bar.cells[c].chord.isEmpty()) {
                         p.setPen(QColor(240, 240, 240));
-                        drawChordPretty(p, cellRect.adjusted(0, 0, -6, -6), bar.cells[c].chord);
+                        QRect chordRect = cellRect.adjusted(0, 0, -6, -6);
+                        if (c == 0) {
+                            chordRect.adjust(chordLeftInsetForLeftBarline(leftStyle), 0, 0, 0);
+                        }
+                        drawChordPretty(p, chordRect, bar.cells[c].chord);
                     }
 
                     globalCell++;

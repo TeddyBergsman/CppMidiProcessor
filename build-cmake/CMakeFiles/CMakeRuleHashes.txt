@@ -1,0 +1,4 @@
+# Hashes of file build rules.
+ed5a7c70f6fa7f50a15bbaab0911f47f CMakeFiles/CppMidiProcessor_autogen
+f8db1e575362b451a01c7fe83bba9f54 CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp
+84f85c2f3c8764f5ea2c27f8621daea8 CppMidiProcessor_autogen/timestamp

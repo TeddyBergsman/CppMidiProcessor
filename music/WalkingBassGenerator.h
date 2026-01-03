@@ -14,6 +14,12 @@ struct BassDecision {
 };
 
 struct BassEvent {
+    enum class Role {
+        MusicalNote, // normal pitched bass notes (will be octave-shifted by the playback engine)
+        KeySwitch,   // articulation keyswitch notes (must never be transposed)
+        FxSound      // FX sound notes (must never be transposed)
+    };
+
     int midiNote = -1;
     int velocity = 0;
     // Offset within the beat: 0.0 = on-beat, 0.5 = upbeat 8th, etc.
@@ -26,6 +32,11 @@ struct BassEvent {
     bool tie = false;
     // If true, explicit rest (no note). This event is ignored by the engine.
     bool rest = false;
+    // Event role (musical vs keyswitch/fx).
+    Role role = Role::MusicalNote;
+    // If true, the engine should NOT clamp this note shorter to avoid overlap with the next musical event.
+    // Used for legato/overlap articulations (e.g., E0/F0-based legato).
+    bool allowOverlap = false;
 };
 
 struct BassBeatContext {
@@ -35,6 +46,7 @@ struct BassBeatContext {
     bool isNewBar = false;
     bool isSectionChange = false;
     bool isPhraseEnd = false;
+    bool isNewChord = false;
     int phraseLengthBars = 4;
     quint32 sectionHash = 0;
     int songPass = 0;     // 0..(totalPasses-1)
@@ -80,6 +92,11 @@ private:
     QVector<int> m_motifSteps; // semitone steps (in pitch classes, signed)
     int m_motifIndex = 0;
     bool m_hasMotif = false;
+
+    // Cross-beat legato support: we extend note lengths slightly and, on the next beat,
+    // decide whether to trigger HP/Legato Slide based on the actual interval.
+    bool m_pendingCrossBeatLegato = false;
+    int m_pendingCrossBeatFromMidi = -1;
 };
 
 } // namespace music

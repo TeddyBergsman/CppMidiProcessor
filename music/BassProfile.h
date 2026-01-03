@@ -10,7 +10,7 @@ namespace music {
 // Per-song “human musician” configuration for the walking bass generator.
 // Versioned and persisted via QSettings.
 struct BassProfile {
-    int version = 1;
+    int version = 2;
     QString name; // optional label, e.g. "Default Walking"
 
     // Routing / range
@@ -21,12 +21,45 @@ struct BassProfile {
     int registerCenterMidi = 36; // C2-ish center
     int registerRange = 12;      // +/- semitones around center
     int maxLeap = 7;             // semitones; larger leaps get penalized
-    int transposeSemitones = 12; // output transpose (default +12 = 1 octave up)
 
     // Harmony interpretation
     bool honorSlashBass = true;
     double slashBassProb = 1.0;  // 0..1
     bool treatMaj6AsMaj7 = false;
+
+    // --- VST performance controls (Ample Bass Upright) ---
+    // These are *behavioral* toggles: they change how the generator uses keyswitches / FX notes.
+    // Musical notes will be octave-shifted by the engine to match the plugin's "normal center";
+    // keyswitches and FX notes must never be transposed.
+    //
+    // IMPORTANT: DAWs/VSTs disagree on octave numbering (e.g. "C3=60" vs "C4=60").
+    // The Ample manual's note names are commonly "C3=60", while this app uses "C4=60".
+    // Set this offset so that manual note names map to the correct MIDI numbers.
+    int ampleNoteNameOffsetSemitones = 12; // typically +12 for manuals using C3=60
+
+    // Articulations (keyswitches)
+    bool artSustainAccent = true;   // C0; velocity >=126 triggers Accent
+    bool artNaturalHarmonic = false; // C#0
+    bool artPalmMute = true;        // D0
+    bool artSlideInOut = true;      // D#0
+    bool artLegatoSlide = true;     // E0
+    bool artHammerPull = true;      // F0
+
+    // FX sounds (played as specific MIDI notes in the VST)
+    bool fxHitRimMute = true;       // F#4
+    bool fxHitTopPalmMute = true;   // G4
+    bool fxHitTopFingerMute = true; // G#4
+    bool fxHitTopOpen = false;      // A4
+    bool fxHitRimOpen = false;      // A#4
+    bool fxScratch = false;         // F5
+    bool fxBreath = false;          // F#5
+    bool fxSingleStringSlap = false; // G5
+    bool fxLeftHandSlapNoise = false; // G#5
+    bool fxRightHandSlapNoise = false; // A5
+    bool fxSlideTurn4 = true;       // A#5
+    bool fxSlideTurn3 = true;       // B5
+    bool fxSlideDown4 = true;       // C6
+    bool fxSlideDown3 = true;       // C#6
 
     // Feel / timing
     double swingAmount = 0.0;    // 0..1 (reserved for later subdivisions)

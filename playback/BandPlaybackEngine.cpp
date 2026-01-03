@@ -440,6 +440,7 @@ void BandPlaybackEngine::onTick() {
     ctx.barIndex = barIndex;
     ctx.beatInBar = beatInBar;
     ctx.isNewBar = (beatInBar == 0);
+    ctx.isNewChord = isNewChord;
     ctx.songPass = (seqLen > 0) ? (step / seqLen) : 0;
     ctx.totalPasses = std::max(1, m_repeats);
     ctx.phraseLengthBars = std::max(1, m_bassProfile.phraseLengthBars);
@@ -508,15 +509,22 @@ void BandPlaybackEngine::onTick() {
         return a.offsetBeats < b.offsetBeats;
     });
 
-    // Schedule note-ons/offs. Clamp note lengths so events don't overlap (strict monophonic).
+    constexpr int kBassMusicalOctaveShift = 12; // baseline octave shift for musical bass notes only
+
+    // Schedule note-ons/offs.
     for (int i = 0; i < ev.size(); ++i) {
         const auto& e = ev[i];
+        if (e.rest) continue;
         if (e.midiNote < 0 || e.velocity <= 0) continue;
 
         const double offset = std::max(0.0, std::min(0.95, e.offsetBeats));
         const double tOnMs = beatStartMs + offset * beatMs;
         int delayOn = int(std::round(tOnMs + double(calcBaseOffsetMs(offset)) - double(elapsedMs)));
         if (delayOn < 0) delayOn = 0;
+        // Ensure keyswitches land slightly before their target notes even when offsets match.
+        if (e.role == music::BassEvent::Role::KeySwitch) {
+            delayOn = std::max(0, delayOn - 12); // ~12ms early is enough to be “before” without feeling late
+        }
 
         // Determine desired length.
         int lenMs = 0;
@@ -532,30 +540,42 @@ void BandPlaybackEngine::onTick() {
         }
         lenMs = std::max(20, std::min(8000, lenMs));
 
-        // Prevent overlap with next event-on.
-        if (i + 1 < ev.size()) {
-            const double nextOffset = std::max(0.0, std::min(0.95, ev[i + 1].offsetBeats));
-            const double nextOnMs = beatStartMs + nextOffset * beatMs;
-            int nextDelayOn = int(std::round(nextOnMs + double(calcBaseOffsetMs(nextOffset)) - double(elapsedMs)));
-            if (nextDelayOn < 0) nextDelayOn = 0;
-            lenMs = std::min(lenMs, std::max(10, nextDelayOn - delayOn - 1));
+        // Prevent unwanted overlap between musical notes (keyswitch/FX are allowed to overlap freely).
+        if (e.role == music::BassEvent::Role::MusicalNote && !e.allowOverlap) {
+            if (i + 1 < ev.size()) {
+                const auto& n = ev[i + 1];
+                if (n.role == music::BassEvent::Role::MusicalNote) {
+                    const double nextOffset = std::max(0.0, std::min(0.95, n.offsetBeats));
+                    const double nextOnMs = beatStartMs + nextOffset * beatMs;
+                    int nextDelayOn = int(std::round(nextOnMs + double(calcBaseOffsetMs(nextOffset)) - double(elapsedMs)));
+                    if (nextDelayOn < 0) nextDelayOn = 0;
+                    lenMs = std::min(lenMs, std::max(10, nextDelayOn - delayOn - 1));
+                }
+            }
         }
 
-        int note = e.midiNote + m_bassProfile.transposeSemitones;
+        int note = e.midiNote;
+        if (e.role == music::BassEvent::Role::MusicalNote) {
+            note += kBassMusicalOctaveShift;
+        }
         if (note < 0) note = 0;
         if (note > 127) note = 127;
         const int vel = e.velocity;
 
-        // Monophonic behavior: release previous note right before new note-on.
-        if (m_lastBassMidi >= 0 && m_lastBassMidi != note) {
-            const int prev = m_lastBassMidi;
-            schedule(std::max(0, delayOn - 1), [this, prev]() { emit bassNoteOff(m_bassProfile.midiChannel, prev); });
+        // Musical voice: keep it effectively monophonic unless generator explicitly requests overlap.
+        if (e.role == music::BassEvent::Role::MusicalNote && !e.allowOverlap) {
+            if (m_lastBassMidi >= 0 && m_lastBassMidi != note) {
+                const int prev = m_lastBassMidi;
+                schedule(std::max(0, delayOn - 1), [this, prev]() { emit bassNoteOff(m_bassProfile.midiChannel, prev); });
+            }
         }
         schedule(delayOn, [this, note, vel]() { emit bassNoteOn(m_bassProfile.midiChannel, note, vel); });
         schedule(delayOn + lenMs, [this, note]() { emit bassNoteOff(m_bassProfile.midiChannel, note); });
 
-        m_lastBassMidi = note;
-        m_noteOnsInBar += 1;
+        if (e.role == music::BassEvent::Role::MusicalNote) {
+            m_lastBassMidi = note;
+            m_noteOnsInBar += 1;
+        }
     }
 
     // Updated sanity: allow up to 24 note-ons per bar (accounts for runs + ghosts).

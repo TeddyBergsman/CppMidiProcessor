@@ -110,6 +110,65 @@ static int pcDistance(int a, int b) {
 
 WalkingBassGenerator::WalkingBassGenerator() = default;
 
+namespace {
+// MIDI note numbers assume C4=60 (so C0=12) which matches the rest of this project (e.g., E1=28).
+struct UprightVst {
+    // Articulation keyswitches
+    static constexpr int KS_SustainAccent = 12;  // C0
+    static constexpr int KS_NaturalHarmonic = 13; // C#0
+    static constexpr int KS_PalmMute = 14;       // D0
+    static constexpr int KS_SlideInOut = 15;     // D#0
+    static constexpr int KS_LegatoSlide = 16;    // E0
+    static constexpr int KS_HammerPull = 17;     // F0
+
+    // FX sounds
+    static constexpr int FX_HitRimMute = 66;       // F#4
+    static constexpr int FX_HitTopPalmMute = 67;   // G4
+    static constexpr int FX_HitTopFingerMute = 68; // G#4
+    static constexpr int FX_HitTopOpen = 69;       // A4
+    static constexpr int FX_HitRimOpen = 70;       // A#4
+    static constexpr int FX_Scratch = 77;          // F5
+    static constexpr int FX_Breath = 78;           // F#5
+    static constexpr int FX_SingleStringSlap = 79; // G5
+    static constexpr int FX_LeftHandSlapNoise = 80; // G#5
+    static constexpr int FX_RightHandSlapNoise = 81; // A5
+    static constexpr int FX_SlideTurn4 = 82;       // A#5
+    static constexpr int FX_SlideTurn3 = 83;       // B5
+    static constexpr int FX_SlideDown4 = 84;       // C6
+    static constexpr int FX_SlideDown3 = 85;       // C#6
+};
+
+static void pushKeySwitch(QVector<BassEvent>& out, int midiNote, int velocity, double offsetBeats, int noteOffsetSemis) {
+    BassEvent ks;
+    ks.role = BassEvent::Role::KeySwitch;
+    ks.midiNote = clampMidi(midiNote + noteOffsetSemis);
+    ks.velocity = clampVelocity(velocity);
+    ks.offsetBeats = std::max(0.0, std::min(0.95, offsetBeats));
+    ks.lengthBeats = 0.06; // short
+    out.push_back(ks);
+}
+
+static void pushFx(QVector<BassEvent>& out, int midiNote, int velocity, double offsetBeats, int noteOffsetSemis) {
+    BassEvent fx;
+    fx.role = BassEvent::Role::FxSound;
+    fx.midiNote = clampMidi(midiNote + noteOffsetSemis);
+    fx.velocity = clampVelocity(velocity);
+    fx.offsetBeats = std::max(0.0, std::min(0.95, offsetBeats));
+    fx.lengthBeats = 0.10; // short
+    out.push_back(fx);
+}
+
+static void pushKeySwitch(QVector<BassEvent>& out, int midiNote, int velocity, double offsetBeats) {
+    // Backward-compat helper (no offset).
+    pushKeySwitch(out, midiNote, velocity, offsetBeats, 0);
+}
+
+static void pushFx(QVector<BassEvent>& out, int midiNote, int velocity, double offsetBeats) {
+    // Backward-compat helper (no offset).
+    pushFx(out, midiNote, velocity, offsetBeats, 0);
+}
+} // namespace
+
 void WalkingBassGenerator::setProfile(const BassProfile& p) {
     m_profile = p;
     // Ensure the seed is non-zero (Qt treats 0 as a valid seed, but we want stable non-degenerate behavior).
@@ -728,6 +787,240 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
     std::sort(out.begin(), out.end(), [](const BassEvent& a, const BassEvent& b) {
         return a.offsetBeats < b.offsetBeats;
     });
+
+    // --- Articulations & FX planning (Ample Bass Upright) ---
+    // This is intentionally rule-driven (not random replacements):
+    // - Accent uses the plugin's velocity trigger (126/127) on musically meaningful moments (new chord / strong beats).
+    // - Legato/HP only when there are adjacent notes close enough to plausibly connect.
+    // - FX hits replace some ghost/dead notes to sound like real string contact/percussion.
+    {
+        const int noteOffs = m_profile.ampleNoteNameOffsetSemitones;
+        // Re-sort after we append extra events.
+        auto resort = [&]() {
+            std::sort(out.begin(), out.end(), [](const BassEvent& a, const BassEvent& b) {
+                if (a.offsetBeats == b.offsetBeats) {
+                    auto rank = [](BassEvent::Role r) -> int {
+                        // Keyswitch must arrive before the musical note.
+                        switch (r) {
+                        case BassEvent::Role::KeySwitch: return 0;
+                        case BassEvent::Role::FxSound: return 1;
+                        case BassEvent::Role::MusicalNote: default: return 2;
+                        }
+                    };
+                    return rank(a.role) < rank(b.role);
+                }
+                return a.offsetBeats < b.offsetBeats;
+            });
+        };
+
+        // Replace ghost "dead notes" with FX hits when enabled (more realistic than pitched dead notes).
+        for (auto& ev : out) {
+            if (ev.role != BassEvent::Role::MusicalNote) continue;
+            if (!ev.ghost) continue;
+
+            // Choose an appropriate muted hit based on availability.
+            int hit = -1;
+            if (m_profile.fxHitTopPalmMute) hit = UprightVst::FX_HitTopPalmMute;
+            else if (m_profile.fxHitTopFingerMute) hit = UprightVst::FX_HitTopFingerMute;
+            else if (m_profile.fxHitRimMute) hit = UprightVst::FX_HitRimMute;
+
+            if (hit >= 0) {
+                pushFx(out, hit, std::min(80, std::max(20, ev.velocity + 25)), ev.offsetBeats, noteOffs);
+                ev.rest = true; // suppress pitched ghost note
+            }
+        }
+
+        // Cross-beat legato: if the previous beat extended into this beat, decide HP/Legato Slide now.
+        // (We can only decide based on the actual interval once we know the destination note.)
+        if (m_pendingCrossBeatLegato && m_pendingCrossBeatFromMidi >= 0) {
+            for (auto& ev : out) {
+                if (ev.role != BassEvent::Role::MusicalNote || ev.rest) continue;
+                if (ev.offsetBeats > 0.20) break; // only treat on-beat/near-on-beat as legato destination
+                const int interval = ev.midiNote - m_pendingCrossBeatFromMidi;
+                const int absIv = std::abs(interval);
+                if (absIv > 0) {
+                    const double ksOffset = std::max(0.0, ev.offsetBeats - 0.03);
+                    if (absIv <= 2 && m_profile.artHammerPull) {
+                        pushKeySwitch(out, UprightVst::KS_HammerPull, 75, ksOffset, noteOffs);
+                        ev.allowOverlap = true;
+                    } else if (absIv <= 12 && m_profile.artLegatoSlide) {
+                        const int ksVel = (absIv >= 7) ? 120 : 85;
+                        pushKeySwitch(out, UprightVst::KS_LegatoSlide, ksVel, ksOffset, noteOffs);
+                        ev.allowOverlap = true;
+                        // Optional slide noise to match direction.
+                        const bool down = (interval < 0);
+                        if (down) {
+                            if (absIv >= 4 && m_profile.fxSlideDown4) pushFx(out, UprightVst::FX_SlideDown4, 55, ksOffset, noteOffs);
+                            else if (m_profile.fxSlideDown3) pushFx(out, UprightVst::FX_SlideDown3, 50, ksOffset, noteOffs);
+                        } else {
+                            if (absIv >= 4 && m_profile.fxSlideTurn4) pushFx(out, UprightVst::FX_SlideTurn4, 55, ksOffset, noteOffs);
+                            else if (m_profile.fxSlideTurn3) pushFx(out, UprightVst::FX_SlideTurn3, 50, ksOffset, noteOffs);
+                        }
+                    }
+                }
+                break;
+            }
+            m_pendingCrossBeatLegato = false;
+            m_pendingCrossBeatFromMidi = -1;
+        }
+
+        // Accent logic (Sustain & Accent keyswitch is C0; Accent is velocity 126/127).
+        if (m_profile.artSustainAccent) {
+            for (auto& ev : out) {
+                if (ev.role != BassEvent::Role::MusicalNote) continue;
+                if (ev.rest) continue;
+
+                const bool strong = (ctx.beatInBar == 0 || ctx.beatInBar == 2);
+                const bool accentMoment =
+                    (ctx.isNewChord && ctx.beatInBar == 0) ||
+                    (strong && ctx.isPhraseEnd && ctx.beatInBar == 2);
+
+                if (accentMoment) {
+                    // Keep it musically intentional: only promote to Accent when the line is already fairly strong.
+                    if (ev.velocity >= 95) ev.velocity = std::max(ev.velocity, 126);
+                }
+            }
+        }
+
+        // Apply legato/HP between adjacent notes *within this beat* when plausible.
+        // (This covers pickups, enclosures, and runs — places a real player naturally connects notes.)
+        for (int i = 0; i + 1 < out.size(); ++i) {
+            auto& a = out[i];
+            auto& b = out[i + 1];
+            if (a.role != BassEvent::Role::MusicalNote || b.role != BassEvent::Role::MusicalNote) continue;
+            if (a.rest || b.rest) continue;
+
+            const double gap = b.offsetBeats - a.offsetBeats;
+            if (gap <= 0.0) continue;
+
+            // Only connect when these are close in time (e.g., 8ths inside a beat).
+            if (gap > 0.55) continue;
+
+            const int interval = b.midiNote - a.midiNote;
+            const int absIv = std::abs(interval);
+            if (absIv == 0) continue;
+
+            // Create a small overlap so the VST's poly-legato logic can trigger.
+            const double overlap = 0.06; // ~a 16th at 1 beat; actual ms depends on tempo
+            const double desiredLen = gap + overlap;
+            if (a.lengthBeats <= 0.0) a.lengthBeats = std::min(0.95, std::max(m_profile.gatePct, desiredLen));
+            else a.lengthBeats = std::max(a.lengthBeats, std::min(0.95, desiredLen));
+            // IMPORTANT: engine decides whether to cut the previous note based on the *destination* event.
+            // So mark the destination as allowOverlap to prevent the engine from pre-cutting `a`.
+            b.allowOverlap = true;
+
+            // Insert the articulation keyswitch slightly before the destination note.
+            const double ksOffset = std::max(0.0, b.offsetBeats - 0.03);
+
+            if (absIv <= 2 && m_profile.artHammerPull) {
+                // HP: small, connected motion.
+                pushKeySwitch(out, UprightVst::KS_HammerPull, 75, ksOffset, noteOffs);
+            } else if (absIv > 2 && m_profile.artLegatoSlide) {
+                // Legato slide: bigger connected motion. Use keyswitch velocity to hint "position change" on bigger shifts.
+                const int ksVel = (absIv >= 7) ? 120 : 85;
+                pushKeySwitch(out, UprightVst::KS_LegatoSlide, ksVel, ksOffset, noteOffs);
+
+                // Optional matching slide noise FX (directional and interval-based).
+                const bool down = (interval < 0);
+                if (down) {
+                    if (absIv >= 4 && m_profile.fxSlideDown4) pushFx(out, UprightVst::FX_SlideDown4, 55, ksOffset, noteOffs);
+                    else if (m_profile.fxSlideDown3) pushFx(out, UprightVst::FX_SlideDown3, 50, ksOffset, noteOffs);
+                } else {
+                    if (absIv >= 4 && m_profile.fxSlideTurn4) pushFx(out, UprightVst::FX_SlideTurn4, 55, ksOffset, noteOffs);
+                    else if (m_profile.fxSlideTurn3) pushFx(out, UprightVst::FX_SlideTurn3, 50, ksOffset, noteOffs);
+                }
+            }
+        }
+
+        // Palm mute: use as a deliberate articulation in intros / broken time / section changes.
+        // We apply it on weak beats to get a more percussive, human "laying back" feel.
+        if (m_profile.artPalmMute) {
+            const bool intro = (ctx.isNewBar && (ctx.isSectionChange || ctx.barInSection == 0));
+            const bool broken = (m_phraseMode == 0);
+            if ((intro || broken) && (ctx.beatInBar == 1 || ctx.beatInBar == 3)) {
+                for (auto& ev : out) {
+                    if (ev.role != BassEvent::Role::MusicalNote || ev.rest) continue;
+                    if (ev.velocity >= 120) continue; // don't mute accents
+                    pushKeySwitch(out, UprightVst::KS_PalmMute, 75, std::max(0.0, ev.offsetBeats - 0.03), noteOffs);
+                    // Slightly shorter notes feel more muted.
+                    ev.lengthBeats = (ev.lengthBeats > 0.0) ? std::min(ev.lengthBeats, 0.65) : 0.65;
+                    break;
+                }
+            }
+        }
+
+        // Natural harmonic: use sparingly as an intentional color at phrase ends.
+        if (m_profile.artNaturalHarmonic && ctx.isPhraseEnd && ctx.beatInBar == 3) {
+            for (auto& ev : out) {
+                if (ev.role != BassEvent::Role::MusicalNote || ev.rest) continue;
+                // Avoid harmonics on very low notes (tends to sound odd/unrealistic).
+                if (ev.midiNote < 40) break;
+                pushKeySwitch(out, UprightVst::KS_NaturalHarmonic, 75, std::max(0.0, ev.offsetBeats - 0.03), noteOffs);
+                break;
+            }
+        }
+
+        // Slide-in on section changes / phrase starts when the first note is a meaningful "arrival".
+        if (m_profile.artSlideInOut) {
+            for (const auto& ev : out) {
+                if (ev.role != BassEvent::Role::MusicalNote) continue;
+                if (ev.rest) continue;
+                if (!(ctx.isNewBar && (ctx.isSectionChange || ctx.barInSection == 0) && ctx.beatInBar == 0)) continue;
+
+                // Only when it's not extremely low (avoid "slide in" below fret 2 guidance).
+                if (ev.midiNote < 30) continue;
+
+                pushKeySwitch(out, UprightVst::KS_SlideInOut, 85, std::max(0.0, ev.offsetBeats - 0.03), noteOffs);
+                break;
+            }
+        }
+
+        // Slide-out: if we’re holding a long note (2-feel / tied broken time), optionally end it with slide-out.
+        if (m_profile.artSlideInOut) {
+            for (auto& ev : out) {
+                if (ev.role != BassEvent::Role::MusicalNote || ev.rest) continue;
+                if (ev.lengthBeats < 1.5) break;
+                // Trigger slide-out late in the beat while the note is still sounding.
+                pushKeySwitch(out, UprightVst::KS_SlideInOut, 85, 0.85, noteOffs);
+                break;
+            }
+        }
+
+        // Ensure Sustain keyswitch is present when articulations are enabled (keeps state consistent).
+        if (m_profile.artSustainAccent) {
+            // Put C0 at the very start of a bar (safe, stable), so any transient articulation reverts correctly.
+            if (ctx.isNewBar && ctx.beatInBar == 0) {
+                pushKeySwitch(out, UprightVst::KS_SustainAccent, 64, 0.0, noteOffs);
+            }
+        }
+
+        // Prepare cross-beat overlap for *next* beat in normal walking modes.
+        // We extend the main note slightly beyond the beat to enable true overlap if the next note is nearby.
+        if (m_profile.artLegatoSlide || m_profile.artHammerPull) {
+            if (m_phraseMode == 1 || m_phraseMode == 2) {
+                int musicalCount = 0;
+                BassEvent* mainEv = nullptr;
+                for (auto& ev : out) {
+                    if (ev.role != BassEvent::Role::MusicalNote || ev.rest) continue;
+                    musicalCount++;
+                    if (!mainEv || ev.offsetBeats < mainEv->offsetBeats) mainEv = &ev;
+                }
+                if (musicalCount == 1 && mainEv && !mainEv->ghost && mainEv->offsetBeats <= 0.15) {
+                    mainEv->lengthBeats = (mainEv->lengthBeats > 0.0) ? std::max(mainEv->lengthBeats, 1.06) : 1.06;
+                    m_pendingCrossBeatLegato = true;
+                    m_pendingCrossBeatFromMidi = mainEv->midiNote;
+                } else {
+                    m_pendingCrossBeatLegato = false;
+                    m_pendingCrossBeatFromMidi = -1;
+                }
+            } else {
+                m_pendingCrossBeatLegato = false;
+                m_pendingCrossBeatFromMidi = -1;
+            }
+        }
+
+        resort();
+    }
 
     return out;
 }

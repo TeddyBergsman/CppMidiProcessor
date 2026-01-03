@@ -38,11 +38,37 @@ BassProfile loadBassProfile(QSettings& settings, const QString& prefix) {
     p.registerCenterMidi = clampInt(readInt(settings, base + "/registerCenterMidi", p.registerCenterMidi), 0, 127);
     p.registerRange = clampInt(readInt(settings, base + "/registerRange", p.registerRange), 0, 60);
     p.maxLeap = clampInt(readInt(settings, base + "/maxLeap", p.maxLeap), 0, 24);
-    p.transposeSemitones = clampInt(readInt(settings, base + "/transposeSemitones", p.transposeSemitones), -36, 36);
+    // transposeSemitones deprecated (previously used for +12 output shift).
+    // Bass output shift is now an internal constant in the playback engine so keyswitch/FX notes are never transposed.
+    (void)readInt(settings, base + "/transposeSemitones", 12);
 
     p.honorSlashBass = readB(settings, base + "/honorSlashBass", p.honorSlashBass);
     p.slashBassProb = clampD(readD(settings, base + "/slashBassProb", p.slashBassProb), 0.0, 1.0);
     p.treatMaj6AsMaj7 = readB(settings, base + "/treatMaj6AsMaj7", p.treatMaj6AsMaj7);
+
+    // VST articulations / FX
+    p.ampleNoteNameOffsetSemitones = clampInt(readInt(settings, base + "/ampleNoteNameOffsetSemitones", p.ampleNoteNameOffsetSemitones), -24, 24);
+    p.artSustainAccent = readB(settings, base + "/artSustainAccent", p.artSustainAccent);
+    p.artNaturalHarmonic = readB(settings, base + "/artNaturalHarmonic", p.artNaturalHarmonic);
+    p.artPalmMute = readB(settings, base + "/artPalmMute", p.artPalmMute);
+    p.artSlideInOut = readB(settings, base + "/artSlideInOut", p.artSlideInOut);
+    p.artLegatoSlide = readB(settings, base + "/artLegatoSlide", p.artLegatoSlide);
+    p.artHammerPull = readB(settings, base + "/artHammerPull", p.artHammerPull);
+
+    p.fxHitRimMute = readB(settings, base + "/fxHitRimMute", p.fxHitRimMute);
+    p.fxHitTopPalmMute = readB(settings, base + "/fxHitTopPalmMute", p.fxHitTopPalmMute);
+    p.fxHitTopFingerMute = readB(settings, base + "/fxHitTopFingerMute", p.fxHitTopFingerMute);
+    p.fxHitTopOpen = readB(settings, base + "/fxHitTopOpen", p.fxHitTopOpen);
+    p.fxHitRimOpen = readB(settings, base + "/fxHitRimOpen", p.fxHitRimOpen);
+    p.fxScratch = readB(settings, base + "/fxScratch", p.fxScratch);
+    p.fxBreath = readB(settings, base + "/fxBreath", p.fxBreath);
+    p.fxSingleStringSlap = readB(settings, base + "/fxSingleStringSlap", p.fxSingleStringSlap);
+    p.fxLeftHandSlapNoise = readB(settings, base + "/fxLeftHandSlapNoise", p.fxLeftHandSlapNoise);
+    p.fxRightHandSlapNoise = readB(settings, base + "/fxRightHandSlapNoise", p.fxRightHandSlapNoise);
+    p.fxSlideTurn4 = readB(settings, base + "/fxSlideTurn4", p.fxSlideTurn4);
+    p.fxSlideTurn3 = readB(settings, base + "/fxSlideTurn3", p.fxSlideTurn3);
+    p.fxSlideDown4 = readB(settings, base + "/fxSlideDown4", p.fxSlideDown4);
+    p.fxSlideDown3 = readB(settings, base + "/fxSlideDown3", p.fxSlideDown3);
 
     p.swingAmount = clampD(readD(settings, base + "/swingAmount", p.swingAmount), 0.0, 1.0);
     p.swingRatio = clampD(readD(settings, base + "/swingRatio", p.swingRatio), 1.2, 4.0);
@@ -120,11 +146,35 @@ void saveBassProfile(QSettings& settings, const QString& prefix, const BassProfi
     settings.setValue(base + "/registerCenterMidi", p.registerCenterMidi);
     settings.setValue(base + "/registerRange", p.registerRange);
     settings.setValue(base + "/maxLeap", p.maxLeap);
-    settings.setValue(base + "/transposeSemitones", p.transposeSemitones);
+    // transposeSemitones deprecated; no longer saved.
 
     settings.setValue(base + "/honorSlashBass", p.honorSlashBass);
     settings.setValue(base + "/slashBassProb", p.slashBassProb);
     settings.setValue(base + "/treatMaj6AsMaj7", p.treatMaj6AsMaj7);
+
+    // VST articulations / FX
+    settings.setValue(base + "/ampleNoteNameOffsetSemitones", p.ampleNoteNameOffsetSemitones);
+    settings.setValue(base + "/artSustainAccent", p.artSustainAccent);
+    settings.setValue(base + "/artNaturalHarmonic", p.artNaturalHarmonic);
+    settings.setValue(base + "/artPalmMute", p.artPalmMute);
+    settings.setValue(base + "/artSlideInOut", p.artSlideInOut);
+    settings.setValue(base + "/artLegatoSlide", p.artLegatoSlide);
+    settings.setValue(base + "/artHammerPull", p.artHammerPull);
+
+    settings.setValue(base + "/fxHitRimMute", p.fxHitRimMute);
+    settings.setValue(base + "/fxHitTopPalmMute", p.fxHitTopPalmMute);
+    settings.setValue(base + "/fxHitTopFingerMute", p.fxHitTopFingerMute);
+    settings.setValue(base + "/fxHitTopOpen", p.fxHitTopOpen);
+    settings.setValue(base + "/fxHitRimOpen", p.fxHitRimOpen);
+    settings.setValue(base + "/fxScratch", p.fxScratch);
+    settings.setValue(base + "/fxBreath", p.fxBreath);
+    settings.setValue(base + "/fxSingleStringSlap", p.fxSingleStringSlap);
+    settings.setValue(base + "/fxLeftHandSlapNoise", p.fxLeftHandSlapNoise);
+    settings.setValue(base + "/fxRightHandSlapNoise", p.fxRightHandSlapNoise);
+    settings.setValue(base + "/fxSlideTurn4", p.fxSlideTurn4);
+    settings.setValue(base + "/fxSlideTurn3", p.fxSlideTurn3);
+    settings.setValue(base + "/fxSlideDown4", p.fxSlideDown4);
+    settings.setValue(base + "/fxSlideDown3", p.fxSlideDown3);
 
     settings.setValue(base + "/swingAmount", p.swingAmount);
     settings.setValue(base + "/swingRatio", p.swingRatio);

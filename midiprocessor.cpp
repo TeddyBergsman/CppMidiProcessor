@@ -421,6 +421,24 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     }
                 } else if (event.source == MidiSource::VirtualBand) {
                     // Virtual musicians: forward as-is (no transpose, no channel remap).
+                    if (m_isVerbose.load()) {
+                        // Log note events so we can verify keyswitch/FX output is actually happening.
+                        if (event.message.size() >= 3) {
+                            const unsigned char st = event.message[0] & 0xF0;
+                            const int ch = int(event.message[0] & 0x0F) + 1;
+                            const int note = int(event.message[1]);
+                            const int vel = int(event.message[2]);
+                            if (st == 0x90 && vel > 0) {
+                                std::lock_guard<std::mutex> lock(m_logMutex);
+                                m_logQueue.push(QString("VirtualBand NOTE_ON  ch%1 note=%2 vel=%3")
+                                                    .arg(ch).arg(note).arg(vel).toStdString());
+                            } else if (st == 0x80 || (st == 0x90 && vel == 0)) {
+                                std::lock_guard<std::mutex> lock(m_logMutex);
+                                m_logQueue.push(QString("VirtualBand NOTE_OFF ch%1 note=%2")
+                                                    .arg(ch).arg(note).toStdString());
+                            }
+                        }
+                    }
                     midiOut->sendMessage(&event.message);
                 }
 

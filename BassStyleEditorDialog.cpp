@@ -77,14 +77,12 @@ void BassStyleEditorDialog::buildUi() {
     m_registerCenter = makeSpin(0, 127);
     m_registerRange = makeSpin(0, 60);
     m_maxLeap = makeSpin(0, 24);
-    m_transposeSemis = makeSpin(-36, 36);
     rangeForm->addRow("MIDI channel", m_channel);
     rangeForm->addRow("Min MIDI note", m_minNote);
     rangeForm->addRow("Max MIDI note", m_maxNote);
     rangeForm->addRow("Register center", m_registerCenter);
     rangeForm->addRow("Register range (+/-)", m_registerRange);
     rangeForm->addRow("Max leap (semitones)", m_maxLeap);
-    rangeForm->addRow("Output transpose (semitones)", m_transposeSemis);
 
     // --- Feel ---
     auto* feelBox = new QGroupBox("Timing / Articulation");
@@ -212,6 +210,77 @@ void BassStyleEditorDialog::buildUi() {
     appForm->addRow("Diatonic-ish", m_wAppDia);
     appForm->addRow("Enclosure-ish", m_wAppEncl);
 
+    // --- VST articulations / FX (Ample Bass Upright) ---
+    m_vstBox = new QGroupBox("VST: Articulations & FX (Ample Bass Upright)");
+    auto* vstGrid = new QGridLayout(m_vstBox);
+    vstGrid->setHorizontalSpacing(10);
+    vstGrid->setVerticalSpacing(6);
+
+    auto* vstTop = new QWidget(m_vstBox);
+    auto* vstTopRow = new QHBoxLayout(vstTop);
+    vstTopRow->setContentsMargins(0, 0, 0, 0);
+    vstTopRow->setSpacing(8);
+    auto* offLbl = new QLabel("Note name offset (semitones):", vstTop);
+    offLbl->setToolTip("Some VST manuals use a different octave naming.\n"
+                       "If the manual says F#4 but you see we send 66, set this to +12 so F#4 becomes 78.");
+    m_ampleOffsetSemis = makeSpin(-24, 24);
+    m_ampleOffsetSemis->setToolTip(offLbl->toolTip());
+    vstTopRow->addWidget(offLbl);
+    vstTopRow->addWidget(m_ampleOffsetSemis);
+    vstTopRow->addStretch(1);
+
+    auto* artBox = new QGroupBox("Articulations (Keyswitches)");
+    auto* artLayout = new QVBoxLayout(artBox);
+    m_artSustainAccent = new QCheckBox("Sustain & Accent (C0; vel >= 126 = Accent)");
+    m_artNaturalHarmonic = new QCheckBox("Natural Harmonic (C#0)");
+    m_artPalmMute = new QCheckBox("Palm Mute (D0)");
+    m_artSlideInOut = new QCheckBox("Slide In / Out (D#0)");
+    m_artLegatoSlide = new QCheckBox("Legato Slide (E0; overlapping notes)");
+    m_artHammerPull = new QCheckBox("Hammer-On / Pull-Off (F0; overlapping notes)");
+    artLayout->addWidget(m_artSustainAccent);
+    artLayout->addWidget(m_artNaturalHarmonic);
+    artLayout->addWidget(m_artPalmMute);
+    artLayout->addWidget(m_artSlideInOut);
+    artLayout->addWidget(m_artLegatoSlide);
+    artLayout->addWidget(m_artHammerPull);
+
+    auto* fxBox = new QGroupBox("FX Sounds (Notes)");
+    auto* fxLayout = new QVBoxLayout(fxBox);
+    m_fxHitRimMute = new QCheckBox("Hit Rim (Mute) F#4");
+    m_fxHitTopPalmMute = new QCheckBox("Hit Top (Palm Mute) G4");
+    m_fxHitTopFingerMute = new QCheckBox("Hit Top (Finger Mute) G#4");
+    m_fxHitTopOpen = new QCheckBox("Hit Top (Open) A4");
+    m_fxHitRimOpen = new QCheckBox("Hit Rim (Open) A#4");
+    m_fxScratch = new QCheckBox("Scratch F5");
+    m_fxBreath = new QCheckBox("Breath F#5");
+    m_fxSingleStringSlap = new QCheckBox("Single String Slap G5");
+    m_fxLeftHandSlapNoise = new QCheckBox("Left-Hand Slap Noise G#5");
+    m_fxRightHandSlapNoise = new QCheckBox("Right-Hand Slap Noise A5");
+    m_fxSlideTurn4 = new QCheckBox("Fx Slide Turn 4 A#5");
+    m_fxSlideTurn3 = new QCheckBox("Fx Slide Turn 3 B5");
+    m_fxSlideDown4 = new QCheckBox("Fx Slide Down 4 C6");
+    m_fxSlideDown3 = new QCheckBox("Fx Slide Down 3 C#6");
+    fxLayout->addWidget(m_fxHitRimMute);
+    fxLayout->addWidget(m_fxHitTopPalmMute);
+    fxLayout->addWidget(m_fxHitTopFingerMute);
+    fxLayout->addWidget(m_fxHitTopOpen);
+    fxLayout->addWidget(m_fxHitRimOpen);
+    fxLayout->addSpacing(6);
+    fxLayout->addWidget(m_fxScratch);
+    fxLayout->addWidget(m_fxBreath);
+    fxLayout->addWidget(m_fxSingleStringSlap);
+    fxLayout->addWidget(m_fxLeftHandSlapNoise);
+    fxLayout->addWidget(m_fxRightHandSlapNoise);
+    fxLayout->addSpacing(6);
+    fxLayout->addWidget(m_fxSlideTurn4);
+    fxLayout->addWidget(m_fxSlideTurn3);
+    fxLayout->addWidget(m_fxSlideDown4);
+    fxLayout->addWidget(m_fxSlideDown3);
+
+    vstGrid->addWidget(vstTop, 0, 0, 1, 2);
+    vstGrid->addWidget(artBox, 1, 0);
+    vstGrid->addWidget(fxBox, 1, 1);
+
     auto* grid = new QGridLayout;
     grid->setHorizontalSpacing(10);
     grid->setVerticalSpacing(10);
@@ -221,7 +290,8 @@ void BassStyleEditorDialog::buildUi() {
     grid->addWidget(lineBox, 1, 1);
     grid->addWidget(weightsBox, 2, 0);
     grid->addWidget(appBox, 2, 1);
-    grid->addWidget(m_advBox, 3, 0, 1, 2);
+    grid->addWidget(m_vstBox, 3, 0, 1, 2);
+    grid->addWidget(m_advBox, 4, 0, 1, 2);
 
     root->addWidget(m_enabled);
 
@@ -282,7 +352,6 @@ void BassStyleEditorDialog::buildUi() {
             p.registerCenterMidi = cur.registerCenterMidi;
             p.registerRange = cur.registerRange;
             p.maxLeap = cur.maxLeap;
-            p.transposeSemitones = cur.transposeSemitones;
         }
 
         // Apply to UI + preview.
@@ -308,7 +377,6 @@ void BassStyleEditorDialog::setUiFromProfile(const music::BassProfile& p) {
     m_registerCenter->setValue(p.registerCenterMidi);
     m_registerRange->setValue(p.registerRange);
     m_maxLeap->setValue(p.maxLeap);
-    if (m_transposeSemis) m_transposeSemis->setValue(p.transposeSemitones);
 
     m_baseVelocity->setValue(p.baseVelocity);
     m_velocityVariance->setValue(p.velocityVariance);
@@ -364,6 +432,29 @@ void BassStyleEditorDialog::setUiFromProfile(const music::BassProfile& p) {
     m_wAppChrom->setValue(p.wApproachChromatic);
     m_wAppDia->setValue(p.wApproachDiatonic);
     m_wAppEncl->setValue(p.wApproachEnclosure);
+
+    if (m_ampleOffsetSemis) m_ampleOffsetSemis->setValue(p.ampleNoteNameOffsetSemitones);
+    if (m_artSustainAccent) m_artSustainAccent->setChecked(p.artSustainAccent);
+    if (m_artNaturalHarmonic) m_artNaturalHarmonic->setChecked(p.artNaturalHarmonic);
+    if (m_artPalmMute) m_artPalmMute->setChecked(p.artPalmMute);
+    if (m_artSlideInOut) m_artSlideInOut->setChecked(p.artSlideInOut);
+    if (m_artLegatoSlide) m_artLegatoSlide->setChecked(p.artLegatoSlide);
+    if (m_artHammerPull) m_artHammerPull->setChecked(p.artHammerPull);
+
+    if (m_fxHitRimMute) m_fxHitRimMute->setChecked(p.fxHitRimMute);
+    if (m_fxHitTopPalmMute) m_fxHitTopPalmMute->setChecked(p.fxHitTopPalmMute);
+    if (m_fxHitTopFingerMute) m_fxHitTopFingerMute->setChecked(p.fxHitTopFingerMute);
+    if (m_fxHitTopOpen) m_fxHitTopOpen->setChecked(p.fxHitTopOpen);
+    if (m_fxHitRimOpen) m_fxHitRimOpen->setChecked(p.fxHitRimOpen);
+    if (m_fxScratch) m_fxScratch->setChecked(p.fxScratch);
+    if (m_fxBreath) m_fxBreath->setChecked(p.fxBreath);
+    if (m_fxSingleStringSlap) m_fxSingleStringSlap->setChecked(p.fxSingleStringSlap);
+    if (m_fxLeftHandSlapNoise) m_fxLeftHandSlapNoise->setChecked(p.fxLeftHandSlapNoise);
+    if (m_fxRightHandSlapNoise) m_fxRightHandSlapNoise->setChecked(p.fxRightHandSlapNoise);
+    if (m_fxSlideTurn4) m_fxSlideTurn4->setChecked(p.fxSlideTurn4);
+    if (m_fxSlideTurn3) m_fxSlideTurn3->setChecked(p.fxSlideTurn3);
+    if (m_fxSlideDown4) m_fxSlideDown4->setChecked(p.fxSlideDown4);
+    if (m_fxSlideDown3) m_fxSlideDown3->setChecked(p.fxSlideDown3);
 }
 
 music::BassProfile BassStyleEditorDialog::profileFromUi() const {
@@ -377,7 +468,6 @@ music::BassProfile BassStyleEditorDialog::profileFromUi() const {
     p.registerCenterMidi = m_registerCenter->value();
     p.registerRange = m_registerRange->value();
     p.maxLeap = m_maxLeap->value();
-    if (m_transposeSemis) p.transposeSemitones = m_transposeSemis->value();
 
     p.baseVelocity = m_baseVelocity->value();
     p.velocityVariance = m_velocityVariance->value();
@@ -438,6 +528,29 @@ music::BassProfile BassStyleEditorDialog::profileFromUi() const {
     p.wApproachChromatic = m_wAppChrom->value();
     p.wApproachDiatonic = m_wAppDia->value();
     p.wApproachEnclosure = m_wAppEncl->value();
+
+    if (m_ampleOffsetSemis) p.ampleNoteNameOffsetSemitones = m_ampleOffsetSemis->value();
+    if (m_artSustainAccent) p.artSustainAccent = m_artSustainAccent->isChecked();
+    if (m_artNaturalHarmonic) p.artNaturalHarmonic = m_artNaturalHarmonic->isChecked();
+    if (m_artPalmMute) p.artPalmMute = m_artPalmMute->isChecked();
+    if (m_artSlideInOut) p.artSlideInOut = m_artSlideInOut->isChecked();
+    if (m_artLegatoSlide) p.artLegatoSlide = m_artLegatoSlide->isChecked();
+    if (m_artHammerPull) p.artHammerPull = m_artHammerPull->isChecked();
+
+    if (m_fxHitRimMute) p.fxHitRimMute = m_fxHitRimMute->isChecked();
+    if (m_fxHitTopPalmMute) p.fxHitTopPalmMute = m_fxHitTopPalmMute->isChecked();
+    if (m_fxHitTopFingerMute) p.fxHitTopFingerMute = m_fxHitTopFingerMute->isChecked();
+    if (m_fxHitTopOpen) p.fxHitTopOpen = m_fxHitTopOpen->isChecked();
+    if (m_fxHitRimOpen) p.fxHitRimOpen = m_fxHitRimOpen->isChecked();
+    if (m_fxScratch) p.fxScratch = m_fxScratch->isChecked();
+    if (m_fxBreath) p.fxBreath = m_fxBreath->isChecked();
+    if (m_fxSingleStringSlap) p.fxSingleStringSlap = m_fxSingleStringSlap->isChecked();
+    if (m_fxLeftHandSlapNoise) p.fxLeftHandSlapNoise = m_fxLeftHandSlapNoise->isChecked();
+    if (m_fxRightHandSlapNoise) p.fxRightHandSlapNoise = m_fxRightHandSlapNoise->isChecked();
+    if (m_fxSlideTurn4) p.fxSlideTurn4 = m_fxSlideTurn4->isChecked();
+    if (m_fxSlideTurn3) p.fxSlideTurn3 = m_fxSlideTurn3->isChecked();
+    if (m_fxSlideDown4) p.fxSlideDown4 = m_fxSlideDown4->isChecked();
+    if (m_fxSlideDown3) p.fxSlideDown3 = m_fxSlideDown3->isChecked();
 
     return p;
 }

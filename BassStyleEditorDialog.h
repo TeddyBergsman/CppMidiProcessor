@@ -44,7 +44,6 @@ private:
     QSpinBox* m_registerCenter = nullptr;
     QSpinBox* m_registerRange = nullptr;
     QSpinBox* m_maxLeap = nullptr;
-    QSpinBox* m_transposeSemis = nullptr;
 
     QSpinBox* m_baseVelocity = nullptr;
     QSpinBox* m_velocityVariance = nullptr;
@@ -99,6 +98,31 @@ private:
     QDoubleSpinBox* m_wAppChrom = nullptr;
     QDoubleSpinBox* m_wAppDia = nullptr;
     QDoubleSpinBox* m_wAppEncl = nullptr;
+
+    // VST articulations / FX toggles
+    QGroupBox* m_vstBox = nullptr;
+    QSpinBox* m_ampleOffsetSemis = nullptr;
+    QCheckBox* m_artSustainAccent = nullptr;
+    QCheckBox* m_artNaturalHarmonic = nullptr;
+    QCheckBox* m_artPalmMute = nullptr;
+    QCheckBox* m_artSlideInOut = nullptr;
+    QCheckBox* m_artLegatoSlide = nullptr;
+    QCheckBox* m_artHammerPull = nullptr;
+
+    QCheckBox* m_fxHitRimMute = nullptr;
+    QCheckBox* m_fxHitTopPalmMute = nullptr;
+    QCheckBox* m_fxHitTopFingerMute = nullptr;
+    QCheckBox* m_fxHitTopOpen = nullptr;
+    QCheckBox* m_fxHitRimOpen = nullptr;
+    QCheckBox* m_fxScratch = nullptr;
+    QCheckBox* m_fxBreath = nullptr;
+    QCheckBox* m_fxSingleStringSlap = nullptr;
+    QCheckBox* m_fxLeftHandSlapNoise = nullptr;
+    QCheckBox* m_fxRightHandSlapNoise = nullptr;
+    QCheckBox* m_fxSlideTurn4 = nullptr;
+    QCheckBox* m_fxSlideTurn3 = nullptr;
+    QCheckBox* m_fxSlideDown4 = nullptr;
+    QCheckBox* m_fxSlideDown3 = nullptr;
 
     QDialogButtonBox* m_buttons = nullptr;
 };

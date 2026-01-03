@@ -33,7 +33,7 @@ private:
     // Layout metrics
     int m_margin = 12;
     int m_sectionGutter = 36; // room for section + time signature (tighter like iReal)
-    int m_lineHeight = 110;
+    int m_lineHeight = 96;
     int m_barHeight = 88;
 
     // Flattened cell rects in content coordinates (not viewport coords)

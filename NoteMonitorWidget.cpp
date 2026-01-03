@@ -14,47 +14,72 @@
 #include <QSettings>
 
 namespace {
-static QString keyFieldToKeyCenter(const QString& keyField) {
-    // iReal song key field examples: "Eb", "F#", "G-" (minor).
-    QString k = keyField.trimmed();
-    if (k.isEmpty()) return {};
-    const bool isMinor = k.endsWith('-');
-    if (isMinor) k.chop(1);
-    if (k.isEmpty()) return {};
-    return k + (isMinor ? " minor" : " major");
+static QString normalizeKeyCenter(const QString& s) {
+    return s.trimmed().toLower();
 }
 
-static QStringList defaultKeyCenters() {
-    // Include common major + relative minor keys (circle-of-fifths style).
+static QStringList orderedMajorKeyCenters() {
+    // Requested ordering: C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B
     return {
-        "C major","A minor",
-        "G major","E minor",
-        "D major","B minor",
-        "A major","F# minor",
-        "E major","C# minor",
-        "B major","G# minor",
-        "F# major","D# minor",
-        "C# major","A# minor",
-        "F major","D minor",
-        "Bb major","G minor",
-        "Eb major","C minor",
-        "Ab major","F minor",
-        "Db major","Bb minor",
-        "Gb major","Eb minor",
-        "Cb major","Ab minor"
+        "C major",
+        "Db major",
+        "D major",
+        "Eb major",
+        "E major",
+        "F major",
+        "Gb major",
+        "G major",
+        "Ab major",
+        "A major",
+        "Bb major",
+        "B major",
+    };
+}
+
+static QStringList orderedMinorKeyCenters() {
+    // Requested ordering: A, Bb, C, C# ... (chromatic from A with preferred spellings)
+    return {
+        "A minor",
+        "Bb minor",
+        "B minor",
+        "C minor",
+        "C# minor",
+        "D minor",
+        "Eb minor",
+        "E minor",
+        "F minor",
+        "F# minor",
+        "G minor",
+        "Ab minor",
     };
 }
 
 static QStringList keyCentersForMode(bool isMinor) {
-    QStringList all = defaultKeyCenters();
-    QStringList out;
-    out.reserve(all.size());
-    for (const QString& k : all) {
-        const bool kMinor = k.toLower().contains("minor");
-        if (kMinor == isMinor) out.push_back(k);
-    }
-    return out;
+    return isMinor ? orderedMinorKeyCenters() : orderedMajorKeyCenters();
 }
+
+class KeyDefaultSuffixDelegate final : public QStyledItemDelegate {
+public:
+    explicit KeyDefaultSuffixDelegate(QObject* parent = nullptr)
+        : QStyledItemDelegate(parent) {}
+
+    void setDefaultKeyCenter(const QString& keyCenter) {
+        m_default = normalizeKeyCenter(keyCenter);
+    }
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
+        QStyleOptionViewItem opt(option);
+        initStyleOption(&opt, index);
+        const QString text = index.data(Qt::DisplayRole).toString();
+        if (!m_default.isEmpty() && normalizeKeyCenter(text) == m_default) {
+            opt.text = text + " (default)";
+        }
+        QStyledItemDelegate::paint(painter, opt, index);
+    }
+
+private:
+    QString m_default;
+};
 
 static int pitchClassFromSpelling(const QString& letter, const QString& accidental) {
     if (letter.isEmpty()) return -1;
@@ -78,6 +103,45 @@ static int pitchClassFromSpelling(const QString& letter, const QString& accident
     pc %= 12;
     if (pc < 0) pc += 12;
     return pc;
+}
+
+static QString canonicalKeyNameFromPitchClass(int pc, bool isMinor) {
+    pc %= 12;
+    if (pc < 0) pc += 12;
+    // Match dropdown spellings.
+    static const QString majorNames[12] = {
+        "C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"
+    };
+    static const QString minorNames[12] = {
+        "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"
+    };
+    return isMinor ? minorNames[pc] : majorNames[pc];
+}
+
+static QString keyFieldToKeyCenter(const QString& keyField) {
+    // iReal song key field examples: "Eb", "F#", "G-" (minor).
+    QString k = keyField.trimmed();
+    if (k.isEmpty()) return {};
+
+    const bool isMinor = k.endsWith('-');
+    if (isMinor) k.chop(1);
+    if (k.isEmpty()) return {};
+
+    const QString letter = k.left(1);
+    QString acc;
+    if (k.size() >= 2) {
+        const QChar a = k[1];
+        if (a == QChar('#') || a == QChar('b') || a == QChar(0x266F) || a == QChar(0x266D)) {
+            acc = k.mid(1, 1);
+        }
+    }
+    const int pc = pitchClassFromSpelling(letter, acc);
+    if (pc < 0) {
+        // Fallback to raw spelling if unexpected.
+        return k + (isMinor ? " minor" : " major");
+    }
+    const QString canon = canonicalKeyNameFromPitchClass(pc, isMinor);
+    return canon + (isMinor ? " minor" : " major");
 }
 
 static int pitchClassFromKeyCenter(const QString& keyCenter, bool* isMinorOut = nullptr) {
@@ -259,7 +323,8 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_keyCombo->setEnabled(false);
     m_keyCombo->setFixedWidth(120);
     m_keyCombo->setStyleSheet("QComboBox { background-color: #111; color: #eee; padding: 4px; }");
-    m_keyCombo->addItems(defaultKeyCenters());
+    m_keyCombo->addItems(orderedMajorKeyCenters());
+    m_keyCombo->setItemDelegate(new KeyDefaultSuffixDelegate(m_keyCombo));
 
     m_playButton = new QPushButton("Play", chartHeader);
     m_playButton->setEnabled(false);
@@ -508,6 +573,9 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
         const bool prev = m_keyCombo->blockSignals(true);
         m_keyCombo->clear();
         m_keyCombo->addItems(keyCentersForMode(isMinorSong));
+        if (auto* d = dynamic_cast<KeyDefaultSuffixDelegate*>(m_keyCombo->itemDelegate())) {
+            d->setDefaultKeyCenter(m_detectedSongKeyCenter);
+        }
         int kidx = m_keyCombo->findText(selectedKeyCenter);
         if (kidx < 0 && !selectedKeyCenter.isEmpty()) {
             // If the detected/overridden key isn't in our list (rare), prepend it (still mode-consistent).

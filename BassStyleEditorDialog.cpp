@@ -519,9 +519,15 @@ void BassStyleEditorDialog::setUiFromProfile(const music::BassProfile& p) {
     if (m_fxSlideDown4) m_fxSlideDown4->setChecked(p.fxSlideDown4);
     if (m_fxSlideDown3) m_fxSlideDown3->setChecked(p.fxSlideDown3);
 
-    if (m_reasoningLogEnabled) m_reasoningLogEnabled->setChecked(p.reasoningLogEnabled);
-    // Ensure connection state matches the checkbox (without forcing it on).
-    setLiveLogActive(p.reasoningLogEnabled);
+    // NOTE: We intentionally do NOT auto-activate the live log on dialog open, even if it was
+    // previously enabled. On some macOS setups, attaching live-updating views during window show
+    // can trigger unstable AppKit/CoreAnimation behavior. The user can re-enable it explicitly.
+    if (m_reasoningLogEnabled) {
+        const bool prev = m_reasoningLogEnabled->blockSignals(true);
+        m_reasoningLogEnabled->setChecked(p.reasoningLogEnabled);
+        m_reasoningLogEnabled->blockSignals(prev);
+    }
+    setLiveLogActive(false);
 }
 
 music::BassProfile BassStyleEditorDialog::profileFromUi() const {

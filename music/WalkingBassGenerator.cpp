@@ -888,9 +888,12 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
 
         // Replace some ghost "dead notes" with FX hits when enabled.
         // IMPORTANT: do NOT replace *all* ghosts; that becomes "too many muted notes" and reads like mistakes.
-        for (auto& ev : out) {
-            if (ev.role != BassEvent::Role::MusicalNote) continue;
-            if (!ev.ghost) continue;
+        //
+        // NOTE: We must NOT append to `out` while iterating it by reference (would invalidate references/iterators).
+        const int ghostScanCount = out.size();
+        for (int i = 0; i < ghostScanCount; ++i) {
+            if (out[i].role != BassEvent::Role::MusicalNote) continue;
+            if (!out[i].ghost) continue;
 
             // Choose an appropriate muted hit based on availability.
             int hit = -1;
@@ -898,35 +901,44 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
             else if (m_profile.fxHitTopFingerMute) hit = UprightVst::FX_HitTopFingerMute;
             else if (m_profile.fxHitRimMute) hit = UprightVst::FX_HitRimMute;
 
+            const int vel0 = out[i].velocity;
+            const double off0 = out[i].offsetBeats;
             const double replaceP = (0.35 + 0.20 * eff); // 35–55% depending on intensity
             if (hit >= 0 && rng.generateDouble() < replaceP) {
-                pushFx(out, hit, std::min(80, std::max(20, ev.velocity + 25)), ev.offsetBeats, noteOffs);
+                pushFx(out, hit, std::min(80, std::max(20, vel0 + 25)), off0, noteOffs);
                 if (explain && !out.isEmpty()) {
                     auto& fxEv = out.last();
                     fxEv.function = "FX hit (mute)";
                     fxEv.reasoning = "Replace some ghost notes with realistic string/contact FX (kept sparse to avoid over-muting).";
                 }
-                ev.rest = true; // suppress pitched ghost note
+                out[i].rest = true; // suppress pitched ghost note
             }
         }
 
         // Cross-beat legato: if the previous beat extended into this beat, decide HP/Legato Slide now.
         // (We can only decide based on the actual interval once we know the destination note.)
         if (m_pendingCrossBeatLegato && m_pendingCrossBeatFromMidi >= 0) {
-            for (auto& ev : out) {
-                if (ev.role != BassEvent::Role::MusicalNote || ev.rest) continue;
-                if (ev.offsetBeats > 0.20) break; // only treat on-beat/near-on-beat as legato destination
-                const int interval = ev.midiNote - m_pendingCrossBeatFromMidi;
+            // Find a destination note without holding references while appending.
+            int destIdx = -1;
+            for (int i = 0; i < out.size(); ++i) {
+                if (out[i].role != BassEvent::Role::MusicalNote || out[i].rest) continue;
+                if (out[i].offsetBeats > 0.20) break; // only treat on-beat/near-on-beat as legato destination
+                destIdx = i;
+                break;
+            }
+
+            if (destIdx >= 0) {
+                const int interval = out[destIdx].midiNote - m_pendingCrossBeatFromMidi;
                 const int absIv = std::abs(interval);
                 if (absIv > 0) {
-                    const double ksOffset = std::max(0.0, ev.offsetBeats - 0.03);
+                    const double ksOffset = std::max(0.0, out[destIdx].offsetBeats - 0.03);
                     if (absIv <= 2 && m_profile.artHammerPull) {
                         pushKeySwitch(out, UprightVst::KS_HammerPull, 75, ksOffset, noteOffs);
-                        ev.allowOverlap = true;
+                        out[destIdx].allowOverlap = true;
                     } else if (absIv <= 12 && m_profile.artLegatoSlide) {
                         const int ksVel = (absIv >= 7) ? 120 : 85;
                         pushKeySwitch(out, UprightVst::KS_LegatoSlide, ksVel, ksOffset, noteOffs);
-                        ev.allowOverlap = true;
+                        out[destIdx].allowOverlap = true;
                         // Optional slide noise to match direction.
                         const bool down = (interval < 0);
                         if (down) {
@@ -938,8 +950,8 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
                         }
                     }
                 }
-                break;
             }
+
             m_pendingCrossBeatLegato = false;
             m_pendingCrossBeatFromMidi = -1;
         }
@@ -964,33 +976,32 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
 
         // Apply legato/HP between adjacent notes *within this beat* when plausible.
         // (This covers pickups, enclosures, and runs — places a real player naturally connects notes.)
-        for (int i = 0; i + 1 < out.size(); ++i) {
-            auto& a = out[i];
-            auto& b = out[i + 1];
-            if (a.role != BassEvent::Role::MusicalNote || b.role != BassEvent::Role::MusicalNote) continue;
-            if (a.rest || b.rest) continue;
+        const int intraScanCount = out.size();
+        for (int i = 0; i + 1 < intraScanCount; ++i) {
+            if (out[i].role != BassEvent::Role::MusicalNote || out[i + 1].role != BassEvent::Role::MusicalNote) continue;
+            if (out[i].rest || out[i + 1].rest) continue;
 
-            const double gap = b.offsetBeats - a.offsetBeats;
+            const double gap = out[i + 1].offsetBeats - out[i].offsetBeats;
             if (gap <= 0.0) continue;
 
             // Only connect when these are close in time (e.g., 8ths inside a beat).
             if (gap > 0.55) continue;
 
-            const int interval = b.midiNote - a.midiNote;
+            const int interval = out[i + 1].midiNote - out[i].midiNote;
             const int absIv = std::abs(interval);
             if (absIv == 0) continue;
 
             // Create a small overlap so the VST's poly-legato logic can trigger.
             const double overlap = 0.06; // ~a 16th at 1 beat; actual ms depends on tempo
             const double desiredLen = gap + overlap;
-            if (a.lengthBeats <= 0.0) a.lengthBeats = std::min(0.95, std::max(m_profile.gatePct, desiredLen));
-            else a.lengthBeats = std::max(a.lengthBeats, std::min(0.95, desiredLen));
+            if (out[i].lengthBeats <= 0.0) out[i].lengthBeats = std::min(0.95, std::max(m_profile.gatePct, desiredLen));
+            else out[i].lengthBeats = std::max(out[i].lengthBeats, std::min(0.95, desiredLen));
             // IMPORTANT: engine decides whether to cut the previous note based on the *destination* event.
             // So mark the destination as allowOverlap to prevent the engine from pre-cutting `a`.
-            b.allowOverlap = true;
+            out[i + 1].allowOverlap = true;
 
             // Insert the articulation keyswitch slightly before the destination note.
-            const double ksOffset = std::max(0.0, b.offsetBeats - 0.03);
+            const double ksOffset = std::max(0.0, out[i + 1].offsetBeats - 0.03);
 
             if (absIv <= 2 && m_profile.artHammerPull) {
                 // HP: small, connected motion.

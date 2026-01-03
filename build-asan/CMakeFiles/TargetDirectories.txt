@@ -1,0 +1,5 @@
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-asan/CMakeFiles/CppMidiProcessor.dir
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-asan/CMakeFiles/edit_cache.dir
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-asan/CMakeFiles/rebuild_cache.dir
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-asan/CMakeFiles/CppMidiProcessor_autogen_timestamp_deps.dir
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-asan/CMakeFiles/CppMidiProcessor_autogen.dir

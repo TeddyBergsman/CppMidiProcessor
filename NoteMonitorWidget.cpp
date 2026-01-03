@@ -678,9 +678,12 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     connect(m_bassEditButton, &QPushButton::clicked, this, [this]() {
         if (!m_playback || m_currentSongId.isEmpty()) return;
         const music::BassProfile snapshot = m_bassProfile;
-        BassStyleEditorDialog dlg(m_bassProfile, m_playback, this);
+        // IMPORTANT: avoid QDialog::exec() nested event loop on macOS (can trigger AppKit paste telemetry crashes).
+        // Use a modeless dialog and handle accept/reject via signals.
+        auto* dlg = new BassStyleEditorDialog(m_bassProfile, m_playback, this);
+        dlg->setAttribute(Qt::WA_DeleteOnClose, true);
 
-        connect(&dlg, &BassStyleEditorDialog::profilePreview, this, [this](const music::BassProfile& p) {
+        connect(dlg, &BassStyleEditorDialog::profilePreview, this, [this](const music::BassProfile& p) {
             m_bassProfile = p;
             if (m_bassToggle) {
                 const bool prev = m_isApplyingSongState;
@@ -690,7 +693,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
             }
             if (m_playback) m_playback->setBassProfile(m_bassProfile);
         });
-        connect(&dlg, &BassStyleEditorDialog::profileCommitted, this, [this](const music::BassProfile& p) {
+        connect(dlg, &BassStyleEditorDialog::profileCommitted, this, [this](const music::BassProfile& p) {
             m_bassProfile = p;
             if (m_playback) m_playback->setBassProfile(m_bassProfile);
             if (m_bassToggle) {
@@ -703,10 +706,9 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
             const QString prefix = overrideGroupForSongId(m_currentSongId) + "/bassProfile";
             music::saveBassProfile(s, prefix, m_bassProfile);
         });
-
-        const int rc = dlg.exec();
-        if (rc != QDialog::Accepted) {
-            // Cancel restores the snapshot.
+        connect(dlg, &QDialog::finished, this, [this, snapshot](int rc) {
+            if (rc == QDialog::Accepted) return;
+            // Cancel/close restores the snapshot.
             m_bassProfile = snapshot;
             if (m_playback) m_playback->setBassProfile(m_bassProfile);
             if (m_bassToggle) {
@@ -715,7 +717,10 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
                 m_bassToggle->setChecked(m_bassProfile.enabled);
                 m_isApplyingSongState = prev;
             }
-        }
+        });
+
+        // Avoid modal windows on macOS (reduces interaction with AppKit modal session / CA commit paths).
+        dlg->show();
     });
 
     connect(m_playButton, &QPushButton::clicked, this, [this]() {

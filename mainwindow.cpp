@@ -148,7 +148,8 @@ void MainWindow::createWidgets(const Preset& preset) {
         "QListWidget {"
         "    background-color: black;"
         "    color: white;"
-        "    font-family: Consolas, Monaco, monospace;"
+        // Avoid generic "monospace" fallback on macOS Qt (can be slow/buggy); use explicit families.
+        "    font-family: Menlo, Monaco, Consolas;"
         "    font-size: 10pt;"
         "    border: 1px solid #333;"
         "}"
@@ -233,7 +234,8 @@ void MainWindow::createWidgets(const Preset& preset) {
     voiceTranscriptionLabel->setWordWrap(true);
     voiceTranscriptionLabel->setMinimumHeight(50);
     voiceTranscriptionLabel->setTextFormat(Qt::RichText);
-    voiceTranscriptionLabel->setStyleSheet("QLabel { background-color: black; color: white; padding: 10px; border-radius: 5px; font-family: monospace; }");
+    // Avoid generic "monospace" fallback on macOS Qt.
+    voiceTranscriptionLabel->setStyleSheet("QLabel { background-color: black; color: white; padding: 10px; border-radius: 5px; font-family: Menlo, Monaco; }");
     
     // Transpose checkbox
     transposeCheckBox = new QCheckBox("Transpose");

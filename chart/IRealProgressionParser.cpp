@@ -163,6 +163,12 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
         return false;
     };
 
+    auto lastEmittedBar = [&]() -> Bar* {
+        if (!currentLine.bars.isEmpty()) return &currentLine.bars.last();
+        if (!model.lines.isEmpty() && !model.lines.last().bars.isEmpty()) return &model.lines.last().bars.last();
+        return nullptr;
+    };
+
     while (i < s.size()) {
         const QChar c = s[i];
 
@@ -246,8 +252,12 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
                 // Special case: iReal streams can end with a dangling '[' to indicate an end-of-chart double barline.
                 // If there is no chord content ahead, attach this marker to the previous real bar instead of creating
                 // a barline-only bar (which we intentionally suppress).
-                if (c == '[' && currentBar.cells.isEmpty() && cellInBar == 0 && !currentLine.bars.isEmpty() && !hasChordAhead(i)) {
-                    currentLine.bars.last().barlineRight += ']';
+                if (c == '[' && currentBar.cells.isEmpty() && cellInBar == 0 && !hasChordAhead(i)) {
+                    if (Bar* last = lastEmittedBar()) {
+                        last->barlineRight += ']';
+                    } else {
+                        currentBar.barlineLeft += c;
+                    }
                 } else {
                     currentBar.barlineLeft += c;
                 }
@@ -256,13 +266,21 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
                 // iReal decoded streams often end with a trailing ']' / 'Z' without additional chord content.
                 const bool curHasContent = barHasChordContent(currentBar, cellInBar) || !currentBar.annotation.trimmed().isEmpty()
                     || currentBar.endingStart > 0 || currentBar.endingEnd > 0;
-                if (!curHasContent && !currentLine.bars.isEmpty()) {
-                    Bar& last = currentLine.bars.last();
+                if (!curHasContent) {
+                    Bar* last = lastEmittedBar();
+                    if (!last) {
+                        // Nothing to attach to; fall back to applying to current bar.
+                        currentBar.barlineRight += c;
+                        finalizeBar();
+                        if (activeEnding != 0) activeEnding = 0;
+                        i += 1;
+                        continue;
+                    }
                     // Ending typically closes at a repeat-end or section end.
                     if (activeEnding != 0) {
-                        last.endingEnd = activeEnding;
+                        last->endingEnd = activeEnding;
                     }
-                    last.barlineRight += c;
+                    last->barlineRight += c;
                     if (activeEnding != 0) {
                         activeEnding = 0;
                     }
@@ -282,8 +300,8 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
                     finalizeBar();
                 } else {
                     // A dangling '|' after a finalized bar belongs to the previous bar's right edge.
-                    if (!currentLine.bars.isEmpty()) {
-                        currentLine.bars.last().barlineRight += c;
+                    if (Bar* last = lastEmittedBar()) {
+                        last->barlineRight += c;
                     } else {
                         currentBar.barlineLeft += c;
                     }

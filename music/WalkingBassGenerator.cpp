@@ -721,12 +721,10 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
                 chordIsValid(ctx.lookaheadChords[3]) &&
                 chordIsValid(ctx.lookaheadChords[4]) &&
                 !sameHarmony(ctx.lookaheadChords[3], ctx.lookaheadChords[4])) {
-                // Choose between two classic ballad devices at the barline.
-                const double pTieAnt = 0.14 + 0.18 * slowBoost;
-                const double pDelay = 0.10 + 0.16 * slowBoost;
-                const double r = rng.generateDouble();
-                if (r < pDelay) patternBallad[3] = 5;
-                else if (r < pDelay + pTieAnt) patternBallad[3] = 4;
+                // Choose between classic ballad devices at the barline.
+                // NOTE: Delayed resolution (pattern 5) is currently disabled because it can read as a timing mistake.
+                const double pTieAnt = 0.18 + 0.22 * slowBoost;
+                if (rng.generateDouble() < pTieAnt) patternBallad[3] = 4;
             }
         } else {
             // Walking: mostly onbeats with some upbeat connectors.

@@ -891,7 +891,7 @@
  mdp:/opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qtwidgetsexports.h
  mdp:/opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qtwidgetsglobal.h
  mdp:/opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qwidget.h
-/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/chart/IRealProgressionParser.h
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordSymbol.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PitchMonitorWidget.h
  mmc:Q_OBJECT
  mdp:/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/Availability.h
@@ -1789,7 +1789,7 @@
  mdp:/opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qtwidgetsexports.h
  mdp:/opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qtwidgetsglobal.h
  mdp:/opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qwidget.h
-/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordSymbol.cpp
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/chart/IRealProgressionParser.h
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PitchColor.h
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/BassPresets.h
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/voicecontroller.h

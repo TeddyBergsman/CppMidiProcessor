@@ -12,7 +12,9 @@ BassStyleEditorDialog::BassStyleEditorDialog(const music::BassProfile& initial,
       m_initial(initial),
       m_playback(playback) {
     setWindowTitle("Bass Style");
-    setModal(true);
+    // Keep this dialog modeless; the caller shows it via `show()` (not exec()).
+    // This ensures the main window remains interactive while the settings are open.
+    setModal(false);
     buildUi();
     setUiFromProfile(initial);
     emitPreview();
@@ -338,7 +340,8 @@ void BassStyleEditorDialog::buildUi() {
         // IMPORTANT: use a list-based log (no text-edit/pasteboard integration).
         // This avoids a macOS AppKit crash seen when opening the dialog with a text-edit control.
         m_liveLog = new QListWidget(box);
-        m_liveLog->setSelectionMode(QAbstractItemView::NoSelection);
+        // Allow selection + copy (requested); keep updates throttled to avoid UI churn.
+        m_liveLog->setSelectionMode(QAbstractItemView::ExtendedSelection);
         m_liveLog->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
         m_liveLog->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         m_liveLog->setWordWrap(false);
@@ -347,6 +350,7 @@ void BassStyleEditorDialog::buildUi() {
         f.setPointSize(std::max(9, f.pointSize()));
         m_liveLog->setFont(f);
         m_liveLog->setStyleSheet("QListWidget { background-color: #0b0b0b; color: #e6e6e6; border: 1px solid #333; }");
+        m_liveLog->setContextMenuPolicy(Qt::CustomContextMenu);
 
         v->addWidget(top);
         v->addWidget(m_liveLog, 1);
@@ -362,6 +366,33 @@ void BassStyleEditorDialog::buildUi() {
 
         connect(m_clearLogBtn, &QPushButton::clicked, this, [this]() {
             if (m_liveLog) m_liveLog->clear();
+        });
+
+        auto copySelectedLog = [this]() {
+            if (!m_liveLog) return;
+            const auto items = m_liveLog->selectedItems();
+            if (items.isEmpty()) return;
+            QStringList lines;
+            lines.reserve(items.size());
+            for (auto* it : items) {
+                if (!it) continue;
+                lines.push_back(it->text());
+            }
+            QGuiApplication::clipboard()->setText(lines.join('\n'));
+        };
+
+        // Keyboard shortcut: Cmd/Ctrl+C copies selected rows.
+        auto* copySc = new QShortcut(QKeySequence::Copy, m_liveLog);
+        connect(copySc, &QShortcut::activated, this, copySelectedLog);
+
+        // Context menu: Copy.
+        connect(m_liveLog, &QListWidget::customContextMenuRequested, this, [this, copySelectedLog](const QPoint& pos) {
+            if (!m_liveLog) return;
+            QMenu menu(m_liveLog);
+            QAction* copy = menu.addAction("Copy");
+            copy->setShortcut(QKeySequence::Copy);
+            connect(copy, &QAction::triggered, this, copySelectedLog);
+            menu.exec(m_liveLog->viewport()->mapToGlobal(pos));
         });
 
         // IMPORTANT: only connect to the playback engine when the user enables logging,

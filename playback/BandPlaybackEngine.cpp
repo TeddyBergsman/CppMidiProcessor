@@ -716,6 +716,9 @@ void BandPlaybackEngine::onTick() {
                 }
                 const QString fn = e.function.trimmed().isEmpty() ? QString("—") : e.function.trimmed();
                 const QString why = e.reasoning.trimmed().isEmpty() ? QString("—") : e.reasoning.trimmed();
+                const int humanizeMs = calcBaseOffsetMs(offset);
+                const int gridOffsetMs = int(std::llround(offset * beatMs));
+                const int totalOffsetMs = gridOffsetMs + humanizeMs;
                 logLine = QString("[bar %1 beat %2] %3  %4 (%5) vel=%6  function=%7  chord=%8  why: %9")
                               .arg(barIndex + 1)
                               .arg(beatInBar + 1)
@@ -726,6 +729,12 @@ void BandPlaybackEngine::onTick() {
                               .arg(fn)
                               .arg(chordText)
                               .arg(why);
+                logLine += QString("  timing: grid=%1ms humanize=%2ms total=%3ms (delayOn=%4ms len=%5ms)")
+                               .arg(gridOffsetMs)
+                               .arg(humanizeMs)
+                               .arg(totalOffsetMs)
+                               .arg(delayOn)
+                               .arg(lenMs);
             }
 
             scheduleEvent(elapsedMs + delayOn, PendingKind::NoteOn, m_bassProfile.midiChannel, note, vel, logOn, logLine);

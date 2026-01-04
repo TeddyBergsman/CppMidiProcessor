@@ -841,6 +841,12 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
     if (m_playback) m_playback->setRepeats(reps);
 
     m_playButton->setEnabled(true);
+
+    // Persist last selected song across sessions.
+    if (!m_isApplyingSongState) {
+        QSettings s;
+        s.setValue("ui/lastSongId", m_currentSongId);
+    }
 }
 
 void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
@@ -873,9 +879,24 @@ void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
         return;
     }
 
-    // Force-load first song so Play is enabled immediately (even on startup auto-load).
-    m_songCombo->setCurrentIndex(0);
-    loadSongAtIndex(0);
+    // Restore last selected song if possible; else fall back to first.
+    int targetIdx = 0;
+    {
+        QSettings s;
+        const QString lastId = s.value("ui/lastSongId", QString()).toString();
+        if (!lastId.isEmpty()) {
+            for (int i = 0; i < m_playlist->songs.size(); ++i) {
+                if (songStableId(m_playlist->songs[i]) == lastId) { targetIdx = i; break; }
+            }
+        }
+    }
+
+    // Force-load selected song so Play is enabled immediately (even on startup auto-load).
+    const bool prev2 = m_songCombo->blockSignals(true);
+    const int maxIdx = std::max(0, int(m_playlist->songs.size()) - 1);
+    m_songCombo->setCurrentIndex(std::max(0, std::min(targetIdx, maxIdx)));
+    m_songCombo->blockSignals(prev2);
+    loadSongAtIndex(m_songCombo->currentIndex());
 }
 
 NoteMonitorWidget::~NoteMonitorWidget() {

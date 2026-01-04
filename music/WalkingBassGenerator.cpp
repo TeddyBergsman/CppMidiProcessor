@@ -520,6 +520,30 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
             return pcs;
         };
 
+        auto avoidPcsForChordScale = [&](const ChordSymbol& c, ScaleType st) -> QVector<int> {
+            // “Avoid notes” are scale degrees that tend to clash hard with the chord’s guide tones
+            // when emphasized. We still allow them as very rare passing tones, but we should not
+            // preferentially select them as “color”.
+            QVector<int> avoid;
+            if (!chordIsValid(c)) return avoid;
+
+            const int root = normalizePc(c.rootPc);
+            const int thirdPc = normalizePc(c.rootPc + thirdIntervalForQuality(c.quality));
+
+            // Major7 in Ionian: natural 11 (4) clashes with major 3.
+            if (c.quality == ChordQuality::Major && c.seventh == SeventhQuality::Major7 && st == ScaleType::Ionian) {
+                avoid.push_back(normalizePc(root + 5)); // 11
+            }
+            // Dominant in Mixolydian (non-sus): natural 11 (4) clashes with major 3.
+            if (c.quality == ChordQuality::Dominant && st == ScaleType::Mixolydian) {
+                if (thirdPc != root) avoid.push_back(normalizePc(root + 5)); // 11
+            }
+
+            std::sort(avoid.begin(), avoid.end());
+            avoid.erase(std::unique(avoid.begin(), avoid.end()), avoid.end());
+            return avoid;
+        };
+
         // Guide-tone target (3rd/7th) for a chord.
         auto guideTones = [&](const ChordSymbol& c) -> QVector<int> {
             QVector<int> g;
@@ -596,7 +620,11 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
 
         // Passing tone between two targets from chord-scale palette (favor stepwise).
         auto choosePassingPc = [&](const ChordSymbol& c, int fromPc, int toPc) -> int {
+            const auto st = primaryScaleTypeForChord(c);
             const QVector<int> pal = paletteForChord(c);
+            const QVector<int> avoid = avoidPcsForChordScale(c, st);
+            const bool isMaj7Ionian =
+                (c.quality == ChordQuality::Major && c.seventh == SeventhQuality::Major7 && st == ScaleType::Ionian);
             int best = fromPc;
             double bestS = -1e9;
             for (int pc : pal) {
@@ -610,17 +638,40 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
                     // favor chord colors: tones not in basic triad often create character
                     const auto basic = ChordDictionary::basicTones(c);
                     const bool isBasic = std::find(basic.begin(), basic.end(), pc) != basic.end();
-                    if (!isBasic) s += 0.45;
+                    const bool isAvoid = std::find(avoid.begin(), avoid.end(), pc) != avoid.end();
+                    if (!isBasic && !isAvoid) s += 0.45;
+                    // Penalize avoid notes heavily so we don't "sound wrong" on Maj7 etc.
+                    if (isAvoid) s -= 2.6;
                     // mild randomness
                     s += (rng.generateDouble() - 0.5) * 0.08;
                     if (s > bestS) { bestS = s; best = pc; }
                 }
             }
             if (best == fromPc) {
-                // chromatic fallback
-                const int up = normalizePc(fromPc + 1);
-                const int dn = normalizePc(fromPc - 1);
-                best = (pcDistance(up, toPc) <= pcDistance(dn, toPc)) ? up : dn;
+                // Fallback strategy:
+                // - Prefer an in-scale neighbor (so Maj7 doesn't randomly get b7/b9 etc. as an "on-beat color").
+                // - Only if that fails, use chromatic neighbor.
+                int bestPal = fromPc;
+                int bestD = 999;
+                for (int pc : pal) {
+                    if (!avoid.isEmpty() && std::find(avoid.begin(), avoid.end(), pc) != avoid.end()) continue;
+                    const int step = pcDistance(fromPc, pc);
+                    if (step == 0) continue;
+                    if (step > 3) continue;
+                    const int d = pcDistance(pc, toPc);
+                    if (d < bestD) { bestD = d; bestPal = pc; }
+                }
+                if (bestPal != fromPc) {
+                    best = bestPal;
+                } else if (!isMaj7Ionian) {
+                    // chromatic fallback (disabled for Maj7/Ionian to avoid "A# over Cmaj7" type clashes)
+                    const int up = normalizePc(fromPc + 1);
+                    const int dn = normalizePc(fromPc - 1);
+                    best = (pcDistance(up, toPc) <= pcDistance(dn, toPc)) ? up : dn;
+                } else {
+                    // last resort: stay put (better than introducing b7 on a Maj7 chord)
+                    best = fromPc;
+                }
             }
             return best;
         };
@@ -1269,11 +1320,21 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
 
                 // Allowed palette from chord-scale + explicit chord tones/colors.
                 const QVector<int> palette = scalePcsForChord(*currentChord);
+                // Avoid-note filtering (see phrase planner for explanation).
+                const auto suggested = ScaleLibrary::suggestForChord(*currentChord);
+                const auto st = !suggested.isEmpty() ? suggested.first() : ScaleType::Ionian;
+                QVector<int> avoid;
+                if (currentChord->quality == ChordQuality::Major && currentChord->seventh == SeventhQuality::Major7 && st == ScaleType::Ionian) {
+                    avoid.push_back(normalizePc(currentChord->rootPc + 5)); // 11
+                }
+                std::sort(avoid.begin(), avoid.end());
+                avoid.erase(std::unique(avoid.begin(), avoid.end()), avoid.end());
 
                 // Candidates: stepwise tones from the palette that move closer to the guide target.
                 QVector<int> candidates;
                 candidates.reserve(12);
                 for (int pc : palette) {
+                    if (!avoid.isEmpty() && std::find(avoid.begin(), avoid.end(), pc) != avoid.end()) continue;
                     const int dNow = pcDistance(curPc, guidePc);
                     const int dNext = pcDistance(pc, guidePc);
                     const int step = pcDistance(curPc, pc);
@@ -1281,12 +1342,30 @@ QVector<BassEvent> WalkingBassGenerator::nextBeat(const BassBeatContext& ctx, co
                         candidates.push_back(pc);
                     }
                 }
-                // Fallback: chromatic approach toward guide if palette is too restrictive.
+                // Fallback: for Maj7/Ionian, prefer diatonic (in-scale) movement; avoid chromatic b7-type tones.
                 if (candidates.isEmpty()) {
-                    const int up = normalizePc(curPc + 1);
-                    const int dn = normalizePc(curPc - 1);
-                    if (pcDistance(up, guidePc) < pcDistance(curPc, guidePc)) candidates.push_back(up);
-                    if (pcDistance(dn, guidePc) < pcDistance(curPc, guidePc)) candidates.push_back(dn);
+                    const bool isMaj7Ionian =
+                        (currentChord->quality == ChordQuality::Major &&
+                         currentChord->seventh == SeventhQuality::Major7 &&
+                         st == ScaleType::Ionian);
+                    if (!isMaj7Ionian) {
+                        const int up = normalizePc(curPc + 1);
+                        const int dn = normalizePc(curPc - 1);
+                        if (pcDistance(up, guidePc) < pcDistance(curPc, guidePc)) candidates.push_back(up);
+                        if (pcDistance(dn, guidePc) < pcDistance(curPc, guidePc)) candidates.push_back(dn);
+                    } else {
+                        // In-scale fallback: pick the closest palette tone toward the guide.
+                        int bestPc = curPc;
+                        int bestD = 999;
+                        for (int pc : palette) {
+                            if (!avoid.isEmpty() && std::find(avoid.begin(), avoid.end(), pc) != avoid.end()) continue;
+                            const int step = pcDistance(curPc, pc);
+                            if (step == 0 || step > 3) continue;
+                            const int d = pcDistance(pc, guidePc);
+                            if (d < bestD) { bestD = d; bestPc = pc; }
+                        }
+                        if (bestPc != curPc) candidates.push_back(bestPc);
+                    }
                 }
 
                 if (!candidates.isEmpty()) {

@@ -77,19 +77,28 @@ static int parseHighestExtension(const QString& s) {
     return 0;
 }
 
-static void decideSeventh(const QString& s, ChordSymbol& out) {
-    // Explicit major seventh markers
-    if (s.contains("maj7", Qt::CaseInsensitive) || s.contains("ma7", Qt::CaseInsensitive) || s.contains("M7")) {
-        out.seventh = SeventhQuality::Major7;
-        return;
-    }
+static void decideSeventh(const QString& sRaw, int ext, ChordSymbol& out) {
+    // IMPORTANT: this must look at the *raw* post-root tail, before we strip "maj"/"m" tokens.
+    // Otherwise "Cmaj7" turns into tail="7" and would be mis-classified as a dominant (minor7).
+
     // Diminished seventh (°7)
-    if (s.contains("dim7", Qt::CaseInsensitive) || s.contains("o7") || s.contains(QChar(0x00B0)) /*°*/ ) {
+    if (sRaw.contains("dim7", Qt::CaseInsensitive) || sRaw.contains("o7") || sRaw.contains(QChar(0x00B0)) /*°*/ ) {
         out.seventh = SeventhQuality::Dim7;
         return;
     }
-    // If any 7/9/11/13 present, default to minor seventh unless otherwise specified above.
-    const int ext = parseHighestExtension(s);
+
+    // Explicit major seventh markers (and maj9/maj11/maj13 imply a major seventh as well).
+    const bool hasMajMarker =
+        sRaw.contains("maj", Qt::CaseInsensitive) ||
+        sRaw.contains("ma7", Qt::CaseInsensitive) ||
+        sRaw.contains("maj7", Qt::CaseInsensitive) ||
+        sRaw.contains("M7");
+    if (hasMajMarker && ext >= 7) {
+        out.seventh = SeventhQuality::Major7;
+        return;
+    }
+
+    // If any 7/9/11/13 present, default to minor seventh unless specified above.
     if (ext >= 7) out.seventh = SeventhQuality::Minor7;
 }
 
@@ -144,6 +153,11 @@ bool parseChordSymbol(const QString& chordText, ChordSymbol& out) {
     if (!parseRootToken(head, out.rootPc)) return false;
     out.quality = ChordQuality::Major; // default triad
 
+    // Preserve the raw tail (post-root) for correct seventh/extension detection.
+    const QString tailRaw = head;
+    const bool hadMajMarker = head.contains("maj", Qt::CaseInsensitive) || head.contains("M7");
+    const bool hadMinorMarker = head.startsWith("m", Qt::CaseInsensitive) || head.startsWith("min", Qt::CaseInsensitive) || head.startsWith("-");
+
     // Slash bass (optional)
     if (!slashBass.isEmpty()) {
         int bassPc = -1;
@@ -188,11 +202,11 @@ bool parseChordSymbol(const QString& chordText, ChordSymbol& out) {
     if (head.contains("alt", Qt::CaseInsensitive)) out.alt = true;
 
     // Extensions / sevenths
-    out.extension = parseHighestExtension(head);
-    decideSeventh(head, out);
+    out.extension = parseHighestExtension(tailRaw);
+    decideSeventh(tailRaw, out.extension, out);
 
     // If the symbol looks like a plain "C7" (no explicit maj/min and has 7), treat as dominant.
-    if (out.extension >= 7 && out.quality == ChordQuality::Major && !head.contains("maj", Qt::CaseInsensitive) && !head.contains("m", Qt::CaseInsensitive)) {
+    if (out.extension >= 7 && out.quality == ChordQuality::Major && !hadMajMarker && !hadMinorMarker) {
         // If it was explicitly maj7 we'll keep Major + Major7; otherwise it's dominant.
         if (out.seventh == SeventhQuality::Minor7) out.quality = ChordQuality::Dominant;
     }

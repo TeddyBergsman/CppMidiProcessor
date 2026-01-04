@@ -55,14 +55,34 @@ QVector<ScaleType> ScaleLibrary::suggestForChord(const ChordSymbol& chord) {
     if (chord.placeholder || chord.noChord) return {};
     QVector<ScaleType> out;
 
+    auto hasSharp11 = [&]() -> bool {
+        // If the chord explicitly has a #11, Lydian is the idiomatic choice.
+        for (const auto& a : chord.alterations) {
+            if (a.degree == 11 && a.delta == +1) return true;
+        }
+        return false;
+    };
+
     // A small, useful heuristic set for later “musician brains”.
     if (chord.quality == ChordQuality::Dominant) {
         if (chord.alt) out.push_back(ScaleType::Altered);
         else if (chord.alterations.size() > 0 && chord.extension >= 7) out.push_back(ScaleType::LydianDominant);
         else out.push_back(ScaleType::Mixolydian);
     } else if (chord.quality == ChordQuality::Major) {
-        if (chord.seventh == SeventhQuality::Major7) out.push_back(ScaleType::Lydian);
-        out.push_back(ScaleType::Ionian);
+        // Maj7: Ionian vs Lydian depends on whether #11 is implied.
+        // Many standards treat Maj7 as Ionian by default; Lydian becomes appropriate when #11 is present
+        // (or when a composition clearly lives in that sound).
+        if (chord.seventh == SeventhQuality::Major7) {
+            if (hasSharp11()) {
+                out.push_back(ScaleType::Lydian);
+                out.push_back(ScaleType::Ionian);
+            } else {
+                out.push_back(ScaleType::Ionian);
+                out.push_back(ScaleType::Lydian);
+            }
+        } else {
+            out.push_back(ScaleType::Ionian);
+        }
     } else if (chord.quality == ChordQuality::Minor) {
         out.push_back(ScaleType::Dorian);
         out.push_back(ScaleType::Aeolian);

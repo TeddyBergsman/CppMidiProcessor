@@ -392,6 +392,9 @@ void BandPlaybackEngine::play() {
     m_dispatchTimer.stop();
     m_tickTimer.start();
     // Let onTick emit the first cell (and first note) exactly once.
+
+    // Defensive: clear sustain at playback start to avoid "stuck pedal" from previous sessions/synth state.
+    if (m_pianoProfile.enabled) emit pianoCC(m_pianoProfile.midiChannel, 64, 0);
 }
 
 void BandPlaybackEngine::stop() {
@@ -465,7 +468,10 @@ void BandPlaybackEngine::onDispatch() {
             else emit pianoAllNotesOff(ev.channel);
             break;
         case PendingKind::CC:
-            if (ev.instrument == Instrument::Piano) emit pianoCC(ev.channel, ev.cc, ev.ccValue);
+            if (ev.instrument == Instrument::Piano) {
+                if (ev.emitLog && !ev.logLine.isEmpty()) emit pianoLogLine(ev.logLine);
+                emit pianoCC(ev.channel, ev.cc, ev.ccValue);
+            }
             break;
         }
     }
@@ -894,8 +900,34 @@ void BandPlaybackEngine::onTick() {
                     if (delayOn < 0) delayOn = 0;
 
                     if (e.kind == music::PianoEvent::Kind::CC) {
+                        bool emitLog = false;
+                        QString logLine;
+                        if (m_pianoProfile.reasoningLogEnabled) {
+                            const QString chordText = !cur.originalText.trimmed().isEmpty()
+                                ? cur.originalText.trimmed()
+                                : QString("pc%1").arg(cur.rootPc);
+                            const QString fn = e.function.trimmed().isEmpty() ? QString("—") : e.function.trimmed();
+                            const QString why = e.reasoning.trimmed().isEmpty() ? QString("—") : e.reasoning.trimmed();
+                            const int humanizeMs = calcBaseOffsetMs(offset);
+                            const int gridOffsetMs = int(std::llround(offset * beatMs));
+                            const int totalOffsetMs = gridOffsetMs + humanizeMs;
+                            emitLog = true;
+                            logLine = QString("[bar %1 beat %2] Piano  chord=%3  CC%4=%5  function=%6  why: %7")
+                                          .arg(barIndex + 1)
+                                          .arg(beatInBar + 1)
+                                          .arg(chordText)
+                                          .arg(e.cc)
+                                          .arg(e.ccValue)
+                                          .arg(fn)
+                                          .arg(why);
+                            logLine += QString("  timing: grid=%1ms humanize=%2ms total=%3ms (delayOn=%4ms)")
+                                           .arg(gridOffsetMs)
+                                           .arg(humanizeMs)
+                                           .arg(totalOffsetMs)
+                                           .arg(delayOn);
+                        }
                         scheduleEvent(elapsedMs + delayOn, Instrument::Piano, PendingKind::CC,
-                                      m_pianoProfile.midiChannel, 0, 0, e.cc, e.ccValue, false, {});
+                                      m_pianoProfile.midiChannel, 0, 0, e.cc, e.ccValue, emitLog, logLine);
                         continue;
                     }
 

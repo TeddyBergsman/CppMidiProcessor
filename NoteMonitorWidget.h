@@ -115,7 +115,7 @@ private:
     int m_lastVocalX = -1; // Track last X position for trail detection
     
     // Trail optimization: limit number of ghosts
-    static constexpr int m_trailMaxGhosts = 15; // Increased for better trail visibility
+    static constexpr int m_trailMaxGhosts = 5; // Increased for better trail visibility
 
 protected:
     void resizeEvent(QResizeEvent* event) override;

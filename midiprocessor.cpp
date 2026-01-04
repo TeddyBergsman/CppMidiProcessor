@@ -167,9 +167,13 @@ void MidiProcessor::sendVirtualNoteOff(int channel, int note) {
     if (note < 0) note = 0;
     if (note > 127) note = 127;
     const unsigned char chan = (unsigned char)(channel - 1);
-    std::vector<unsigned char> msg = { (unsigned char)(0x80 | chan), (unsigned char)note, 0 };
     std::lock_guard<std::mutex> lock(m_eventMutex);
-    m_eventQueue.push({EventType::MIDI_MESSAGE, msg, MidiSource::VirtualBand, -1, ""});
+    // Some VSTs/hosts are more reliable with "NoteOn velocity=0" as note-off.
+    // Send BOTH forms to avoid stuck notes / "infinite sustain" symptoms.
+    std::vector<unsigned char> msgOff = { (unsigned char)(0x80 | chan), (unsigned char)note, 0 };
+    std::vector<unsigned char> msgOn0 = { (unsigned char)(0x90 | chan), (unsigned char)note, 0 };
+    m_eventQueue.push({EventType::MIDI_MESSAGE, msgOff, MidiSource::VirtualBand, -1, ""});
+    m_eventQueue.push({EventType::MIDI_MESSAGE, msgOn0, MidiSource::VirtualBand, -1, ""});
     m_condition.notify_one();
 }
 

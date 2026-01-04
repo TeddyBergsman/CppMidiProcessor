@@ -80,6 +80,9 @@ private:
     int m_lastPlannedGlobalBeat = -1;
     int m_lastPatternId = -1;
     int m_lastTopMidi = -1;
+    bool m_pedalIsDown = false;
+    double m_pedalDownAtBeatTime = -1.0;   // globalBeat + offsetBeats
+    double m_pedalReleaseAtBeatTime = -1.0; // scheduled release time in beat units
 
     // Helper methods
     int globalBeatIndex(const PianoBeatContext& ctx) const;

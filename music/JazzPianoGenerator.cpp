@@ -178,6 +178,9 @@ void JazzPianoGenerator::reset() {
     m_lastPlannedGlobalBeat = -1;
     m_lastPatternId = -1;
     m_lastTopMidi = -1;
+    m_pedalIsDown = false;
+    m_pedalDownAtBeatTime = -1.0;
+    m_pedalReleaseAtBeatTime = -1.0;
     m_rngState = (m_profile.humanizeSeed == 0u) ? 1u : m_profile.humanizeSeed;
     if (m_rngState == 0u) m_rngState = 1u;
 }
@@ -1160,8 +1163,12 @@ void JazzPianoGenerator::planBar(const PianoBeatContext& ctx, const ChordSymbol&
         }
         const int vel = std::min(maxVel, clampInt(int(std::llround(double(baseVel) * beatMul * h.velMul * phraseMul)), 1, 127));
 
-        // Length in beats: ballad should *hold* (ties) rather than jab.
-        const double baseLen = ballad ? 2.20 : 0.78;
+        // Length in beats:
+        // - With pedal enabled, keep key-down shorter so CC64 hold time is audible.
+        // - Without pedal, ballads can tie/hold more.
+        const double baseLen = ballad
+            ? (m_profile.pedalEnabled ? 0.55 : 2.20)
+            : 0.78;
         double len = std::max(0.15, baseLen * h.lenMul);
 
         auto beatsUntilChange = [&](int beat, double offset, const ChordSymbol& here) -> double {
@@ -1251,6 +1258,9 @@ QVector<PianoEvent> JazzPianoGenerator::nextBeat(const PianoBeatContext& ctx,
             }
             out.push_back(ev);
         }
+        m_pedalIsDown = false;
+        m_pedalDownAtBeatTime = -1.0;
+        m_pedalReleaseAtBeatTime = -1.0;
         m_lastLh.clear();
         m_lastRh.clear();
         return out;
@@ -1261,47 +1271,93 @@ QVector<PianoEvent> JazzPianoGenerator::nextBeat(const PianoBeatContext& ctx,
 
     // --- Phrase-aware planning ---
     const int gb = globalBeatIndex(ctx);
-    if (m_planned.contains(gb)) {
-        out = m_planned.take(gb);
-        return out;
-    }
-    // Plan a bar on entry (or if we've fallen behind / state reset).
-    if (ctx.isNewBar || (m_lastPlannedGlobalBeat < gb)) {
+    // Ensure we have events planned for this bar/beat.
+    if (!m_planned.contains(gb) && (ctx.isNewBar || (m_lastPlannedGlobalBeat < gb))) {
         planBar(ctx, *currentChord, nextChord);
-        if (m_planned.contains(gb)) {
-            out = m_planned.take(gb);
-            return out;
-        }
     }
+    if (m_planned.contains(gb)) out = m_planned.take(gb);
 
     // --- Pedal management (CC64) ---
-    if (m_profile.pedalEnabled && ctx.isNewChord && next01() < clamp01(m_profile.pedalChangeProb)) {
-        // Refresh pedal on chord changes to avoid harmonic blur.
-        if (m_profile.pedalReleaseOnChordChange) {
+    // Fix: pedal events must be generated even when note events are planned.
+    if (m_profile.pedalEnabled) {
+        const double beatMs = (ctx.tempoBpm > 0) ? (60000.0 / double(ctx.tempoBpm)) : 500.0;
+        const double beatStartTime = double(gb); // current beat start (in beat units)
+
+        auto holdBeats = [&]() -> double {
+            const int lo = std::max(0, m_profile.pedalMinHoldMs);
+            const int hi = std::max(lo, m_profile.pedalMaxHoldMs);
+            const int ms = lo + int(std::llround(next01() * double(hi - lo)));
+            return std::max(0.10, double(ms) / beatMs);
+        };
+
+        auto emitPedalUp = [&](double off, const QString& why) {
             PianoEvent up;
             up.kind = PianoEvent::Kind::CC;
             up.cc = 64;
             up.ccValue = m_profile.pedalUpValue;
-            up.offsetBeats = 0.0;
-            if (logOn) { up.function = "Pedal up"; up.reasoning = "Chord change → release sustain to avoid blur."; }
+            up.offsetBeats = clamp01(off);
+            if (logOn) { up.function = "Pedal up"; up.reasoning = why; }
             out.push_back(up);
+            m_pedalIsDown = false;
+            m_pedalDownAtBeatTime = -1.0;
+            m_pedalReleaseAtBeatTime = -1.0;
+        };
 
+        auto emitPedalDown = [&](double off, const QString& why) {
             PianoEvent down;
             down.kind = PianoEvent::Kind::CC;
             down.cc = 64;
             down.ccValue = m_profile.pedalDownValue;
-            down.offsetBeats = 0.08; // small gap after release
-            if (logOn) { down.function = "Pedal down"; down.reasoning = "Re-engage sustain for warmth after chord change."; }
+            down.offsetBeats = clamp01(off);
+            if (logOn) { down.function = "Pedal down"; down.reasoning = why; }
             out.push_back(down);
-        } else {
-            PianoEvent down;
-            down.kind = PianoEvent::Kind::CC;
-            down.cc = 64;
-            down.ccValue = m_profile.pedalDownValue;
-            down.offsetBeats = 0.0;
-            if (logOn) { down.function = "Pedal down"; down.reasoning = "Chord change → refresh sustain (no explicit release)."; }
-            out.push_back(down);
+            m_pedalIsDown = true;
+            m_pedalDownAtBeatTime = beatStartTime + clamp01(off);
+            // Store the target release time; we'll emit pedal-up when its beat window is reached.
+            m_pedalReleaseAtBeatTime = m_pedalDownAtBeatTime + holdBeats();
+        };
+
+        // Determine if we're actually playing notes on this beat.
+        const bool hasNotesThisBeat = std::any_of(out.begin(), out.end(), [](const PianoEvent& e) {
+            return e.kind == PianoEvent::Kind::Note && e.midiNote >= 0 && e.velocity > 0;
+        });
+
+        // Chord-change behavior:
+        // - If enabled, RELEASE on chord change to avoid blur,
+        // - but DO NOT immediately re-pedal (that makes min/max hold irrelevant and can feel "always sustaining").
+        if (ctx.isNewChord && m_profile.pedalReleaseOnChordChange) {
+            if (m_pedalIsDown) {
+                emitPedalUp(0.0, "Chord change → pedal up (let harmony speak).");
+            }
         }
+
+        // Engage pedal only when we're actually playing notes, and let min/max hold control the release.
+        // Deterministic: if pedal is enabled and we play notes, we will use the pedal (otherwise hold can't matter).
+        // Also: don't slam pedal every beat—prefer engaging on new chords / bar starts.
+        if (hasNotesThisBeat && !m_pedalIsDown && (ctx.isNewChord || ctx.beatInBar == 0)) {
+            emitPedalDown(0.02, "Pedal down (note event) → timed by min/max hold.");
+        }
+
+        // Timed release (must run AFTER pedal-down, otherwise the release time can't land within this beat).
+        if (m_pedalIsDown && m_pedalReleaseAtBeatTime >= 0.0) {
+            if (m_pedalReleaseAtBeatTime < beatStartTime) {
+                emitPedalUp(0.0, "Timed pedal release (past due).");
+            } else if (m_pedalReleaseAtBeatTime >= beatStartTime && m_pedalReleaseAtBeatTime < (beatStartTime + 1.0)) {
+                // Ensure we don't release before we even pressed (tiny safety).
+                const double off = std::max(0.0, m_pedalReleaseAtBeatTime - beatStartTime);
+                emitPedalUp(off, "Timed pedal release (per hold ms).");
+            }
+        }
+    }
+
+    // Ensure CC events (pedal) are scheduled before notes at same offset.
+    if (!out.isEmpty()) {
+        std::stable_sort(out.begin(), out.end(), [](const PianoEvent& a, const PianoEvent& b) {
+            if (a.offsetBeats != b.offsetBeats) return a.offsetBeats < b.offsetBeats;
+            // CC before Note when simultaneous.
+            if (a.kind != b.kind) return a.kind == PianoEvent::Kind::CC;
+            return a.midiNote < b.midiNote;
+        });
     }
 
     // Fallback: if nothing planned and no pedal event, be silent.

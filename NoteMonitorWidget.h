@@ -26,6 +26,7 @@ public:
     void setKeyCenter(const QString& keyCenter);
     void setIRealPlaylist(const ireal::Playlist& playlist);
     void setMidiProcessor(MidiProcessor* processor);
+    void openBassStyleEditor();
 
 public slots:
     void setGuitarNote(int midiNote, double cents);
@@ -93,8 +94,6 @@ private:
     QComboBox* m_songCombo = nullptr;
     QComboBox* m_keyCombo = nullptr;
     QPushButton* m_playButton = nullptr;
-    QCheckBox* m_bassToggle = nullptr;
-    QPushButton* m_bassEditButton = nullptr;
     QSpinBox* m_tempoSpin = nullptr;
     QSpinBox* m_repeatsSpin = nullptr;
     playback::BandPlaybackEngine* m_playback = nullptr;

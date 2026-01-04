@@ -113,6 +113,25 @@ void MainWindow::createWidgets(const Preset& preset) {
             settingsMenu = menuBar()->addMenu("Settings");
         }
         settingsMenu->addAction(preferencesAction);
+
+        // Window menu: access secondary windows/dialogs.
+        QMenu* windowMenu = nullptr;
+        for (QAction* a : menuBar()->actions()) {
+            if (a->menu() && a->menu()->title() == "Window") {
+                windowMenu = a->menu();
+                break;
+            }
+        }
+        if (!windowMenu) {
+            windowMenu = menuBar()->addMenu("Window");
+        }
+
+        QAction* bassAction = new QAction("Bass", this);
+        bassAction->setMenuRole(QAction::NoRole);
+        connect(bassAction, &QAction::triggered, this, [this]() {
+            if (noteMonitorWidget) noteMonitorWidget->openBassStyleEditor();
+        });
+        windowMenu->addAction(bassAction);
     }
 
     // Dynamically create program buttons from preset data

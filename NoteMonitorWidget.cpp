@@ -8,7 +8,9 @@
 #include "playback/BandPlaybackEngine.h"
 #include "midiprocessor.h"
 #include "music/BassProfile.h"
+#include "music/PianoProfile.h"
 #include "BassStyleEditorDialog.h"
+#include "PianoStyleEditorDialog.h"
 #include <QtWidgets>
 #include <cmath>
 #include <QGraphicsOpacityEffect>
@@ -690,6 +692,32 @@ void NoteMonitorWidget::openBassStyleEditor() {
     dlg->show();
 }
 
+void NoteMonitorWidget::openPianoStyleEditor() {
+    if (!m_playback || m_currentSongId.isEmpty()) return;
+    const music::PianoProfile snapshot = m_pianoProfile;
+    auto* dlg = new PianoStyleEditorDialog(m_pianoProfile, m_playback, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose, true);
+
+    connect(dlg, &PianoStyleEditorDialog::profilePreview, this, [this](const music::PianoProfile& p) {
+        m_pianoProfile = p;
+        if (m_playback) m_playback->setPianoProfile(m_pianoProfile);
+    });
+    connect(dlg, &PianoStyleEditorDialog::profileCommitted, this, [this](const music::PianoProfile& p) {
+        m_pianoProfile = p;
+        if (m_playback) m_playback->setPianoProfile(m_pianoProfile);
+        QSettings s;
+        const QString prefix = overrideGroupForSongId(m_currentSongId) + "/pianoProfile";
+        music::savePianoProfile(s, prefix, m_pianoProfile);
+    });
+    connect(dlg, &QDialog::finished, this, [this, snapshot](int rc) {
+        if (rc == QDialog::Accepted) return;
+        m_pianoProfile = snapshot;
+        if (m_playback) m_playback->setPianoProfile(m_pianoProfile);
+    });
+
+    dlg->show();
+}
+
 void NoteMonitorWidget::setMidiProcessor(MidiProcessor* processor) {
     m_midiProcessor = processor;
     if (!m_playback || !m_midiProcessor) return;
@@ -701,6 +729,16 @@ void NoteMonitorWidget::setMidiProcessor(MidiProcessor* processor) {
             m_midiProcessor, &MidiProcessor::sendVirtualNoteOff, Qt::UniqueConnection);
     connect(m_playback, &playback::BandPlaybackEngine::bassAllNotesOff,
             m_midiProcessor, &MidiProcessor::sendVirtualAllNotesOff, Qt::UniqueConnection);
+
+    // Route virtual piano MIDI events through MidiProcessor's thread-safe enqueuing slots.
+    connect(m_playback, &playback::BandPlaybackEngine::pianoNoteOn,
+            m_midiProcessor, &MidiProcessor::sendVirtualNoteOn, Qt::UniqueConnection);
+    connect(m_playback, &playback::BandPlaybackEngine::pianoNoteOff,
+            m_midiProcessor, &MidiProcessor::sendVirtualNoteOff, Qt::UniqueConnection);
+    connect(m_playback, &playback::BandPlaybackEngine::pianoAllNotesOff,
+            m_midiProcessor, &MidiProcessor::sendVirtualAllNotesOff, Qt::UniqueConnection);
+    connect(m_playback, &playback::BandPlaybackEngine::pianoCC,
+            m_midiProcessor, &MidiProcessor::sendVirtualCC, Qt::UniqueConnection);
 }
 
 void NoteMonitorWidget::loadSongAtIndex(int idx) {
@@ -768,6 +806,27 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
 
         m_bassProfile = p;
         m_playback->setBassProfile(m_bassProfile);
+    }
+
+    // Apply per-song piano settings.
+    if (m_playback) {
+        const QString prefix = group + "/pianoProfile";
+        const bool hasProfile = settings.contains(prefix + "/version") || settings.contains(prefix + "/enabled");
+
+        music::PianoProfile p;
+        if (hasProfile) {
+            p = music::loadPianoProfile(settings, prefix);
+        } else {
+            p = music::defaultPianoProfile();
+            // Derive a stable per-song seed if none was persisted.
+            p.humanizeSeed = (quint32)qHash(QString("piano|") + m_currentSongId);
+            if (p.humanizeSeed == 0) p.humanizeSeed = 1;
+        }
+        // Ensure defaults match our reserved routing.
+        if (p.midiChannel < 1 || p.midiChannel > 16) p.midiChannel = 4;
+
+        m_pianoProfile = p;
+        m_playback->setPianoProfile(m_pianoProfile);
     }
 
     // Tempo preference: song tempo if present, else current spin.

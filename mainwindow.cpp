@@ -132,6 +132,13 @@ void MainWindow::createWidgets(const Preset& preset) {
             if (noteMonitorWidget) noteMonitorWidget->openBassStyleEditor();
         });
         windowMenu->addAction(bassAction);
+
+        QAction* pianoAction = new QAction("Piano", this);
+        pianoAction->setMenuRole(QAction::NoRole);
+        connect(pianoAction, &QAction::triggered, this, [this]() {
+            if (noteMonitorWidget) noteMonitorWidget->openPianoStyleEditor();
+        });
+        windowMenu->addAction(pianoAction);
     }
 
     // Dynamically create program buttons from preset data

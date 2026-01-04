@@ -186,6 +186,19 @@ void MidiProcessor::sendVirtualAllNotesOff(int channel) {
     m_condition.notify_one();
 }
 
+void MidiProcessor::sendVirtualCC(int channel, int cc, int value) {
+    if (channel < 1 || channel > 16) return;
+    if (cc < 0) cc = 0;
+    if (cc > 127) cc = 127;
+    if (value < 0) value = 0;
+    if (value > 127) value = 127;
+    const unsigned char chan = (unsigned char)(channel - 1);
+    std::vector<unsigned char> msg = { (unsigned char)(0xB0 | chan), (unsigned char)cc, (unsigned char)value };
+    std::lock_guard<std::mutex> lock(m_eventMutex);
+    m_eventQueue.push({EventType::MIDI_MESSAGE, msg, MidiSource::VirtualBand, -1, ""});
+    m_condition.notify_one();
+}
+
 void MidiProcessor::toggleTrack(const std::string& trackId) {
     std::lock_guard<std::mutex> lock(m_eventMutex);
     m_eventQueue.push({EventType::TRACK_TOGGLE, std::vector<unsigned char>(), MidiSource::Guitar, -1, trackId});

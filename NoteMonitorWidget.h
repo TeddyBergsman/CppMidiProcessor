@@ -4,6 +4,7 @@
 #include <QWidget>
 #include "chart/ChartModel.h"
 #include "music/BassProfile.h"
+#include "music/PianoProfile.h"
 class WaveVisualizer;
 
 class QLabel;
@@ -27,6 +28,7 @@ public:
     void setIRealPlaylist(const ireal::Playlist& playlist);
     void setMidiProcessor(MidiProcessor* processor);
     void openBassStyleEditor();
+    void openPianoStyleEditor();
 
 public slots:
     void setGuitarNote(int midiNote, double cents);
@@ -103,6 +105,8 @@ private:
 
     // Current per-song bass profile (mirrored for UI/editor convenience)
     music::BassProfile m_bassProfile;
+    // Current per-song piano profile (mirrored for UI/editor convenience)
+    music::PianoProfile m_pianoProfile;
 
     // Last state for positioning
     int m_lastGuitarNote = -1;

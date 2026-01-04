@@ -42,6 +42,8 @@ public slots:
     void sendVirtualNoteOn(int channel, int note, int velocity);
     void sendVirtualNoteOff(int channel, int note);
     void sendVirtualAllNotesOff(int channel);
+    // Virtual musician CC (thread-safe; enqueued to worker thread)
+    void sendVirtualCC(int channel, int cc, int value);
 
 private slots:
     void pollLogQueue();

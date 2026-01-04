@@ -182,6 +182,13 @@ BandPlaybackEngine::BandPlaybackEngine(QObject* parent)
 
     m_timingRng.seed(1u);
     m_driftMs = 0;
+    m_pianoTimingRng.seed(2u);
+    m_pianoDriftMs = 0;
+
+    m_bassProfile = music::defaultBassProfile();
+    m_bass.setProfile(m_bassProfile);
+    m_pianoProfile = music::defaultPianoProfile();
+    m_piano.setProfile(m_pianoProfile);
 }
 
 void BandPlaybackEngine::setTempoBpm(int bpm) {
@@ -218,6 +225,32 @@ void BandPlaybackEngine::setBassProfile(const music::BassProfile& p) {
     }
 }
 
+void BandPlaybackEngine::setPianoProfile(const music::PianoProfile& p) {
+    const bool wasEnabled = m_pianoProfile.enabled;
+    const int oldCh = m_pianoProfile.midiChannel;
+    m_pianoProfile = p;
+    m_piano.setProfile(m_pianoProfile);
+
+    // Stable timing randomness per-song (separate from bass).
+    quint32 seed = (m_pianoProfile.humanizeSeed == 0) ? 1u : m_pianoProfile.humanizeSeed;
+    m_pianoTimingRng.seed(seed ^ 0x7F4A7C15u);
+
+    // If piano was disabled or channel changed during playback, hard-stop pending events + silence.
+    if (m_playing && (wasEnabled && !m_pianoProfile.enabled)) {
+        m_eventHeap.clear();
+        m_dispatchTimer.stop();
+        emit pianoCC(oldCh, 64, 0);
+        emit pianoAllNotesOff(oldCh);
+        m_scheduledPianoNoteOnsInBar.clear();
+    } else if (m_playing && wasEnabled && m_pianoProfile.enabled && oldCh != m_pianoProfile.midiChannel) {
+        m_eventHeap.clear();
+        m_dispatchTimer.stop();
+        emit pianoCC(oldCh, 64, 0);
+        emit pianoAllNotesOff(oldCh);
+        m_scheduledPianoNoteOnsInBar.clear();
+    }
+}
+
 void BandPlaybackEngine::setChartModel(const chart::ChartModel& model) {
     m_model = model;
     m_sequence = buildPlaybackSequenceFrom(m_model);
@@ -229,11 +262,14 @@ void BandPlaybackEngine::setChartModel(const chart::ChartModel& model) {
     m_lastEmittedCell = -1;
     m_lastBarIndex = -1;
     m_scheduledNoteOnsInBar.clear();
+    m_scheduledPianoNoteOnsInBar.clear();
     m_driftMs = 0;
+    m_pianoDriftMs = 0;
     // Clear any scheduled events.
     m_eventHeap.clear();
     m_dispatchTimer.stop();
     m_bass.reset();
+    m_piano.reset();
 }
 
 QVector<const chart::Bar*> BandPlaybackEngine::flattenBars() const {
@@ -347,7 +383,9 @@ void BandPlaybackEngine::play() {
     m_lastEmittedCell = -1;
     m_lastBarIndex = -1;
     m_scheduledNoteOnsInBar.clear();
+    m_scheduledPianoNoteOnsInBar.clear();
     m_driftMs = 0;
+    m_pianoDriftMs = 0;
     m_lastPlayheadStep = -1;
     m_nextScheduledStep = 0;
     m_eventHeap.clear();
@@ -370,16 +408,23 @@ void BandPlaybackEngine::stop() {
         if (m_lastBassMidi >= 0) emit bassNoteOff(m_bassProfile.midiChannel, m_lastBassMidi);
         emit bassAllNotesOff(m_bassProfile.midiChannel);
     }
+    if (m_pianoProfile.enabled) {
+        emit pianoCC(m_pianoProfile.midiChannel, 64, 0);
+        emit pianoAllNotesOff(m_pianoProfile.midiChannel);
+    }
     m_lastBassMidi = -1;
     m_hasLastChord = false;
     m_lastStep = -1;
     m_lastEmittedCell = -1;
     m_lastBarIndex = -1;
     m_scheduledNoteOnsInBar.clear();
+    m_scheduledPianoNoteOnsInBar.clear();
     m_driftMs = 0;
+    m_pianoDriftMs = 0;
     m_lastPlayheadStep = -1;
     m_nextScheduledStep = 0;
     m_bass.reset();
+    m_piano.reset();
 
     emit currentCellChanged(-1);
 }
@@ -403,14 +448,24 @@ void BandPlaybackEngine::onDispatch() {
 
         switch (ev.kind) {
         case PendingKind::NoteOn:
-            if (ev.emitLog && !ev.logLine.isEmpty()) emit bassLogLine(ev.logLine);
-            emit bassNoteOn(ev.channel, ev.note, ev.velocity);
+            if (ev.instrument == Instrument::Bass) {
+                if (ev.emitLog && !ev.logLine.isEmpty()) emit bassLogLine(ev.logLine);
+                emit bassNoteOn(ev.channel, ev.note, ev.velocity);
+            } else {
+                if (ev.emitLog && !ev.logLine.isEmpty()) emit pianoLogLine(ev.logLine);
+                emit pianoNoteOn(ev.channel, ev.note, ev.velocity);
+            }
             break;
         case PendingKind::NoteOff:
-            emit bassNoteOff(ev.channel, ev.note);
+            if (ev.instrument == Instrument::Bass) emit bassNoteOff(ev.channel, ev.note);
+            else emit pianoNoteOff(ev.channel, ev.note);
             break;
         case PendingKind::AllNotesOff:
-            emit bassAllNotesOff(ev.channel);
+            if (ev.instrument == Instrument::Bass) emit bassAllNotesOff(ev.channel);
+            else emit pianoAllNotesOff(ev.channel);
+            break;
+        case PendingKind::CC:
+            if (ev.instrument == Instrument::Piano) emit pianoCC(ev.channel, ev.cc, ev.ccValue);
             break;
         }
     }
@@ -448,7 +503,9 @@ void BandPlaybackEngine::onTick() {
     }
 
     // If bass disabled, we still update the playhead but skip scheduling.
-    if (!m_bassProfile.enabled) return;
+    const bool bassOn = m_bassProfile.enabled;
+    const bool pianoOn = m_pianoProfile.enabled;
+    if (!bassOn && !pianoOn) return;
 
     // Lookahead scheduling window to avoid "late notes" caused by tick quantization.
     constexpr int kLookaheadMs = 180;
@@ -459,13 +516,25 @@ void BandPlaybackEngine::onTick() {
         return a.dueMs > b.dueMs; // reversed for min-heap
     };
 
-    auto scheduleEvent = [&](qint64 dueAbsMs, PendingKind kind, int channel, int note, int velocity, bool emitLog, const QString& logLine) {
+    auto scheduleEvent = [&](qint64 dueAbsMs,
+                             Instrument instrument,
+                             PendingKind kind,
+                             int channel,
+                             int note,
+                             int velocity,
+                             int cc,
+                             int ccValue,
+                             bool emitLog,
+                             const QString& logLine) {
         PendingEvent ev;
         ev.dueMs = dueAbsMs;
+        ev.instrument = instrument;
         ev.kind = kind;
         ev.channel = channel;
         ev.note = note;
         ev.velocity = velocity;
+        ev.cc = cc;
+        ev.ccValue = ccValue;
         ev.emitLog = emitLog;
         ev.logLine = logLine;
 
@@ -475,7 +544,7 @@ void BandPlaybackEngine::onTick() {
 
         // If this is the earliest event, re-arm dispatcher.
         const qint64 now = m_clock.elapsed();
-        if (wasEmpty || m_eventHeap.front().dueMs == dueAbsMs) {
+        if (wasEmpty || dueAbsMs <= m_eventHeap.front().dueMs) {
             const int delay = int(std::max<qint64>(0, m_eventHeap.front().dueMs - now));
             if (!m_dispatchTimer.isActive() || delay < m_dispatchTimer.remainingTime()) {
                 m_dispatchTimer.start(delay);
@@ -503,7 +572,7 @@ void BandPlaybackEngine::onTick() {
         // Update slow timing drift once per bar (random-walk) at the moment we schedule beat 1 of the bar.
         if (beatInBar == 0 && barIndex != m_lastBarIndex) {
             m_lastBarIndex = barIndex;
-            if (m_bassProfile.driftMaxMs > 0 && m_bassProfile.driftRate > 0.0) {
+            if (bassOn && m_bassProfile.driftMaxMs > 0 && m_bassProfile.driftRate > 0.0) {
                 const int stepMax = std::max(1, int(std::round(double(m_bassProfile.driftMaxMs) * m_bassProfile.driftRate)));
                 const int delta = int(m_timingRng.bounded(stepMax * 2 + 1)) - stepMax;
                 m_driftMs += delta;
@@ -511,6 +580,15 @@ void BandPlaybackEngine::onTick() {
                 if (m_driftMs < -m_bassProfile.driftMaxMs) m_driftMs = -m_bassProfile.driftMaxMs;
             } else {
                 m_driftMs = 0;
+            }
+            if (pianoOn && m_pianoProfile.driftMaxMs > 0 && m_pianoProfile.driftRate > 0.0) {
+                const int stepMax = std::max(1, int(std::round(double(m_pianoProfile.driftMaxMs) * m_pianoProfile.driftRate)));
+                const int delta = int(m_pianoTimingRng.bounded(stepMax * 2 + 1)) - stepMax;
+                m_pianoDriftMs += delta;
+                if (m_pianoDriftMs > m_pianoProfile.driftMaxMs) m_pianoDriftMs = m_pianoProfile.driftMaxMs;
+                if (m_pianoDriftMs < -m_pianoProfile.driftMaxMs) m_pianoDriftMs = -m_pianoProfile.driftMaxMs;
+            } else {
+                m_pianoDriftMs = 0;
             }
         }
 
@@ -522,12 +600,18 @@ void BandPlaybackEngine::onTick() {
             // Use an on-beat timing (no jitter) so this feels intentional and tight.
             const int delay = std::max(0, int(std::llround(beatStartMs - double(elapsedMs))));
             const qint64 due = elapsedMs + delay;
-            if (m_lastBassMidi >= 0) {
-                const int prev = m_lastBassMidi;
-                scheduleEvent(due, PendingKind::NoteOff, m_bassProfile.midiChannel, prev, 0, false, {});
-                m_lastBassMidi = -1;
+            if (bassOn) {
+                if (m_lastBassMidi >= 0) {
+                    const int prev = m_lastBassMidi;
+                    scheduleEvent(due, Instrument::Bass, PendingKind::NoteOff, m_bassProfile.midiChannel, prev, 0, 0, 0, false, {});
+                    m_lastBassMidi = -1;
+                }
+                scheduleEvent(due, Instrument::Bass, PendingKind::AllNotesOff, m_bassProfile.midiChannel, 0, 0, 0, 0, false, {});
             }
-            scheduleEvent(due, PendingKind::AllNotesOff, m_bassProfile.midiChannel, 0, 0, false, {});
+            if (pianoOn) {
+                scheduleEvent(due, Instrument::Piano, PendingKind::CC, m_pianoProfile.midiChannel, 0, 0, 64, 0, false, {});
+                scheduleEvent(due, Instrument::Piano, PendingKind::AllNotesOff, m_pianoProfile.midiChannel, 0, 0, 0, 0, false, {});
+            }
             continue;
         }
 
@@ -550,199 +634,307 @@ void BandPlaybackEngine::onTick() {
             return parsed;
         };
 
-        // Beat context for evolving performance.
-        music::BassBeatContext ctx;
-        ctx.barIndex = barIndex;
-        ctx.beatInBar = beatInBar;
-        ctx.tempoBpm = m_bpm;
-        ctx.isNewBar = (beatInBar == 0);
-        ctx.isNewChord = isNewChord;
-        ctx.songPass = (seqLen > 0) ? (step / seqLen) : 0;
-        ctx.totalPasses = std::max(1, m_repeats);
-        ctx.phraseLengthBars = std::max(1, m_bassProfile.phraseLengthBars);
+        // Shared beat context signals.
+        const bool isNewBar = (beatInBar == 0);
         const QString sec = (barIndex >= 0 && barIndex < m_barSections.size()) ? m_barSections[barIndex] : QString();
-        ctx.sectionHash = (quint32)qHash(sec);
-        if (ctx.isNewBar) {
-            const QString prevSec = (barIndex - 1 >= 0 && barIndex - 1 < m_barSections.size()) ? m_barSections[barIndex - 1] : QString();
-            ctx.isSectionChange = (sec != prevSec) && (!sec.isEmpty() || !prevSec.isEmpty());
+        const QString prevSec = (barIndex - 1 >= 0 && barIndex - 1 < m_barSections.size()) ? m_barSections[barIndex - 1] : QString();
+        const bool isSectionChange = isNewBar && ((sec != prevSec) && (!sec.isEmpty() || !prevSec.isEmpty()));
+        int barInSection = 0;
+        if (isNewBar) {
             int count = 0;
             for (int b = barIndex; b >= 0; --b) {
                 const QString s = (b >= 0 && b < m_barSections.size()) ? m_barSections[b] : QString();
                 if (s != sec) break;
                 count++;
             }
-            ctx.barInSection = std::max(0, count - 1);
-            ctx.isPhraseEnd = (((ctx.barInSection + 1) % ctx.phraseLengthBars) == 0);
+            barInSection = std::max(0, count - 1);
         }
+        const quint32 sectionHash = (quint32)qHash(sec);
+        const int songPass = (seqLen > 0) ? (step / seqLen) : 0;
+        const int totalPasses = std::max(1, m_repeats);
 
         // Lookahead chords: current beat + next 7 beats (2 bars).
         // Use local "last-known" fallback while scanning.
-        ctx.lookaheadChords.clear();
-        ctx.lookaheadChords.reserve(8);
+        QVector<music::ChordSymbol> lookahead;
+        lookahead.reserve(8);
         music::ChordSymbol laLast = cur;
-        ctx.lookaheadChords.push_back(cur);
+        lookahead.push_back(cur);
         for (int o = 1; o < 8; ++o) {
             const int step2 = step + o;
             if (step2 >= total) break;
             const int cell2 = m_sequence[step2 % seqLen];
             music::ChordSymbol parsed = parseCellChordNoState(cell2, laLast);
             laLast = parsed;
-            ctx.lookaheadChords.push_back(parsed);
+            lookahead.push_back(parsed);
         }
 
-        // Generate events for this beat (possibly multiple per beat).
-        QVector<music::BassEvent> ev = m_bass.nextBeat(ctx, &cur, nextPtr);
-        if (ev.isEmpty()) continue;
-        std::sort(ev.begin(), ev.end(), [](const music::BassEvent& a, const music::BassEvent& b) {
-            return a.offsetBeats < b.offsetBeats;
-        });
-
-        // Human timing for this scheduled beat (stable per-song).
-        // IMPORTANT: a pro bassist is *tight* on chord arrivals and structural beats.
-        // Randomness there reads like mistakes (“drunken”).
         const bool strongBeat = (beatInBar == 0 || beatInBar == 2);
         const bool structural = strongBeat || isNewChord;
 
-        int jitter = (m_bassProfile.microJitterMs > 0)
-            ? (int(m_timingRng.bounded(m_bassProfile.microJitterMs * 2 + 1)) - m_bassProfile.microJitterMs)
-            : 0;
-        int attackVar = (m_bassProfile.attackVarianceMs > 0)
-            ? (int(m_timingRng.bounded(m_bassProfile.attackVarianceMs * 2 + 1)) - m_bassProfile.attackVarianceMs)
-            : 0;
-        int push = m_bassProfile.pushMs;
-        int laidBack = m_bassProfile.laidBackMs;
-        int driftLocal = m_driftMs;
-
-        if (structural) {
-            jitter = 0;
-            attackVar = 0;
-            // Keep the “feel” but make structural moments precise.
-            push = int(std::llround(double(push) * 0.35));
-            laidBack = int(std::llround(double(laidBack) * 0.35));
-            driftLocal = int(std::llround(double(driftLocal) * 0.30));
-        }
-
-        auto calcBaseOffsetMs = [&](double offsetBeats) -> int {
-            int swingMsLocal = 0;
-            const double frac = offsetBeats - std::floor(offsetBeats);
-            const bool isUpbeat8th = std::fabs(frac - 0.5) < 0.001;
-            if (isUpbeat8th) {
-                const double ratio = std::max(1.2, std::min(4.0, m_bassProfile.swingRatio));
-                const double deltaFrac = (ratio / (ratio + 1.0)) - 0.5;
-                swingMsLocal = int(std::round(beatMs * deltaFrac * m_bassProfile.swingAmount));
+        // ---- Bass scheduling ----
+        if (bassOn) {
+            music::BassBeatContext ctx;
+            ctx.barIndex = barIndex;
+            ctx.beatInBar = beatInBar;
+            ctx.tempoBpm = m_bpm;
+            ctx.isNewBar = isNewBar;
+            ctx.isNewChord = isNewChord;
+            ctx.songPass = songPass;
+            ctx.totalPasses = totalPasses;
+            ctx.phraseLengthBars = std::max(1, m_bassProfile.phraseLengthBars);
+            ctx.sectionHash = sectionHash;
+            if (ctx.isNewBar) {
+                ctx.isSectionChange = isSectionChange;
+                ctx.barInSection = barInSection;
+                ctx.isPhraseEnd = (((ctx.barInSection + 1) % ctx.phraseLengthBars) == 0);
             }
-            int base = laidBack - push + jitter + attackVar + driftLocal + swingMsLocal;
-            // Safety clamp: keep the player feeling professional (not "drunken").
-            const int clampMs = structural ? 16 : 28;
-            base = std::max(-clampMs, std::min(clampMs, base));
-            return base;
-        };
+            ctx.lookaheadChords = lookahead;
 
-        constexpr int kBassMusicalOctaveShift = 12;
+            QVector<music::BassEvent> ev = m_bass.nextBeat(ctx, &cur, nextPtr);
+            if (!ev.isEmpty()) {
+                std::sort(ev.begin(), ev.end(), [](const music::BassEvent& a, const music::BassEvent& b) {
+                    return a.offsetBeats < b.offsetBeats;
+                });
 
-        // Schedule note-ons/offs (and optional explainability log).
-        for (int i = 0; i < ev.size(); ++i) {
-            const auto& e = ev[i];
-            if (e.rest) continue;
-            if (e.midiNote < 0 || e.velocity <= 0) continue;
+                int jitter = (m_bassProfile.microJitterMs > 0)
+                    ? (int(m_timingRng.bounded(m_bassProfile.microJitterMs * 2 + 1)) - m_bassProfile.microJitterMs)
+                    : 0;
+                int attackVar = (m_bassProfile.attackVarianceMs > 0)
+                    ? (int(m_timingRng.bounded(m_bassProfile.attackVarianceMs * 2 + 1)) - m_bassProfile.attackVarianceMs)
+                    : 0;
+                int push = m_bassProfile.pushMs;
+                int laidBack = m_bassProfile.laidBackMs;
+                int driftLocal = m_driftMs;
 
-            const double offset = std::max(0.0, std::min(0.95, e.offsetBeats));
-            const double tOnMs = beatStartMs + offset * beatMs;
-            int delayOn = int(std::round(tOnMs + double(calcBaseOffsetMs(offset)) - double(elapsedMs)));
-            if (delayOn < 0) delayOn = 0;
-            if (e.role == music::BassEvent::Role::KeySwitch) {
-                delayOn = std::max(0, delayOn - 12);
-            }
+                if (structural) {
+                    jitter = 0;
+                    attackVar = 0;
+                    push = int(std::llround(double(push) * 0.35));
+                    laidBack = int(std::llround(double(laidBack) * 0.35));
+                    driftLocal = int(std::llround(double(driftLocal) * 0.30));
+                }
 
-            int lenMs = 0;
-            if (e.lengthBeats > 0.0) {
-                lenMs = int(std::round(beatMs * e.lengthBeats));
-            } else if (m_bassProfile.noteLengthMs > 0) {
-                lenMs = m_bassProfile.noteLengthMs;
-            } else {
-                lenMs = int(std::round(beatMs * m_bassProfile.gatePct));
-            }
-            if (e.ghost) {
-                lenMs = int(std::round(std::max(20.0, beatMs * m_bassProfile.ghostGatePct)));
-            }
-            lenMs = std::max(20, std::min(8000, lenMs));
+                auto calcBaseOffsetMs = [&](double offsetBeats) -> int {
+                    int swingMsLocal = 0;
+                    const double frac = offsetBeats - std::floor(offsetBeats);
+                    const bool isUpbeat8th = std::fabs(frac - 0.5) < 0.001;
+                    if (isUpbeat8th) {
+                        const double ratio = std::max(1.2, std::min(4.0, m_bassProfile.swingRatio));
+                        const double deltaFrac = (ratio / (ratio + 1.0)) - 0.5;
+                        swingMsLocal = int(std::round(beatMs * deltaFrac * m_bassProfile.swingAmount));
+                    }
+                    int base = laidBack - push + jitter + attackVar + driftLocal + swingMsLocal;
+                    const int clampMs = structural ? 16 : 28;
+                    base = std::max(-clampMs, std::min(clampMs, base));
+                    return base;
+                };
 
-            if (e.role == music::BassEvent::Role::MusicalNote && !e.allowOverlap) {
-                if (i + 1 < ev.size()) {
-                    const auto& n = ev[i + 1];
-                    if (n.role == music::BassEvent::Role::MusicalNote) {
-                        const double nextOffset = std::max(0.0, std::min(0.95, n.offsetBeats));
-                        const double nextOnMs = beatStartMs + nextOffset * beatMs;
-                        int nextDelayOn = int(std::round(nextOnMs + double(calcBaseOffsetMs(nextOffset)) - double(elapsedMs)));
-                        if (nextDelayOn < 0) nextDelayOn = 0;
-                        lenMs = std::min(lenMs, std::max(10, nextDelayOn - delayOn - 1));
+                constexpr int kBassMusicalOctaveShift = 12;
+
+                for (int i = 0; i < ev.size(); ++i) {
+                    const auto& e = ev[i];
+                    if (e.rest) continue;
+                    if (e.midiNote < 0 || e.velocity <= 0) continue;
+
+                    const double offset = std::max(0.0, std::min(0.95, e.offsetBeats));
+                    const double tOnMs = beatStartMs + offset * beatMs;
+                    int delayOn = int(std::round(tOnMs + double(calcBaseOffsetMs(offset)) - double(elapsedMs)));
+                    if (delayOn < 0) delayOn = 0;
+                    if (e.role == music::BassEvent::Role::KeySwitch) {
+                        delayOn = std::max(0, delayOn - 12);
+                    }
+
+                    int lenMs = 0;
+                    if (e.lengthBeats > 0.0) {
+                        lenMs = int(std::round(beatMs * e.lengthBeats));
+                    } else if (m_bassProfile.noteLengthMs > 0) {
+                        lenMs = m_bassProfile.noteLengthMs;
+                    } else {
+                        lenMs = int(std::round(beatMs * m_bassProfile.gatePct));
+                    }
+                    if (e.ghost) {
+                        lenMs = int(std::round(std::max(20.0, beatMs * m_bassProfile.ghostGatePct)));
+                    }
+                    lenMs = std::max(20, std::min(8000, lenMs));
+
+                    if (e.role == music::BassEvent::Role::MusicalNote && !e.allowOverlap) {
+                        if (i + 1 < ev.size()) {
+                            const auto& n = ev[i + 1];
+                            if (n.role == music::BassEvent::Role::MusicalNote) {
+                                const double nextOffset = std::max(0.0, std::min(0.95, n.offsetBeats));
+                                const double nextOnMs = beatStartMs + nextOffset * beatMs;
+                                int nextDelayOn = int(std::round(nextOnMs + double(calcBaseOffsetMs(nextOffset)) - double(elapsedMs)));
+                                if (nextDelayOn < 0) nextDelayOn = 0;
+                                lenMs = std::min(lenMs, std::max(10, nextDelayOn - delayOn - 1));
+                            }
+                        }
+                    }
+
+                    int note = e.midiNote;
+                    if (e.role == music::BassEvent::Role::MusicalNote) {
+                        note += kBassMusicalOctaveShift;
+                    }
+                    note = std::max(0, std::min(127, note));
+                    const int vel = std::max(1, std::min(127, e.velocity));
+
+                    const int curCount = m_scheduledNoteOnsInBar.value(barIndex, 0);
+                    if (e.role == music::BassEvent::Role::MusicalNote && curCount >= 24) {
+                        continue;
+                    }
+
+                    if (e.role == music::BassEvent::Role::MusicalNote && !e.allowOverlap) {
+                        if (m_lastBassMidi >= 0 && m_lastBassMidi != note) {
+                            const int prev = m_lastBassMidi;
+                            const int d = std::max(0, delayOn - 1);
+                            scheduleEvent(elapsedMs + d, Instrument::Bass, PendingKind::NoteOff, m_bassProfile.midiChannel, prev, 0, 0, 0, false, {});
+                        }
+                    }
+
+                    const bool logOn = m_bassProfile.reasoningLogEnabled;
+                    QString logLine;
+                    if (logOn) {
+                        const QString chordText = !cur.originalText.trimmed().isEmpty()
+                            ? cur.originalText.trimmed()
+                            : QString("pc%1").arg(cur.rootPc);
+                        QString kind;
+                        switch (e.role) {
+                        case music::BassEvent::Role::KeySwitch: kind = "Keyswitch"; break;
+                        case music::BassEvent::Role::FxSound: kind = "FX"; break;
+                        case music::BassEvent::Role::MusicalNote: default: kind = "Note"; break;
+                        }
+                        const QString fn = e.function.trimmed().isEmpty() ? QString("—") : e.function.trimmed();
+                        const QString why = e.reasoning.trimmed().isEmpty() ? QString("—") : e.reasoning.trimmed();
+                        const int humanizeMs = calcBaseOffsetMs(offset);
+                        const int gridOffsetMs = int(std::llround(offset * beatMs));
+                        const int totalOffsetMs = gridOffsetMs + humanizeMs;
+                        logLine = QString("[bar %1 beat %2] %3  %4 (%5) vel=%6  function=%7  chord=%8  why: %9")
+                                      .arg(barIndex + 1)
+                                      .arg(beatInBar + 1)
+                                      .arg(kind)
+                                      .arg(midiName(note))
+                                      .arg(note)
+                                      .arg(vel)
+                                      .arg(fn)
+                                      .arg(chordText)
+                                      .arg(why);
+                        logLine += QString("  timing: grid=%1ms humanize=%2ms total=%3ms (delayOn=%4ms len=%5ms)")
+                                       .arg(gridOffsetMs)
+                                       .arg(humanizeMs)
+                                       .arg(totalOffsetMs)
+                                       .arg(delayOn)
+                                       .arg(lenMs);
+                    }
+
+                    scheduleEvent(elapsedMs + delayOn, Instrument::Bass, PendingKind::NoteOn, m_bassProfile.midiChannel, note, vel, 0, 0, logOn, logLine);
+                    scheduleEvent(elapsedMs + delayOn + lenMs, Instrument::Bass, PendingKind::NoteOff, m_bassProfile.midiChannel, note, 0, 0, 0, false, {});
+
+                    if (e.role == music::BassEvent::Role::MusicalNote) {
+                        m_lastBassMidi = note;
+                        m_scheduledNoteOnsInBar.insert(barIndex, curCount + 1);
                     }
                 }
             }
+        }
 
-            int note = e.midiNote;
-            if (e.role == music::BassEvent::Role::MusicalNote) {
-                note += kBassMusicalOctaveShift;
+        // ---- Piano scheduling ----
+        if (pianoOn) {
+            music::PianoBeatContext pctx;
+            pctx.barIndex = barIndex;
+            pctx.beatInBar = beatInBar;
+            pctx.tempoBpm = m_bpm;
+            pctx.isNewBar = isNewBar;
+            pctx.isNewChord = isNewChord;
+            pctx.songPass = songPass;
+            pctx.totalPasses = totalPasses;
+            pctx.phraseLengthBars = std::max(1, m_pianoProfile.phraseLengthBars);
+            pctx.sectionHash = sectionHash;
+            if (pctx.isNewBar) {
+                pctx.isSectionChange = isSectionChange;
+                pctx.barInSection = barInSection;
+                pctx.isPhraseEnd = (((pctx.barInSection + 1) % pctx.phraseLengthBars) == 0);
             }
-            note = std::max(0, std::min(127, note));
-            const int vel = std::max(1, std::min(127, e.velocity));
+            pctx.lookaheadChords = lookahead;
 
-            // Per-bar sanity cap (avoid runaway density) without pre-silencing future bars.
-            const int curCount = m_scheduledNoteOnsInBar.value(barIndex, 0);
-            if (e.role == music::BassEvent::Role::MusicalNote && curCount >= 24) {
-                continue;
-            }
-
-            if (e.role == music::BassEvent::Role::MusicalNote && !e.allowOverlap) {
-                if (m_lastBassMidi >= 0 && m_lastBassMidi != note) {
-                    const int prev = m_lastBassMidi;
-                    const int d = std::max(0, delayOn - 1);
-                    scheduleEvent(elapsedMs + d, PendingKind::NoteOff, m_bassProfile.midiChannel, prev, 0, false, {});
+            QVector<music::PianoEvent> pev = m_piano.nextBeat(pctx, &cur, nextPtr);
+            if (!pev.isEmpty()) {
+                // Piano human timing: slightly looser than bass, still tight on chord arrivals.
+                int jitter = (m_pianoProfile.microJitterMs > 0)
+                    ? (int(m_pianoTimingRng.bounded(m_pianoProfile.microJitterMs * 2 + 1)) - m_pianoProfile.microJitterMs)
+                    : 0;
+                int push = m_pianoProfile.pushMs;
+                int laidBack = m_pianoProfile.laidBackMs;
+                int driftLocal = m_pianoDriftMs;
+                if (structural) {
+                    jitter = 0;
+                    push = int(std::llround(double(push) * 0.40));
+                    laidBack = int(std::llround(double(laidBack) * 0.40));
+                    driftLocal = int(std::llround(double(driftLocal) * 0.30));
                 }
-            }
 
-            // Note-on (and optional explainability) uses a single timer to minimize overhead.
-            const bool logOn = m_bassProfile.reasoningLogEnabled;
-            QString logLine;
-            if (logOn) {
-                const QString chordText = !cur.originalText.trimmed().isEmpty()
-                    ? cur.originalText.trimmed()
-                    : QString("pc%1").arg(cur.rootPc);
-                QString kind;
-                switch (e.role) {
-                case music::BassEvent::Role::KeySwitch: kind = "Keyswitch"; break;
-                case music::BassEvent::Role::FxSound: kind = "FX"; break;
-                case music::BassEvent::Role::MusicalNote: default: kind = "Note"; break;
+                auto calcBaseOffsetMs = [&](double /*offsetBeats*/) -> int {
+                    int base = laidBack - push + jitter + driftLocal;
+                    const int clampMs = structural ? 18 : 32;
+                    base = std::max(-clampMs, std::min(clampMs, base));
+                    return base;
+                };
+
+                for (const auto& e : pev) {
+                    const double offset = std::max(0.0, std::min(0.95, e.offsetBeats));
+                    const double tOnMs = beatStartMs + offset * beatMs;
+                    int delayOn = int(std::round(tOnMs + double(calcBaseOffsetMs(offset)) - double(elapsedMs)));
+                    if (delayOn < 0) delayOn = 0;
+
+                    if (e.kind == music::PianoEvent::Kind::CC) {
+                        scheduleEvent(elapsedMs + delayOn, Instrument::Piano, PendingKind::CC,
+                                      m_pianoProfile.midiChannel, 0, 0, e.cc, e.ccValue, false, {});
+                        continue;
+                    }
+
+                    if (e.midiNote < 0 || e.velocity <= 0) continue;
+                    const int note = std::max(0, std::min(127, e.midiNote));
+                    const int vel = std::max(1, std::min(127, e.velocity));
+                    int lenMs = 0;
+                    if (e.lengthBeats > 0.0) lenMs = int(std::round(beatMs * e.lengthBeats));
+                    else lenMs = int(std::round(beatMs * (m_pianoProfile.feelStyle == music::PianoFeelStyle::Ballad ? 0.92 : 0.78)));
+                    lenMs = std::max(30, std::min(8000, lenMs));
+
+                    const int curCount = m_scheduledPianoNoteOnsInBar.value(barIndex, 0);
+                    if (curCount >= 48) continue;
+
+                    const bool logOn = m_pianoProfile.reasoningLogEnabled;
+                    QString logLine;
+                    if (logOn) {
+                        const QString chordText = !cur.originalText.trimmed().isEmpty()
+                            ? cur.originalText.trimmed()
+                            : QString("pc%1").arg(cur.rootPc);
+                        const QString fn = e.function.trimmed().isEmpty() ? QString("—") : e.function.trimmed();
+                        const QString why = e.reasoning.trimmed().isEmpty() ? QString("—") : e.reasoning.trimmed();
+                        const int humanizeMs = calcBaseOffsetMs(offset);
+                        const int gridOffsetMs = int(std::llround(offset * beatMs));
+                        const int totalOffsetMs = gridOffsetMs + humanizeMs;
+                        logLine = QString("[bar %1 beat %2] Piano  %3 (%4) vel=%5  function=%6  chord=%7  why: %8")
+                                      .arg(barIndex + 1)
+                                      .arg(beatInBar + 1)
+                                      .arg(midiName(note))
+                                      .arg(note)
+                                      .arg(vel)
+                                      .arg(fn)
+                                      .arg(chordText)
+                                      .arg(why);
+                        logLine += QString("  timing: grid=%1ms humanize=%2ms total=%3ms (delayOn=%4ms len=%5ms)")
+                                       .arg(gridOffsetMs)
+                                       .arg(humanizeMs)
+                                       .arg(totalOffsetMs)
+                                       .arg(delayOn)
+                                       .arg(lenMs);
+                    }
+
+                    scheduleEvent(elapsedMs + delayOn, Instrument::Piano, PendingKind::NoteOn,
+                                  m_pianoProfile.midiChannel, note, vel, 0, 0, logOn, logLine);
+                    scheduleEvent(elapsedMs + delayOn + lenMs, Instrument::Piano, PendingKind::NoteOff,
+                                  m_pianoProfile.midiChannel, note, 0, 0, 0, false, {});
+                    m_scheduledPianoNoteOnsInBar.insert(barIndex, curCount + 1);
                 }
-                const QString fn = e.function.trimmed().isEmpty() ? QString("—") : e.function.trimmed();
-                const QString why = e.reasoning.trimmed().isEmpty() ? QString("—") : e.reasoning.trimmed();
-                const int humanizeMs = calcBaseOffsetMs(offset);
-                const int gridOffsetMs = int(std::llround(offset * beatMs));
-                const int totalOffsetMs = gridOffsetMs + humanizeMs;
-                logLine = QString("[bar %1 beat %2] %3  %4 (%5) vel=%6  function=%7  chord=%8  why: %9")
-                              .arg(barIndex + 1)
-                              .arg(beatInBar + 1)
-                              .arg(kind)
-                              .arg(midiName(note))
-                              .arg(note)
-                              .arg(vel)
-                              .arg(fn)
-                              .arg(chordText)
-                              .arg(why);
-                logLine += QString("  timing: grid=%1ms humanize=%2ms total=%3ms (delayOn=%4ms len=%5ms)")
-                               .arg(gridOffsetMs)
-                               .arg(humanizeMs)
-                               .arg(totalOffsetMs)
-                               .arg(delayOn)
-                               .arg(lenMs);
-            }
-
-            scheduleEvent(elapsedMs + delayOn, PendingKind::NoteOn, m_bassProfile.midiChannel, note, vel, logOn, logLine);
-            scheduleEvent(elapsedMs + delayOn + lenMs, PendingKind::NoteOff, m_bassProfile.midiChannel, note, 0, false, {});
-
-            if (e.role == music::BassEvent::Role::MusicalNote) {
-                m_lastBassMidi = note;
-                m_scheduledNoteOnsInBar.insert(barIndex, curCount + 1);
             }
         }
     }

@@ -10,6 +10,8 @@
 #include "chart/ChartModel.h"
 #include "music/WalkingBassGenerator.h"
 #include "music/BassProfile.h"
+#include "music/JazzPianoGenerator.h"
+#include "music/PianoProfile.h"
 
 namespace playback {
 
@@ -25,6 +27,8 @@ public:
     void setChartModel(const chart::ChartModel& model);
     void setBassProfile(const music::BassProfile& p);
     const music::BassProfile& bassProfile() const { return m_bassProfile; }
+    void setPianoProfile(const music::PianoProfile& p);
+    const music::PianoProfile& pianoProfile() const { return m_pianoProfile; }
 
     bool isPlaying() const { return m_playing; }
 
@@ -43,6 +47,16 @@ signals:
     // Human-readable log line explaining why an event was played.
     // Emitted only when BassProfile::reasoningLogEnabled is true.
     void bassLogLine(const QString& line);
+
+    // Virtual piano MIDI events (1-based channel)
+    void pianoNoteOn(int channel, int note, int velocity);
+    void pianoNoteOff(int channel, int note);
+    void pianoAllNotesOff(int channel);
+    void pianoCC(int channel, int cc, int value);
+
+    // Human-readable log line explaining why an event was played.
+    // Emitted only when PianoProfile::reasoningLogEnabled is true.
+    void pianoLogLine(const QString& line);
 
 private slots:
     void onTick();
@@ -67,6 +81,8 @@ private:
 
     music::WalkingBassGenerator m_bass;
     music::BassProfile m_bassProfile;
+    music::JazzPianoGenerator m_piano;
+    music::PianoProfile m_pianoProfile;
     music::ChordSymbol m_lastChord; // last non-empty/non-placeholder chord encountered
     bool m_hasLastChord = false;
     int m_lastBassMidi = -1;
@@ -76,13 +92,17 @@ private:
     int m_nextScheduledStep = 0;
 
     // ---- Scheduling (single timer + min-heap) ----
-    enum class PendingKind { NoteOn, NoteOff, AllNotesOff };
+    enum class Instrument { Bass, Piano };
+    enum class PendingKind { NoteOn, NoteOff, AllNotesOff, CC };
     struct PendingEvent {
         qint64 dueMs = 0; // absolute in m_clock.elapsed() ms
+        Instrument instrument = Instrument::Bass;
         PendingKind kind = PendingKind::NoteOn;
         int channel = 1;
         int note = 0;
         int velocity = 0;
+        int cc = 0;
+        int ccValue = 0;
         bool emitLog = false;
         QString logLine;
     };
@@ -91,6 +111,7 @@ private:
 
     QRandomGenerator m_timingRng;
     int m_driftMs = 0; // slow random-walk timing drift
+    QRandomGenerator m_pianoTimingRng;
 
     QElapsedTimer m_clock;
     QTimer m_tickTimer;
@@ -98,6 +119,8 @@ private:
     // Safety/validation
     int m_lastBarIndex = -1;
     QHash<int, int> m_scheduledNoteOnsInBar; // barIndex -> note-ons scheduled (for sanity)
+    QHash<int, int> m_scheduledPianoNoteOnsInBar; // barIndex -> piano note-ons scheduled (for sanity)
+    int m_pianoDriftMs = 0; // slow random-walk timing drift for piano
 };
 
 } // namespace playback

@@ -33,6 +33,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   NoteMonitorWidget.cpp
   BassStyleEditorDialog.h
   BassStyleEditorDialog.cpp
+  PianoStyleEditorDialog.h
+  PianoStyleEditorDialog.cpp
   PitchMonitorWidget.h
   PitchMonitorWidget.cpp
   PitchColor.h
@@ -62,10 +64,16 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   music/BassProfile.cpp
   music/BassPresets.h
   music/BassPresets.cpp
+  music/PianoProfile.h
+  music/PianoProfile.cpp
+  music/PianoPresets.h
+  music/PianoPresets.cpp
   music/ScaleLibrary.h
   music/ScaleLibrary.cpp
   music/WalkingBassGenerator.h
   music/WalkingBassGenerator.cpp
+  music/JazzPianoGenerator.h
+  music/JazzPianoGenerator.cpp
   music/SelfTest.h
   music/SelfTest.cpp
   resources.qrc

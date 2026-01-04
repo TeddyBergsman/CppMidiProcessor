@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QVector>
+#include <QHash>
 
 #include "music/ChordSymbol.h"
 #include "music/PianoProfile.h"
@@ -74,10 +75,31 @@ private:
     QVector<int> m_lastRh; // MIDI notes
     quint32 m_lastVoicingHash = 0;
 
+    // Cross-beat planning (so rhythm/phrasing isn't random per beat).
+    QHash<int, QVector<PianoEvent>> m_planned; // globalBeat -> events
+    int m_lastPlannedGlobalBeat = -1;
+    int m_lastPatternId = -1;
+    int m_lastTopMidi = -1;
+
     // Helper methods
+    int globalBeatIndex(const PianoBeatContext& ctx) const;
     QVector<int> chooseVoicingPitchClasses(const ChordSymbol& chord, bool rootless, bool& outUsedTension);
     QVector<int> realizeToMidi(const QVector<int>& pcs, int lo, int hi, const QVector<int>& prev, int maxLeap) const;
     static quint32 hashNotes(const QVector<int>& notes);
+
+    struct VoicingPcs {
+        QVector<int> lh; // pitch classes
+        QVector<int> rh; // pitch classes
+        bool usedTension = false;
+    };
+    VoicingPcs buildBasicChordPcs(const ChordSymbol& chord);
+    VoicingPcs buildLiteralChordPcs(const ChordSymbol& chord);
+    VoicingPcs buildEvansVoicingPcs(const ChordSymbol& chord, bool ballad);
+    VoicingPcs buildTraditionalVoicingPcs(const ChordSymbol& chord,
+                                         const ChordSymbol* nextChord,
+                                         bool ballad,
+                                         bool rootless);
+    void planBar(const PianoBeatContext& ctx, const ChordSymbol& cur, const ChordSymbol* nextChord);
 };
 
 } // namespace music

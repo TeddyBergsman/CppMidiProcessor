@@ -871,8 +871,17 @@ void BandPlaybackEngine::onTick() {
                     driftLocal = int(std::llround(double(driftLocal) * 0.30));
                 }
 
-                auto calcBaseOffsetMs = [&](double /*offsetBeats*/) -> int {
-                    int base = laidBack - push + jitter + driftLocal;
+                // Piano feel: swing the upbeat 8th slightly (even in ballads, subtly).
+                // This gives "jazz time" without needing a separate piano swing UI yet.
+                auto calcBaseOffsetMs = [&](double offsetBeats) -> int {
+                    const double frac = offsetBeats - std::floor(offsetBeats);
+                    const bool isUpbeat8th = std::fabs(frac - 0.5) < 0.001;
+                    const double ratio = (m_pianoProfile.feelStyle == music::PianoFeelStyle::Ballad) ? 2.15 : 2.2;
+                    const double amount = (m_pianoProfile.feelStyle == music::PianoFeelStyle::Ballad) ? 0.35 : 0.55;
+                    const double deltaFrac = (ratio / (ratio + 1.0)) - 0.5;
+                    const int swingMsLocal = isUpbeat8th ? int(std::round(beatMs * deltaFrac * amount)) : 0;
+
+                    int base = laidBack - push + jitter + driftLocal + swingMsLocal;
                     const int clampMs = structural ? 18 : 32;
                     base = std::max(-clampMs, std::min(clampMs, base));
                     return base;
@@ -901,36 +910,68 @@ void BandPlaybackEngine::onTick() {
                     const int curCount = m_scheduledPianoNoteOnsInBar.value(barIndex, 0);
                     if (curCount >= 48) continue;
 
+                    // Reasoning log: emit one line per chord-hit (per offset group), not per note.
                     const bool logOn = m_pianoProfile.reasoningLogEnabled;
+                    bool emitLog = false;
                     QString logLine;
                     if (logOn) {
+                        // Build a chord-hit summary for this beat+offset on the fly:
+                        // We only attach it to the first NoteOn scheduled for a given offset.
+                        static QHash<QString, bool> emittedThisTick;
+                        if (beatInBar == 0 && offset < 1e-6) emittedThisTick.clear();
+
                         const QString chordText = !cur.originalText.trimmed().isEmpty()
                             ? cur.originalText.trimmed()
                             : QString("pc%1").arg(cur.rootPc);
-                        const QString fn = e.function.trimmed().isEmpty() ? QString("—") : e.function.trimmed();
-                        const QString why = e.reasoning.trimmed().isEmpty() ? QString("—") : e.reasoning.trimmed();
-                        const int humanizeMs = calcBaseOffsetMs(offset);
-                        const int gridOffsetMs = int(std::llround(offset * beatMs));
-                        const int totalOffsetMs = gridOffsetMs + humanizeMs;
-                        logLine = QString("[bar %1 beat %2] Piano  %3 (%4) vel=%5  function=%6  chord=%7  why: %8")
-                                      .arg(barIndex + 1)
-                                      .arg(beatInBar + 1)
-                                      .arg(midiName(note))
-                                      .arg(note)
-                                      .arg(vel)
-                                      .arg(fn)
-                                      .arg(chordText)
-                                      .arg(why);
-                        logLine += QString("  timing: grid=%1ms humanize=%2ms total=%3ms (delayOn=%4ms len=%5ms)")
-                                       .arg(gridOffsetMs)
-                                       .arg(humanizeMs)
-                                       .arg(totalOffsetMs)
-                                       .arg(delayOn)
-                                       .arg(lenMs);
+                        const int offKey = int(std::llround(offset * 1000.0));
+                        const QString key = QString("%1|b%2|bt%3|off%4")
+                                                .arg(barIndex)
+                                                .arg(barIndex)
+                                                .arg(beatInBar)
+                                                .arg(offKey);
+                        if (!emittedThisTick.value(key, false)) {
+                            emittedThisTick.insert(key, true);
+                            emitLog = true;
+
+                            // Collect notes for this same offset (from pev).
+                            QVector<int> notes;
+                            notes.reserve(12);
+                            QVector<QString> names;
+                            for (const auto& e2 : pev) {
+                                if (e2.kind != music::PianoEvent::Kind::Note) continue;
+                                const double o2 = std::max(0.0, std::min(0.95, e2.offsetBeats));
+                                if (std::abs(o2 - offset) > 1e-6) continue;
+                                if (e2.midiNote < 0 || e2.velocity <= 0) continue;
+                                const int n2 = std::max(0, std::min(127, e2.midiNote));
+                                if (!notes.contains(n2)) notes.push_back(n2);
+                            }
+                            std::sort(notes.begin(), notes.end());
+                            for (int n2 : notes) names.push_back(QString("%1(%2)").arg(midiName(n2)).arg(n2));
+
+                            const QString fn = e.function.trimmed().isEmpty() ? QString("—") : e.function.trimmed();
+                            const QString why = e.reasoning.trimmed().isEmpty() ? QString("—") : e.reasoning.trimmed();
+                            const int humanizeMs = calcBaseOffsetMs(offset);
+                            const int gridOffsetMs = int(std::llround(offset * beatMs));
+                            const int totalOffsetMs = gridOffsetMs + humanizeMs;
+
+                            logLine = QString("[bar %1 beat %2] Piano  chord=%3  notes=[%4]  function=%5  why: %6")
+                                          .arg(barIndex + 1)
+                                          .arg(beatInBar + 1)
+                                          .arg(chordText)
+                                          .arg(names.join(", "))
+                                          .arg(fn)
+                                          .arg(why);
+                            logLine += QString("  timing: grid=%1ms humanize=%2ms total=%3ms (delayOn=%4ms len=%5ms)")
+                                           .arg(gridOffsetMs)
+                                           .arg(humanizeMs)
+                                           .arg(totalOffsetMs)
+                                           .arg(delayOn)
+                                           .arg(lenMs);
+                        }
                     }
 
                     scheduleEvent(elapsedMs + delayOn, Instrument::Piano, PendingKind::NoteOn,
-                                  m_pianoProfile.midiChannel, note, vel, 0, 0, logOn, logLine);
+                                  m_pianoProfile.midiChannel, note, vel, 0, 0, emitLog, logLine);
                     scheduleEvent(elapsedMs + delayOn + lenMs, Instrument::Piano, PendingKind::NoteOff,
                                   m_pianoProfile.midiChannel, note, 0, 0, 0, false, {});
                     m_scheduledPianoNoteOnsInBar.insert(barIndex, curCount + 1);

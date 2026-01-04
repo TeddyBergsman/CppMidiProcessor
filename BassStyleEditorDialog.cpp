@@ -728,4 +728,3 @@ void BassStyleEditorDialog::flushPendingLog() {
     }
     m_liveLog->scrollToBottom();
 }
-

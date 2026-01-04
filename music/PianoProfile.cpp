@@ -22,55 +22,67 @@ static quint32 readU32(QSettings& s, const QString& k, quint32 def) { return (qu
 } // namespace
 
 PianoProfile defaultPianoProfile() {
-    // Default: world-class Bill Evans-ish comping with light fills, tasteful pedal.
+    // Default: classic, beautiful jazz ballad comping (hotel-bar tasteful).
     PianoProfile p;
-    p.name = "Bill Evans (Default)";
+    p.name = "Classic Ballad (Default)";
     p.enabled = true;
     p.midiChannel = 4;
-    p.feelStyle = PianoFeelStyle::Swing;
+    p.feelStyle = PianoFeelStyle::Ballad;
+
+    // Register: this app's piano center is one octave higher than v1 assumptions.
+    // Keep LH in the midrange and RH comfortably above it.
+    // Expanded downward range so the piano isn't only bright.
+    p.lhMinMidiNote = 36;  // C2
+    p.lhMaxMidiNote = 72;  // C5
+    p.rhMinMidiNote = 60;  // C4
+    p.rhMaxMidiNote = 100; // E7
 
     // Timing: slightly laid back, still professional/tight.
-    p.microJitterMs = 4;
-    p.laidBackMs = 8;
+    p.microJitterMs = 2;
+    p.laidBackMs = 9;
     p.pushMs = 0;
-    p.driftMaxMs = 14;
-    p.driftRate = 0.18;
+    p.driftMaxMs = 8;
+    p.driftRate = 0.10;
 
     // Dynamics: warm and restrained.
-    p.baseVelocity = 62;
-    p.velocityVariance = 14;
+    p.baseVelocity = 60;
+    p.velocityVariance = 10;
+    p.accentDownbeat = 1.22;
+    p.accentBackbeat = 0.92;
 
-    // Comping probability: not "every beat", but present.
-    p.compDensity = 0.55;
-    p.anticipationProb = 0.14;
-    p.syncopationProb = 0.18;
-    p.restProb = 0.12;
+    // Comping: very sparse, mainly 1 & 3 (two-feel).
+    p.compDensity = 0.46;
+    p.anticipationProb = 0.0;
+    p.syncopationProb = 0.0;
+    p.restProb = 0.22;
 
-    // Voicing language: rootless, guided voice-leading, occasional quartal/cluster color.
+    // Voicing language: shell/rootless, very consonant, smooth voice-leading.
     p.preferRootless = true;
-    p.rootlessProb = 0.80;
-    p.drop2Prob = 0.35;
-    p.quartalProb = 0.18;
-    p.clusterProb = 0.10;
-    p.tensionProb = 0.75;
-    p.avoidRootProb = 0.65;
-    p.avoidThirdProb = 0.10;
-    p.voiceLeadingStrength = 0.75;
-    p.repetitionPenalty = 0.45;
-    p.maxHandLeap = 10;
+    p.rootlessProb = 1.00;
+    p.drop2Prob = 0.0;
+    p.quartalProb = 0.0;
+    p.clusterProb = 0.0;
+    p.tensionProb = 0.35;
+    p.avoidRootProb = 0.90;
+    p.avoidThirdProb = 0.0;
+    p.voiceLeadingStrength = 0.92;
+    p.repetitionPenalty = 0.18;
+    p.maxHandLeap = 7;
 
-    // Fills: rare outside phrase ends.
-    p.fillProbPhraseEnd = 0.22;
-    p.fillProbAnyBeat = 0.06;
+    // Fills: off by default for classic ballad (no distracting licks).
+    p.fillProbPhraseEnd = 0.0;
+    p.fillProbAnyBeat = 0.0;
     p.phraseLengthBars = 4;
-    p.fillMaxNotes = 4;
+    p.fillMaxNotes = 0;
+    p.fillMinMidiNote = 64;
+    p.fillMaxMidiNote = 108;
 
-    // Pedal: on by default, refresh on changes.
+    // Pedal: on by default, refresh on changes (clear harmony).
     p.pedalEnabled = true;
     p.pedalReleaseOnChordChange = true;
-    p.pedalMinHoldMs = 180;
-    p.pedalMaxHoldMs = 620;
-    p.pedalChangeProb = 0.80;
+    p.pedalMinHoldMs = 420;
+    p.pedalMaxHoldMs = 1400;
+    p.pedalChangeProb = 0.95;
 
     return p;
 }
@@ -144,6 +156,33 @@ PianoProfile loadPianoProfile(QSettings& settings, const QString& prefix) {
     p.pedalChangeProb = clampD(readD(settings, base + "/pedalChangeProb", p.pedalChangeProb), 0.0, 1.0);
 
     p.reasoningLogEnabled = readB(settings, base + "/reasoningLogEnabled", p.reasoningLogEnabled);
+
+    // v1 -> v2 migration: earlier versions were centered an octave too low.
+    if (p.version < 2) {
+        auto bump12 = [](int x) -> int { return std::max(0, std::min(127, x + 12)); };
+        p.lhMinMidiNote = bump12(p.lhMinMidiNote);
+        p.lhMaxMidiNote = bump12(p.lhMaxMidiNote);
+        p.rhMinMidiNote = bump12(p.rhMinMidiNote);
+        p.rhMaxMidiNote = bump12(p.rhMaxMidiNote);
+        p.fillMinMidiNote = bump12(p.fillMinMidiNote);
+        p.fillMaxMidiNote = bump12(p.fillMaxMidiNote);
+        if (p.lhMinMidiNote > p.lhMaxMidiNote) std::swap(p.lhMinMidiNote, p.lhMaxMidiNote);
+        if (p.rhMinMidiNote > p.rhMaxMidiNote) std::swap(p.rhMinMidiNote, p.rhMaxMidiNote);
+        if (p.fillMinMidiNote > p.fillMaxMidiNote) std::swap(p.fillMinMidiNote, p.fillMaxMidiNote);
+        p.version = 2;
+    }
+
+    // v2 -> v3 migration: expand range downward by an octave (warmer, less bright).
+    if (p.version < 3) {
+        auto down12 = [](int x) -> int { return std::max(0, std::min(127, x - 12)); };
+        p.lhMinMidiNote = down12(p.lhMinMidiNote);
+        p.rhMinMidiNote = down12(p.rhMinMidiNote);
+        p.fillMinMidiNote = down12(p.fillMinMidiNote);
+        if (p.lhMinMidiNote > p.lhMaxMidiNote) std::swap(p.lhMinMidiNote, p.lhMaxMidiNote);
+        if (p.rhMinMidiNote > p.rhMaxMidiNote) std::swap(p.rhMinMidiNote, p.rhMaxMidiNote);
+        if (p.fillMinMidiNote > p.fillMaxMidiNote) std::swap(p.fillMinMidiNote, p.fillMaxMidiNote);
+        p.version = 3;
+    }
 
     return p;
 }

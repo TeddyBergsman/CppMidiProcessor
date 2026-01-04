@@ -17,58 +17,71 @@ QVector<PianoPreset> PianoPresets::all() {
     QVector<PianoPreset> out;
     out.reserve(8);
 
-    // Bill Evans default: warm, rootless, voice-led, light fills.
+    // Classic ballad default: sparse, consonant, beautiful.
     {
-        PianoProfile p = baseEnabledTrue("Bill Evans (Default)");
-        p.feelStyle = PianoFeelStyle::Swing;
-        p.compDensity = 0.55;
-        p.anticipationProb = 0.14;
-        p.syncopationProb = 0.18;
-        p.restProb = 0.12;
-        p.baseVelocity = 62;
-        p.velocityVariance = 14;
-        p.laidBackMs = 8;
-        p.microJitterMs = 4;
-        p.driftMaxMs = 14;
-        p.driftRate = 0.18;
-        p.rootlessProb = 0.80;
-        p.tensionProb = 0.75;
-        p.quartalProb = 0.18;
-        p.clusterProb = 0.10;
-        p.drop2Prob = 0.35;
-        p.voiceLeadingStrength = 0.75;
-        p.repetitionPenalty = 0.45;
-        p.fillProbPhraseEnd = 0.22;
-        p.fillProbAnyBeat = 0.06;
+        PianoProfile p = baseEnabledTrue("Classic Ballad (Default)");
+        p.feelStyle = PianoFeelStyle::Ballad;
+        p.lhMinMidiNote = 36; p.lhMaxMidiNote = 72;
+        p.rhMinMidiNote = 60; p.rhMaxMidiNote = 100;
+        p.fillMinMidiNote = 64; p.fillMaxMidiNote = 108;
+        p.compDensity = 0.46;
+        p.anticipationProb = 0.0;
+        p.syncopationProb = 0.0;
+        p.restProb = 0.22;
+        p.baseVelocity = 60;
+        p.velocityVariance = 10;
+        p.accentDownbeat = 1.22;
+        p.accentBackbeat = 0.92;
+        p.laidBackMs = 9;
+        p.microJitterMs = 2;
+        p.driftMaxMs = 8;
+        p.driftRate = 0.10;
+        p.rootlessProb = 1.00;
+        p.tensionProb = 0.35;
+        p.quartalProb = 0.0;
+        p.clusterProb = 0.0;
+        p.drop2Prob = 0.0;
+        p.voiceLeadingStrength = 0.92;
+        p.repetitionPenalty = 0.18;
+        p.maxHandLeap = 7;
+        p.fillProbPhraseEnd = 0.0;
+        p.fillProbAnyBeat = 0.0;
+        p.fillMaxNotes = 0;
         p.pedalEnabled = true;
         p.pedalReleaseOnChordChange = true;
-        p.pedalChangeProb = 0.80;
-        out.push_back({"bill_evans_default", p.name, p});
+        p.pedalMinHoldMs = 420;
+        p.pedalMaxHoldMs = 1400;
+        p.pedalChangeProb = 0.95;
+        out.push_back({"classic_ballad_default", p.name, p});
     }
 
-    // Bill Evans ballad: sparser, more sustained, less syncopation, more pedal.
+    // Bill Evans (Ballad): slightly more color, still gentle (but no licks by default).
     {
         PianoProfile p = baseEnabledTrue("Bill Evans (Ballad)");
         p.feelStyle = PianoFeelStyle::Ballad;
-        p.compDensity = 0.34;
-        p.anticipationProb = 0.08;
-        p.syncopationProb = 0.10;
-        p.restProb = 0.22;
-        p.baseVelocity = 54;
+        p.lhMinMidiNote = 38; p.lhMaxMidiNote = 74;
+        p.rhMinMidiNote = 62; p.rhMaxMidiNote = 102;
+        p.fillMinMidiNote = 66; p.fillMaxMidiNote = 108;
+        p.compDensity = 0.40;
+        p.anticipationProb = 0.0;
+        p.syncopationProb = 0.0;
+        p.restProb = 0.26;
+        p.baseVelocity = 58;
         p.velocityVariance = 10;
         p.laidBackMs = 10;
         p.microJitterMs = 3;
         p.driftMaxMs = 10;
         p.driftRate = 0.12;
-        p.rootlessProb = 0.75;
-        p.tensionProb = 0.70;
-        p.quartalProb = 0.12;
-        p.clusterProb = 0.06;
-        p.drop2Prob = 0.30;
+        p.rootlessProb = 1.00;
+        p.tensionProb = 0.45;
+        p.quartalProb = 0.0;
+        p.clusterProb = 0.0;
+        p.drop2Prob = 0.10;
         p.voiceLeadingStrength = 0.85;
         p.repetitionPenalty = 0.35;
-        p.fillProbPhraseEnd = 0.12;
-        p.fillProbAnyBeat = 0.03;
+        p.fillProbPhraseEnd = 0.0;
+        p.fillProbAnyBeat = 0.0;
+        p.fillMaxNotes = 0;
         p.pedalEnabled = true;
         p.pedalReleaseOnChordChange = true;
         p.pedalMinHoldMs = 380;
@@ -81,6 +94,9 @@ QVector<PianoPreset> PianoPresets::all() {
     {
         PianoProfile p = baseEnabledTrue("Sparse Guide Tones");
         p.feelStyle = PianoFeelStyle::Swing;
+        p.lhMinMidiNote = 36; p.lhMaxMidiNote = 70;
+        p.rhMinMidiNote = 58; p.rhMaxMidiNote = 98;
+        p.fillMinMidiNote = 62; p.fillMaxMidiNote = 104;
         p.compDensity = 0.30;
         p.anticipationProb = 0.08;
         p.syncopationProb = 0.10;
@@ -108,6 +124,9 @@ QVector<PianoPreset> PianoPresets::all() {
     {
         PianoProfile p = baseEnabledTrue("Quartal Modern");
         p.feelStyle = PianoFeelStyle::Swing;
+        p.lhMinMidiNote = 36; p.lhMaxMidiNote = 72;
+        p.rhMinMidiNote = 60; p.rhMaxMidiNote = 104;
+        p.fillMinMidiNote = 64; p.fillMaxMidiNote = 110;
         p.compDensity = 0.60;
         p.anticipationProb = 0.18;
         p.syncopationProb = 0.24;

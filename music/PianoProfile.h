@@ -16,7 +16,7 @@ enum class PianoFeelStyle {
 // Per-song “human musician” configuration for the jazz piano generator.
 // Versioned and persisted via QSettings.
 struct PianoProfile {
-    int version = 1;
+    int version = 3;
     QString name; // optional label, e.g. "Bill Evans (Default)"
 
     // High-level feel / density mode.
@@ -27,10 +27,10 @@ struct PianoProfile {
     int midiChannel = 4; // 1..16 (reserved: 4 = piano)
 
     // Register / hand ranges (MIDI notes)
-    int lhMinMidiNote = 36; // C2
-    int lhMaxMidiNote = 60; // C4
+    int lhMinMidiNote = 36; // C2 (warmer range)
+    int lhMaxMidiNote = 72; // C5
     int rhMinMidiNote = 60; // C4
-    int rhMaxMidiNote = 88; // E6
+    int rhMaxMidiNote = 100; // E7
 
     // Timing / humanization
     int microJitterMs = 4;   // +/- per event
@@ -73,7 +73,7 @@ struct PianoProfile {
     int phraseLengthBars = 4;        // typical jazz phrasing (used for phrase-end fills)
     int fillMaxNotes = 4;            // per beat window
     int fillMinMidiNote = 64;        // E4
-    int fillMaxMidiNote = 96;        // C7
+    int fillMaxMidiNote = 108;       // C8
 
     // Sustain pedal (CC64)
     bool pedalEnabled = true;

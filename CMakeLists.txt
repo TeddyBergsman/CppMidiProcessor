@@ -13,6 +13,33 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_PREFIX_PATH "/opt/homebrew") # Use /usr/local for Intel Macs.
 find_package(Qt6 REQUIRED COMPONENTS Widgets Xml Multimedia)
 
+# --- Testing ---
+include(CTest)
+enable_testing()
+
+# --- VirtuosoCore (new library, Stage 1) ---
+add_library(VirtuosoCore STATIC
+  virtuoso/ontology/OntologyRegistry.h
+  virtuoso/ontology/OntologyRegistry.cpp
+  virtuoso/constraints/ConstraintsTypes.h
+  virtuoso/constraints/IInstrumentDriver.h
+  virtuoso/constraints/PianoDriver.h
+  virtuoso/constraints/PianoDriver.cpp
+  virtuoso/constraints/BassDriver.h
+  virtuoso/constraints/BassDriver.cpp
+  virtuoso/theory/TheoryEvent.h
+  virtuoso/theory/TheoryEvent.cpp
+)
+
+target_link_libraries(VirtuosoCore PUBLIC Qt6::Core)
+target_include_directories(VirtuosoCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+
+add_executable(VirtuosoCoreTests
+  virtuoso/tests/VirtuosoCoreTests.cpp
+)
+target_link_libraries(VirtuosoCoreTests PRIVATE VirtuosoCore Qt6::Core)
+add_test(NAME VirtuosoCoreTests COMMAND VirtuosoCoreTests)
+
 
 # --- Define the Executable Target as a macOS App Bundle---
 # We add resources.qrc here. CMAKE_AUTORCC will handle it automatically.
@@ -20,6 +47,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   main.cpp
   mainwindow.h
   mainwindow.cpp
+  LibraryWindow.h
+  LibraryWindow.cpp
   midiprocessor.h
   midiprocessor.cpp
   voicecontroller.h
@@ -76,6 +105,10 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   music/JazzPianoGenerator.cpp
   music/SelfTest.h
   music/SelfTest.cpp
+  virtuoso/ui/GuitarFretboardWidget.h
+  virtuoso/ui/GuitarFretboardWidget.cpp
+  virtuoso/ui/PianoKeyboardWidget.h
+  virtuoso/ui/PianoKeyboardWidget.cpp
   resources.qrc
 )
 
@@ -90,6 +123,7 @@ target_link_libraries(CppMidiProcessor
   Qt6::Widgets
   Qt6::Xml
   Qt6::Multimedia
+  VirtuosoCore
   "-framework CoreMIDI"
   "-framework CoreAudio"
   "-framework CoreFoundation"

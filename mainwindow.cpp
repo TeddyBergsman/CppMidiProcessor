@@ -13,6 +13,7 @@
 #include <QDialog>
 #include "NoteMonitorWidget.h"
 #include "ireal/HtmlPlaylistParser.h"
+#include "LibraryWindow.h"
 
 namespace {
 static const char* kIRealLastHtmlPathKey = "ireal/lastHtmlPath";
@@ -139,6 +140,19 @@ void MainWindow::createWidgets(const Preset& preset) {
             if (noteMonitorWidget) noteMonitorWidget->openPianoStyleEditor();
         });
         windowMenu->addAction(pianoAction);
+
+        QAction* libraryAction = new QAction("Library", this);
+        libraryAction->setMenuRole(QAction::NoRole);
+        connect(libraryAction, &QAction::triggered, this, [this]() {
+            if (!m_libraryWindow) {
+                m_libraryWindow = new LibraryWindow(this);
+                m_libraryWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+            }
+            m_libraryWindow->show();
+            m_libraryWindow->raise();
+            m_libraryWindow->activateWindow();
+        });
+        windowMenu->addAction(libraryAction);
     }
 
     // Dynamically create program buttons from preset data

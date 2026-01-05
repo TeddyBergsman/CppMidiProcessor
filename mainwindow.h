@@ -25,6 +25,7 @@ class QStackedWidget;
 QT_END_NAMESPACE
 
 class NoteMonitorWidget;
+class LibraryWindow;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -154,6 +155,9 @@ protected:
     
     // Transpose control
     QCheckBox* transposeCheckBox;
+
+    // Library Visualizer window (Window → Library)
+    LibraryWindow* m_libraryWindow = nullptr;
 };
 
 #endif // MAINWINDOW_H

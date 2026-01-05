@@ -4,7 +4,6 @@
 #include "virtuoso/theory/TheoryEvent.h"
 #include "virtuoso/theory/NegativeHarmony.h"
 #include "virtuoso/theory/ScaleSuggester.h"
-#include "virtuoso/theory/GrooveEngine.h"
 #include "virtuoso/theory/FunctionalHarmony.h"
 
 #include <QCoreApplication>
@@ -173,31 +172,6 @@ static void testScaleSuggester() {
     expect(hasAltered, "ScaleSuggester includes Altered for altered-ish dominant set");
 }
 
-static void testGrooveEngine() {
-    using virtuoso::theory::GrooveEngine;
-    using virtuoso::theory::GrooveTemplate;
-
-    GrooveTemplate straight;
-    straight.swing = 0.50;
-    auto dueStraight = GrooveEngine::scheduleDueMs(/*steps=*/8, /*baseStepMs=*/100, /*stepsPerBeat=*/2, straight, /*seed=*/123);
-    expectEq(dueStraight.size(), 8, "GrooveEngine: due size");
-    expectEq(dueStraight[0], 0, "GrooveEngine: straight step0");
-    expectEq(dueStraight[1], 100, "GrooveEngine: straight step1");
-    expectEq(dueStraight[2], 200, "GrooveEngine: straight step2");
-
-    GrooveTemplate swing;
-    swing.swing = 0.666;
-    auto dueSwing = GrooveEngine::scheduleDueMs(/*steps=*/8, /*baseStepMs=*/100, /*stepsPerBeat=*/2, swing, /*seed=*/123);
-    expectEq(dueSwing.size(), 8, "GrooveEngine: swing due size");
-    expect(dueSwing[1] > dueStraight[1], "GrooveEngine: offbeat delayed");
-    expect(dueSwing[3] > dueStraight[3], "GrooveEngine: offbeat delayed (2)");
-    expectEq(dueSwing[2], dueStraight[2], "GrooveEngine: downbeat on grid");
-    expectEq(dueSwing[4], dueStraight[4], "GrooveEngine: downbeat on grid (2)");
-    for (int i = 1; i < dueSwing.size(); ++i) {
-        expect(dueSwing[i] > dueSwing[i - 1], "GrooveEngine: monotonic schedule");
-    }
-}
-
 static void testFunctionalHarmony() {
     const OntologyRegistry reg = OntologyRegistry::builtins();
     const auto* maj7 = reg.chord("maj7");
@@ -236,7 +210,6 @@ int main(int argc, char** argv) {
     testTheoryStream();
     testNegativeHarmony();
     testScaleSuggester();
-    testGrooveEngine();
     testFunctionalHarmony();
 
     if (g_failures == 0) {

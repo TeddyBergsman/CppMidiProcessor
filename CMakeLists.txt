@@ -31,6 +31,8 @@ add_library(VirtuosoCore STATIC
   virtuoso/theory/TheoryEvent.cpp
   virtuoso/theory/NegativeHarmony.h
   virtuoso/theory/NegativeHarmony.cpp
+  virtuoso/theory/ScaleSuggester.h
+  virtuoso/theory/ScaleSuggester.cpp
 )
 
 target_link_libraries(VirtuosoCore PUBLIC Qt6::Core)

@@ -189,10 +189,8 @@ void GuitarFretboardWidget::paintEvent(QPaintEvent*) {
             QColor fill = isRoot
                 ? QColor(255, 170, 60, 235)
                 : (isBlackPc(pc) ? QColor(60, 160, 255, 220) : QColor(80, 200, 255, 220));
-            if (!isInSet && isActiveMidi) {
-                // Active note not in selection (e.g., click): use green.
-                fill = QColor(120, 255, 140, 235);
-            }
+            // Active notes are indicated via the white outline ring below; don't recolor
+            // out-of-set notes to avoid confusion (it can look like a wrong highlight).
             p.setBrush(fill);
             p.setPen(QPen(QColor(10, 10, 10, 160), 1));
             p.drawEllipse(QPointF(xCenter, y), 10, 10);

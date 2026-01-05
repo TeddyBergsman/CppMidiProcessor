@@ -3,6 +3,7 @@
 #include "virtuoso/constraints/BassDriver.h"
 #include "virtuoso/theory/TheoryEvent.h"
 #include "virtuoso/theory/NegativeHarmony.h"
+#include "virtuoso/theory/ScaleSuggester.h"
 
 #include <QCoreApplication>
 #include <QJsonDocument>
@@ -158,6 +159,18 @@ static void testNegativeHarmony() {
     expectEq(negativeHarmonyMirrorPc(0, 0), 0, "NegativeHarmony: C -> C (pc)");
 }
 
+static void testScaleSuggester() {
+    const OntologyRegistry reg = OntologyRegistry::builtins();
+    // For a dominant alt-ish pitch set, Altered should appear very high.
+    // Example set: {G, B, F, Ab, Bb, Db} pcs {7,11,5,8,10,1}
+    QSet<int> pcs = {7, 11, 5, 8, 10, 1};
+    const auto sug = virtuoso::theory::suggestScalesForPitchClasses(reg, pcs, 6);
+    expect(!sug.isEmpty(), "ScaleSuggester returns suggestions");
+    bool hasAltered = false;
+    for (const auto& s : sug) if (s.key == "altered") hasAltered = true;
+    expect(hasAltered, "ScaleSuggester includes Altered for altered-ish dominant set");
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
@@ -166,6 +179,7 @@ int main(int argc, char** argv) {
     testBassConstraints();
     testTheoryStream();
     testNegativeHarmony();
+    testScaleSuggester();
 
     if (g_failures == 0) {
         qInfo("VirtuosoCoreTests: PASS");

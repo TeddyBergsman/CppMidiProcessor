@@ -10,12 +10,14 @@
 #include <QHBoxLayout>
 #include <QGroupBox>
 #include <QTimer>
+#include <QStatusBar>
 #include <functional>
 
 #include "virtuoso/ui/GuitarFretboardWidget.h"
 #include "virtuoso/ui/PianoKeyboardWidget.h"
 
 #include "midiprocessor.h"
+#include "virtuoso/theory/ScaleSuggester.h"
 
 using namespace virtuoso::ontology;
 
@@ -769,6 +771,16 @@ void LibraryWindow::updateHighlights() {
             m_piano->setHighlightedPitchClasses(pcs);
             m_piano->setDegreeLabels({});
         }
+        // Suggested scales for polychord pitch set (status bar)
+        if (statusBar()) {
+            const auto sug = virtuoso::theory::suggestScalesForPitchClasses(m_registry, pcs, 6);
+            QString msg = "Suggested scales: ";
+            for (int i = 0; i < sug.size(); ++i) {
+                if (i) msg += " | ";
+                msg += QString("%1 (%2)").arg(sug[i].name).arg(pcName(sug[i].bestTranspose));
+            }
+            statusBar()->showMessage(msg);
+        }
         return;
     }
     if (tab == 0 && m_chordsList) {
@@ -791,6 +803,48 @@ void LibraryWindow::updateHighlights() {
         const auto* chordCtx = allChords.isEmpty() ? nullptr : allChords[idx];
         pcs = pitchClassesForVoicing(voicingDef, chordCtx, rootPc);
         deg = degreeLabelsForVoicing(voicingDef, chordCtx);
+
+        // If this is a UST voicing, show explicit hints + ranked suggestions.
+        if (statusBar() && voicingDef && voicingDef->tags.contains("ust")) {
+            // union of chord context + voicing pcs
+            QSet<int> unionPcs = pcs;
+            if (chordCtx) {
+                for (int iv : chordCtx->intervals) unionPcs.insert(normalizePc(rootPc + iv));
+            }
+            const QString chordKey = chordCtx ? chordCtx->key : QString();
+            const auto hints = virtuoso::theory::explicitHintScalesForContext(voicingDef->key, chordKey);
+            const auto ranked = virtuoso::theory::suggestScalesForPitchClasses(m_registry, unionPcs, 6);
+
+            QString msg = "UST scale hints: ";
+            if (!hints.isEmpty()) {
+                for (int i = 0; i < hints.size(); ++i) {
+                    msg += (i ? ", " : "");
+                    // Show hinted scale name + best transpose inferred from the same union pitch set
+                    QString label = hints[i];
+                    int bestT = 0;
+                    for (const auto& s : ranked) {
+                        if (s.key == hints[i]) {
+                            label = s.name;
+                            bestT = s.bestTranspose;
+                            break;
+                        }
+                    }
+                    const auto* sd = m_registry.scale(hints[i]);
+                    if (sd) label = sd->name;
+                    msg += QString("%1 (%2)").arg(label).arg(pcName(bestT));
+                }
+            } else {
+                msg += "(none)";
+            }
+            msg += "  |  Suggested scales: ";
+            for (int i = 0; i < ranked.size(); ++i) {
+                if (i) msg += " | ";
+                msg += QString("%1 (%2)").arg(ranked[i].name).arg(pcName(ranked[i].bestTranspose));
+            }
+            statusBar()->showMessage(msg);
+        } else if (statusBar()) {
+            statusBar()->clearMessage();
+        }
     }
 
     if (m_guitar) {
@@ -802,6 +856,11 @@ void LibraryWindow::updateHighlights() {
         m_piano->setRootPitchClass(rootPc);
         m_piano->setHighlightedPitchClasses(pcs);
         m_piano->setDegreeLabels(deg);
+    }
+
+    if (statusBar() && tab != 2) {
+        // Avoid stale messages outside UST/polychord contexts.
+        if (!m_polyTab || tab != m_tabs->indexOf(m_polyTab)) statusBar()->clearMessage();
     }
 }
 

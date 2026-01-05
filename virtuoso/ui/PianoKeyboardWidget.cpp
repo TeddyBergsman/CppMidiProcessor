@@ -158,9 +158,8 @@ void PianoKeyboardWidget::paintEvent(QPaintEvent*) {
         if (m_pcs.contains(pc)) {
             fill = (m_rootPc >= 0 && pc == m_rootPc) ? QColor(255, 190, 90) : QColor(120, 200, 255);
         }
-        if (!m_pcs.contains(pc) && isActiveMidi) {
-            fill = QColor(160, 255, 170);
-        }
+        // Active notes are indicated via the white outline ring below; don't recolor
+        // out-of-set notes to avoid confusion (it can look like a wrong highlight).
         p.setBrush(fill);
         p.drawRect(k.rect);
 
@@ -193,9 +192,8 @@ void PianoKeyboardWidget::paintEvent(QPaintEvent*) {
         if (m_pcs.contains(pc)) {
             fill = (m_rootPc >= 0 && pc == m_rootPc) ? QColor(220, 130, 40) : QColor(60, 150, 255);
         }
-        if (!m_pcs.contains(pc) && isActiveMidi) {
-            fill = QColor(40, 170, 70);
-        }
+        // Active notes are indicated via the white outline ring below; don't recolor
+        // out-of-set notes to avoid confusion (it can look like a wrong highlight).
         p.setBrush(fill);
         p.drawRoundedRect(k.rect, 2, 2);
 

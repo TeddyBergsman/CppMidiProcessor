@@ -50,8 +50,11 @@ QVector<int> GrooveEngine::scheduleDueMs(int steps,
 
     const int beatMs = baseStepMs * stepsPerBeat;
     const double swingRatio = std::clamp(tpl.swing, 0.50, 0.90);
-    const int swingDelayMs = (stepsPerBeat == 2)
+    const int swingDelay8thMs = (stepsPerBeat == 2)
         ? int(std::round((swingRatio - 0.50) * double(beatMs)))
+        : 0;
+    const int swingDelay16thMs = (stepsPerBeat == 4)
+        ? int(std::round((swingRatio - 0.50) * double(beatMs / 2)))
         : 0;
 
     for (int i = 0; i < steps; ++i) {
@@ -60,7 +63,12 @@ QVector<int> GrooveEngine::scheduleDueMs(int steps,
         // 8th swing: delay the offbeat within each beat.
         if (stepsPerBeat == 2) {
             const int inBeat = i % 2;
-            if (inBeat == 1) t += swingDelayMs;
+            if (inBeat == 1) t += swingDelay8thMs;
+        }
+        // 16th swing: treat each beat as two 8th-pairs (0-1 and 2-3), and delay the 2nd note in each pair.
+        if (stepsPerBeat == 4) {
+            const int inBeat = i % 4;
+            if (inBeat == 1 || inBeat == 3) t += swingDelay16thMs;
         }
 
         // Pocket: shift offbeats.

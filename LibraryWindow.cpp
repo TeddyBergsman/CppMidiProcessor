@@ -442,6 +442,9 @@ void LibraryWindow::populateLists() {
 }
 
 void LibraryWindow::onSelectionChanged() {
+    const int tab = m_tabs ? m_tabs->currentIndex() : 0;
+    const int grooveIdx = (m_grooveTab && m_tabs) ? m_tabs->indexOf(m_grooveTab) : -1;
+    if (tab >= 0 && tab != grooveIdx) m_lastAuditionTab = tab;
     updateHighlights();
     scheduleAutoPlay();
 }
@@ -658,9 +661,8 @@ void LibraryWindow::scheduleAutoPlay() {
     m_autoPlayTimer->start(80);
 }
 
-QVector<int> LibraryWindow::midiNotesForCurrentSelection(int rootPc) const {
+QVector<int> LibraryWindow::midiNotesForSelectionTab(int tab, int rootPc) const {
     QVector<int> notes;
-    const int tab = m_tabs ? m_tabs->currentIndex() : 0;
     const int baseRoot = baseRootMidiForPosition(rootPc);
 
     if (tab == 0 && m_chordsList && m_chordsList->currentItem()) {
@@ -702,6 +704,11 @@ QVector<int> LibraryWindow::midiNotesForCurrentSelection(int rootPc) const {
     std::sort(notes.begin(), notes.end());
     notes.erase(std::unique(notes.begin(), notes.end()), notes.end());
     return notes;
+}
+
+QVector<int> LibraryWindow::midiNotesForCurrentSelection(int rootPc) const {
+    const int tab = m_tabs ? m_tabs->currentIndex() : 0;
+    return midiNotesForSelectionTab(tab, rootPc);
 }
 
 void LibraryWindow::playSingleNote(int midi, int durationMs) {
@@ -920,8 +927,10 @@ void LibraryWindow::playPatternSequence(const QVector<int>& midiSeq, int duratio
     QTimer::singleShot(firstDelay, this, [stepFn]() { (*stepFn)(/*idx=*/0, /*prev=*/-1); });
 }
 
-void LibraryWindow::playGroovePreview(int durationMs) {
+void LibraryWindow::playGroovedChordHits(const QVector<int>& chordNotes, int durationMs) {
+    if (chordNotes.isEmpty()) return;
     if (!m_midi) return;
+
     const int ch = selectedPlaybackChannel();
     const int vel = 48;
     const quint64 session = ++m_playSession;
@@ -938,51 +947,70 @@ void LibraryWindow::playGroovePreview(int durationMs) {
         }
     }
     const int stepsPerBeat = m_grooveSubdivisionCombo ? m_grooveSubdivisionCombo->currentData().toInt() : 2;
+    const int beats = 4; // one bar in 4/4 for audition
+    const int steps = qMax(1, beats * qMax(1, stepsPerBeat));
 
-    const int baseRoot = baseRootMidiForPosition(pcFromIndex(m_rootCombo ? m_rootCombo->currentIndex() : 0));
-    const int stepMs = qMax(40, durationMs / 4);
-    const int gateMs = qMax(18, stepMs / 2);
-    const QVector<int> due = virtuoso::theory::GrooveEngine::scheduleDueMs(/*steps=*/12,
-                                                                          stepMs,
+    // Treat Duration as the "beat length" for this preview (Quarter note).
+    const int baseStepMs = qMax(22, durationMs / qMax(1, stepsPerBeat));
+    const QVector<int> due = virtuoso::theory::GrooveEngine::scheduleDueMs(steps,
+                                                                          baseStepMs,
                                                                           stepsPerBeat,
                                                                           groove,
                                                                           quint32(session));
 
+    const int gateMs = qMax(18, qMin(int(double(baseStepMs) * 0.65), baseStepMs - 2));
+
     using StepFn = std::function<void(int idx)>;
     auto stepFn = std::make_shared<StepFn>();
-    *stepFn = [this, session, ch, vel, gateMs, baseRoot, due, stepFn](int idx) {
+    *stepFn = [this, session, ch, vel, gateMs, chordNotes, due, stepFn](int idx) {
         if (session != m_playSession) return;
         if (!m_midi) return;
         if (idx >= due.size()) return;
 
-        const int n = baseRoot;
-        setActiveMidi(n, true);
-        noteOnTracked(ch, n, vel);
-        QTimer::singleShot(gateMs, this, [this, session, ch, n]() {
-            if (session != m_playSession) return;
-            if (!m_midi) return;
+        // Ensure chord hits don't overlap.
+        for (int n : chordNotes) {
             noteOffTracked(ch, n);
             setActiveMidi(n, false);
+        }
+        for (int n : chordNotes) {
+            setActiveMidi(n, true);
+            noteOnTracked(ch, n, vel);
+        }
+
+        QTimer::singleShot(gateMs, this, [this, session, ch, chordNotes]() {
+            if (session != m_playSession) return;
+            if (!m_midi) return;
+            for (int n : chordNotes) {
+                noteOffTracked(ch, n);
+                setActiveMidi(n, false);
+            }
         });
 
         if (idx + 1 < due.size()) {
-            const int nextDelay = due[idx + 1] - due[idx];
+            const int nextDelay = qMax(1, due[idx + 1] - due[idx]);
             QTimer::singleShot(nextDelay, this, [stepFn, idx]() { (*stepFn)(idx + 1); });
         }
     };
 
-    const int firstDelay = (!due.isEmpty() ? due[0] : 0);
+    const int firstDelay = (!due.isEmpty() ? qMax(0, due[0]) : 0);
     QTimer::singleShot(firstDelay, this, [stepFn]() { (*stepFn)(0); });
 }
 
 void LibraryWindow::onPlayPressed() {
-    const int tab = m_tabs ? m_tabs->currentIndex() : 0;
+    int tab = m_tabs ? m_tabs->currentIndex() : 0;
     const int dur = perNoteDurationMs();
+
+    // If the user is on the Groove tab, treat Play as "audition the last selected musical thing"
+    // with the currently selected groove settings.
+    const int grooveIdx = (m_grooveTab && m_tabs) ? m_tabs->indexOf(m_grooveTab) : -1;
+    const bool grooveMode = (tab == grooveIdx);
+    if (grooveMode && m_lastAuditionTab != grooveIdx) tab = m_lastAuditionTab;
 
     // Polychords tab
     if (m_polyTab && tab == m_tabs->indexOf(m_polyTab)) {
         const QVector<int> notes = midiNotesForPolychord();
-        playMidiNotes(notes, /*durationMs=*/dur, /*arpeggiate=*/false);
+        if (grooveMode) playGroovedChordHits(notes, dur);
+        else playMidiNotes(notes, /*durationMs=*/dur, /*arpeggiate=*/false);
         return;
     }
 
@@ -1014,16 +1042,15 @@ void LibraryWindow::onPlayPressed() {
         return;
     }
 
-    // Groove tab
-    if (m_grooveTab && tab == m_tabs->indexOf(m_grooveTab)) {
-        playGroovePreview(dur);
-        return;
-    }
-
     const int rootPc = pcFromIndex(m_rootCombo ? m_rootCombo->currentIndex() : 0);
-    const QVector<int> notes = midiNotesForCurrentSelection(rootPc);
-    const bool isScale = (tab == 1);
-    playMidiNotes(notes, /*durationMs=*/dur, /*arpeggiate=*/isScale);
+    const QVector<int> notes = midiNotesForSelectionTab(tab, rootPc);
+    const bool isScale = (tab == 1); // scales tab is still index 1
+    if (grooveMode && !isScale) {
+        // chord/voicing audition: turn it into a rhythmic stream so groove is audible
+        playGroovedChordHits(notes, dur);
+    } else {
+        playMidiNotes(notes, /*durationMs=*/dur, /*arpeggiate=*/isScale);
+    }
 }
 
 void LibraryWindow::onUserClickedMidi(int midi) {
@@ -1118,16 +1145,6 @@ void LibraryWindow::updateHighlights() {
             m_groovePreviewLabel->setText(s);
         }
         if (statusBar()) statusBar()->clearMessage();
-        if (m_guitar) {
-            m_guitar->setRootPitchClass(-1);
-            m_guitar->setHighlightedPitchClasses({});
-            m_guitar->setDegreeLabels({});
-        }
-        if (m_piano) {
-            m_piano->setRootPitchClass(-1);
-            m_piano->setHighlightedPitchClasses({});
-            m_piano->setDegreeLabels({});
-        }
         return;
     }
 
@@ -1245,9 +1262,6 @@ void LibraryWindow::updateHighlights() {
         m_piano->setDegreeLabels(deg);
     }
 
-    if (statusBar() && tab != 2) {
-        // Avoid stale messages outside UST/polychord contexts.
-        if (!m_polyTab || tab != m_tabs->indexOf(m_polyTab)) statusBar()->clearMessage();
-    }
+    // (No generic statusBar clearing here; each tab owns its own status behavior.)
 }
 

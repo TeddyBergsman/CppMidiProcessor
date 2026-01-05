@@ -54,6 +54,7 @@ private:
 
     int selectedPlaybackChannel() const;
     int baseRootMidiForPosition(int rootPc) const;
+    QVector<int> midiNotesForSelectionTab(int tab, int rootPc) const;
     QVector<int> midiNotesForCurrentSelection(int rootPc) const;
     QVector<int> midiNotesForPolychord() const;
     void playMidiNotes(const QVector<int>& notes, int durationMs, bool arpeggiate);
@@ -66,7 +67,7 @@ private:
     void noteOnTracked(int channel, int midi, int vel);
     void noteOffTracked(int channel, int midi);
     void playPatternSequence(const QVector<int>& midiSeq, int durationMs);
-    void playGroovePreview(int durationMs);
+    void playGroovedChordHits(const QVector<int>& chordNotes, int durationMs);
 
     virtuoso::ontology::OntologyRegistry m_registry;
     virtuoso::theory::PatternLibrary m_patternLib = virtuoso::theory::PatternLibrary::builtins();
@@ -81,6 +82,7 @@ private:
     QVector<const virtuoso::theory::PatternDef*> m_orderedPatterns;
 
     QTabWidget* m_tabs = nullptr;
+    int m_lastAuditionTab = 0;
 
     // Global controls
     QComboBox* m_rootCombo = nullptr;      // 0..11 (C..B)

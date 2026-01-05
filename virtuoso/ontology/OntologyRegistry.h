@@ -18,17 +18,30 @@ enum class InstrumentKind {
 
 enum class ChordId {
     Power5,
+    Shell_1_3,
+    Shell_1_7,
+
     MajorTriad,
     MinorTriad,
     DiminishedTriad,
     AugmentedTriad,
     Sus2Triad,
     Sus4Triad,
+    PhrygianTriad, // 1-b2-5
+
     Major7,
     Minor7,
     Dominant7,
     HalfDiminished7,
     Diminished7,
+
+    MinorMajor7,     // min(maj7)
+    Augmented7,      // aug7
+    Dominant7Sus4,   // 7sus4
+    SevenSharp5,     // 7#5
+    SevenFlat5,      // 7b5
+    Six,             // 6
+    MinorSix,        // min6
 };
 
 // Allow strongly-typed enum keys in QHash.
@@ -53,10 +66,28 @@ enum class ScaleId {
     Locrian,
 
     MelodicMinor,
+    DorianB2,        // melodic minor mode 2
+    LydianAugmented, // melodic minor mode 3
     Altered,         // melodic minor mode 7
     LydianDominant,  // melodic minor mode 4
+    MixolydianB6,    // melodic minor mode 5
+    LocrianNat2,     // melodic minor mode 6
 
     HarmonicMinor,
+    LocrianSharp6,    // harmonic minor mode 2
+    IonianSharp5,     // harmonic minor mode 3
+    DorianSharp4,     // harmonic minor mode 4
+    PhrygianDominant, // harmonic minor mode 5
+    LydianSharp2,     // harmonic minor mode 6
+    SuperLocrianBb7,  // harmonic minor mode 7
+
+    HarmonicMajor,
+    DorianB5,
+    PhrygianB4,
+    LydianB3,
+    MixolydianB2,
+    LydianAugSharp2,
+    LocrianBb7,
 
     WholeTone,
     DiminishedWH,
@@ -65,6 +96,13 @@ enum class ScaleId {
     MajorPentatonic,
     MinorPentatonic,
     Blues,
+    MajorBlues,
+    DominantPentatonic,
+
+    MajorBebop,
+    DominantBebop,
+    MinorBebop,
+    DorianBebop,
 };
 
 inline size_t qHash(ScaleId key, size_t seed = 0) noexcept {
@@ -86,6 +124,9 @@ enum class VoicingId {
     PianoRootlessA_3_5_7_9,
     PianoRootlessB_7_9_3_5,
     PianoQuartal_Stack4ths,
+    PianoQuartal_3Notes,
+    PianoQuartal_4Notes,
+    PianoSoWhat,
 };
 
 inline size_t qHash(VoicingId key, size_t seed = 0) noexcept {

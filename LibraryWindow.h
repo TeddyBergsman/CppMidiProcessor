@@ -3,6 +3,7 @@
 #include <QMainWindow>
 #include <QSet>
 #include <QtGlobal>
+#include <QHash>
 
 #include "virtuoso/ontology/OntologyRegistry.h"
 
@@ -56,6 +57,9 @@ private:
     void clearActiveMidis();
     int perNoteDurationMs() const;
     void scheduleAutoPlay();
+    void stopPlaybackNow(int channel);
+    void noteOnTracked(int channel, int midi, int vel);
+    void noteOffTracked(int channel, int midi);
 
     virtuoso::ontology::OntologyRegistry m_registry;
     MidiProcessor* m_midi = nullptr; // not owned
@@ -88,5 +92,8 @@ private:
     QSet<int> m_activeMidis;
     QTimer* m_autoPlayTimer = nullptr;
     quint64 m_playSession = 0;
+
+    // Track which notes we turned on per channel, so we can force-release them on rapid retriggers.
+    QHash<int, QSet<int>> m_heldNotesByChannel;
 };
 

@@ -215,18 +215,31 @@ void LibraryWindow::populateLists() {
 
     auto chordRank = [](ChordId id) -> int {
         switch (id) {
-        case ChordId::Power5: return 0;
-        case ChordId::MajorTriad: return 10;
-        case ChordId::MinorTriad: return 11;
-        case ChordId::DiminishedTriad: return 12;
-        case ChordId::AugmentedTriad: return 13;
-        case ChordId::Sus2Triad: return 14;
-        case ChordId::Sus4Triad: return 15;
-        case ChordId::Major7: return 20;
-        case ChordId::Minor7: return 21;
-        case ChordId::Dominant7: return 22;
-        case ChordId::HalfDiminished7: return 23;
-        case ChordId::Diminished7: return 24;
+        // Requested order:
+        // Maj, Maj7, 7, Sus2, Sus4, Min, Min7, m7b5, dim7, aug, 5
+        case ChordId::MajorTriad: return 0;
+        case ChordId::Major7: return 1;
+        case ChordId::Dominant7: return 2;
+        case ChordId::Sus2Triad: return 3;
+        case ChordId::Sus4Triad: return 4;
+        case ChordId::MinorTriad: return 5;
+        case ChordId::Minor7: return 6;
+        case ChordId::HalfDiminished7: return 7;
+        case ChordId::Diminished7: return 8;
+        case ChordId::AugmentedTriad: return 9;
+        case ChordId::Power5: return 10;
+        // Extra items not in the requested list go after.
+        case ChordId::Shell_1_3: return 50;
+        case ChordId::Shell_1_7: return 51;
+        case ChordId::DiminishedTriad: return 100;
+        case ChordId::PhrygianTriad: return 101;
+        case ChordId::MinorMajor7: return 110;
+        case ChordId::Augmented7: return 111;
+        case ChordId::Dominant7Sus4: return 112;
+        case ChordId::SevenSharp5: return 113;
+        case ChordId::SevenFlat5: return 114;
+        case ChordId::Six: return 120;
+        case ChordId::MinorSix: return 121;
         default: return 1000;
         }
     };
@@ -242,18 +255,43 @@ void LibraryWindow::populateLists() {
         case ScaleId::Locrian: return 6;
 
         case ScaleId::MelodicMinor: return 20;
-        case ScaleId::LydianDominant: return 21;
-        case ScaleId::Altered: return 22;
+        case ScaleId::DorianB2: return 21;
+        case ScaleId::LydianAugmented: return 22;
+        case ScaleId::LydianDominant: return 23;
+        case ScaleId::MixolydianB6: return 24;
+        case ScaleId::LocrianNat2: return 25;
+        case ScaleId::Altered: return 26;
 
         case ScaleId::HarmonicMinor: return 30;
+        case ScaleId::LocrianSharp6: return 31;
+        case ScaleId::IonianSharp5: return 32;
+        case ScaleId::DorianSharp4: return 33;
+        case ScaleId::PhrygianDominant: return 34;
+        case ScaleId::LydianSharp2: return 35;
+        case ScaleId::SuperLocrianBb7: return 36;
 
-        case ScaleId::WholeTone: return 40;
-        case ScaleId::DiminishedWH: return 41;
-        case ScaleId::DiminishedHW: return 42;
+        case ScaleId::HarmonicMajor: return 40;
+        case ScaleId::DorianB5: return 41;
+        case ScaleId::PhrygianB4: return 42;
+        case ScaleId::LydianB3: return 43;
+        case ScaleId::MixolydianB2: return 44;
+        case ScaleId::LydianAugSharp2: return 45;
+        case ScaleId::LocrianBb7: return 46;
 
-        case ScaleId::MajorPentatonic: return 50;
-        case ScaleId::MinorPentatonic: return 51;
-        case ScaleId::Blues: return 52;
+        case ScaleId::WholeTone: return 60;
+        case ScaleId::DiminishedWH: return 61;
+        case ScaleId::DiminishedHW: return 62;
+
+        case ScaleId::MajorPentatonic: return 70;
+        case ScaleId::MinorPentatonic: return 71;
+        case ScaleId::DominantPentatonic: return 72;
+        case ScaleId::Blues: return 73;
+        case ScaleId::MajorBlues: return 74;
+
+        case ScaleId::MajorBebop: return 80;
+        case ScaleId::DominantBebop: return 81;
+        case ScaleId::MinorBebop: return 82;
+        case ScaleId::DorianBebop: return 83;
         default: return 1000;
         }
     };
@@ -498,12 +536,19 @@ QVector<int> LibraryWindow::midiNotesForCurrentSelection(int rootPc) const {
     } else if (tab == 2 && m_voicingsList && m_voicingsList->currentItem()) {
         const auto* voicingDef = m_registry.voicing(VoicingId(m_voicingsList->currentItem()->data(Qt::UserRole).toInt()));
         if (!voicingDef) return notes;
-        const auto allChords = m_registry.allChords();
-        const int idx = qBound(0, m_chordCtxCombo ? m_chordCtxCombo->currentIndex() : 0, allChords.size() - 1);
-        const auto* chordCtx = allChords.isEmpty() ? nullptr : allChords[idx];
-        for (int deg : voicingDef->chordDegrees) {
-            const int st = degreeToSemitone(chordCtx, deg);
-            notes.push_back(normalizeMidi(baseRoot + st));
+        const int idx = qBound(0, m_chordCtxCombo ? m_chordCtxCombo->currentIndex() : 0, m_orderedChords.size() - 1);
+        const auto* chordCtx = m_orderedChords.isEmpty() ? nullptr : m_orderedChords[idx];
+
+        if (voicingDef->chordDegrees.isEmpty() && voicingDef->id == VoicingId::PianoQuartal_Stack4ths) {
+            // Mirror pitch-class fallback so quartal also auditions.
+            notes.push_back(normalizeMidi(baseRoot + degreeToSemitone(chordCtx, 3)));
+            notes.push_back(normalizeMidi(baseRoot + degreeToSemitone(chordCtx, 7)));
+            notes.push_back(normalizeMidi(baseRoot + degreeToSemitone(chordCtx, 9)));
+        } else {
+            for (int deg : voicingDef->chordDegrees) {
+                const int st = degreeToSemitone(chordCtx, deg);
+                notes.push_back(normalizeMidi(baseRoot + st));
+            }
         }
     }
 
@@ -518,15 +563,41 @@ void LibraryWindow::playSingleNote(int midi, int durationMs) {
     const int vel = 48;
     const quint64 session = ++m_playSession;
     clearActiveMidis();
-    m_midi->sendVirtualAllNotesOff(ch);
+    stopPlaybackNow(ch);
     setActiveMidi(midi, true);
-    m_midi->sendVirtualNoteOn(ch, midi, vel);
+    noteOnTracked(ch, midi, vel);
     QTimer::singleShot(durationMs, this, [this, session, ch, midi]() {
         if (session != m_playSession) return;
         if (!m_midi) return;
-        m_midi->sendVirtualNoteOff(ch, midi);
+        noteOffTracked(ch, midi);
         setActiveMidi(midi, false);
     });
+}
+
+void LibraryWindow::stopPlaybackNow(int channel) {
+    if (!m_midi) return;
+    // First, release any notes we know we turned on (works even if the host ignores CC123).
+    const QSet<int> held = m_heldNotesByChannel.value(channel);
+    for (int n : held) {
+        m_midi->sendVirtualNoteOff(channel, n);
+    }
+    m_heldNotesByChannel[channel].clear();
+
+    // Then send "panic" style messages.
+    m_midi->sendVirtualCC(channel, 64, 0); // sustain off
+    m_midi->sendVirtualAllNotesOff(channel);
+}
+
+void LibraryWindow::noteOnTracked(int channel, int midi, int vel) {
+    if (!m_midi) return;
+    m_heldNotesByChannel[channel].insert(midi);
+    m_midi->sendVirtualNoteOn(channel, midi, vel);
+}
+
+void LibraryWindow::noteOffTracked(int channel, int midi) {
+    if (!m_midi) return;
+    m_heldNotesByChannel[channel].remove(midi);
+    m_midi->sendVirtualNoteOff(channel, midi);
 }
 
 void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, bool arpeggiate) {
@@ -537,19 +608,19 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
     const int vel = 48;
     const quint64 session = ++m_playSession;
     clearActiveMidis();
-    // Avoid stuck notes during fast auditioning.
-    m_midi->sendVirtualAllNotesOff(ch);
+    // Avoid stuck notes during fast auditioning (including old canceled timers).
+    stopPlaybackNow(ch);
 
     if (!arpeggiate) {
         for (int n : notes) {
             setActiveMidi(n, true);
-            m_midi->sendVirtualNoteOn(ch, n, vel);
+            noteOnTracked(ch, n, vel);
         }
         QTimer::singleShot(durationMs, this, [this, session, ch, notes]() {
             if (session != m_playSession) return;
             if (!m_midi) return;
             for (int n : notes) {
-                m_midi->sendVirtualNoteOff(ch, n);
+                noteOffTracked(ch, n);
                 setActiveMidi(n, false);
             }
         });
@@ -591,13 +662,13 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
         }
 
         setActiveMidi(n, true);
-        m_midi->sendVirtualNoteOn(ch, n, vel);
+        noteOnTracked(ch, n, vel);
 
         // Gate-off (safe even if next step already killed it).
         QTimer::singleShot(gateMs, this, [this, session, ch, n]() {
             if (session != m_playSession) return;
             if (!m_midi) return;
-            m_midi->sendVirtualNoteOff(ch, n);
+            noteOffTracked(ch, n);
             setActiveMidi(n, false);
         });
 

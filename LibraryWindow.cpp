@@ -10,6 +10,7 @@
 #include <QHBoxLayout>
 #include <QGroupBox>
 #include <QTimer>
+#include <functional>
 
 #include "virtuoso/ui/GuitarFretboardWidget.h"
 #include "virtuoso/ui/PianoKeyboardWidget.h"
@@ -113,10 +114,6 @@ void LibraryWindow::buildUi() {
     controls->addSpacing(10);
     controls->addWidget(new QLabel("Voicing chord context:", this));
     m_chordCtxCombo = new QComboBox(this);
-    // Populate with chord defs (name is short; we prefix for clarity)
-    for (const ChordDef* c : m_registry.allChords()) {
-        m_chordCtxCombo->addItem(c->name);
-    }
     m_chordCtxCombo->setCurrentIndex(0);
     controls->addWidget(m_chordCtxCombo);
 
@@ -132,6 +129,12 @@ void LibraryWindow::buildUi() {
     m_positionCombo->addItems({"Low", "Mid", "High"});
     m_positionCombo->setCurrentText("Mid");
     controls->addWidget(m_positionCombo);
+
+    controls->addWidget(new QLabel("Duration:", this));
+    m_durationCombo = new QComboBox(this);
+    m_durationCombo->addItems({"Short", "Medium", "Long"});
+    m_durationCombo->setCurrentText("Medium"); // default, matches prior behavior
+    controls->addWidget(m_durationCombo);
 
     m_playButton = new QPushButton("Play", this);
     controls->addWidget(m_playButton);
@@ -186,6 +189,7 @@ void LibraryWindow::buildUi() {
     connect(m_chordCtxCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_playInstrumentCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_positionCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
+    connect(m_durationCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_full88Check, &QCheckBox::toggled, this, &LibraryWindow::updatePianoRange);
     connect(m_playButton, &QPushButton::clicked, this, &LibraryWindow::onPlayPressed);
 
@@ -196,12 +200,100 @@ void LibraryWindow::buildUi() {
     // Click-to-play from visualizers
     connect(m_guitar, &GuitarFretboardWidget::noteClicked, this, &LibraryWindow::onUserClickedMidi);
     connect(m_piano, &PianoKeyboardWidget::noteClicked, this, &LibraryWindow::onUserClickedMidi);
+
+    // Debounced auto-play on selection changes.
+    m_autoPlayTimer = new QTimer(this);
+    m_autoPlayTimer->setSingleShot(true);
+    connect(m_autoPlayTimer, &QTimer::timeout, this, &LibraryWindow::onPlayPressed);
 }
 
 void LibraryWindow::populateLists() {
+    // Build stable orderings (avoid QHash iteration order).
+    m_orderedChords = m_registry.allChords();
+    m_orderedScales = m_registry.allScales();
+    m_orderedVoicings = m_registry.allVoicings();
+
+    auto chordRank = [](ChordId id) -> int {
+        switch (id) {
+        case ChordId::Power5: return 0;
+        case ChordId::MajorTriad: return 10;
+        case ChordId::MinorTriad: return 11;
+        case ChordId::DiminishedTriad: return 12;
+        case ChordId::AugmentedTriad: return 13;
+        case ChordId::Sus2Triad: return 14;
+        case ChordId::Sus4Triad: return 15;
+        case ChordId::Major7: return 20;
+        case ChordId::Minor7: return 21;
+        case ChordId::Dominant7: return 22;
+        case ChordId::HalfDiminished7: return 23;
+        case ChordId::Diminished7: return 24;
+        default: return 1000;
+        }
+    };
+
+    auto scaleRank = [](ScaleId id) -> int {
+        switch (id) {
+        case ScaleId::Ionian: return 0;
+        case ScaleId::Dorian: return 1;
+        case ScaleId::Phrygian: return 2;
+        case ScaleId::Lydian: return 3;
+        case ScaleId::Mixolydian: return 4;
+        case ScaleId::Aeolian: return 5;
+        case ScaleId::Locrian: return 6;
+
+        case ScaleId::MelodicMinor: return 20;
+        case ScaleId::LydianDominant: return 21;
+        case ScaleId::Altered: return 22;
+
+        case ScaleId::HarmonicMinor: return 30;
+
+        case ScaleId::WholeTone: return 40;
+        case ScaleId::DiminishedWH: return 41;
+        case ScaleId::DiminishedHW: return 42;
+
+        case ScaleId::MajorPentatonic: return 50;
+        case ScaleId::MinorPentatonic: return 51;
+        case ScaleId::Blues: return 52;
+        default: return 1000;
+        }
+    };
+
+    auto voicingRank = [](const VoicingDef* v) -> int {
+        if (!v) return 1000;
+        if (v->category == "Shell") return 0;
+        if (v->category == "Rootless") return 10;
+        if (v->category == "Quartal") return 20;
+        return 100;
+    };
+
+    std::sort(m_orderedChords.begin(), m_orderedChords.end(), [&](const ChordDef* a, const ChordDef* b) {
+        if (!a || !b) return a != nullptr;
+        const int ra = chordRank(a->id);
+        const int rb = chordRank(b->id);
+        if (ra != rb) return ra < rb;
+        return a->name < b->name;
+    });
+
+    std::sort(m_orderedScales.begin(), m_orderedScales.end(), [&](const ScaleDef* a, const ScaleDef* b) {
+        if (!a || !b) return a != nullptr;
+        const int ra = scaleRank(a->id);
+        const int rb = scaleRank(b->id);
+        if (ra != rb) return ra < rb;
+        return a->name < b->name;
+    });
+
+    std::sort(m_orderedVoicings.begin(), m_orderedVoicings.end(), [&](const VoicingDef* a, const VoicingDef* b) {
+        if (!a || !b) return a != nullptr;
+        const int ra = voicingRank(a);
+        const int rb = voicingRank(b);
+        if (ra != rb) return ra < rb;
+        if (a->category != b->category) return a->category < b->category;
+        return a->name < b->name;
+    });
+
     // Chords
     m_chordsList->clear();
-    for (const ChordDef* c : m_registry.allChords()) {
+    for (const ChordDef* c : m_orderedChords) {
         QListWidgetItem* it = new QListWidgetItem(c->name, m_chordsList);
         it->setData(Qt::UserRole, int(c->id));
     }
@@ -209,7 +301,7 @@ void LibraryWindow::populateLists() {
 
     // Scales
     m_scalesList->clear();
-    for (const ScaleDef* s : m_registry.allScales()) {
+    for (const ScaleDef* s : m_orderedScales) {
         QListWidgetItem* it = new QListWidgetItem(s->name, m_scalesList);
         it->setData(Qt::UserRole, int(s->id));
     }
@@ -217,15 +309,23 @@ void LibraryWindow::populateLists() {
 
     // Voicings
     m_voicingsList->clear();
-    for (const VoicingDef* v : m_registry.allVoicings()) {
+    for (const VoicingDef* v : m_orderedVoicings) {
         QListWidgetItem* it = new QListWidgetItem(v->name, m_voicingsList);
         it->setData(Qt::UserRole, int(v->id));
     }
     m_voicingsList->setCurrentRow(0);
+
+    // Chord context combo should match chord ordering.
+    m_chordCtxCombo->clear();
+    for (const ChordDef* c : m_orderedChords) {
+        m_chordCtxCombo->addItem(c->name);
+    }
+    m_chordCtxCombo->setCurrentIndex(0);
 }
 
 void LibraryWindow::onSelectionChanged() {
     updateHighlights();
+    scheduleAutoPlay();
 }
 
 void LibraryWindow::updatePianoRange() {
@@ -235,6 +335,7 @@ void LibraryWindow::updatePianoRange() {
     } else {
         m_piano->setRange(/*A2*/45, /*C5*/72);
     }
+    scheduleAutoPlay();
 }
 
 int LibraryWindow::pcFromIndex(int idx) {
@@ -265,6 +366,19 @@ QSet<int> LibraryWindow::pitchClassesForVoicing(const VoicingDef* voicingDef,
                                                 int rootPc) const {
     QSet<int> pcs;
     if (!voicingDef) return pcs;
+
+    // Special-case: quartal placeholder voicing currently has no degree list.
+    if (voicingDef->chordDegrees.isEmpty() && voicingDef->id == VoicingId::PianoQuartal_Stack4ths) {
+        // Stage-1 approximation: use guide/extension tones so something shows and is playable.
+        // (Later we can derive true quartal stacks from the chosen scale/mode.)
+        const int st3 = degreeToSemitone(chordContext, 3);
+        const int st7 = degreeToSemitone(chordContext, 7);
+        const int st9 = degreeToSemitone(chordContext, 9);
+        pcs.insert(normalizePc(rootPc + st3));
+        pcs.insert(normalizePc(rootPc + st7));
+        pcs.insert(normalizePc(rootPc + st9));
+        return pcs;
+    }
 
     // Stage 1: interpret voicing degrees relative to chord context with a simple extension mapping.
     for (int deg : voicingDef->chordDegrees) {
@@ -297,6 +411,12 @@ QHash<int, QString> LibraryWindow::degreeLabelsForVoicing(const VoicingDef* voic
                                                           const ChordDef* chordContext) const {
     QHash<int, QString> out;
     if (!voicingDef) return out;
+    if (voicingDef->chordDegrees.isEmpty() && voicingDef->id == VoicingId::PianoQuartal_Stack4ths) {
+        out.insert(normalizePc(degreeToSemitone(chordContext, 3)), "3");
+        out.insert(normalizePc(degreeToSemitone(chordContext, 7)), "7");
+        out.insert(normalizePc(degreeToSemitone(chordContext, 9)), "9");
+        return out;
+    }
     for (int deg : voicingDef->chordDegrees) {
         const int st = degreeToSemitone(chordContext, deg);
         out.insert(normalizePc(st), QString::number(deg));
@@ -330,6 +450,34 @@ int LibraryWindow::baseRootMidiForPosition(int rootPc) const {
     int baseRoot = base - normalizePc(base - rootPc);
     if (baseRoot < 24) baseRoot += 12;
     return normalizeMidi(baseRoot);
+}
+
+int LibraryWindow::perNoteDurationMs() const {
+    const QString d = m_durationCombo ? m_durationCombo->currentText() : "Medium";
+    // Medium is the previous default (650ms)
+    if (d == "Short") return 250;
+    if (d == "Long") return 1100;
+    return 650;
+}
+
+void LibraryWindow::setActiveMidi(int midi, bool on) {
+    if (midi < 0 || midi > 127) return;
+    if (on) m_activeMidis.insert(midi);
+    else m_activeMidis.remove(midi);
+    if (m_guitar) m_guitar->setActiveMidiNotes(m_activeMidis);
+    if (m_piano) m_piano->setActiveMidiNotes(m_activeMidis);
+}
+
+void LibraryWindow::clearActiveMidis() {
+    m_activeMidis.clear();
+    if (m_guitar) m_guitar->setActiveMidiNotes(m_activeMidis);
+    if (m_piano) m_piano->setActiveMidiNotes(m_activeMidis);
+}
+
+void LibraryWindow::scheduleAutoPlay() {
+    if (!m_autoPlayTimer) return;
+    // Small debounce so rapid list navigation doesn't spam MIDI.
+    m_autoPlayTimer->start(80);
 }
 
 QVector<int> LibraryWindow::midiNotesForCurrentSelection(int rootPc) const {
@@ -368,10 +516,16 @@ void LibraryWindow::playSingleNote(int midi, int durationMs) {
     if (!m_midi) return;
     const int ch = selectedPlaybackChannel();
     const int vel = 48;
+    const quint64 session = ++m_playSession;
+    clearActiveMidis();
+    m_midi->sendVirtualAllNotesOff(ch);
+    setActiveMidi(midi, true);
     m_midi->sendVirtualNoteOn(ch, midi, vel);
-    QTimer::singleShot(durationMs, this, [this, ch, midi]() {
+    QTimer::singleShot(durationMs, this, [this, session, ch, midi]() {
+        if (session != m_playSession) return;
         if (!m_midi) return;
         m_midi->sendVirtualNoteOff(ch, midi);
+        setActiveMidi(midi, false);
     });
 }
 
@@ -381,40 +535,90 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
 
     const int ch = selectedPlaybackChannel();
     const int vel = 48;
+    const quint64 session = ++m_playSession;
+    clearActiveMidis();
+    // Avoid stuck notes during fast auditioning.
+    m_midi->sendVirtualAllNotesOff(ch);
 
     if (!arpeggiate) {
-        for (int n : notes) m_midi->sendVirtualNoteOn(ch, n, vel);
-        QTimer::singleShot(durationMs, this, [this, ch, notes]() {
+        for (int n : notes) {
+            setActiveMidi(n, true);
+            m_midi->sendVirtualNoteOn(ch, n, vel);
+        }
+        QTimer::singleShot(durationMs, this, [this, session, ch, notes]() {
+            if (session != m_playSession) return;
             if (!m_midi) return;
-            for (int n : notes) m_midi->sendVirtualNoteOff(ch, n);
+            for (int n : notes) {
+                m_midi->sendVirtualNoteOff(ch, n);
+                setActiveMidi(n, false);
+            }
         });
         return;
     }
 
-    // Arpeggiate (used for scales)
-    int stepMs = qMax(40, durationMs / qMax(1, notes.size()));
-    for (int i = 0; i < notes.size(); ++i) {
-        const int n = notes[i];
-        QTimer::singleShot(i * stepMs, this, [this, ch, n, vel, stepMs]() {
+    // Arpeggiate (used for scales): up then down.
+    // Build sequence that always ends on the root (notes[0]) if present:
+    // up (including top) then down (excluding top) ending at root.
+    QVector<int> seq;
+    seq.reserve(notes.size() * 2);
+    for (int n : notes) seq.push_back(n);
+    for (int i = notes.size() - 2; i >= 0; --i) seq.push_back(notes[i]);
+
+    // Faster scale feel (still tied to Duration): step is a fraction of chord duration.
+    const int stepMs = qMax(25, durationMs / 5);
+    const int gateMs = qMax(18, int(double(stepMs) * 0.80));
+
+    // Use a chained timer approach (rather than N independent timers) to avoid ordering jitter.
+    using StepFn = std::function<void(int idx, int prev)>;
+    auto stepFn = std::make_shared<StepFn>();
+    *stepFn = [this, session, ch, vel, gateMs, stepMs, seq, stepFn](int idx, int prev) {
+        if (session != m_playSession) return;
+        if (!m_midi) return;
+        if (idx >= seq.size()) {
+            if (prev >= 0) {
+                m_midi->sendVirtualNoteOff(ch, prev);
+                setActiveMidi(prev, false);
+            }
+            return;
+        }
+
+        const int n = seq[idx];
+
+        // Monophonic guarantee: kill previous immediately.
+        if (prev >= 0) {
+            m_midi->sendVirtualNoteOff(ch, prev);
+            setActiveMidi(prev, false);
+        }
+
+        setActiveMidi(n, true);
+        m_midi->sendVirtualNoteOn(ch, n, vel);
+
+        // Gate-off (safe even if next step already killed it).
+        QTimer::singleShot(gateMs, this, [this, session, ch, n]() {
+            if (session != m_playSession) return;
             if (!m_midi) return;
-            m_midi->sendVirtualNoteOn(ch, n, vel);
-            QTimer::singleShot(stepMs - 5, this, [this, ch, n]() {
-                if (!m_midi) return;
-                m_midi->sendVirtualNoteOff(ch, n);
-            });
+            m_midi->sendVirtualNoteOff(ch, n);
+            setActiveMidi(n, false);
         });
-    }
+
+        QTimer::singleShot(stepMs, this, [stepFn, idx, n]() {
+            (*stepFn)(idx + 1, n);
+        });
+    };
+
+    (*stepFn)(/*idx=*/0, /*prev=*/-1);
 }
 
 void LibraryWindow::onPlayPressed() {
     const int rootPc = pcFromIndex(m_rootCombo ? m_rootCombo->currentIndex() : 0);
     const QVector<int> notes = midiNotesForCurrentSelection(rootPc);
     const bool isScale = (m_tabs && m_tabs->currentIndex() == 1);
-    playMidiNotes(notes, /*durationMs=*/650, /*arpeggiate=*/isScale);
+    const int dur = perNoteDurationMs();
+    playMidiNotes(notes, /*durationMs=*/dur, /*arpeggiate=*/isScale);
 }
 
 void LibraryWindow::onUserClickedMidi(int midi) {
-    playSingleNote(midi, /*durationMs=*/200);
+    playSingleNote(midi, /*durationMs=*/perNoteDurationMs());
 }
 
 void LibraryWindow::updateHighlights() {

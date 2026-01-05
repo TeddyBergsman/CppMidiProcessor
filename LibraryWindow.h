@@ -2,6 +2,7 @@
 
 #include <QMainWindow>
 #include <QSet>
+#include <QtGlobal>
 
 #include "virtuoso/ontology/OntologyRegistry.h"
 
@@ -51,9 +52,18 @@ private:
     QVector<int> midiNotesForCurrentSelection(int rootPc) const;
     void playMidiNotes(const QVector<int>& notes, int durationMs, bool arpeggiate);
     void playSingleNote(int midi, int durationMs);
+    void setActiveMidi(int midi, bool on);
+    void clearActiveMidis();
+    int perNoteDurationMs() const;
+    void scheduleAutoPlay();
 
     virtuoso::ontology::OntologyRegistry m_registry;
     MidiProcessor* m_midi = nullptr; // not owned
+
+    // Stable, logical ordering (QHash iteration order is not deterministic)
+    QVector<const virtuoso::ontology::ChordDef*> m_orderedChords;
+    QVector<const virtuoso::ontology::ScaleDef*> m_orderedScales;
+    QVector<const virtuoso::ontology::VoicingDef*> m_orderedVoicings;
 
     QTabWidget* m_tabs = nullptr;
 
@@ -62,6 +72,7 @@ private:
     QComboBox* m_chordCtxCombo = nullptr;  // context chord for voicing degree->interval mapping
     QComboBox* m_playInstrumentCombo = nullptr;
     QComboBox* m_positionCombo = nullptr;
+    QComboBox* m_durationCombo = nullptr;
     QPushButton* m_playButton = nullptr;
     QCheckBox* m_full88Check = nullptr;
 
@@ -73,5 +84,9 @@ private:
     // Visualizers
     GuitarFretboardWidget* m_guitar = nullptr;
     PianoKeyboardWidget* m_piano = nullptr;
+
+    QSet<int> m_activeMidis;
+    QTimer* m_autoPlayTimer = nullptr;
+    quint64 m_playSession = 0;
 };
 

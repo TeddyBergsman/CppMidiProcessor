@@ -20,6 +20,9 @@ public:
     // Optional: pitch-class -> degree label (e.g. "1", "3", "b7")
     void setDegreeLabels(QHash<int, QString> labels);
 
+    // Optional: highlight specific MIDI notes (e.g. currently sounding notes).
+    void setActiveMidiNotes(QSet<int> midis);
+
     // Display range (inclusive). The widget supports full 88 keys, but can display a subset.
     void setRange(int minMidi, int maxMidi);
     int minMidi() const { return m_minMidi; }
@@ -44,6 +47,7 @@ private:
 
     QSet<int> m_pcs;
     QHash<int, QString> m_degreeForPc;
+    QSet<int> m_activeMidis;
     int m_rootPc = -1;
     int m_minMidi = 45; // A2
     int m_maxMidi = 72; // C5

@@ -31,6 +31,11 @@ void PianoKeyboardWidget::setDegreeLabels(QHash<int, QString> labels) {
     update();
 }
 
+void PianoKeyboardWidget::setActiveMidiNotes(QSet<int> midis) {
+    m_activeMidis = std::move(midis);
+    update();
+}
+
 void PianoKeyboardWidget::setRange(int minMidi, int maxMidi) {
     if (minMidi > maxMidi) std::swap(minMidi, maxMidi);
     m_minMidi = qBound(21, minMidi, 108); // 88-key range A0(21) .. C8(108)
@@ -148,9 +153,13 @@ void PianoKeyboardWidget::paintEvent(QPaintEvent*) {
     for (const auto& k : keys) {
         if (k.black) continue;
         const int pc = normalizePc(k.midi);
+        const bool isActiveMidi = m_activeMidis.contains(k.midi);
         QColor fill = QColor(245, 245, 245);
         if (m_pcs.contains(pc)) {
             fill = (m_rootPc >= 0 && pc == m_rootPc) ? QColor(255, 190, 90) : QColor(120, 200, 255);
+        }
+        if (!m_pcs.contains(pc) && isActiveMidi) {
+            fill = QColor(160, 255, 170);
         }
         p.setBrush(fill);
         p.drawRect(k.rect);
@@ -166,15 +175,26 @@ void PianoKeyboardWidget::paintEvent(QPaintEvent*) {
             tr.setHeight(14);
             p.drawText(tr, Qt::AlignCenter, deg);
         }
+
+        if (isActiveMidi) {
+            p.setBrush(Qt::NoBrush);
+            p.setPen(QPen(QColor(255, 255, 255, 220), 2));
+            p.drawRoundedRect(k.rect.adjusted(1, 1, -1, -1), 2, 2);
+            p.setPen(QPen(QColor(40, 40, 40, 200), 1));
+        }
     }
 
     p.setPen(QPen(QColor(10, 10, 10, 220), 1));
     for (const auto& k : keys) {
         if (!k.black) continue;
         const int pc = normalizePc(k.midi);
+        const bool isActiveMidi = m_activeMidis.contains(k.midi);
         QColor fill = QColor(20, 20, 20);
         if (m_pcs.contains(pc)) {
             fill = (m_rootPc >= 0 && pc == m_rootPc) ? QColor(220, 130, 40) : QColor(60, 150, 255);
+        }
+        if (!m_pcs.contains(pc) && isActiveMidi) {
+            fill = QColor(40, 170, 70);
         }
         p.setBrush(fill);
         p.drawRoundedRect(k.rect, 2, 2);
@@ -189,6 +209,13 @@ void PianoKeyboardWidget::paintEvent(QPaintEvent*) {
             QRectF tr = k.rect.adjusted(0, 2, 0, -2);
             tr.setHeight(14);
             p.drawText(tr, Qt::AlignCenter, deg);
+            p.setPen(QPen(QColor(10, 10, 10, 220), 1));
+        }
+
+        if (isActiveMidi) {
+            p.setBrush(Qt::NoBrush);
+            p.setPen(QPen(QColor(255, 255, 255, 220), 2));
+            p.drawRoundedRect(k.rect.adjusted(1, 1, -1, -1), 2, 2);
             p.setPen(QPen(QColor(10, 10, 10, 220), 1));
         }
     }

@@ -40,6 +40,11 @@ void GuitarFretboardWidget::setDegreeLabels(QHash<int, QString> labels) {
     update();
 }
 
+void GuitarFretboardWidget::setActiveMidiNotes(QSet<int> midis) {
+    m_activeMidis = std::move(midis);
+    update();
+}
+
 void GuitarFretboardWidget::setFretCount(int frets) {
     m_frets = qMax(1, frets);
     update();
@@ -175,25 +180,38 @@ void GuitarFretboardWidget::paintEvent(QPaintEvent*) {
         for (int f = 0; f <= frets; ++f) {
             const int midi = openMidi[s] + f;
             const int pc = normalizePc(midi);
-            if (!m_pcs.contains(pc)) continue;
-
             const double xCenter = r.left() + (double(f) + 0.5) * fretW;
+            const bool isActiveMidi = m_activeMidis.contains(midi);
+            const bool isInSet = m_pcs.contains(pc);
+            if (!isInSet && !isActiveMidi) continue;
+
             const bool isRoot = (m_rootPc >= 0 && pc == m_rootPc);
-            const QColor fill = isRoot
+            QColor fill = isRoot
                 ? QColor(255, 170, 60, 235)
                 : (isBlackPc(pc) ? QColor(60, 160, 255, 220) : QColor(80, 200, 255, 220));
+            if (!isInSet && isActiveMidi) {
+                // Active note not in selection (e.g., click): use green.
+                fill = QColor(120, 255, 140, 235);
+            }
             p.setBrush(fill);
             p.setPen(QPen(QColor(10, 10, 10, 160), 1));
             p.drawEllipse(QPointF(xCenter, y), 10, 10);
 
             const QString deg = m_degreeForPc.value(pc);
-            if (!deg.isEmpty()) {
+            if (!deg.isEmpty() && isInSet) {
                 p.setPen(QColor(10, 10, 10, 220));
                 QFont fnt = p.font();
                 fnt.setPointSize(8);
                 fnt.setBold(true);
                 p.setFont(fnt);
                 p.drawText(QRectF(xCenter - 9, y - 8, 18, 16), Qt::AlignCenter, deg);
+            }
+
+            if (isActiveMidi) {
+                // Outer ring for "currently played" note
+                p.setBrush(Qt::NoBrush);
+                p.setPen(QPen(QColor(255, 255, 255, 230), 2));
+                p.drawEllipse(QPointF(xCenter, y), 13, 13);
             }
         }
     }

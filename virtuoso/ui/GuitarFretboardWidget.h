@@ -19,6 +19,9 @@ public:
     // Optional: pitch-class -> degree label (e.g. "1", "3", "b7")
     void setDegreeLabels(QHash<int, QString> labels);
 
+    // Optional: highlight specific MIDI notes (e.g. currently sounding notes).
+    void setActiveMidiNotes(QSet<int> midis);
+
     void setFretCount(int frets); // default 24
     int fretCount() const { return m_frets; }
 
@@ -39,6 +42,7 @@ private:
 
     QSet<int> m_pcs;
     QHash<int, QString> m_degreeForPc;
+    QSet<int> m_activeMidis;
     int m_rootPc = -1;
     int m_frets = 24;
     int m_lastTooltipMidi = -999;

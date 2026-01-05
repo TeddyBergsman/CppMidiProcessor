@@ -4,6 +4,8 @@
 #include "virtuoso/theory/TheoryEvent.h"
 #include "virtuoso/theory/NegativeHarmony.h"
 #include "virtuoso/theory/ScaleSuggester.h"
+#include "virtuoso/theory/GrooveEngine.h"
+#include "virtuoso/theory/FunctionalHarmony.h"
 
 #include <QCoreApplication>
 #include <QJsonDocument>
@@ -171,6 +173,60 @@ static void testScaleSuggester() {
     expect(hasAltered, "ScaleSuggester includes Altered for altered-ish dominant set");
 }
 
+static void testGrooveEngine() {
+    using virtuoso::theory::GrooveEngine;
+    using virtuoso::theory::GrooveTemplate;
+
+    GrooveTemplate straight;
+    straight.swing = 0.50;
+    auto dueStraight = GrooveEngine::scheduleDueMs(/*steps=*/8, /*baseStepMs=*/100, /*stepsPerBeat=*/2, straight, /*seed=*/123);
+    expectEq(dueStraight.size(), 8, "GrooveEngine: due size");
+    expectEq(dueStraight[0], 0, "GrooveEngine: straight step0");
+    expectEq(dueStraight[1], 100, "GrooveEngine: straight step1");
+    expectEq(dueStraight[2], 200, "GrooveEngine: straight step2");
+
+    GrooveTemplate swing;
+    swing.swing = 0.666;
+    auto dueSwing = GrooveEngine::scheduleDueMs(/*steps=*/8, /*baseStepMs=*/100, /*stepsPerBeat=*/2, swing, /*seed=*/123);
+    expectEq(dueSwing.size(), 8, "GrooveEngine: swing due size");
+    expect(dueSwing[1] > dueStraight[1], "GrooveEngine: offbeat delayed");
+    expect(dueSwing[3] > dueStraight[3], "GrooveEngine: offbeat delayed (2)");
+    expectEq(dueSwing[2], dueStraight[2], "GrooveEngine: downbeat on grid");
+    expectEq(dueSwing[4], dueStraight[4], "GrooveEngine: downbeat on grid (2)");
+    for (int i = 1; i < dueSwing.size(); ++i) {
+        expect(dueSwing[i] > dueSwing[i - 1], "GrooveEngine: monotonic schedule");
+    }
+}
+
+static void testFunctionalHarmony() {
+    const OntologyRegistry reg = OntologyRegistry::builtins();
+    const auto* maj7 = reg.chord("maj7");
+    const auto* dom7 = reg.chord("7");
+    expect(maj7 != nullptr, "FunctionalHarmony: have maj7 chord def");
+    expect(dom7 != nullptr, "FunctionalHarmony: have 7 chord def");
+    if (!maj7 || !dom7) return;
+
+    // In C major: Cmaj7 -> Imaj7 (Tonic)
+    {
+        const auto r = virtuoso::theory::analyzeChordInMajorKey(/*tonicPc=*/0, /*chordRootPc=*/0, *maj7);
+        expect(r.roman.startsWith("I"), "FunctionalHarmony: Cmaj7 is I...");
+        expectStrEq(r.function, "Tonic", "FunctionalHarmony: I is Tonic");
+    }
+
+    // In C major: G7 -> V7 (Dominant)
+    {
+        const auto r = virtuoso::theory::analyzeChordInMajorKey(/*tonicPc=*/0, /*chordRootPc=*/7, *dom7);
+        expect(r.roman.startsWith("V"), "FunctionalHarmony: G7 is V...");
+        expectStrEq(r.function, "Dominant", "FunctionalHarmony: V is Dominant");
+    }
+
+    // In C major: D7 -> V/V (secondary dominant heuristic)
+    {
+        const auto r = virtuoso::theory::analyzeChordInMajorKey(/*tonicPc=*/0, /*chordRootPc=*/2, *dom7);
+        expect(r.roman.startsWith("V/"), "FunctionalHarmony: D7 is V/...");
+    }
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
@@ -180,6 +236,8 @@ int main(int argc, char** argv) {
     testTheoryStream();
     testNegativeHarmony();
     testScaleSuggester();
+    testGrooveEngine();
+    testFunctionalHarmony();
 
     if (g_failures == 0) {
         qInfo("VirtuosoCoreTests: PASS");

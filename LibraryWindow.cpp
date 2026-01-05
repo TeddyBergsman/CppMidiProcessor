@@ -11,6 +11,7 @@
 #include <QGroupBox>
 #include <QTimer>
 #include <QStatusBar>
+#include <QSignalBlocker>
 #include <functional>
 
 #include "virtuoso/ui/GuitarFretboardWidget.h"
@@ -18,6 +19,9 @@
 
 #include "midiprocessor.h"
 #include "virtuoso/theory/ScaleSuggester.h"
+#include "virtuoso/theory/PatternLibrary.h"
+#include "virtuoso/theory/GrooveEngine.h"
+#include "virtuoso/theory/FunctionalHarmony.h"
 
 using namespace virtuoso::ontology;
 
@@ -98,6 +102,7 @@ LibraryWindow::LibraryWindow(MidiProcessor* midi, QWidget* parent)
     : QMainWindow(parent),
       m_registry(OntologyRegistry::builtins()),
       m_midi(midi) {
+    m_grooveTemplates = virtuoso::theory::GrooveEngine::builtins();
     setWindowTitle("Library");
     resize(1100, 520);
     buildUi();
@@ -120,6 +125,13 @@ void LibraryWindow::buildUi() {
     for (const auto& n : pcNames()) m_rootCombo->addItem(n);
     m_rootCombo->setCurrentIndex(0); // C
     controls->addWidget(m_rootCombo);
+
+    controls->addSpacing(10);
+    controls->addWidget(new QLabel("Harmony key:", this));
+    m_keyCombo = new QComboBox(this);
+    for (const auto& n : pcNames()) m_keyCombo->addItem(n);
+    m_keyCombo->setCurrentIndex(0); // C
+    controls->addWidget(m_keyCombo);
 
     controls->addSpacing(10);
     controls->addWidget(new QLabel("Voicing chord context:", this));
@@ -179,6 +191,50 @@ void LibraryWindow::buildUi() {
     mkTab(m_scalesList, "Scales");
     mkTab(m_voicingsList, "Voicings");
 
+    // Patterns tab (arpeggios / scalar patterns)
+    m_patternsTab = new QWidget(this);
+    QVBoxLayout* patV = new QVBoxLayout(m_patternsTab);
+    QHBoxLayout* patControls = new QHBoxLayout;
+    patControls->addWidget(new QLabel("Target:", this));
+    m_patternTargetCombo = new QComboBox(this);
+    m_patternTargetCombo->addItems({"Chord", "Scale"});
+    patControls->addWidget(m_patternTargetCombo);
+    patControls->addStretch(1);
+    patV->addLayout(patControls);
+
+    QHBoxLayout* patLists = new QHBoxLayout;
+    m_patternsList = new QListWidget(this);
+    m_patternsList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_patternTargetList = new QListWidget(this);
+    m_patternTargetList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_patternsList->setMinimumWidth(170);
+    patLists->addWidget(m_patternsList, 1);
+    patLists->addWidget(m_patternTargetList, 1);
+    patV->addLayout(patLists, 1);
+    m_tabs->addTab(m_patternsTab, "Patterns");
+
+    // Groove tab (micro-timing templates)
+    m_grooveTab = new QWidget(this);
+    QVBoxLayout* grooveV = new QVBoxLayout(m_grooveTab);
+    QHBoxLayout* grooveControls = new QHBoxLayout;
+    grooveControls->addWidget(new QLabel("Subdivision:", this));
+    m_grooveSubdivisionCombo = new QComboBox(this);
+    m_grooveSubdivisionCombo->addItem("8ths (2/beat)", 2);
+    m_grooveSubdivisionCombo->addItem("16ths (4/beat)", 4);
+    m_grooveSubdivisionCombo->setCurrentIndex(0);
+    grooveControls->addWidget(m_grooveSubdivisionCombo);
+    grooveControls->addStretch(1);
+    grooveV->addLayout(grooveControls);
+
+    m_grooveList = new QListWidget(this);
+    m_grooveList->setSelectionMode(QAbstractItemView::SingleSelection);
+    grooveV->addWidget(m_grooveList, 1);
+
+    m_groovePreviewLabel = new QLabel(this);
+    m_groovePreviewLabel->setWordWrap(true);
+    grooveV->addWidget(m_groovePreviewLabel);
+    m_tabs->addTab(m_grooveTab, "Groove");
+
     // Polychords tab (generator UI)
     m_polyTab = new QWidget(this);
     QVBoxLayout* polyL = new QVBoxLayout(m_polyTab);
@@ -229,6 +285,7 @@ void LibraryWindow::buildUi() {
     // Signals
     connect(m_tabs, &QTabWidget::currentChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_rootCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
+    connect(m_keyCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_chordCtxCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_playInstrumentCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_positionCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
@@ -239,6 +296,15 @@ void LibraryWindow::buildUi() {
     connect(m_chordsList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_scalesList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_voicingsList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
+
+    // Patterns signals
+    connect(m_patternTargetCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
+    connect(m_patternsList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
+    connect(m_patternTargetList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
+
+    // Groove signals
+    connect(m_grooveSubdivisionCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
+    connect(m_grooveList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
 
     // Polychord signals
     connect(m_polyTemplateCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
@@ -262,6 +328,7 @@ void LibraryWindow::populateLists() {
     m_orderedChords = m_registry.allChords();
     m_orderedScales = m_registry.allScales();
     m_orderedVoicings = m_registry.allVoicings();
+    m_orderedPatterns = m_patternLib.all();
 
     std::sort(m_orderedChords.begin(), m_orderedChords.end(), [&](const ChordDef* a, const ChordDef* b) {
         if (!a || !b) return a != nullptr;
@@ -305,6 +372,35 @@ void LibraryWindow::populateLists() {
         it->setData(Qt::UserRole, v->key);
     }
     m_voicingsList->setCurrentRow(0);
+
+    // Patterns
+    if (m_patternsList) {
+        m_patternsList->clear();
+        for (const auto* p : m_orderedPatterns) {
+            QListWidgetItem* it = new QListWidgetItem(p->name, m_patternsList);
+            it->setData(Qt::UserRole, p->key);
+        }
+        m_patternsList->setCurrentRow(0);
+    }
+
+    if (m_patternTargetList) {
+        m_patternTargetList->clear();
+        for (const ChordDef* c : m_orderedChords) {
+            QListWidgetItem* it = new QListWidgetItem(c->name, m_patternTargetList);
+            it->setData(Qt::UserRole, c->key);
+        }
+        m_patternTargetList->setCurrentRow(0);
+    }
+
+    // Groove presets
+    if (m_grooveList) {
+        m_grooveList->clear();
+        for (const auto& g : m_grooveTemplates) {
+            QListWidgetItem* it = new QListWidgetItem(g.name, m_grooveList);
+            it->setData(Qt::UserRole, g.key);
+        }
+        if (m_grooveList->count() > 0) m_grooveList->setCurrentRow(0);
+    }
 
     // Chord context combo should match chord ordering.
     m_chordCtxCombo->clear();
@@ -690,15 +786,32 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
     const int stepMs = qMax(25, durationMs / 5);
     const int gateMs = qMax(18, int(double(stepMs) * 0.80));
 
+    // Optional groove micro-timing
+    virtuoso::theory::GrooveTemplate groove;
+    groove.key = "straight";
+    groove.name = "Straight";
+    if (m_grooveList && m_grooveList->currentItem()) {
+        const QString gk = m_grooveList->currentItem()->data(Qt::UserRole).toString();
+        for (const auto& g : m_grooveTemplates) {
+            if (g.key == gk) { groove = g; break; }
+        }
+    }
+    const int stepsPerBeat = m_grooveSubdivisionCombo ? m_grooveSubdivisionCombo->currentData().toInt() : 2;
+    const QVector<int> due = virtuoso::theory::GrooveEngine::scheduleDueMs(seq.size(),
+                                                                          stepMs,
+                                                                          stepsPerBeat,
+                                                                          groove,
+                                                                          quint32(session));
+
     // Use a chained timer approach (rather than N independent timers) to avoid ordering jitter.
     using StepFn = std::function<void(int idx, int prev)>;
     auto stepFn = std::make_shared<StepFn>();
-    *stepFn = [this, session, ch, vel, gateMs, stepMs, seq, stepFn](int idx, int prev) {
+    *stepFn = [this, session, ch, vel, gateMs, stepMs, seq, due, stepFn](int idx, int prev) {
         if (session != m_playSession) return;
         if (!m_midi) return;
         if (idx >= seq.size()) {
             if (prev >= 0) {
-                m_midi->sendVirtualNoteOff(ch, prev);
+                noteOffTracked(ch, prev);
                 setActiveMidi(prev, false);
             }
             return;
@@ -708,7 +821,7 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
 
         // Monophonic guarantee: kill previous immediately.
         if (prev >= 0) {
-            m_midi->sendVirtualNoteOff(ch, prev);
+            noteOffTracked(ch, prev);
             setActiveMidi(prev, false);
         }
 
@@ -716,6 +829,135 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
         noteOnTracked(ch, n, vel);
 
         // Gate-off (safe even if next step already killed it).
+        int gate = gateMs;
+        if (idx + 1 < due.size()) {
+            const int nextDelay = due[idx + 1] - due[idx];
+            gate = qMin(gateMs, qMax(12, nextDelay - 2));
+        }
+        QTimer::singleShot(gate, this, [this, session, ch, n]() {
+            if (session != m_playSession) return;
+            if (!m_midi) return;
+            noteOffTracked(ch, n);
+            setActiveMidi(n, false);
+        });
+
+        const int nextDelay = (idx + 1 < due.size()) ? (due[idx + 1] - due[idx]) : stepMs;
+        QTimer::singleShot(nextDelay, this, [stepFn, idx, n]() { (*stepFn)(idx + 1, n); });
+    };
+
+    const int firstDelay = (!due.isEmpty() ? due[0] : 0);
+    QTimer::singleShot(firstDelay, this, [stepFn]() { (*stepFn)(/*idx=*/0, /*prev=*/-1); });
+}
+
+void LibraryWindow::playPatternSequence(const QVector<int>& midiSeq, int durationMs) {
+    if (midiSeq.isEmpty()) return;
+    if (!m_midi) return;
+
+    const int ch = selectedPlaybackChannel();
+    const int vel = 48;
+    const quint64 session = ++m_playSession;
+    clearActiveMidis();
+    stopPlaybackNow(ch);
+
+    const int stepMs = qMax(28, durationMs / 4);
+    const int gateMs = qMax(18, int(double(stepMs) * 0.85));
+
+    virtuoso::theory::GrooveTemplate groove;
+    groove.key = "straight";
+    groove.name = "Straight";
+    if (m_grooveList && m_grooveList->currentItem()) {
+        const QString gk = m_grooveList->currentItem()->data(Qt::UserRole).toString();
+        for (const auto& g : m_grooveTemplates) {
+            if (g.key == gk) { groove = g; break; }
+        }
+    }
+    const int stepsPerBeat = m_grooveSubdivisionCombo ? m_grooveSubdivisionCombo->currentData().toInt() : 2;
+    const QVector<int> due = virtuoso::theory::GrooveEngine::scheduleDueMs(midiSeq.size(),
+                                                                          stepMs,
+                                                                          stepsPerBeat,
+                                                                          groove,
+                                                                          quint32(session));
+
+    using StepFn = std::function<void(int idx, int prev)>;
+    auto stepFn = std::make_shared<StepFn>();
+    *stepFn = [this, session, ch, vel, gateMs, stepMs, midiSeq, due, stepFn](int idx, int prev) {
+        if (session != m_playSession) return;
+        if (!m_midi) return;
+        if (idx >= midiSeq.size()) {
+            if (prev >= 0) {
+                noteOffTracked(ch, prev);
+                setActiveMidi(prev, false);
+            }
+            return;
+        }
+
+        const int n = midiSeq[idx];
+        if (prev >= 0) {
+            noteOffTracked(ch, prev);
+            setActiveMidi(prev, false);
+        }
+
+        setActiveMidi(n, true);
+        noteOnTracked(ch, n, vel);
+
+        int gate = gateMs;
+        if (idx + 1 < due.size()) {
+            const int nextDelay = due[idx + 1] - due[idx];
+            gate = qMin(gateMs, qMax(12, nextDelay - 2));
+        }
+        QTimer::singleShot(gate, this, [this, session, ch, n]() {
+            if (session != m_playSession) return;
+            if (!m_midi) return;
+            noteOffTracked(ch, n);
+            setActiveMidi(n, false);
+        });
+
+        const int nextDelay = (idx + 1 < due.size()) ? (due[idx + 1] - due[idx]) : stepMs;
+        QTimer::singleShot(nextDelay, this, [stepFn, idx, n]() { (*stepFn)(idx + 1, n); });
+    };
+
+    const int firstDelay = (!due.isEmpty() ? due[0] : 0);
+    QTimer::singleShot(firstDelay, this, [stepFn]() { (*stepFn)(/*idx=*/0, /*prev=*/-1); });
+}
+
+void LibraryWindow::playGroovePreview(int durationMs) {
+    if (!m_midi) return;
+    const int ch = selectedPlaybackChannel();
+    const int vel = 48;
+    const quint64 session = ++m_playSession;
+    clearActiveMidis();
+    stopPlaybackNow(ch);
+
+    virtuoso::theory::GrooveTemplate groove;
+    groove.key = "straight";
+    groove.name = "Straight";
+    if (m_grooveList && m_grooveList->currentItem()) {
+        const QString gk = m_grooveList->currentItem()->data(Qt::UserRole).toString();
+        for (const auto& g : m_grooveTemplates) {
+            if (g.key == gk) { groove = g; break; }
+        }
+    }
+    const int stepsPerBeat = m_grooveSubdivisionCombo ? m_grooveSubdivisionCombo->currentData().toInt() : 2;
+
+    const int baseRoot = baseRootMidiForPosition(pcFromIndex(m_rootCombo ? m_rootCombo->currentIndex() : 0));
+    const int stepMs = qMax(40, durationMs / 4);
+    const int gateMs = qMax(18, stepMs / 2);
+    const QVector<int> due = virtuoso::theory::GrooveEngine::scheduleDueMs(/*steps=*/12,
+                                                                          stepMs,
+                                                                          stepsPerBeat,
+                                                                          groove,
+                                                                          quint32(session));
+
+    using StepFn = std::function<void(int idx)>;
+    auto stepFn = std::make_shared<StepFn>();
+    *stepFn = [this, session, ch, vel, gateMs, baseRoot, due, stepFn](int idx) {
+        if (session != m_playSession) return;
+        if (!m_midi) return;
+        if (idx >= due.size()) return;
+
+        const int n = baseRoot;
+        setActiveMidi(n, true);
+        noteOnTracked(ch, n, vel);
         QTimer::singleShot(gateMs, this, [this, session, ch, n]() {
             if (session != m_playSession) return;
             if (!m_midi) return;
@@ -723,12 +965,14 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
             setActiveMidi(n, false);
         });
 
-        QTimer::singleShot(stepMs, this, [stepFn, idx, n]() {
-            (*stepFn)(idx + 1, n);
-        });
+        if (idx + 1 < due.size()) {
+            const int nextDelay = due[idx + 1] - due[idx];
+            QTimer::singleShot(nextDelay, this, [stepFn, idx]() { (*stepFn)(idx + 1); });
+        }
     };
 
-    (*stepFn)(/*idx=*/0, /*prev=*/-1);
+    const int firstDelay = (!due.isEmpty() ? due[0] : 0);
+    QTimer::singleShot(firstDelay, this, [stepFn]() { (*stepFn)(0); });
 }
 
 void LibraryWindow::onPlayPressed() {
@@ -739,6 +983,40 @@ void LibraryWindow::onPlayPressed() {
     if (m_polyTab && tab == m_tabs->indexOf(m_polyTab)) {
         const QVector<int> notes = midiNotesForPolychord();
         playMidiNotes(notes, /*durationMs=*/dur, /*arpeggiate=*/false);
+        return;
+    }
+
+    // Patterns tab
+    if (m_patternsTab && tab == m_tabs->indexOf(m_patternsTab)) {
+        const int rootPc = pcFromIndex(m_rootCombo ? m_rootCombo->currentIndex() : 0);
+        const int baseRoot = baseRootMidiForPosition(rootPc);
+
+        if (!m_patternsList || !m_patternsList->currentItem()) return;
+        const auto* pat = m_patternLib.pattern(m_patternsList->currentItem()->data(Qt::UserRole).toString());
+        if (!pat) return;
+
+        const QString targetType = m_patternTargetCombo ? m_patternTargetCombo->currentText() : "Chord";
+        const QString targetKey = (m_patternTargetList && m_patternTargetList->currentItem())
+                                      ? m_patternTargetList->currentItem()->data(Qt::UserRole).toString()
+                                      : QString();
+
+        const ChordDef* chordDef = nullptr;
+        const ScaleDef* scaleDef = nullptr;
+        if (targetType == "Scale") scaleDef = m_registry.scale(targetKey);
+        else chordDef = m_registry.chord(targetKey);
+
+        const QVector<int> semis = virtuoso::theory::PatternLibrary::renderSemitoneSequence(*pat, chordDef, scaleDef);
+        QVector<int> midiSeq;
+        midiSeq.reserve(semis.size() + 1);
+        for (int st : semis) midiSeq.push_back(normalizeMidi(baseRoot + st));
+        if (midiSeq.isEmpty() || midiSeq.back() != normalizeMidi(baseRoot)) midiSeq.push_back(normalizeMidi(baseRoot));
+        playPatternSequence(midiSeq, dur);
+        return;
+    }
+
+    // Groove tab
+    if (m_grooveTab && tab == m_tabs->indexOf(m_grooveTab)) {
+        playGroovePreview(dur);
         return;
     }
 
@@ -754,11 +1032,105 @@ void LibraryWindow::onUserClickedMidi(int midi) {
 
 void LibraryWindow::updateHighlights() {
     const int rootPc = pcFromIndex(m_rootCombo ? m_rootCombo->currentIndex() : 0);
+    const int keyPc = pcFromIndex(m_keyCombo ? m_keyCombo->currentIndex() : 0);
 
     QSet<int> pcs;
     QHash<int, QString> deg;
 
     const int tab = m_tabs ? m_tabs->currentIndex() : 0;
+
+    if (m_patternsTab && tab == m_tabs->indexOf(m_patternsTab)) {
+        const QString targetType = m_patternTargetCombo ? m_patternTargetCombo->currentText() : "Chord";
+
+        if (m_patternTargetList) {
+            const QString prevType = m_patternTargetList->property("targetType").toString();
+            if (prevType != targetType) {
+                m_patternTargetList->setProperty("targetType", targetType);
+                const QSignalBlocker blocker(m_patternTargetList);
+                m_patternTargetList->clear();
+                if (targetType == "Scale") {
+                    for (const ScaleDef* s : m_orderedScales) {
+                        QListWidgetItem* it = new QListWidgetItem(s->name, m_patternTargetList);
+                        it->setData(Qt::UserRole, s->key);
+                    }
+                } else {
+                    for (const ChordDef* c : m_orderedChords) {
+                        QListWidgetItem* it = new QListWidgetItem(c->name, m_patternTargetList);
+                        it->setData(Qt::UserRole, c->key);
+                    }
+                }
+                if (m_patternTargetList->count() > 0) m_patternTargetList->setCurrentRow(0);
+            }
+        }
+
+        if (m_patternTargetList && m_patternTargetList->currentItem()) {
+            const QString key = m_patternTargetList->currentItem()->data(Qt::UserRole).toString();
+            if (targetType == "Scale") {
+                const auto* scaleDef = m_registry.scale(key);
+                pcs = pitchClassesForScale(scaleDef, rootPc);
+                deg = degreeLabelsForScale(scaleDef);
+            } else {
+                const auto* chordDef = m_registry.chord(key);
+                pcs = pitchClassesForChord(chordDef, rootPc);
+                deg = degreeLabelsForChord(chordDef);
+            }
+        }
+
+        if (statusBar()) statusBar()->clearMessage();
+
+        if (m_guitar) {
+            m_guitar->setRootPitchClass(rootPc);
+            m_guitar->setHighlightedPitchClasses(pcs);
+            m_guitar->setDegreeLabels(deg);
+        }
+        if (m_piano) {
+            m_piano->setRootPitchClass(rootPc);
+            m_piano->setHighlightedPitchClasses(pcs);
+            m_piano->setDegreeLabels(deg);
+        }
+        return;
+    }
+
+    if (m_grooveTab && tab == m_tabs->indexOf(m_grooveTab)) {
+        // Show a small timing preview for the selected groove.
+        virtuoso::theory::GrooveTemplate groove;
+        groove.key = "straight";
+        groove.name = "Straight";
+        if (m_grooveList && m_grooveList->currentItem()) {
+            const QString gk = m_grooveList->currentItem()->data(Qt::UserRole).toString();
+            for (const auto& g : m_grooveTemplates) {
+                if (g.key == gk) { groove = g; break; }
+            }
+        }
+        const int stepsPerBeat = m_grooveSubdivisionCombo ? m_grooveSubdivisionCombo->currentData().toInt() : 2;
+        const int stepMs = qMax(40, perNoteDurationMs() / 4);
+        const QVector<int> due = virtuoso::theory::GrooveEngine::scheduleDueMs(/*steps=*/12,
+                                                                              stepMs,
+                                                                              stepsPerBeat,
+                                                                              groove,
+                                                                              /*seed=*/123);
+        if (m_groovePreviewLabel) {
+            QString s = QString("Due ms (12 steps): ");
+            for (int i = 0; i < due.size(); ++i) {
+                if (i) s += ", ";
+                s += QString::number(due[i]);
+            }
+            m_groovePreviewLabel->setText(s);
+        }
+        if (statusBar()) statusBar()->clearMessage();
+        if (m_guitar) {
+            m_guitar->setRootPitchClass(-1);
+            m_guitar->setHighlightedPitchClasses({});
+            m_guitar->setDegreeLabels({});
+        }
+        if (m_piano) {
+            m_piano->setRootPitchClass(-1);
+            m_piano->setHighlightedPitchClasses({});
+            m_piano->setDegreeLabels({});
+        }
+        return;
+    }
+
     if (m_polyTab && tab == m_tabs->indexOf(m_polyTab)) {
         const QSet<int> pcs = pitchClassesForPolychord();
         if (m_guitar) {
@@ -771,10 +1143,20 @@ void LibraryWindow::updateHighlights() {
             m_piano->setHighlightedPitchClasses(pcs);
             m_piano->setDegreeLabels({});
         }
-        // Suggested scales for polychord pitch set (status bar)
+        // Harmony + suggested scales for polychord pitch set (status bar)
         if (statusBar()) {
+            QString harmonyPrefix;
+            if (m_polyLowerChord && m_polyLowerRoot) {
+                const int lowerRoot = pcFromIndex(m_polyLowerRoot->currentIndex());
+                const auto* lower = m_registry.chord(m_polyLowerChord->currentData().toString());
+                if (lower) {
+                    const auto h = virtuoso::theory::analyzeChordInMajorKey(keyPc, lowerRoot, *lower);
+                    harmonyPrefix = QString("Harmony: %1 — %2 (%3)").arg(h.roman, h.function, h.detail);
+                }
+            }
             const auto sug = virtuoso::theory::suggestScalesForPitchClasses(m_registry, pcs, 6);
-            QString msg = "Suggested scales: ";
+            QString msg = harmonyPrefix.isEmpty() ? QString() : (harmonyPrefix + "  |  ");
+            msg += "Suggested scales: ";
             for (int i = 0; i < sug.size(); ++i) {
                 if (i) msg += " | ";
                 msg += QString("%1 (%2)").arg(sug[i].name).arg(pcName(sug[i].bestTranspose));
@@ -788,11 +1170,16 @@ void LibraryWindow::updateHighlights() {
         const auto* chordDef = m_registry.chord(m_chordsList->currentItem()->data(Qt::UserRole).toString());
         pcs = pitchClassesForChord(chordDef, rootPc);
         deg = degreeLabelsForChord(chordDef);
+        if (statusBar() && chordDef) {
+            const auto h = virtuoso::theory::analyzeChordInMajorKey(keyPc, rootPc, *chordDef);
+            statusBar()->showMessage(QString("Harmony: %1 — %2 (%3)").arg(h.roman, h.function, h.detail));
+        }
     } else if (tab == 1 && m_scalesList) {
         if (!m_scalesList->currentItem()) return;
         const auto* scaleDef = m_registry.scale(m_scalesList->currentItem()->data(Qt::UserRole).toString());
         pcs = pitchClassesForScale(scaleDef, rootPc);
         deg = degreeLabelsForScale(scaleDef);
+        if (statusBar()) statusBar()->clearMessage();
     } else if (tab == 2 && m_voicingsList) {
         if (!m_voicingsList->currentItem()) return;
         const auto* voicingDef = m_registry.voicing(m_voicingsList->currentItem()->data(Qt::UserRole).toString());

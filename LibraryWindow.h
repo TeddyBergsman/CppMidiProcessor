@@ -6,6 +6,8 @@
 #include <QHash>
 
 #include "virtuoso/ontology/OntologyRegistry.h"
+#include "virtuoso/theory/PatternLibrary.h"
+#include "virtuoso/theory/GrooveEngine.h"
 
 class QListWidget;
 class QTabWidget;
@@ -63,19 +65,26 @@ private:
     void stopPlaybackNow(int channel);
     void noteOnTracked(int channel, int midi, int vel);
     void noteOffTracked(int channel, int midi);
+    void playPatternSequence(const QVector<int>& midiSeq, int durationMs);
+    void playGroovePreview(int durationMs);
 
     virtuoso::ontology::OntologyRegistry m_registry;
+    virtuoso::theory::PatternLibrary m_patternLib = virtuoso::theory::PatternLibrary::builtins();
     MidiProcessor* m_midi = nullptr; // not owned
+
+    QVector<virtuoso::theory::GrooveTemplate> m_grooveTemplates;
 
     // Stable, logical ordering (QHash iteration order is not deterministic)
     QVector<const virtuoso::ontology::ChordDef*> m_orderedChords;
     QVector<const virtuoso::ontology::ScaleDef*> m_orderedScales;
     QVector<const virtuoso::ontology::VoicingDef*> m_orderedVoicings;
+    QVector<const virtuoso::theory::PatternDef*> m_orderedPatterns;
 
     QTabWidget* m_tabs = nullptr;
 
     // Global controls
     QComboBox* m_rootCombo = nullptr;      // 0..11 (C..B)
+    QComboBox* m_keyCombo = nullptr;       // harmony analysis key (0..11, C..B)
     QComboBox* m_chordCtxCombo = nullptr;  // context chord for voicing degree->interval mapping
     QComboBox* m_playInstrumentCombo = nullptr;
     QComboBox* m_positionCombo = nullptr;
@@ -87,6 +96,14 @@ private:
     QListWidget* m_chordsList = nullptr;
     QListWidget* m_scalesList = nullptr;
     QListWidget* m_voicingsList = nullptr;
+    QWidget* m_patternsTab = nullptr;
+    QListWidget* m_patternsList = nullptr;
+    QComboBox* m_patternTargetCombo = nullptr; // "Chord" | "Scale"
+    QListWidget* m_patternTargetList = nullptr;
+    QWidget* m_grooveTab = nullptr;
+    QListWidget* m_grooveList = nullptr;
+    QComboBox* m_grooveSubdivisionCombo = nullptr; // steps per beat (2=eighths, 4=sixteenths)
+    QLabel* m_groovePreviewLabel = nullptr;
     QWidget* m_polyTab = nullptr;
 
     // Visualizers

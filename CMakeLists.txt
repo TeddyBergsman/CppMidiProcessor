@@ -31,6 +31,12 @@ add_library(VirtuosoCore STATIC
   virtuoso/theory/TheoryEvent.cpp
   virtuoso/theory/NegativeHarmony.h
   virtuoso/theory/NegativeHarmony.cpp
+  virtuoso/theory/PatternLibrary.h
+  virtuoso/theory/PatternLibrary.cpp
+  virtuoso/theory/GrooveEngine.h
+  virtuoso/theory/GrooveEngine.cpp
+  virtuoso/theory/FunctionalHarmony.h
+  virtuoso/theory/FunctionalHarmony.cpp
   virtuoso/theory/ScaleSuggester.h
   virtuoso/theory/ScaleSuggester.cpp
 )

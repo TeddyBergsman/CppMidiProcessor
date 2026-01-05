@@ -24,6 +24,7 @@ struct ChordDef {
     QVector<int> intervals;     // semitone offsets from root (0..)
     QStringList tags;           // e.g. "triad", "seventh", "shell"
     int order = 1000;           // stable UI ordering
+    int bassInterval = -1;      // optional slash-bass/inversion bass note (semitones from root)
 };
 
 struct ScaleDef {

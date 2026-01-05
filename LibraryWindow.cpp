@@ -448,6 +448,10 @@ QVector<int> LibraryWindow::midiNotesForCurrentSelection(int rootPc) const {
         const auto* chordDef = m_registry.chord(m_chordsList->currentItem()->data(Qt::UserRole).toString());
         if (!chordDef) return notes;
         for (int iv : chordDef->intervals) notes.push_back(normalizeMidi(baseRoot + iv));
+        // If this chord encodes a slash-bass/inversion, add an emphasized bass note one octave below.
+        if (chordDef->bassInterval >= 0) {
+            notes.push_back(normalizeMidi(baseRoot - 12 + chordDef->bassInterval));
+        }
     } else if (tab == 1 && m_scalesList && m_scalesList->currentItem()) {
         const auto* scaleDef = m_registry.scale(m_scalesList->currentItem()->data(Qt::UserRole).toString());
         if (!scaleDef) return notes;

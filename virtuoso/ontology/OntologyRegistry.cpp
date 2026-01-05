@@ -9,13 +9,14 @@ OntologyRegistry OntologyRegistry::builtins() {
     OntologyRegistry r;
 
     // --- Chord primitives (subset, extensible) ---
-    auto addChord = [&](QString key, QString name, QVector<int> iv, QStringList tags, int order) {
+    auto addChord = [&](QString key, QString name, QVector<int> iv, QStringList tags, int order, int bassInterval = -1) {
         ChordDef d;
         d.key = std::move(key);
         d.name = std::move(name);
         d.intervals = std::move(iv);
         d.tags = std::move(tags);
         d.order = order;
+        d.bassInterval = bassInterval;
         r.m_chords.insert(d.key, d);
     };
 
@@ -33,8 +34,11 @@ OntologyRegistry OntologyRegistry::builtins() {
     addChord("5", "5", {0, 7}, {"dyad"}, 10);
 
     // Additional dyads/intervals/shells
+    // Shell dyads (both major and minor variants)
     addChord("shell_1_3", "shell(1-3)", {0, 4}, {"dyad", "shell"}, 50);
-    addChord("shell_1_7", "shell(1-7)", {0, 10}, {"dyad", "shell"}, 51);
+    addChord("shell_1_b3", "shell(1-b3)", {0, 3}, {"dyad", "shell"}, 51);
+    addChord("shell_1_7", "shell(1-7)", {0, 11}, {"dyad", "shell"}, 52);
+    addChord("shell_1_b7", "shell(1-b7)", {0, 10}, {"dyad", "shell"}, 53);
     addChord("m2", "interval(m2)", {0, 1}, {"dyad", "interval"}, 60);
     addChord("M2", "interval(M2)", {0, 2}, {"dyad", "interval"}, 61);
     addChord("m3", "interval(m3)", {0, 3}, {"dyad", "interval"}, 62);
@@ -57,6 +61,37 @@ OntologyRegistry OntologyRegistry::builtins() {
     addChord("7b5", "7b5", {0, 4, 6, 10}, {"seventh", "dominant"}, 114);
     addChord("6", "6", {0, 4, 7, 9}, {"six"}, 120);
     addChord("min6", "min6", {0, 3, 7, 9}, {"six"}, 121);
+
+    // Add-chords
+    addChord("add9", "add9", {0,4,7,14}, {"add"}, 180);
+    addChord("madd9", "madd9", {0,3,7,14}, {"add"}, 181);
+    addChord("6_9", "6/9", {0,4,7,9,14}, {"six","extended"}, 182);
+    addChord("sus4add9", "sus4(add9)", {0,5,7,14}, {"sus","add"}, 183);
+
+    // Sus extensions
+    addChord("9sus4", "9sus4", {0,5,7,10,14}, {"extended","sus","dominant"}, 236);
+    addChord("13sus4", "13sus4", {0,5,7,10,14,21}, {"extended","sus","dominant"}, 237);
+
+    // Minor-major extensions
+    addChord("minmaj9", "min(maj9)", {0,3,7,11,14}, {"extended"}, 240);
+    addChord("minmaj11", "min(maj11)", {0,3,7,11,14,17}, {"extended"}, 241);
+    addChord("minmaj13", "min(maj13)", {0,3,7,11,14,17,21}, {"extended"}, 242);
+
+    // Slash-bass / inversions (audible bass is handled by bassInterval in the UI playback)
+    addChord("maj/3", "maj/3", {0,4,7}, {"triad","slash"}, 300, /*bassInterval=*/4);
+    addChord("maj/5", "maj/5", {0,4,7}, {"triad","slash"}, 301, /*bassInterval=*/7);
+    addChord("min/b3", "min/b3", {0,3,7}, {"triad","slash"}, 302, /*bassInterval=*/3);
+    addChord("min/5", "min/5", {0,3,7}, {"triad","slash"}, 303, /*bassInterval=*/7);
+    addChord("maj7/3", "maj7/3", {0,4,7,11}, {"seventh","slash"}, 310, /*bassInterval=*/4);
+    addChord("maj7/5", "maj7/5", {0,4,7,11}, {"seventh","slash"}, 311, /*bassInterval=*/7);
+    addChord("maj7/7", "maj7/7", {0,4,7,11}, {"seventh","slash"}, 312, /*bassInterval=*/11);
+    addChord("7/3", "7/3", {0,4,7,10}, {"seventh","dominant","slash"}, 313, /*bassInterval=*/4);
+    addChord("7/5", "7/5", {0,4,7,10}, {"seventh","dominant","slash"}, 314, /*bassInterval=*/7);
+    addChord("7/b7", "7/b7", {0,4,7,10}, {"seventh","dominant","slash"}, 315, /*bassInterval=*/10);
+    addChord("min7/b3", "min7/b3", {0,3,7,10}, {"seventh","slash"}, 316, /*bassInterval=*/3);
+    addChord("min7/5", "min7/5", {0,3,7,10}, {"seventh","slash"}, 317, /*bassInterval=*/7);
+    addChord("m7b5/b3", "m7b5/b3", {0,3,6,10}, {"seventh","slash"}, 318, /*bassInterval=*/3);
+    addChord("m7b5/b5", "m7b5/b5", {0,3,6,10}, {"seventh","slash"}, 319, /*bassInterval=*/6);
 
     // Extensions & alterations (core set; more will be added below when we broaden the catalog)
     addChord("maj9", "maj9", {0,4,7,11,14}, {"extended"}, 200);
@@ -141,6 +176,9 @@ OntologyRegistry OntologyRegistry::builtins() {
     addScale("whole_tone", "Whole Tone", {0,2,4,6,8,10}, {"symmetric"}, 60);
     addScale("diminished_wh", "Diminished (Whole-Half)", {0,2,3,5,6,8,9,11}, {"symmetric"}, 61);
     addScale("diminished_hw", "Diminished (Half-Whole)", {0,1,3,4,6,7,9,10}, {"symmetric"}, 62);
+    // Aliases commonly used in jazz
+    addScale("dominant_diminished", "Dominant Diminished (Half-Whole)", {0,1,3,4,6,7,9,10}, {"symmetric"}, 62);
+    addScale("whole_half_diminished", "Whole-Half Diminished", {0,2,3,5,6,8,9,11}, {"symmetric"}, 61);
     addScale("augmented_hexatonic", "Augmented Hexatonic", {0,3,4,7,8,11}, {"symmetric"}, 63);
 
     // Pentatonics / blues

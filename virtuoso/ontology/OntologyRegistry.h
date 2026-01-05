@@ -47,6 +47,14 @@ struct VoicingDef {
     int order = 1000;       // stable UI ordering
 };
 
+struct PolychordTemplate {
+    Key key;          // stable id
+    QString name;     // display name
+    QString formula;  // e.g. "UpperTriad / Bass" or "UpperTriad over LowerChord"
+    QStringList tags;
+    int order = 1000;
+};
+
 // Static registry (in-memory knowledge base).
 // Stage 1: code-defined tables; later can be made data-driven (JSON).
 class OntologyRegistry {
@@ -64,11 +72,15 @@ public:
     QVector<const ChordDef*> allChords() const;
     QVector<const ScaleDef*> allScales() const;
     QVector<const VoicingDef*> allVoicings() const;
+    QVector<const PolychordTemplate*> allPolychordTemplates() const;
+
+    const PolychordTemplate* polychordTemplate(const Key& key) const;
 
 private:
     QHash<Key, ChordDef> m_chords;
     QHash<Key, ScaleDef> m_scales;
     QHash<Key, VoicingDef> m_voicings;
+    QHash<Key, PolychordTemplate> m_polychords;
 };
 
 } // namespace virtuoso::ontology

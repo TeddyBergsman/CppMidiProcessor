@@ -283,6 +283,19 @@ OntologyRegistry OntologyRegistry::builtins() {
     addVoicing2("guitar_drop3_1235", InstrumentKind::Guitar, "Drop 3 (set 1235)", "Drop3", "Drop 3 set 1235", {1,3,7,9}, {}, {"guitar","drop3"}, 320);
     addVoicing2("guitar_drop3_2346", InstrumentKind::Guitar, "Drop 3 (set 2346)", "Drop3", "Drop 3 set 2346", {1,3,7,9}, {}, {"guitar","drop3"}, 321);
 
+    // --- Polychord templates (procedural combinations; do not enumerate all pairs) ---
+    auto addPoly = [&](QString key, QString name, QString formula, QStringList tags, int order) {
+        PolychordTemplate t;
+        t.key = std::move(key);
+        t.name = std::move(name);
+        t.formula = std::move(formula);
+        t.tags = std::move(tags);
+        t.order = order;
+        r.m_polychords.insert(t.key, t);
+    };
+    addPoly("triad_over_bass", "Triad over Bass (D/C)", "UpperTriad / Bass", {"polychord","slash"}, 0);
+    addPoly("triad_over_chord", "Triad over Chord (D over Cmaj7#11)", "UpperTriad over LowerChord", {"polychord","stack"}, 1);
+
     return r;
 }
 
@@ -350,6 +363,24 @@ QVector<const VoicingDef*> OntologyRegistry::allVoicings() const {
     out.reserve(m_voicings.size());
     for (const VoicingDef& v : m_voicings) out.push_back(&v);
     return out;
+}
+
+QVector<const PolychordTemplate*> OntologyRegistry::allPolychordTemplates() const {
+    QVector<const PolychordTemplate*> out;
+    out.reserve(m_polychords.size());
+    for (const PolychordTemplate& t : m_polychords) out.push_back(&t);
+    std::sort(out.begin(), out.end(), [](const PolychordTemplate* a, const PolychordTemplate* b) {
+        if (!a || !b) return a != nullptr;
+        if (a->order != b->order) return a->order < b->order;
+        return a->name < b->name;
+    });
+    return out;
+}
+
+const PolychordTemplate* OntologyRegistry::polychordTemplate(const Key& key) const {
+    auto it = m_polychords.find(key);
+    if (it == m_polychords.end()) return nullptr;
+    return &it.value();
 }
 
 } // namespace virtuoso::ontology

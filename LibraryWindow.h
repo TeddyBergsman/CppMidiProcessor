@@ -33,6 +33,7 @@ private:
     void populateLists();
     void updateHighlights();
     void updatePianoRange();
+    void updatePolychordHighlights();
 
     static QString pcName(int pc);
     static int pcFromIndex(int idx);
@@ -42,6 +43,7 @@ private:
     QSet<int> pitchClassesForVoicing(const virtuoso::ontology::VoicingDef* voicingDef,
                                      const virtuoso::ontology::ChordDef* chordContext,
                                      int rootPc) const;
+    QSet<int> pitchClassesForPolychord() const;
 
     QHash<int, QString> degreeLabelsForChord(const virtuoso::ontology::ChordDef* chordDef) const;
     QHash<int, QString> degreeLabelsForScale(const virtuoso::ontology::ScaleDef* scaleDef) const;
@@ -51,6 +53,7 @@ private:
     int selectedPlaybackChannel() const;
     int baseRootMidiForPosition(int rootPc) const;
     QVector<int> midiNotesForCurrentSelection(int rootPc) const;
+    QVector<int> midiNotesForPolychord() const;
     void playMidiNotes(const QVector<int>& notes, int durationMs, bool arpeggiate);
     void playSingleNote(int midi, int durationMs);
     void setActiveMidi(int midi, bool on);
@@ -84,10 +87,18 @@ private:
     QListWidget* m_chordsList = nullptr;
     QListWidget* m_scalesList = nullptr;
     QListWidget* m_voicingsList = nullptr;
+    QWidget* m_polyTab = nullptr;
 
     // Visualizers
     GuitarFretboardWidget* m_guitar = nullptr;
     PianoKeyboardWidget* m_piano = nullptr;
+
+    // Polychord controls (procedural generator)
+    QComboBox* m_polyTemplateCombo = nullptr;
+    QComboBox* m_polyUpperRoot = nullptr;
+    QComboBox* m_polyUpperChord = nullptr;
+    QComboBox* m_polyLowerRoot = nullptr;
+    QComboBox* m_polyLowerChord = nullptr;
 
     QSet<int> m_activeMidis;
     QTimer* m_autoPlayTimer = nullptr;

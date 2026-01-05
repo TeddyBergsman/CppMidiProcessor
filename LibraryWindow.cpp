@@ -177,6 +177,39 @@ void LibraryWindow::buildUi() {
     mkTab(m_scalesList, "Scales");
     mkTab(m_voicingsList, "Voicings");
 
+    // Polychords tab (generator UI)
+    m_polyTab = new QWidget(this);
+    QVBoxLayout* polyL = new QVBoxLayout(m_polyTab);
+    QGridLayout* grid = new QGridLayout;
+
+    m_polyTemplateCombo = new QComboBox(this);
+    m_polyUpperRoot = new QComboBox(this);
+    m_polyUpperChord = new QComboBox(this);
+    m_polyLowerRoot = new QComboBox(this);
+    m_polyLowerChord = new QComboBox(this);
+
+    for (const auto& n : pcNames()) {
+        m_polyUpperRoot->addItem(n);
+        m_polyLowerRoot->addItem(n);
+    }
+    m_polyUpperRoot->setCurrentIndex(2); // D (nice default for D/C)
+    m_polyLowerRoot->setCurrentIndex(0); // C
+
+    grid->addWidget(new QLabel("Template:", this), 0, 0);
+    grid->addWidget(m_polyTemplateCombo, 0, 1, 1, 3);
+
+    grid->addWidget(new QLabel("Upper triad:", this), 1, 0);
+    grid->addWidget(m_polyUpperRoot, 1, 1);
+    grid->addWidget(m_polyUpperChord, 1, 2, 1, 2);
+
+    grid->addWidget(new QLabel("Lower:", this), 2, 0);
+    grid->addWidget(m_polyLowerRoot, 2, 1);
+    grid->addWidget(m_polyLowerChord, 2, 2, 1, 2);
+
+    polyL->addLayout(grid);
+    polyL->addStretch(1);
+    m_tabs->addTab(m_polyTab, "Polychords");
+
     content->addWidget(m_tabs, 0);
 
     // Visualizers on right
@@ -204,6 +237,13 @@ void LibraryWindow::buildUi() {
     connect(m_chordsList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_scalesList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_voicingsList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
+
+    // Polychord signals
+    connect(m_polyTemplateCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
+    connect(m_polyUpperRoot, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
+    connect(m_polyUpperChord, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
+    connect(m_polyLowerRoot, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
+    connect(m_polyLowerChord, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
 
     // Click-to-play from visualizers
     connect(m_guitar, &GuitarFretboardWidget::noteClicked, this, &LibraryWindow::onUserClickedMidi);
@@ -270,11 +310,92 @@ void LibraryWindow::populateLists() {
         m_chordCtxCombo->addItem(c->name);
     }
     m_chordCtxCombo->setCurrentIndex(0);
+
+    // Polychord template combo
+    if (m_polyTemplateCombo) {
+        m_polyTemplateCombo->clear();
+        const auto polys = m_registry.allPolychordTemplates();
+        for (const auto* t : polys) {
+            m_polyTemplateCombo->addItem(t->name, t->key);
+        }
+        m_polyTemplateCombo->setCurrentIndex(0);
+    }
+
+    // Upper triad choices: show common triads only
+    if (m_polyUpperChord) {
+        m_polyUpperChord->clear();
+        const QVector<QString> triadKeys = {"maj","min","dim","aug","sus2","sus4","phryg"};
+        for (const QString& k : triadKeys) {
+            const auto* c = m_registry.chord(k);
+            if (!c) continue;
+            m_polyUpperChord->addItem(c->name, c->key);
+        }
+        if (m_polyUpperChord->count() > 0) m_polyUpperChord->setCurrentIndex(0);
+    }
+
+    // Lower chord choices: all chords (ordered)
+    if (m_polyLowerChord) {
+        m_polyLowerChord->clear();
+        for (const auto* c : m_orderedChords) {
+            m_polyLowerChord->addItem(c->name, c->key);
+        }
+        if (m_polyLowerChord->count() > 0) m_polyLowerChord->setCurrentIndex(0);
+    }
 }
 
 void LibraryWindow::onSelectionChanged() {
     updateHighlights();
     scheduleAutoPlay();
+}
+
+QSet<int> LibraryWindow::pitchClassesForPolychord() const {
+    QSet<int> pcs;
+    if (!m_polyTemplateCombo || !m_polyUpperChord || !m_polyLowerChord) return pcs;
+
+    const int upperRoot = pcFromIndex(m_polyUpperRoot ? m_polyUpperRoot->currentIndex() : 0);
+    const int lowerRoot = pcFromIndex(m_polyLowerRoot ? m_polyLowerRoot->currentIndex() : 0);
+    const auto* upper = m_registry.chord(m_polyUpperChord->currentData().toString());
+    const auto* lower = m_registry.chord(m_polyLowerChord->currentData().toString());
+    if (!upper || !lower) return pcs;
+
+    for (int iv : upper->intervals) pcs.insert(normalizePc(upperRoot + iv));
+
+    const QString tpl = m_polyTemplateCombo->currentData().toString();
+    if (tpl == "triad_over_bass") {
+        pcs.insert(normalizePc(lowerRoot));
+    } else {
+        for (int iv : lower->intervals) pcs.insert(normalizePc(lowerRoot + iv));
+    }
+    return pcs;
+}
+
+QVector<int> LibraryWindow::midiNotesForPolychord() const {
+    QVector<int> notes;
+    if (!m_polyTemplateCombo || !m_polyUpperChord || !m_polyLowerChord) return notes;
+
+    const int upperRootPc = pcFromIndex(m_polyUpperRoot ? m_polyUpperRoot->currentIndex() : 0);
+    const int lowerRootPc = pcFromIndex(m_polyLowerRoot ? m_polyLowerRoot->currentIndex() : 0);
+    const auto* upper = m_registry.chord(m_polyUpperChord->currentData().toString());
+    const auto* lower = m_registry.chord(m_polyLowerChord->currentData().toString());
+    if (!upper || !lower) return notes;
+
+    const int baseLower = baseRootMidiForPosition(lowerRootPc);
+    const int baseUpper = normalizeMidi(baseLower + 12 + normalizePc(upperRootPc - lowerRootPc));
+
+    // Lower part
+    const QString tpl = m_polyTemplateCombo->currentData().toString();
+    if (tpl == "triad_over_bass") {
+        notes.push_back(normalizeMidi(baseLower - 12)); // bass root emphasis
+    } else {
+        for (int iv : lower->intervals) notes.push_back(normalizeMidi(baseLower + iv));
+    }
+
+    // Upper part (triad) above
+    for (int iv : upper->intervals) notes.push_back(normalizeMidi(baseUpper + iv));
+
+    std::sort(notes.begin(), notes.end());
+    notes.erase(std::unique(notes.begin(), notes.end()), notes.end());
+    return notes;
 }
 
 void LibraryWindow::updatePianoRange() {
@@ -609,10 +730,19 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
 }
 
 void LibraryWindow::onPlayPressed() {
+    const int tab = m_tabs ? m_tabs->currentIndex() : 0;
+    const int dur = perNoteDurationMs();
+
+    // Polychords tab
+    if (m_polyTab && tab == m_tabs->indexOf(m_polyTab)) {
+        const QVector<int> notes = midiNotesForPolychord();
+        playMidiNotes(notes, /*durationMs=*/dur, /*arpeggiate=*/false);
+        return;
+    }
+
     const int rootPc = pcFromIndex(m_rootCombo ? m_rootCombo->currentIndex() : 0);
     const QVector<int> notes = midiNotesForCurrentSelection(rootPc);
-    const bool isScale = (m_tabs && m_tabs->currentIndex() == 1);
-    const int dur = perNoteDurationMs();
+    const bool isScale = (tab == 1);
     playMidiNotes(notes, /*durationMs=*/dur, /*arpeggiate=*/isScale);
 }
 
@@ -627,6 +757,20 @@ void LibraryWindow::updateHighlights() {
     QHash<int, QString> deg;
 
     const int tab = m_tabs ? m_tabs->currentIndex() : 0;
+    if (m_polyTab && tab == m_tabs->indexOf(m_polyTab)) {
+        const QSet<int> pcs = pitchClassesForPolychord();
+        if (m_guitar) {
+            m_guitar->setRootPitchClass(-1);
+            m_guitar->setHighlightedPitchClasses(pcs);
+            m_guitar->setDegreeLabels({});
+        }
+        if (m_piano) {
+            m_piano->setRootPitchClass(-1);
+            m_piano->setHighlightedPitchClasses(pcs);
+            m_piano->setDegreeLabels({});
+        }
+        return;
+    }
     if (tab == 0 && m_chordsList) {
         if (!m_chordsList->currentItem()) return;
         const auto* chordDef = m_registry.chord(m_chordsList->currentItem()->data(Qt::UserRole).toString());

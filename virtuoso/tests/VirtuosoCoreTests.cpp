@@ -2,6 +2,7 @@
 #include "virtuoso/constraints/PianoDriver.h"
 #include "virtuoso/constraints/BassDriver.h"
 #include "virtuoso/theory/TheoryEvent.h"
+#include "virtuoso/theory/NegativeHarmony.h"
 
 #include <QCoreApplication>
 #include <QJsonDocument>
@@ -9,9 +10,6 @@
 #include <QtGlobal>
 
 using virtuoso::ontology::OntologyRegistry;
-using virtuoso::ontology::ChordId;
-using virtuoso::ontology::ScaleId;
-using virtuoso::ontology::VoicingId;
 using virtuoso::ontology::InstrumentKind;
 
 using virtuoso::constraints::CandidateGesture;
@@ -44,7 +42,7 @@ static void testOntology() {
     const OntologyRegistry reg = OntologyRegistry::builtins();
 
     // Chords
-    const auto* maj7 = reg.chord(ChordId::Major7);
+    const auto* maj7 = reg.chord("maj7");
     expect(maj7 != nullptr, "Chord Major7 exists");
     if (maj7) {
         expectStrEq(maj7->name, "maj7", "Chord Major7 name");
@@ -57,10 +55,10 @@ static void testOntology() {
     expect(sevenths.size() >= 4, "At least a few 7th-chord primitives exist");
 
     // Scales
-    const auto* ionian = reg.scale(ScaleId::Ionian);
+    const auto* ionian = reg.scale("ionian");
     expect(ionian != nullptr, "Scale Ionian exists");
     if (ionian) {
-        expectStrEq(ionian->name, "Ionian", "Scale Ionian name");
+        expect(ionian->name.contains("Ionian"), "Scale Ionian name");
         expectEq(ionian->intervals.size(), 7, "Scale Ionian interval count");
         expectEq(ionian->intervals[0], 0, "Scale Ionian interval 0");
         expectEq(ionian->intervals[6], 11, "Scale Ionian interval 11");
@@ -70,7 +68,7 @@ static void testOntology() {
     expect(diatonic.size() >= 7, "All 7 diatonic modes exist");
 
     // Voicings
-    const auto* rootlessA = reg.voicing(VoicingId::PianoRootlessA_3_5_7_9);
+    const auto* rootlessA = reg.voicing("piano_rootless_a");
     expect(rootlessA != nullptr, "Voicing RootlessA exists");
     if (rootlessA) {
         expect(rootlessA->instrument == InstrumentKind::Piano, "RootlessA instrument == Piano");
@@ -151,6 +149,15 @@ static void testTheoryStream() {
     expectStrEq(o.value("dynamic_marking").toString(), "mf", "TheoryEvent.dynamic_marking");
 }
 
+static void testNegativeHarmony() {
+    using virtuoso::theory::negativeHarmonyMirrorPc;
+    // In C (tonic=0): D(2)->Bb(10), E(4)->Ab(8), F(5)->G(7)
+    expectEq(negativeHarmonyMirrorPc(2, 0), 10, "NegativeHarmony: D -> Bb (pc)");
+    expectEq(negativeHarmonyMirrorPc(4, 0), 8, "NegativeHarmony: E -> Ab (pc)");
+    expectEq(negativeHarmonyMirrorPc(5, 0), 7, "NegativeHarmony: F -> G (pc)");
+    expectEq(negativeHarmonyMirrorPc(0, 0), 0, "NegativeHarmony: C -> C (pc)");
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
@@ -158,6 +165,7 @@ int main(int argc, char** argv) {
     testPianoConstraints();
     testBassConstraints();
     testTheoryStream();
+    testNegativeHarmony();
 
     if (g_failures == 0) {
         qInfo("VirtuosoCoreTests: PASS");

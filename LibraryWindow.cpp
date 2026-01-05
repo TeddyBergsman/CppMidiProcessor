@@ -64,16 +64,24 @@ static int degreeToSemitone(const ChordDef* chordCtx, int degree) {
 }
 
 static QString degreeLabelForChordInterval(int iv) {
-    // Very small Stage-1 mapping for visual feedback.
-    // (Later: quality-aware b3/#5/b7, etc.)
-    if (iv == 0) return "1";
-    if (iv == 3 || iv == 4) return "3";
-    if (iv == 6 || iv == 7 || iv == 8) return "5";
-    if (iv == 9 || iv == 10 || iv == 11) return "7";
-    if (iv == 14) return "9";
-    if (iv == 17) return "11";
-    if (iv == 21) return "13";
-    return {};
+    // Semitone-based label map (dominant-oriented). This is used for UI degree labels/tooltips.
+    // For now, we keep it simple and consistent across chord/scale/voicing highlighting.
+    const int pc = normalizePc(iv);
+    switch (pc) {
+    case 0: return "1";
+    case 1: return "b9";
+    case 2: return "9";
+    case 3: return "#9";
+    case 4: return "3";
+    case 5: return "11";
+    case 6: return "#11";
+    case 7: return "5";
+    case 8: return "b13";
+    case 9: return "13";
+    case 10: return "b7";
+    case 11: return "7";
+    default: return {};
+    }
 }
 
 static int normalizeMidi(int midi) {
@@ -213,118 +221,21 @@ void LibraryWindow::populateLists() {
     m_orderedScales = m_registry.allScales();
     m_orderedVoicings = m_registry.allVoicings();
 
-    auto chordRank = [](ChordId id) -> int {
-        switch (id) {
-        // Requested order:
-        // Maj, Maj7, 7, Sus2, Sus4, Min, Min7, m7b5, dim7, aug, 5
-        case ChordId::MajorTriad: return 0;
-        case ChordId::Major7: return 1;
-        case ChordId::Dominant7: return 2;
-        case ChordId::Sus2Triad: return 3;
-        case ChordId::Sus4Triad: return 4;
-        case ChordId::MinorTriad: return 5;
-        case ChordId::Minor7: return 6;
-        case ChordId::HalfDiminished7: return 7;
-        case ChordId::Diminished7: return 8;
-        case ChordId::AugmentedTriad: return 9;
-        case ChordId::Power5: return 10;
-        // Extra items not in the requested list go after.
-        case ChordId::Shell_1_3: return 50;
-        case ChordId::Shell_1_7: return 51;
-        case ChordId::DiminishedTriad: return 100;
-        case ChordId::PhrygianTriad: return 101;
-        case ChordId::MinorMajor7: return 110;
-        case ChordId::Augmented7: return 111;
-        case ChordId::Dominant7Sus4: return 112;
-        case ChordId::SevenSharp5: return 113;
-        case ChordId::SevenFlat5: return 114;
-        case ChordId::Six: return 120;
-        case ChordId::MinorSix: return 121;
-        default: return 1000;
-        }
-    };
-
-    auto scaleRank = [](ScaleId id) -> int {
-        switch (id) {
-        case ScaleId::Ionian: return 0;
-        case ScaleId::Dorian: return 1;
-        case ScaleId::Phrygian: return 2;
-        case ScaleId::Lydian: return 3;
-        case ScaleId::Mixolydian: return 4;
-        case ScaleId::Aeolian: return 5;
-        case ScaleId::Locrian: return 6;
-
-        case ScaleId::MelodicMinor: return 20;
-        case ScaleId::DorianB2: return 21;
-        case ScaleId::LydianAugmented: return 22;
-        case ScaleId::LydianDominant: return 23;
-        case ScaleId::MixolydianB6: return 24;
-        case ScaleId::LocrianNat2: return 25;
-        case ScaleId::Altered: return 26;
-
-        case ScaleId::HarmonicMinor: return 30;
-        case ScaleId::LocrianSharp6: return 31;
-        case ScaleId::IonianSharp5: return 32;
-        case ScaleId::DorianSharp4: return 33;
-        case ScaleId::PhrygianDominant: return 34;
-        case ScaleId::LydianSharp2: return 35;
-        case ScaleId::SuperLocrianBb7: return 36;
-
-        case ScaleId::HarmonicMajor: return 40;
-        case ScaleId::DorianB5: return 41;
-        case ScaleId::PhrygianB4: return 42;
-        case ScaleId::LydianB3: return 43;
-        case ScaleId::MixolydianB2: return 44;
-        case ScaleId::LydianAugSharp2: return 45;
-        case ScaleId::LocrianBb7: return 46;
-
-        case ScaleId::WholeTone: return 60;
-        case ScaleId::DiminishedWH: return 61;
-        case ScaleId::DiminishedHW: return 62;
-
-        case ScaleId::MajorPentatonic: return 70;
-        case ScaleId::MinorPentatonic: return 71;
-        case ScaleId::DominantPentatonic: return 72;
-        case ScaleId::Blues: return 73;
-        case ScaleId::MajorBlues: return 74;
-
-        case ScaleId::MajorBebop: return 80;
-        case ScaleId::DominantBebop: return 81;
-        case ScaleId::MinorBebop: return 82;
-        case ScaleId::DorianBebop: return 83;
-        default: return 1000;
-        }
-    };
-
-    auto voicingRank = [](const VoicingDef* v) -> int {
-        if (!v) return 1000;
-        if (v->category == "Shell") return 0;
-        if (v->category == "Rootless") return 10;
-        if (v->category == "Quartal") return 20;
-        return 100;
-    };
-
     std::sort(m_orderedChords.begin(), m_orderedChords.end(), [&](const ChordDef* a, const ChordDef* b) {
         if (!a || !b) return a != nullptr;
-        const int ra = chordRank(a->id);
-        const int rb = chordRank(b->id);
-        if (ra != rb) return ra < rb;
+        if (a->order != b->order) return a->order < b->order;
         return a->name < b->name;
     });
 
     std::sort(m_orderedScales.begin(), m_orderedScales.end(), [&](const ScaleDef* a, const ScaleDef* b) {
         if (!a || !b) return a != nullptr;
-        const int ra = scaleRank(a->id);
-        const int rb = scaleRank(b->id);
-        if (ra != rb) return ra < rb;
+        if (a->order != b->order) return a->order < b->order;
         return a->name < b->name;
     });
 
     std::sort(m_orderedVoicings.begin(), m_orderedVoicings.end(), [&](const VoicingDef* a, const VoicingDef* b) {
         if (!a || !b) return a != nullptr;
-        const int ra = voicingRank(a);
-        const int rb = voicingRank(b);
-        if (ra != rb) return ra < rb;
+        if (a->order != b->order) return a->order < b->order;
         if (a->category != b->category) return a->category < b->category;
         return a->name < b->name;
     });
@@ -333,7 +244,7 @@ void LibraryWindow::populateLists() {
     m_chordsList->clear();
     for (const ChordDef* c : m_orderedChords) {
         QListWidgetItem* it = new QListWidgetItem(c->name, m_chordsList);
-        it->setData(Qt::UserRole, int(c->id));
+        it->setData(Qt::UserRole, c->key);
     }
     m_chordsList->setCurrentRow(0);
 
@@ -341,7 +252,7 @@ void LibraryWindow::populateLists() {
     m_scalesList->clear();
     for (const ScaleDef* s : m_orderedScales) {
         QListWidgetItem* it = new QListWidgetItem(s->name, m_scalesList);
-        it->setData(Qt::UserRole, int(s->id));
+        it->setData(Qt::UserRole, s->key);
     }
     m_scalesList->setCurrentRow(0);
 
@@ -349,7 +260,7 @@ void LibraryWindow::populateLists() {
     m_voicingsList->clear();
     for (const VoicingDef* v : m_orderedVoicings) {
         QListWidgetItem* it = new QListWidgetItem(v->name, m_voicingsList);
-        it->setData(Qt::UserRole, int(v->id));
+        it->setData(Qt::UserRole, v->key);
     }
     m_voicingsList->setCurrentRow(0);
 
@@ -405,8 +316,14 @@ QSet<int> LibraryWindow::pitchClassesForVoicing(const VoicingDef* voicingDef,
     QSet<int> pcs;
     if (!voicingDef) return pcs;
 
+    // Interval-based voicing: direct semitone offsets from root.
+    if (!voicingDef->intervals.isEmpty()) {
+        for (int iv : voicingDef->intervals) pcs.insert(normalizePc(rootPc + iv));
+        return pcs;
+    }
+
     // Special-case: quartal placeholder voicing currently has no degree list.
-    if (voicingDef->chordDegrees.isEmpty() && voicingDef->id == VoicingId::PianoQuartal_Stack4ths) {
+    if (voicingDef->chordDegrees.isEmpty() && voicingDef->key == "piano_quartal_stack4ths") {
         // Stage-1 approximation: use guide/extension tones so something shows and is playable.
         // (Later we can derive true quartal stacks from the chosen scale/mode.)
         const int st3 = degreeToSemitone(chordContext, 3);
@@ -449,7 +366,11 @@ QHash<int, QString> LibraryWindow::degreeLabelsForVoicing(const VoicingDef* voic
                                                           const ChordDef* chordContext) const {
     QHash<int, QString> out;
     if (!voicingDef) return out;
-    if (voicingDef->chordDegrees.isEmpty() && voicingDef->id == VoicingId::PianoQuartal_Stack4ths) {
+    if (!voicingDef->intervals.isEmpty()) {
+        for (int iv : voicingDef->intervals) out.insert(normalizePc(iv), degreeLabelForChordInterval(iv));
+        return out;
+    }
+    if (voicingDef->chordDegrees.isEmpty() && voicingDef->key == "piano_quartal_stack4ths") {
         out.insert(normalizePc(degreeToSemitone(chordContext, 3)), "3");
         out.insert(normalizePc(degreeToSemitone(chordContext, 7)), "7");
         out.insert(normalizePc(degreeToSemitone(chordContext, 9)), "9");
@@ -524,22 +445,25 @@ QVector<int> LibraryWindow::midiNotesForCurrentSelection(int rootPc) const {
     const int baseRoot = baseRootMidiForPosition(rootPc);
 
     if (tab == 0 && m_chordsList && m_chordsList->currentItem()) {
-        const auto* chordDef = m_registry.chord(ChordId(m_chordsList->currentItem()->data(Qt::UserRole).toInt()));
+        const auto* chordDef = m_registry.chord(m_chordsList->currentItem()->data(Qt::UserRole).toString());
         if (!chordDef) return notes;
         for (int iv : chordDef->intervals) notes.push_back(normalizeMidi(baseRoot + iv));
     } else if (tab == 1 && m_scalesList && m_scalesList->currentItem()) {
-        const auto* scaleDef = m_registry.scale(ScaleId(m_scalesList->currentItem()->data(Qt::UserRole).toInt()));
+        const auto* scaleDef = m_registry.scale(m_scalesList->currentItem()->data(Qt::UserRole).toString());
         if (!scaleDef) return notes;
         for (int iv : scaleDef->intervals) notes.push_back(normalizeMidi(baseRoot + iv));
         // add octave for a more scale-like sound
         notes.push_back(normalizeMidi(baseRoot + 12));
     } else if (tab == 2 && m_voicingsList && m_voicingsList->currentItem()) {
-        const auto* voicingDef = m_registry.voicing(VoicingId(m_voicingsList->currentItem()->data(Qt::UserRole).toInt()));
+        const auto* voicingDef = m_registry.voicing(m_voicingsList->currentItem()->data(Qt::UserRole).toString());
         if (!voicingDef) return notes;
         const int idx = qBound(0, m_chordCtxCombo ? m_chordCtxCombo->currentIndex() : 0, m_orderedChords.size() - 1);
         const auto* chordCtx = m_orderedChords.isEmpty() ? nullptr : m_orderedChords[idx];
 
-        if (voicingDef->chordDegrees.isEmpty() && voicingDef->id == VoicingId::PianoQuartal_Stack4ths) {
+        if (!voicingDef->intervals.isEmpty()) {
+            for (int iv : voicingDef->intervals) notes.push_back(normalizeMidi(baseRoot + iv));
+        } else
+        if (voicingDef->chordDegrees.isEmpty() && voicingDef->key == "piano_quartal_stack4ths") {
             // Mirror pitch-class fallback so quartal also auditions.
             notes.push_back(normalizeMidi(baseRoot + degreeToSemitone(chordCtx, 3)));
             notes.push_back(normalizeMidi(baseRoot + degreeToSemitone(chordCtx, 7)));
@@ -701,17 +625,17 @@ void LibraryWindow::updateHighlights() {
     const int tab = m_tabs ? m_tabs->currentIndex() : 0;
     if (tab == 0 && m_chordsList) {
         if (!m_chordsList->currentItem()) return;
-        const auto* chordDef = m_registry.chord(ChordId(m_chordsList->currentItem()->data(Qt::UserRole).toInt()));
+        const auto* chordDef = m_registry.chord(m_chordsList->currentItem()->data(Qt::UserRole).toString());
         pcs = pitchClassesForChord(chordDef, rootPc);
         deg = degreeLabelsForChord(chordDef);
     } else if (tab == 1 && m_scalesList) {
         if (!m_scalesList->currentItem()) return;
-        const auto* scaleDef = m_registry.scale(ScaleId(m_scalesList->currentItem()->data(Qt::UserRole).toInt()));
+        const auto* scaleDef = m_registry.scale(m_scalesList->currentItem()->data(Qt::UserRole).toString());
         pcs = pitchClassesForScale(scaleDef, rootPc);
         deg = degreeLabelsForScale(scaleDef);
     } else if (tab == 2 && m_voicingsList) {
         if (!m_voicingsList->currentItem()) return;
-        const auto* voicingDef = m_registry.voicing(VoicingId(m_voicingsList->currentItem()->data(Qt::UserRole).toInt()));
+        const auto* voicingDef = m_registry.voicing(m_voicingsList->currentItem()->data(Qt::UserRole).toString());
 
         // chord context by combo index into allChords() list ordering
         const auto allChords = m_registry.allChords();

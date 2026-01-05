@@ -9,160 +9,259 @@ OntologyRegistry OntologyRegistry::builtins() {
     OntologyRegistry r;
 
     // --- Chord primitives (subset, extensible) ---
-    auto addChord = [&](ChordId id, QString name, QVector<int> iv, QStringList tags) {
+    auto addChord = [&](QString key, QString name, QVector<int> iv, QStringList tags, int order) {
         ChordDef d;
-        d.id = id;
+        d.key = std::move(key);
         d.name = std::move(name);
         d.intervals = std::move(iv);
         d.tags = std::move(tags);
-        r.m_chords.insert(id, d);
+        d.order = order;
+        r.m_chords.insert(d.key, d);
     };
 
-    addChord(ChordId::Shell_1_3, "shell(1-3)", {0, 4}, {"dyad", "shell"});
-    addChord(ChordId::Shell_1_7, "shell(1-7)", {0, 10}, {"dyad", "shell"});
-    addChord(ChordId::Power5, "5", {0, 7}, {"dyad"});
-    addChord(ChordId::MajorTriad, "maj", {0, 4, 7}, {"triad"});
-    addChord(ChordId::MinorTriad, "min", {0, 3, 7}, {"triad"});
-    addChord(ChordId::DiminishedTriad, "dim", {0, 3, 6}, {"triad"});
-    addChord(ChordId::AugmentedTriad, "aug", {0, 4, 8}, {"triad"});
-    addChord(ChordId::Sus2Triad, "sus2", {0, 2, 7}, {"triad", "sus"});
-    addChord(ChordId::Sus4Triad, "sus4", {0, 5, 7}, {"triad", "sus"});
-    addChord(ChordId::PhrygianTriad, "phryg", {0, 1, 7}, {"triad", "exotic"});
+    // Chord ordering requested: Maj, Maj7, 7, Sus2, Sus4, Min, Min7, m7b5, dim7, aug, 5
+    addChord("maj", "maj", {0, 4, 7}, {"triad"}, 0);
+    addChord("maj7", "maj7", {0, 4, 7, 11}, {"seventh"}, 1);
+    addChord("7", "7", {0, 4, 7, 10}, {"seventh", "dominant"}, 2);
+    addChord("sus2", "sus2", {0, 2, 7}, {"triad", "sus"}, 3);
+    addChord("sus4", "sus4", {0, 5, 7}, {"triad", "sus"}, 4);
+    addChord("min", "min", {0, 3, 7}, {"triad"}, 5);
+    addChord("min7", "min7", {0, 3, 7, 10}, {"seventh"}, 6);
+    addChord("m7b5", "m7b5", {0, 3, 6, 10}, {"seventh"}, 7);
+    addChord("dim7", "dim7", {0, 3, 6, 9}, {"seventh", "symmetric"}, 8);
+    addChord("aug", "aug", {0, 4, 8}, {"triad"}, 9);
+    addChord("5", "5", {0, 7}, {"dyad"}, 10);
 
-    addChord(ChordId::Major7, "maj7", {0, 4, 7, 11}, {"seventh"});
-    addChord(ChordId::Minor7, "min7", {0, 3, 7, 10}, {"seventh"});
-    addChord(ChordId::Dominant7, "7", {0, 4, 7, 10}, {"seventh", "dominant"});
-    addChord(ChordId::HalfDiminished7, "m7b5", {0, 3, 6, 10}, {"seventh"});
-    addChord(ChordId::Diminished7, "dim7", {0, 3, 6, 9}, {"seventh", "symmetric"});
-    addChord(ChordId::MinorMajor7, "min(maj7)", {0, 3, 7, 11}, {"seventh"});
-    addChord(ChordId::Augmented7, "aug7", {0, 4, 8, 10}, {"seventh"});
-    addChord(ChordId::Dominant7Sus4, "7sus4", {0, 5, 7, 10}, {"seventh", "sus", "dominant"});
-    addChord(ChordId::SevenSharp5, "7#5", {0, 4, 8, 10}, {"seventh", "dominant"});
-    addChord(ChordId::SevenFlat5, "7b5", {0, 4, 6, 10}, {"seventh", "dominant"});
-    addChord(ChordId::Six, "6", {0, 4, 7, 9}, {"six"});
-    addChord(ChordId::MinorSix, "min6", {0, 3, 7, 9}, {"six"});
+    // Additional dyads/intervals/shells
+    addChord("shell_1_3", "shell(1-3)", {0, 4}, {"dyad", "shell"}, 50);
+    addChord("shell_1_7", "shell(1-7)", {0, 10}, {"dyad", "shell"}, 51);
+    addChord("m2", "interval(m2)", {0, 1}, {"dyad", "interval"}, 60);
+    addChord("M2", "interval(M2)", {0, 2}, {"dyad", "interval"}, 61);
+    addChord("m3", "interval(m3)", {0, 3}, {"dyad", "interval"}, 62);
+    addChord("M3", "interval(M3)", {0, 4}, {"dyad", "interval"}, 63);
+    addChord("P4", "interval(P4)", {0, 5}, {"dyad", "interval"}, 64);
+    addChord("TT", "interval(TT)", {0, 6}, {"dyad", "interval"}, 65);
+    addChord("P5", "interval(P5)", {0, 7}, {"dyad", "interval"}, 66);
+    addChord("m6", "interval(m6)", {0, 8}, {"dyad", "interval"}, 67);
+    addChord("M6", "interval(M6)", {0, 9}, {"dyad", "interval"}, 68);
+    addChord("m7", "interval(m7)", {0, 10}, {"dyad", "interval"}, 69);
+    addChord("M7", "interval(M7)", {0, 11}, {"dyad", "interval"}, 70);
+
+    // Additional triads / seventh variants
+    addChord("dim", "dim", {0, 3, 6}, {"triad"}, 100);
+    addChord("phryg", "phryg(1-b2-5)", {0, 1, 7}, {"triad", "exotic"}, 101);
+    addChord("min_maj7", "min(maj7)", {0, 3, 7, 11}, {"seventh"}, 110);
+    addChord("aug7", "aug7", {0, 4, 8, 10}, {"seventh"}, 111);
+    addChord("7sus4", "7sus4", {0, 5, 7, 10}, {"seventh", "sus", "dominant"}, 112);
+    addChord("7#5", "7#5", {0, 4, 8, 10}, {"seventh", "dominant"}, 113);
+    addChord("7b5", "7b5", {0, 4, 6, 10}, {"seventh", "dominant"}, 114);
+    addChord("6", "6", {0, 4, 7, 9}, {"six"}, 120);
+    addChord("min6", "min6", {0, 3, 7, 9}, {"six"}, 121);
+
+    // Extensions & alterations (core set; more will be added below when we broaden the catalog)
+    addChord("maj9", "maj9", {0,4,7,11,14}, {"extended"}, 200);
+    addChord("maj13#11", "maj13#11", {0,4,7,11,14,18,21}, {"extended"}, 201);
+    addChord("min9", "min9", {0,3,7,10,14}, {"extended"}, 210);
+    addChord("min11", "min11", {0,3,7,10,14,17}, {"extended"}, 211);
+    addChord("min13", "min13", {0,3,7,10,14,17,21}, {"extended"}, 212);
+    addChord("7b9", "7b9", {0,4,7,10,13}, {"extended","dominant"}, 220);
+    addChord("7#9", "7#9", {0,4,7,10,15}, {"extended","dominant"}, 221);
+    addChord("7b13", "7b13", {0,4,7,10,20}, {"extended","dominant"}, 222);
+    addChord("13", "13", {0,4,7,10,14,21}, {"extended","dominant"}, 223);
+    addChord("7alt", "7alt", {0,4,10,13,15,20}, {"extended","dominant","alt"}, 224);
+
+    // More common extensions/alterations (finite but broad coverage)
+    addChord("maj11", "maj11", {0,4,7,11,14,17}, {"extended"}, 202);
+    addChord("maj13", "maj13", {0,4,7,11,14,17,21}, {"extended"}, 203);
+    addChord("maj9#11", "maj9#11", {0,4,7,11,14,18}, {"extended"}, 204);
+
+    addChord("min9b13", "min9b13", {0,3,7,10,14,20}, {"extended"}, 213);
+    addChord("min13b13", "min13b13", {0,3,7,10,14,17,20}, {"extended"}, 214);
+
+    addChord("9", "9", {0,4,7,10,14}, {"extended","dominant"}, 225);
+    addChord("11", "11", {0,4,7,10,14,17}, {"extended","dominant"}, 226);
+    addChord("13#11", "13#11", {0,4,7,10,14,18,21}, {"extended","dominant"}, 227);
+    addChord("7#11", "7#11", {0,4,7,10,18}, {"extended","dominant"}, 228);
+    addChord("7b9#9", "7b9#9", {0,4,7,10,13,15}, {"extended","dominant","alt"}, 229);
+    addChord("7b9b13", "7b9b13", {0,4,7,10,13,20}, {"extended","dominant","alt"}, 230);
+    addChord("7#9b13", "7#9b13", {0,4,7,10,15,20}, {"extended","dominant","alt"}, 231);
+    addChord("13b9", "13b9", {0,4,7,10,13,21}, {"extended","dominant"}, 232);
+    addChord("13#9", "13#9", {0,4,7,10,15,21}, {"extended","dominant"}, 233);
+    addChord("13b9#11", "13b9#11", {0,4,7,10,13,18,21}, {"extended","dominant"}, 234);
+    addChord("13#9#11", "13#9#11", {0,4,7,10,15,18,21}, {"extended","dominant"}, 235);
 
     // --- Scale syllabus (subset, extensible) ---
-    auto addScale = [&](ScaleId id, QString name, QVector<int> iv, QStringList tags) {
+    auto addScale = [&](QString key, QString name, QVector<int> iv, QStringList tags, int order) {
         ScaleDef s;
-        s.id = id;
+        s.key = std::move(key);
         s.name = std::move(name);
         s.intervals = std::move(iv);
         s.tags = std::move(tags);
-        r.m_scales.insert(id, s);
+        s.order = order;
+        r.m_scales.insert(s.key, s);
     };
 
-    addScale(ScaleId::Ionian, "Ionian", {0,2,4,5,7,9,11}, {"diatonic"});
-    addScale(ScaleId::Dorian, "Dorian", {0,2,3,5,7,9,10}, {"diatonic"});
-    addScale(ScaleId::Phrygian, "Phrygian", {0,1,3,5,7,8,10}, {"diatonic"});
-    addScale(ScaleId::Lydian, "Lydian", {0,2,4,6,7,9,11}, {"diatonic"});
-    addScale(ScaleId::Mixolydian, "Mixolydian", {0,2,4,5,7,9,10}, {"diatonic"});
-    addScale(ScaleId::Aeolian, "Aeolian", {0,2,3,5,7,8,10}, {"diatonic"});
-    addScale(ScaleId::Locrian, "Locrian", {0,1,3,5,6,8,10}, {"diatonic"});
+    // Diatonic modes (requested order)
+    addScale("ionian", "Ionian (Major)", {0,2,4,5,7,9,11}, {"diatonic"}, 0);
+    addScale("dorian", "Dorian", {0,2,3,5,7,9,10}, {"diatonic"}, 1);
+    addScale("phrygian", "Phrygian", {0,1,3,5,7,8,10}, {"diatonic"}, 2);
+    addScale("lydian", "Lydian", {0,2,4,6,7,9,11}, {"diatonic"}, 3);
+    addScale("mixolydian", "Mixolydian", {0,2,4,5,7,9,10}, {"diatonic"}, 4);
+    addScale("aeolian", "Aeolian (Natural Minor)", {0,2,3,5,7,8,10}, {"diatonic"}, 5);
+    addScale("locrian", "Locrian", {0,1,3,5,6,8,10}, {"diatonic"}, 6);
 
-    addScale(ScaleId::MelodicMinor, "Melodic Minor", {0,2,3,5,7,9,11}, {"melodic_minor"});
-    addScale(ScaleId::DorianB2, "Dorian b2", {0,1,3,5,7,9,10}, {"melodic_minor"});
-    addScale(ScaleId::LydianAugmented, "Lydian Augmented", {0,2,4,6,8,9,11}, {"melodic_minor"});
-    addScale(ScaleId::LydianDominant, "Lydian Dominant", {0,2,4,6,7,9,10}, {"melodic_minor"});
-    addScale(ScaleId::MixolydianB6, "Mixolydian b6", {0,2,4,5,7,8,10}, {"melodic_minor"});
-    addScale(ScaleId::LocrianNat2, "Locrian #2", {0,2,3,5,6,8,10}, {"melodic_minor"});
-    addScale(ScaleId::Altered, "Altered (Super Locrian)", {0,1,3,4,6,8,10}, {"melodic_minor"});
-    addScale(ScaleId::HarmonicMinor, "Harmonic Minor", {0,2,3,5,7,8,11}, {"harmonic_minor"});
-    addScale(ScaleId::LocrianSharp6, "Locrian #6", {0,1,3,5,6,9,10}, {"harmonic_minor"});
-    addScale(ScaleId::IonianSharp5, "Ionian #5", {0,2,4,5,8,9,11}, {"harmonic_minor"});
-    addScale(ScaleId::DorianSharp4, "Dorian #4", {0,2,3,6,7,9,10}, {"harmonic_minor"});
-    addScale(ScaleId::PhrygianDominant, "Phrygian Dominant", {0,1,4,5,7,8,10}, {"harmonic_minor"});
-    addScale(ScaleId::LydianSharp2, "Lydian #2", {0,3,4,6,7,9,11}, {"harmonic_minor"});
-    addScale(ScaleId::SuperLocrianBb7, "Super Locrian bb7", {0,1,3,4,6,8,9}, {"harmonic_minor"});
+    // Melodic minor universe
+    addScale("melodic_minor", "Melodic Minor", {0,2,3,5,7,9,11}, {"melodic_minor"}, 20);
+    addScale("dorian_b2", "Dorian b2", {0,1,3,5,7,9,10}, {"melodic_minor"}, 21);
+    addScale("lydian_augmented", "Lydian Augmented", {0,2,4,6,8,9,11}, {"melodic_minor"}, 22);
+    addScale("lydian_dominant", "Lydian Dominant", {0,2,4,6,7,9,10}, {"melodic_minor"}, 23);
+    addScale("mixolydian_b6", "Mixolydian b6", {0,2,4,5,7,8,10}, {"melodic_minor"}, 24);
+    addScale("locrian_nat2", "Locrian #2", {0,2,3,5,6,8,10}, {"melodic_minor"}, 25);
+    addScale("altered", "Altered (Super Locrian)", {0,1,3,4,6,8,10}, {"melodic_minor"}, 26);
 
-    addScale(ScaleId::HarmonicMajor, "Harmonic Major", {0,2,4,5,7,8,11}, {"harmonic_major"});
-    addScale(ScaleId::DorianB5, "Dorian b5", {0,2,3,5,6,9,10}, {"harmonic_major"});
-    addScale(ScaleId::PhrygianB4, "Phrygian b4", {0,1,3,4,7,8,10}, {"harmonic_major"});
-    addScale(ScaleId::LydianB3, "Lydian b3", {0,2,3,6,7,9,11}, {"harmonic_major"});
-    addScale(ScaleId::MixolydianB2, "Mixolydian b2", {0,1,4,5,7,9,10}, {"harmonic_major"});
-    addScale(ScaleId::LydianAugSharp2, "Lydian Augmented #2", {0,3,4,6,8,9,11}, {"harmonic_major"});
-    addScale(ScaleId::LocrianBb7, "Locrian bb7", {0,1,3,5,6,8,9}, {"harmonic_major"});
+    // Harmonic minor universe
+    addScale("harmonic_minor", "Harmonic Minor", {0,2,3,5,7,8,11}, {"harmonic_minor"}, 30);
+    addScale("locrian_sharp6", "Locrian #6", {0,1,3,5,6,9,10}, {"harmonic_minor"}, 31);
+    addScale("ionian_sharp5", "Ionian #5", {0,2,4,5,8,9,11}, {"harmonic_minor"}, 32);
+    addScale("dorian_sharp4", "Dorian #4", {0,2,3,6,7,9,10}, {"harmonic_minor"}, 33);
+    addScale("phrygian_dominant", "Phrygian Dominant", {0,1,4,5,7,8,10}, {"harmonic_minor"}, 34);
+    addScale("lydian_sharp2", "Lydian #2", {0,3,4,6,7,9,11}, {"harmonic_minor"}, 35);
+    addScale("super_locrian_bb7", "Super Locrian bb7", {0,1,3,4,6,8,9}, {"harmonic_minor"}, 36);
 
-    addScale(ScaleId::WholeTone, "Whole Tone", {0,2,4,6,8,10}, {"symmetric"});
-    addScale(ScaleId::DiminishedWH, "Diminished (Whole-Half)", {0,2,3,5,6,8,9,11}, {"symmetric"});
-    addScale(ScaleId::DiminishedHW, "Diminished (Half-Whole)", {0,1,3,4,6,7,9,10}, {"symmetric"});
+    // Harmonic major universe
+    addScale("harmonic_major", "Harmonic Major", {0,2,4,5,7,8,11}, {"harmonic_major"}, 40);
+    addScale("dorian_b5", "Dorian b5", {0,2,3,5,6,9,10}, {"harmonic_major"}, 41);
+    addScale("phrygian_b4", "Phrygian b4", {0,1,3,4,7,8,10}, {"harmonic_major"}, 42);
+    addScale("lydian_b3", "Lydian b3", {0,2,3,6,7,9,11}, {"harmonic_major"}, 43);
+    addScale("mixolydian_b2", "Mixolydian b2", {0,1,4,5,7,9,10}, {"harmonic_major"}, 44);
+    addScale("lydian_aug_sharp2", "Lydian Augmented #2", {0,3,4,6,8,9,11}, {"harmonic_major"}, 45);
+    addScale("locrian_bb7", "Locrian bb7", {0,1,3,5,6,8,9}, {"harmonic_major"}, 46);
 
-    addScale(ScaleId::MajorPentatonic, "Major Pentatonic", {0,2,4,7,9}, {"pentatonic"});
-    addScale(ScaleId::MinorPentatonic, "Minor Pentatonic", {0,3,5,7,10}, {"pentatonic"});
-    addScale(ScaleId::Blues, "Minor Blues", {0,3,5,6,7,10}, {"pentatonic", "blues"});
-    addScale(ScaleId::MajorBlues, "Major Blues", {0,2,3,4,7,9}, {"pentatonic", "blues"});
-    addScale(ScaleId::DominantPentatonic, "Dominant Pentatonic", {0,2,4,7,10}, {"pentatonic"});
+    // Symmetric scales
+    addScale("whole_tone", "Whole Tone", {0,2,4,6,8,10}, {"symmetric"}, 60);
+    addScale("diminished_wh", "Diminished (Whole-Half)", {0,2,3,5,6,8,9,11}, {"symmetric"}, 61);
+    addScale("diminished_hw", "Diminished (Half-Whole)", {0,1,3,4,6,7,9,10}, {"symmetric"}, 62);
+    addScale("augmented_hexatonic", "Augmented Hexatonic", {0,3,4,7,8,11}, {"symmetric"}, 63);
 
-    addScale(ScaleId::MajorBebop, "Major Bebop", {0,2,4,5,7,8,9,11}, {"bebop"});
-    addScale(ScaleId::DominantBebop, "Dominant Bebop", {0,2,4,5,7,9,10,11}, {"bebop"});
-    addScale(ScaleId::MinorBebop, "Minor Bebop", {0,2,3,5,7,8,9,10}, {"bebop"});
-    addScale(ScaleId::DorianBebop, "Dorian Bebop", {0,2,3,5,7,9,10,11}, {"bebop"});
+    // Pentatonics / blues
+    addScale("major_pentatonic", "Major Pentatonic", {0,2,4,7,9}, {"pentatonic"}, 70);
+    addScale("minor_pentatonic", "Minor Pentatonic", {0,3,5,7,10}, {"pentatonic"}, 71);
+    addScale("dominant_pentatonic", "Dominant Pentatonic", {0,2,4,7,10}, {"pentatonic"}, 72);
+    addScale("minor_blues", "Minor Blues", {0,3,5,6,7,10}, {"pentatonic","blues"}, 73);
+    addScale("major_blues", "Major Blues", {0,2,3,4,7,9}, {"pentatonic","blues"}, 74);
 
-    // --- Voicing library (Stage 1 subset for Piano) ---
-    auto addVoicing = [&](VoicingId id,
-                          InstrumentKind inst,
-                          QString name,
-                          QString category,
-                          QString formula,
-                          QVector<int> degrees,
-                          QStringList tags) {
+    // Bebop
+    addScale("major_bebop", "Major Bebop", {0,2,4,5,7,8,9,11}, {"bebop"}, 80);
+    addScale("dominant_bebop", "Dominant Bebop", {0,2,4,5,7,9,10,11}, {"bebop"}, 81);
+    addScale("minor_bebop", "Minor Bebop", {0,2,3,5,7,8,9,10}, {"bebop"}, 82);
+    addScale("dorian_bebop", "Dorian Bebop", {0,2,3,5,7,9,10,11}, {"bebop"}, 83);
+
+    // Exotic / synthetic (subset; more will be appended in later patch step)
+    addScale("hungarian_minor", "Hungarian Minor", {0,2,3,6,7,8,11}, {"exotic"}, 200);
+    addScale("neapolitan_major", "Neapolitan Major", {0,1,3,5,7,9,11}, {"exotic"}, 201);
+    addScale("neapolitan_minor", "Neapolitan Minor", {0,1,3,5,7,8,11}, {"exotic"}, 202);
+    addScale("double_harmonic", "Double Harmonic (Byzantine)", {0,1,4,5,7,8,11}, {"exotic"}, 203);
+    addScale("enigmatic", "Enigmatic", {0,1,4,6,8,10,11}, {"exotic"}, 204);
+    addScale("prometheus", "Prometheus", {0,2,4,6,9,10}, {"exotic"}, 205);
+    addScale("persian", "Persian", {0,1,4,5,6,8,11}, {"exotic"}, 206);
+
+    // Japanese / world pentatonics (canonical interval-set approximations)
+    addScale("kumoi", "Kumoi", {0,2,3,7,9}, {"pentatonic","world"}, 210);
+    addScale("hirajoshi", "Hirajoshi", {0,2,3,7,8}, {"pentatonic","world"}, 211);
+    addScale("iwato", "Iwato", {0,1,5,6,10}, {"pentatonic","world"}, 212);
+    addScale("in_sen", "In Sen", {0,1,5,7,10}, {"pentatonic","world"}, 213);
+    addScale("pelog", "Pelog (5-tone approx)", {0,1,3,7,8}, {"pentatonic","world"}, 214);
+    addScale("ryukyu", "Ryuukyuu", {0,4,5,7,11}, {"pentatonic","world"}, 215);
+
+    // Messiaen modes (using common pitch-class sets; further validation can refine)
+    addScale("messiaen_mode1", "Messiaen Mode 1 (Whole Tone)", {0,2,4,6,8,10}, {"messiaen","symmetric"}, 290);
+    addScale("messiaen_mode2", "Messiaen Mode 2 (Octatonic)", {0,1,3,4,6,7,9,10}, {"messiaen","symmetric"}, 291);
+    addScale("messiaen_mode3", "Messiaen Mode 3", {0,2,3,4,6,7,8,10,11}, {"messiaen"}, 300);
+    addScale("messiaen_mode4", "Messiaen Mode 4", {0,1,2,5,6,7,8,11}, {"messiaen"}, 301);
+    addScale("messiaen_mode5", "Messiaen Mode 5", {0,1,5,6,7,11}, {"messiaen"}, 302);
+    addScale("messiaen_mode6", "Messiaen Mode 6", {0,2,4,5,6,8,10,11}, {"messiaen"}, 303);
+    addScale("messiaen_mode7", "Messiaen Mode 7", {0,1,2,3,5,6,7,8,9,11}, {"messiaen"}, 304);
+
+    // Tritone scale (hexatonic; tritone symmetry)
+    addScale("tritone_scale", "Tritone Scale", {0,1,4,6,7,10}, {"symmetric"}, 64);
+
+    // --- Voicing library (piano + later guitar) ---
+    auto addVoicing2 = [&](QString key,
+                           InstrumentKind inst,
+                           QString name,
+                           QString category,
+                           QString formula,
+                           QVector<int> degrees,
+                           QVector<int> intervals,
+                           QStringList tags,
+                           int order) {
         VoicingDef v;
-        v.id = id;
+        v.key = std::move(key);
         v.instrument = inst;
         v.name = std::move(name);
         v.category = std::move(category);
         v.formula = std::move(formula);
         v.chordDegrees = std::move(degrees);
+        v.intervals = std::move(intervals);
         v.tags = std::move(tags);
-        r.m_voicings.insert(id, v);
+        v.order = order;
+        r.m_voicings.insert(v.key, v);
     };
 
-    addVoicing(VoicingId::PianoShell_1_7, InstrumentKind::Piano,
-               "Shell (1-7)", "Shell", "1-7",
-               {1, 7}, {"piano", "shell"});
-    addVoicing(VoicingId::PianoShell_1_3, InstrumentKind::Piano,
-               "Shell (1-3)", "Shell", "1-3",
-               {1, 3}, {"piano", "shell"});
-    addVoicing(VoicingId::PianoGuideTones_3_7, InstrumentKind::Piano,
-               "Guide tones (3-7)", "Shell", "3-7",
-               {3, 7}, {"piano", "guide_tones"});
-    addVoicing(VoicingId::PianoRootlessA_3_5_7_9, InstrumentKind::Piano,
-               "Rootless Type A (3-5-7-9)", "Rootless", "3-5-7-9",
-               {3, 5, 7, 9}, {"piano", "rootless"});
-    addVoicing(VoicingId::PianoRootlessB_7_9_3_5, InstrumentKind::Piano,
-               "Rootless Type B (7-9-3-5)", "Rootless", "7-9-3-5",
-               {7, 9, 3, 5}, {"piano", "rootless"});
-    addVoicing(VoicingId::PianoQuartal_Stack4ths, InstrumentKind::Piano,
-               "Quartal (stack 4ths)", "Quartal", "Approx: 3-7-9 (placeholder for quartal stacks)",
-               {3, 7, 9}, {"piano", "quartal"});
+    addVoicing2("piano_shell_1_7", InstrumentKind::Piano, "Shell (1-7)", "Shell", "1-7", {1, 7}, {}, {"piano","shell"}, 0);
+    addVoicing2("piano_shell_1_3", InstrumentKind::Piano, "Shell (1-3)", "Shell", "1-3", {1, 3}, {}, {"piano","shell"}, 1);
+    addVoicing2("piano_guide_3_7", InstrumentKind::Piano, "Guide tones (3-7)", "Shell", "3-7", {3, 7}, {}, {"piano","guide_tones"}, 2);
+    addVoicing2("piano_rootless_a", InstrumentKind::Piano, "Rootless Type A (3-5-7-9)", "Rootless", "3-5-7-9", {3,5,7,9}, {}, {"piano","rootless"}, 10);
+    addVoicing2("piano_rootless_b", InstrumentKind::Piano, "Rootless Type B (7-9-3-5)", "Rootless", "7-9-3-5", {7,9,3,5}, {}, {"piano","rootless"}, 11);
+    addVoicing2("piano_quartal_stack4ths", InstrumentKind::Piano, "Quartal (stack 4ths)", "Quartal", "Approx: 3-7-9", {3,7,9}, {}, {"piano","quartal"}, 20);
+    addVoicing2("piano_quartal_3", InstrumentKind::Piano, "Quartal (3-note)", "Quartal", "3-7-9", {3,7,9}, {}, {"piano","quartal"}, 21);
+    addVoicing2("piano_quartal_4", InstrumentKind::Piano, "Quartal (4-note)", "Quartal", "3-7-9-11", {3,7,9,11}, {}, {"piano","quartal"}, 22);
+    addVoicing2("piano_so_what", InstrumentKind::Piano, "\"So What\" (quartal + M3)", "Quartal", "3-7-9-11", {3,7,9,11}, {}, {"piano","quartal"}, 23);
 
-    addVoicing(VoicingId::PianoQuartal_3Notes, InstrumentKind::Piano,
-               "Quartal (3-note)", "Quartal", "3-note quartal color (3-7-9)",
-               {3, 7, 9}, {"piano", "quartal"});
-    addVoicing(VoicingId::PianoQuartal_4Notes, InstrumentKind::Piano,
-               "Quartal (4-note)", "Quartal", "4-note quartal color (3-7-9-11)",
-               {3, 7, 9, 11}, {"piano", "quartal"});
-    addVoicing(VoicingId::PianoSoWhat, InstrumentKind::Piano,
-               "\"So What\" (quartal + M3)", "Quartal", "So-What-like: 3-7-9-11-(M3 above)",
-               {3, 7, 9, 11}, {"piano", "quartal"});
+    // Upper Structure Triads (UST) over a dominant root (intervals are relative to the dominant root).
+    // We use interval-based voicings so the Library can display/play them without requiring complex degree parsing.
+    addVoicing2("piano_ust_I", InstrumentKind::Piano, "UST I (I Major triad)", "UST", "Major triad on I", {}, {0,4,7}, {"piano","ust"}, 100);
+    addVoicing2("piano_ust_II", InstrumentKind::Piano, "UST II (II Major triad)", "UST", "Major triad on II", {}, {2,6,9}, {"piano","ust"}, 101);
+    addVoicing2("piano_ust_bIII", InstrumentKind::Piano, "UST bIII (bIII Major triad)", "UST", "Major triad on bIII", {}, {3,7,10}, {"piano","ust"}, 102);
+    addVoicing2("piano_ust_III", InstrumentKind::Piano, "UST III (III Major triad)", "UST", "Major triad on III", {}, {4,8,11}, {"piano","ust"}, 103);
+    addVoicing2("piano_ust_bV", InstrumentKind::Piano, "UST bV (bV Major triad)", "UST", "Major triad on bV", {}, {6,10,13}, {"piano","ust"}, 104);
+    addVoicing2("piano_ust_V", InstrumentKind::Piano, "UST V (V Major triad)", "UST", "Major triad on V", {}, {7,11,14}, {"piano","ust"}, 105);
+    addVoicing2("piano_ust_bVI", InstrumentKind::Piano, "UST bVI (bVI Major triad)", "UST", "Major triad on bVI", {}, {8,12,15}, {"piano","ust"}, 106);
+    addVoicing2("piano_ust_VI", InstrumentKind::Piano, "UST VI (VI Major triad)", "UST", "Major triad on VI", {}, {9,13,16}, {"piano","ust"}, 107);
+
+    // Piano textures (initial placeholders; degrees chosen to be audible + recognizable)
+    addVoicing2("piano_block_shearing", InstrumentKind::Piano, "Block Chords (Shearing-style)", "Block", "4-way close (approx)", {1,3,5,7}, {}, {"piano","block"}, 200);
+    addVoicing2("piano_drop2", InstrumentKind::Piano, "Drop 2 (piano)", "Block", "Drop 2 (approx)", {1,3,5,7}, {}, {"piano","block"}, 201);
+    addVoicing2("piano_cluster_diatonic", InstrumentKind::Piano, "Cluster (diatonic)", "Cluster", "Diatonic cluster (approx)", {9,11,13}, {}, {"piano","cluster"}, 220);
+    addVoicing2("piano_cluster_chromatic", InstrumentKind::Piano, "Cluster (chromatic)", "Cluster", "Chromatic cluster (approx)", {}, {0,1,2,3}, {"piano","cluster"}, 221);
+    addVoicing2("piano_gospel_triads", InstrumentKind::Piano, "Gospel (triad cycling)", "Gospel", "Inversion cycling (placeholder)", {1,3,5}, {}, {"piano","gospel"}, 240);
+    addVoicing2("piano_stride_basic", InstrumentKind::Piano, "Stride (basic)", "Stride", "Tenths + chord (placeholder)", {1,7,10}, {}, {"piano","stride"}, 260);
+
+    // Guitar voicings (shape-level placeholders; still useful for pitch-class visualization)
+    addVoicing2("guitar_shell_3_7", InstrumentKind::Guitar, "Shell (3-7)", "Shell", "Freddie Green shell", {3,7}, {}, {"guitar","shell"}, 300);
+    addVoicing2("guitar_drop2_1234", InstrumentKind::Guitar, "Drop 2 (strings 1-2-3-4)", "Drop2", "Drop 2 set 1234", {3,5,7,9}, {}, {"guitar","drop2"}, 310);
+    addVoicing2("guitar_drop2_2345", InstrumentKind::Guitar, "Drop 2 (strings 2-3-4-5)", "Drop2", "Drop 2 set 2345", {3,5,7,9}, {}, {"guitar","drop2"}, 311);
+    addVoicing2("guitar_drop2_3456", InstrumentKind::Guitar, "Drop 2 (strings 3-4-5-6)", "Drop2", "Drop 2 set 3456", {3,5,7,9}, {}, {"guitar","drop2"}, 312);
+    addVoicing2("guitar_drop3_1235", InstrumentKind::Guitar, "Drop 3 (set 1235)", "Drop3", "Drop 3 set 1235", {1,3,7,9}, {}, {"guitar","drop3"}, 320);
+    addVoicing2("guitar_drop3_2346", InstrumentKind::Guitar, "Drop 3 (set 2346)", "Drop3", "Drop 3 set 2346", {1,3,7,9}, {}, {"guitar","drop3"}, 321);
 
     return r;
 }
 
-const ChordDef* OntologyRegistry::chord(ChordId id) const {
-    auto it = m_chords.find(id);
+const ChordDef* OntologyRegistry::chord(const Key& key) const {
+    auto it = m_chords.find(key);
     if (it == m_chords.end()) return nullptr;
     return &it.value();
 }
 
-const ScaleDef* OntologyRegistry::scale(ScaleId id) const {
-    auto it = m_scales.find(id);
+const ScaleDef* OntologyRegistry::scale(const Key& key) const {
+    auto it = m_scales.find(key);
     if (it == m_scales.end()) return nullptr;
     return &it.value();
 }
 
-const VoicingDef* OntologyRegistry::voicing(VoicingId id) const {
-    auto it = m_voicings.find(id);
+const VoicingDef* OntologyRegistry::voicing(const Key& key) const {
+    auto it = m_voicings.find(key);
     if (it == m_voicings.end()) return nullptr;
     return &it.value();
 }

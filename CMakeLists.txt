@@ -29,6 +29,8 @@ add_library(VirtuosoCore STATIC
   virtuoso/constraints/BassDriver.cpp
   virtuoso/theory/TheoryEvent.h
   virtuoso/theory/TheoryEvent.cpp
+  virtuoso/theory/NegativeHarmony.h
+  virtuoso/theory/NegativeHarmony.cpp
 )
 
 target_link_libraries(VirtuosoCore PUBLIC Qt6::Core)

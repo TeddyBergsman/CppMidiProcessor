@@ -2,6 +2,8 @@
 
 #include <QPainter>
 #include <QtMath>
+#include <QMouseEvent>
+#include <QToolTip>
 
 namespace {
 static int normalizePc(int pc) {
@@ -15,6 +17,7 @@ GuitarFretboardWidget::GuitarFretboardWidget(QWidget* parent)
     : QWidget(parent) {
     setMinimumHeight(140);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setMouseTracking(true);
 }
 
 void GuitarFretboardWidget::setHighlightedPitchClasses(QSet<int> pcs) {
@@ -24,6 +27,16 @@ void GuitarFretboardWidget::setHighlightedPitchClasses(QSet<int> pcs) {
 
 void GuitarFretboardWidget::setRootPitchClass(int pc) {
     m_rootPc = normalizePc(pc);
+    update();
+}
+
+void GuitarFretboardWidget::setDegreeLabels(QHash<int, QString> labels) {
+    // normalize keys to 0..11
+    QHash<int, QString> norm;
+    for (auto it = labels.begin(); it != labels.end(); ++it) {
+        norm.insert(normalizePc(it.key()), it.value());
+    }
+    m_degreeForPc = std::move(norm);
     update();
 }
 
@@ -42,6 +55,58 @@ bool GuitarFretboardWidget::isBlackPc(int pc) {
     case 1: case 3: case 6: case 8: case 10: return true;
     default: return false;
     }
+}
+
+int GuitarFretboardWidget::midiAtPoint(const QPoint& pos) const {
+    const QRect r = rect().adjusted(8, 8, -8, -8);
+    const QRect board = r.adjusted(0, 0, 0, 0);
+    if (!board.contains(pos)) return -1;
+
+    const int strings = 6;
+    const int frets = m_frets;
+    const double fretW = double(board.width()) / double(frets + 1);
+    const double stringH = double(board.height()) / double(strings - 1);
+
+    const double fx = (double(pos.x()) - double(board.left())) / fretW;
+    const int fret = qBound(0, int(std::floor(fx)), frets);
+
+    const double sy = (double(pos.y()) - double(board.top())) / stringH;
+    const int stringIndex = qBound(0, int(std::round(sy)), strings - 1);
+
+    // Standard guitar tuning (MIDI), drawn TOP→BOTTOM (right-handed view):
+    // E4 B3 G3 D3 A2 E2
+    const int openMidi[6] = {64, 59, 55, 50, 45, 40};
+    return openMidi[stringIndex] + fret;
+}
+
+QString GuitarFretboardWidget::tooltipForMidi(int midi) const {
+    if (midi < 0 || midi > 127) return {};
+    const int pc = normalizePc(midi);
+    const int oct = midi / 12 - 1;
+    QString t = QString("%1%2").arg(pcName(pc)).arg(oct);
+    if (m_degreeForPc.contains(pc)) {
+        t += QString("  (deg %1)").arg(m_degreeForPc.value(pc));
+    }
+    return t;
+}
+
+void GuitarFretboardWidget::mouseMoveEvent(QMouseEvent* event) {
+    const int midi = midiAtPoint(event->pos());
+    if (midi == m_lastTooltipMidi) return;
+    m_lastTooltipMidi = midi;
+    const QString tip = tooltipForMidi(midi);
+    if (tip.isEmpty()) {
+        QToolTip::hideText();
+        return;
+    }
+    QToolTip::showText(event->globalPosition().toPoint(), tip, this);
+}
+
+void GuitarFretboardWidget::mousePressEvent(QMouseEvent* event) {
+    if (event->button() != Qt::LeftButton) return;
+    const int midi = midiAtPoint(event->pos());
+    if (midi < 0) return;
+    emit noteClicked(midi);
 }
 
 void GuitarFretboardWidget::paintEvent(QPaintEvent*) {
@@ -120,6 +185,16 @@ void GuitarFretboardWidget::paintEvent(QPaintEvent*) {
             p.setBrush(fill);
             p.setPen(QPen(QColor(10, 10, 10, 160), 1));
             p.drawEllipse(QPointF(xCenter, y), 10, 10);
+
+            const QString deg = m_degreeForPc.value(pc);
+            if (!deg.isEmpty()) {
+                p.setPen(QColor(10, 10, 10, 220));
+                QFont fnt = p.font();
+                fnt.setPointSize(8);
+                fnt.setBold(true);
+                p.setFont(fnt);
+                p.drawText(QRectF(xCenter - 9, y - 8, 18, 16), Qt::AlignCenter, deg);
+            }
         }
     }
 

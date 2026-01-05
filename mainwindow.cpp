@@ -145,7 +145,7 @@ void MainWindow::createWidgets(const Preset& preset) {
         libraryAction->setMenuRole(QAction::NoRole);
         connect(libraryAction, &QAction::triggered, this, [this]() {
             if (!m_libraryWindow) {
-                m_libraryWindow = new LibraryWindow(this);
+                m_libraryWindow = new LibraryWindow(m_midiProcessor, this);
                 m_libraryWindow->setAttribute(Qt::WA_DeleteOnClose, false);
             }
             m_libraryWindow->show();

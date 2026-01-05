@@ -2,11 +2,14 @@
 
 #include <QPainter>
 #include <QtGlobal>
+#include <QMouseEvent>
+#include <QToolTip>
 
 PianoKeyboardWidget::PianoKeyboardWidget(QWidget* parent)
     : QWidget(parent) {
     setMinimumHeight(120);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setMouseTracking(true);
 }
 
 void PianoKeyboardWidget::setHighlightedPitchClasses(QSet<int> pcs) {
@@ -16,6 +19,15 @@ void PianoKeyboardWidget::setHighlightedPitchClasses(QSet<int> pcs) {
 
 void PianoKeyboardWidget::setRootPitchClass(int pc) {
     m_rootPc = normalizePc(pc);
+    update();
+}
+
+void PianoKeyboardWidget::setDegreeLabels(QHash<int, QString> labels) {
+    QHash<int, QString> norm;
+    for (auto it = labels.begin(); it != labels.end(); ++it) {
+        norm.insert(normalizePc(it.key()), it.value());
+    }
+    m_degreeForPc = std::move(norm);
     update();
 }
 
@@ -39,6 +51,88 @@ bool PianoKeyboardWidget::isBlackPc(int pc) {
     }
 }
 
+QVector<PianoKeyboardWidget::KeyRect> PianoKeyboardWidget::buildKeyRects(const QRect& area) const {
+    QVector<KeyRect> out;
+    if (area.width() <= 0 || area.height() <= 0) return out;
+
+    // Count white keys in range.
+    int whiteCount = 0;
+    for (int midi = m_minMidi; midi <= m_maxMidi; ++midi) {
+        if (!isBlackPc(midi)) ++whiteCount;
+    }
+    if (whiteCount <= 0) return out;
+
+    const double whiteW = double(area.width()) / double(whiteCount);
+    const double whiteH = double(area.height());
+    const double blackW = whiteW * 0.62;
+    const double blackH = whiteH * 0.62;
+
+    // First create white keys (with x), and placeholders for black keys.
+    double x = area.left();
+    double lastWhiteX = area.left();
+    bool haveLastWhite = false;
+
+    for (int midi = m_minMidi; midi <= m_maxMidi; ++midi) {
+        const bool black = isBlackPc(midi);
+        if (!black) {
+            QRectF rect(x, area.top(), whiteW, whiteH);
+            out.push_back({midi, false, rect});
+            lastWhiteX = x;
+            haveLastWhite = true;
+            x += whiteW;
+        } else {
+            if (!haveLastWhite) continue;
+            const double bx = lastWhiteX + whiteW - blackW * 0.5;
+            QRectF rect(bx, area.top(), blackW, blackH);
+            out.push_back({midi, true, rect});
+        }
+    }
+    return out;
+}
+
+int PianoKeyboardWidget::midiAtPoint(const QPoint& pos) const {
+    const QRect area = rect().adjusted(8, 24, -8, -8);
+    if (!area.contains(pos)) return -1;
+    const auto keys = buildKeyRects(area);
+    // Check black keys first (top layer), then whites.
+    for (const auto& k : keys) {
+        if (k.black && k.rect.contains(pos)) return k.midi;
+    }
+    for (const auto& k : keys) {
+        if (!k.black && k.rect.contains(pos)) return k.midi;
+    }
+    return -1;
+}
+
+QString PianoKeyboardWidget::tooltipForMidi(int midi) const {
+    if (midi < 0 || midi > 127) return {};
+    static const char* names[] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+    const int pc = normalizePc(midi);
+    const int oct = midi / 12 - 1;
+    QString t = QString("%1%2").arg(names[pc]).arg(oct);
+    if (m_degreeForPc.contains(pc)) t += QString("  (deg %1)").arg(m_degreeForPc.value(pc));
+    return t;
+}
+
+void PianoKeyboardWidget::mouseMoveEvent(QMouseEvent* event) {
+    const int midi = midiAtPoint(event->pos());
+    if (midi == m_lastTooltipMidi) return;
+    m_lastTooltipMidi = midi;
+    const QString tip = tooltipForMidi(midi);
+    if (tip.isEmpty()) {
+        QToolTip::hideText();
+        return;
+    }
+    QToolTip::showText(event->globalPosition().toPoint(), tip, this);
+}
+
+void PianoKeyboardWidget::mousePressEvent(QMouseEvent* event) {
+    if (event->button() != Qt::LeftButton) return;
+    const int midi = midiAtPoint(event->pos());
+    if (midi < 0) return;
+    emit noteClicked(midi);
+}
+
 void PianoKeyboardWidget::paintEvent(QPaintEvent*) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
@@ -46,34 +140,8 @@ void PianoKeyboardWidget::paintEvent(QPaintEvent*) {
 
     const QRect r = rect().adjusted(8, 24, -8, -8);
 
-    // Count white keys in range.
-    int whiteCount = 0;
-    for (int midi = m_minMidi; midi <= m_maxMidi; ++midi) {
-        if (!isBlackPc(midi)) ++whiteCount;
-    }
-    if (whiteCount <= 0) return;
-
-    const double whiteW = double(r.width()) / double(whiteCount);
-    const double whiteH = double(r.height());
-    const double blackW = whiteW * 0.62;
-    const double blackH = whiteH * 0.62;
-
-    // First pass: draw white keys and remember their x positions.
-    struct KeyGeom { int midi; bool black; double x; };
-    QVector<KeyGeom> keys;
-    keys.reserve(m_maxMidi - m_minMidi + 1);
-
-    double x = r.left();
-    for (int midi = m_minMidi; midi <= m_maxMidi; ++midi) {
-        const bool black = isBlackPc(midi);
-        if (!black) {
-            keys.push_back({midi, false, x});
-            x += whiteW;
-        } else {
-            // black key x will be placed relative to previous white key.
-            keys.push_back({midi, true, 0.0});
-        }
-    }
+    const auto keys = buildKeyRects(r);
+    if (keys.isEmpty()) return;
 
     // Draw white keys.
     p.setPen(QPen(QColor(40, 40, 40, 200), 1));
@@ -85,22 +153,19 @@ void PianoKeyboardWidget::paintEvent(QPaintEvent*) {
             fill = (m_rootPc >= 0 && pc == m_rootPc) ? QColor(255, 190, 90) : QColor(120, 200, 255);
         }
         p.setBrush(fill);
-        p.drawRect(QRectF(k.x, r.top(), whiteW, whiteH));
-    }
+        p.drawRect(k.rect);
 
-    // Second pass: draw black keys on top.
-    // Find x position: center black key between adjacent whites.
-    // Simple heuristic: black key goes at (prevWhiteX + whiteW - blackW/2).
-    double lastWhiteX = r.left();
-    bool haveLastWhite = false;
-    for (auto& k : keys) {
-        if (!k.black) {
-            lastWhiteX = k.x;
-            haveLastWhite = true;
-            continue;
+        const QString deg = m_degreeForPc.value(pc);
+        if (!deg.isEmpty() && m_pcs.contains(pc)) {
+            p.setPen(QColor(20, 20, 20, 220));
+            QFont fnt = p.font();
+            fnt.setPointSize(8);
+            fnt.setBold(true);
+            p.setFont(fnt);
+            QRectF tr = k.rect.adjusted(0, 2, 0, -2);
+            tr.setHeight(14);
+            p.drawText(tr, Qt::AlignCenter, deg);
         }
-        if (!haveLastWhite) continue;
-        k.x = lastWhiteX + whiteW - blackW * 0.5;
     }
 
     p.setPen(QPen(QColor(10, 10, 10, 220), 1));
@@ -112,7 +177,20 @@ void PianoKeyboardWidget::paintEvent(QPaintEvent*) {
             fill = (m_rootPc >= 0 && pc == m_rootPc) ? QColor(220, 130, 40) : QColor(60, 150, 255);
         }
         p.setBrush(fill);
-        p.drawRoundedRect(QRectF(k.x, r.top(), blackW, blackH), 2, 2);
+        p.drawRoundedRect(k.rect, 2, 2);
+
+        const QString deg = m_degreeForPc.value(pc);
+        if (!deg.isEmpty() && m_pcs.contains(pc)) {
+            p.setPen(QColor(240, 240, 240, 220));
+            QFont fnt = p.font();
+            fnt.setPointSize(8);
+            fnt.setBold(true);
+            p.setFont(fnt);
+            QRectF tr = k.rect.adjusted(0, 2, 0, -2);
+            tr.setHeight(14);
+            p.drawText(tr, Qt::AlignCenter, deg);
+            p.setPen(QPen(QColor(10, 10, 10, 220), 1));
+        }
     }
 
     // Label

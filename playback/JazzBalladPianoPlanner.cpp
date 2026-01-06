@@ -558,9 +558,36 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         n.note = clampMidi(m);
             n.baseVelocity = vel;
             n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, beat, sub, count, ts);
-            // If RH is rolled late, keep it a bit shorter so it doesn't smear.
-            const bool shorten = doRoll && isRh && !isLow && (hit.dur <= virtuoso::groove::Rational(1, 4));
-            n.durationWhole = shorten ? qMin(hit.dur, virtuoso::groove::Rational(3, 16)) : hit.dur;
+            // --- Pedal-ish performance model (session feel) ---
+            // We don't have real CC64, but we can approximate:
+            // - LH anchors ring longer (pedal bed)
+            // - RH answers are shorter (clarity)
+            // - Phrase cadences + chord arrivals ring more
+            auto barDur = [&]() -> virtuoso::groove::Rational { return virtuoso::groove::Rational(ts.num, ts.den); };
+            const bool cadence = (c.cadence01 >= 0.55) || c.phraseEndBar;
+            const bool arrival = c.chordIsNew || hit.rhythmTag.contains("arrival") || hit.rhythmTag.contains("forced_arrival1");
+            virtuoso::groove::Rational d = hit.dur;
+            if (!userBusy) {
+                if (isLow && !isRh) {
+                    // LH pedal bed: longer, especially at cadences/arrivals.
+                    d = qMax(d, virtuoso::groove::Rational(3, 8));
+                    if (arrival) d = qMax(d, virtuoso::groove::Rational(1, 2));
+                    if (cadence) d = qMax(d, barDur());
+                    // Tiny overlap to avoid "MIDI choking".
+                    d = d + virtuoso::groove::Rational(1, 16);
+                } else if (isRh) {
+                    // RH clarity: usually shorter, but let top voice sing at cadences.
+                    if (!isTop) d = qMin(d, virtuoso::groove::Rational(1, 4));
+                    if (cadence && isTop) d = qMax(d, virtuoso::groove::Rational(3, 8));
+                    if (arrival && isTop) d = qMax(d, virtuoso::groove::Rational(1, 4));
+                } else {
+                    // Inner (near LH ceiling): medium.
+                    d = qMax(d, virtuoso::groove::Rational(1, 4));
+                }
+            }
+            // If RH is rolled late, shorten *inner* RH notes a bit so it doesn't smear (but keep top singing).
+            const bool shorten = doRoll && isRh && !isLow && !isTop && (d <= virtuoso::groove::Rational(1, 4));
+            n.durationWhole = shorten ? qMin(d, virtuoso::groove::Rational(3, 16)) : d;
         n.structural = c.chordIsNew;
         n.chord_context = c.chordText;
             n.voicing_type = voicingType + (doRoll ? (doArp ? " + Arpeggiated" : " + RolledHands") : "");
@@ -599,19 +626,19 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
             auto push = [&](int m, const QString& target) {
                 if (m < 0) return;
-                virtuoso::engine::AgentIntentNote n;
-                n.agent = "Piano";
-                n.channel = midiChannel;
+        virtuoso::engine::AgentIntentNote n;
+        n.agent = "Piano";
+        n.channel = midiChannel;
                 n.note = clampMidi(m);
                 n.baseVelocity = vel;
                 n.startPos = pos;
                 n.durationWhole = dur;
-                n.structural = false;
-                n.chord_context = c.chordText;
+        n.structural = false;
+        n.chord_context = c.chordText;
                 n.voicing_type = voicingType + " + CadenceAnticipation";
                 n.logic_tag = "ballad_cadence_anticipation";
                 n.target_note = target;
-                out.push_back(n);
+        out.push_back(n);
             };
             // Keep dyad consonant-ish: if low is too close, skip it.
             if (mLow >= 0 && qAbs(mTop - mLow) >= 3) push(mLow, "Cadence anticipation (low)");

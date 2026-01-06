@@ -166,23 +166,131 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     QString logic;
 
     if (doWalk) {
-        // Very simple walking grammar (MVP):
-        // beat1: root, beat2: 5th or 3rd, beat3: approach/chord tone, beat4: approach into next bar if changing.
-        const int pc3 = (rootPc + 4) % 12;
+        // Walking grammar v1 (still simple, but much more "session" than MVP):
+        // - Strong beats favor clear chord tones
+        // - Weak beats can use passing tones (esp. dominants/cadences)
+        // - Beat 4 approaches into next bar when harmony changes
+        const int thirdIv =
+            (c.chord.quality == music::ChordQuality::Minor ||
+             c.chord.quality == music::ChordQuality::HalfDiminished ||
+             c.chord.quality == music::ChordQuality::Diminished)
+                ? 3
+                : 4;
+        const int pc3 = (rootPc + thirdIv) % 12;
         const int pc5 = (rootPc + 7) % 12;
-        if (c.beatInBar == 0) { chosenPc = rootPc; logic = "Bass:walk root"; }
-        else if (c.beatInBar == 1) {
-            chosenPc = ((qHash(QString("%1|%2|w2").arg(c.chordText).arg(c.playbackBarIndex)) % 2u) == 0u) ? pc5 : pc3;
-            logic = "Bass:walk chord tone";
+        const int pc6 = (rootPc + 9) % 12;
+
+        auto pickMidiNearLast = [&](int pc, int lo, int hi) -> int {
+            int m = pcToBassMidiInRange(pc, lo, hi);
+            if (m_lastMidi < 0) return m;
+            int best = m;
+            int bestD = qAbs(m - m_lastMidi);
+            for (int k = -2; k <= 2; ++k) {
+                const int cand = m + 12 * k;
+                if (cand < lo || cand > hi) continue;
+                const int d = qAbs(cand - m_lastMidi);
+                if (d < bestD) { best = cand; bestD = d; }
+            }
+            return best;
+        };
+
+        auto chooseApproachTo = [&](int targetMidi) -> int {
+            // Prefer half-step approaches; at cadence/dominant allow occasional whole-step.
+            const bool spicy = (c.chordFunction == "Dominant") || (c.cadence01 >= 0.55);
+            const quint32 h = quint32(qHash(QString("bwalk_app|%1|%2|%3")
+                                                .arg(c.chordText)
+                                                .arg(c.playbackBarIndex)
+                                                .arg(c.determinismSeed)));
+            const int step = (spicy && c.harmonicRisk >= 0.55 && int(h % 100u) < 35) ? 2 : 1;
+            const int below = targetMidi - step;
+            const int above = targetMidi + step;
+            const int dBelow = (m_lastMidi >= 0) ? qAbs(below - m_lastMidi) : qAbs(step);
+            const int dAbove = (m_lastMidi >= 0) ? qAbs(above - m_lastMidi) : qAbs(step);
+            // Bias to "below" slightly (classic bass approach), but still pick the smaller leap.
+            if (dBelow + 1 <= dAbove) return below;
+            return above;
+        };
+
+        // Beat-by-beat choice (pitch-class domain) with voice-leading hints.
+        if (c.beatInBar == 0) {
+            chosenPc = rootPc;
+            logic = "Bass:walk_v1 root";
+        } else if (c.beatInBar == 1) {
+            // Weak beat: choose chord tone, occasionally passing tone on dominants/cadences.
+            struct Cand { QString id; int pc = 0; bool passing = false; };
+            QVector<Cand> cands;
+            cands.reserve(6);
+            cands.push_back({"third", pc3, false});
+            cands.push_back({"fifth", pc5, false});
+            cands.push_back({"root", rootPc, false});
+            if (c.harmonicRisk >= 0.65 && (c.chordFunction == "Tonic" || c.chordFunction == "Subdominant")) cands.push_back({"sixth", pc6, false});
+            if (!userBusy && (c.chordFunction == "Dominant" || c.cadence01 >= 0.55)) {
+                // A tiny chromatic passing tone is very idiomatic in walking lines.
+                cands.push_back({"pass_up", (rootPc + 1) % 12, true});
+                cands.push_back({"pass_dn", (rootPc + 11) % 12, true});
+            }
+            const int lo = 40, hi = 57;
+            const int last = m_lastMidi;
+            auto score = [&](const Cand& k) -> double {
+                const int m = pickMidiNearLast(k.pc, lo, hi);
+                double s = 0.0;
+                if (last >= 0) s += 0.020 * double(qAbs(m - last));
+                // Dominant function: prefer 3rd.
+                if (c.chordFunction == "Dominant" && k.id == "third") s -= 0.25;
+                // Passing tones only when we want motion.
+                if (k.passing) s += (c.rhythmicComplexity >= 0.65 ? 0.10 : 0.60);
+                // Avoid sitting on root too much.
+                if (k.id == "root") s += 0.10;
+                // Deterministic tiny tiebreak.
+                s += (double(qHash(k.id)) / double(std::numeric_limits<uint>::max())) * 1e-6;
+                return s;
+            };
+            const Cand* best = nullptr;
+            double bestS = 1e9;
+            for (const auto& k : cands) {
+                const double sc = score(k);
+                if (sc < bestS) { bestS = sc; best = &k; }
+            }
+            chosenPc = best ? best->pc : pc5;
+            logic = best ? ("Bass:walk_v1 " + best->id) : "Bass:walk_v1 chord";
         } else if (c.beatInBar == 2) {
-            chosenPc = pc5;
-            logic = "Bass:walk support";
+            // Strong beat: stable support tone; drift toward next root when cadence is strong.
+            const bool wantMove = nextChanges || (c.cadence01 >= 0.55);
+            struct Cand { QString id; int pc = 0; };
+            QVector<Cand> cands;
+            cands.reserve(4);
+            cands.push_back({"fifth", pc5});
+            cands.push_back({"third", pc3});
+            if (c.harmonicRisk >= 0.60) cands.push_back({"sixth", pc6});
+            if (wantMove && nextRootPc >= 0) cands.push_back({"nextRoot", nextRootPc});
+            const int lo = 40, hi = 57;
+            const int last = m_lastMidi;
+            auto score = [&](const Cand& k) -> double {
+                const int m = pickMidiNearLast(k.pc, lo, hi);
+                double s = 0.0;
+                if (last >= 0) s += 0.015 * double(qAbs(m - last));
+                if (k.id == "nextRoot" && !wantMove) s += 0.6;
+                if (k.id == "nextRoot" && wantMove) s -= 0.10;
+                if (c.chordFunction == "Dominant" && k.id == "third") s -= 0.10;
+                s += (double(qHash(k.id)) / double(std::numeric_limits<uint>::max())) * 1e-6;
+                return s;
+            };
+            const Cand* best = nullptr;
+            double bestS = 1e9;
+            for (const auto& k : cands) {
+                const double sc = score(k);
+                if (sc < bestS) { bestS = sc; best = &k; }
+            }
+            chosenPc = best ? best->pc : pc5;
+            logic = best ? ("Bass:walk_v1 " + best->id) : "Bass:walk_v1 support";
         } else { // beat 3 (0-based) => beat 4
+            // Cadence / chord-change: approach into next bar.
             if (nextChanges) {
-                const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
-                while (approachMidi < 40) approachMidi += 12;
-                while (approachMidi > 57) approachMidi -= 12;
+                const int lo = 40, hi = 57;
+                const int nextRootMidi = pickMidiNearLast(nextRootPc, lo, hi);
+                int approachMidi = c.allowApproachFromAbove ? chooseApproachTo(nextRootMidi) : (nextRootMidi - 1);
+                while (approachMidi < lo) approachMidi += 12;
+                while (approachMidi > hi) approachMidi -= 12;
                 int repaired = approachMidi;
                 if (feasibleOrRepair(repaired)) {
                     virtuoso::engine::AgentIntentNote n;
@@ -194,14 +302,15 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                     n.durationWhole = Rational(1, ts.den);
                     n.structural = false;
                     n.chord_context = c.chordText;
-                    n.logic_tag = "walk_approach";
+                    n.logic_tag = "walk_v1_approach";
                     n.target_note = "Walk approach";
                     out.push_back(n);
                     return out;
                 }
             }
-            chosenPc = pc3;
-            logic = "Bass:walk resolve";
+            // If not changing, resolve toward root/third to make barline feel intentional.
+            chosenPc = (c.cadence01 >= 0.55 || c.phraseEndBar) ? rootPc : pc3;
+            logic = "Bass:walk_v1 resolve";
         }
     } else if (c.beatInBar == 0) {
         if (havePhraseHits) {

@@ -7,6 +7,7 @@
 #include "virtuoso/constraints/PianoDriver.h"
 #include "virtuoso/engine/VirtuosoEngine.h"
 #include "virtuoso/groove/GrooveGrid.h"
+#include "virtuoso/theory/FunctionalHarmony.h"
 
 namespace playback {
 
@@ -85,6 +86,11 @@ public:
         bool phraseEndBar = false;
         double cadence01 = 0.0;  // 0..1 (stronger at phrase end / turnarounds)
 
+        // Key context (optional; used to keep RH line and colors tonal).
+        bool hasKey = false;
+        int keyTonicPc = 0; // 0..11
+        virtuoso::theory::KeyMode keyMode = virtuoso::theory::KeyMode::Major;
+
         // Lookahead for anticipations (optional).
         music::ChordSymbol nextChord;
         bool hasNextChord = false;
@@ -131,6 +137,8 @@ private:
     void ensureMotifBlockPlanned(const Context& c);
     void buildMotifBlockTemplates(const Context& c);
     QVector<TopHit> realizeTopTemplate(const Context& c, const QVector<TopTemplateHit>& tmpl) const;
+    void ensurePhraseGuideLinePlanned(const Context& c);
+    int chooseGuidePcForChord(const music::ChordSymbol& chord, int prevGuidePc, bool preferResolve) const;
 
     virtuoso::constraints::PianoDriver m_driver;
     QVector<int> m_lastVoicing;
@@ -139,6 +147,11 @@ private:
     QVector<CompHit> m_barHits;
     int m_lastTopMidi = -1; // right-hand top-line continuity
     QVector<TopHit> m_barTopHits;
+
+    // Phrase-spanning guide-tone line (3rds/7ths) for "tonal + intentional" RH.
+    int m_phraseGuideStartBar = -1;
+    int m_phraseGuideBars = 4;
+    QVector<int> m_phraseGuidePcByBar; // size=m_phraseGuideBars, values 0..11
 
     int m_motifBlockStartBar = -1; // even bar index of current 2-bar block
     QVector<TopTemplateHit> m_motifA;

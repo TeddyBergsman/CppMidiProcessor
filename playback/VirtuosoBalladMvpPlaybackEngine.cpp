@@ -714,6 +714,9 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
             pc.barInPhrase = barInPhrase;
             pc.phraseEndBar = phraseEndBar;
             pc.cadence01 = cadence01;
+            pc.hasKey = true;
+            pc.keyTonicPc = lk.tonicPc;
+            pc.keyMode = lk.mode;
             pc.hasNextChord = haveNext && !nextChord.noChord;
             pc.nextChord = nextChord;
             pc.nextChanges = nextChanges;
@@ -1199,6 +1202,15 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
                 pc.userIntensityPeak = intent.intensityPeak;
                 pc.userRegisterHigh = intent.registerHigh;
                 pc.userSilence = intent.silence;
+                // Key context (lookahead): use per-bar local estimate if available, else fall back to global guess.
+                {
+                    const playback::LocalKeyEstimate lk2 = (playbackBarIndex >= 0 && playbackBarIndex < m_localKeysByBar.size())
+                        ? m_localKeysByBar[playbackBarIndex]
+                        : playback::LocalKeyEstimate{m_keyPcGuess, m_keyScaleKey, m_keyScaleName, m_keyMode, 0.0, 0.0};
+                    pc.hasKey = true;
+                    pc.keyTonicPc = lk2.tonicPc;
+                    pc.keyMode = lk2.mode;
+                }
                 const double pianoMult = m_agentEnergyMult.value("Piano", 1.0);
                 pc.forceClimax = (baseEnergy >= 0.85);
                 pc.energy = qBound(0.0, baseEnergy * pianoMult, 1.0);
@@ -1532,6 +1544,9 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     pc.barInPhrase = barInPhrase;
     pc.phraseEndBar = phraseEndBar;
     pc.cadence01 = cadence01;
+    pc.hasKey = true;
+    pc.keyTonicPc = lk.tonicPc;
+    pc.keyMode = lk.mode;
     pc.hasNextChord = haveNext && !nextChord.noChord;
     pc.nextChord = nextChord;
     pc.nextChanges = nextChanges;

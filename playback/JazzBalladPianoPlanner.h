@@ -153,6 +153,10 @@ private:
     int m_phraseGuideBars = 4;
     QVector<int> m_phraseGuidePcByBar; // size=m_phraseGuideBars, values 0..11
 
+    // Upper-structure memory (for resolutions).
+    int m_lastUpperBar = -1;
+    QVector<int> m_lastUpperPcs; // 0..11 (size 2-3)
+
     int m_motifBlockStartBar = -1; // even bar index of current 2-bar block
     QVector<TopTemplateHit> m_motifA;
     QVector<TopTemplateHit> m_motifB;

@@ -44,7 +44,7 @@ public:
     void setRepeats(int repeats);
     void setChartModel(const chart::ChartModel& model);
 
-    // A key from groove::GrooveRegistry::StylePreset (e.g. "jazz_brushes_ballad_60_evans").
+    // A key from groove::GrooveRegistry::StylePreset (e.g. "jazz_brushes_ballad_60_evans_lush").
     void setStylePresetKey(const QString& key);
     QString stylePresetKey() const { return m_stylePresetKey; }
 

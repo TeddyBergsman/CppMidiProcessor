@@ -29,6 +29,11 @@ void JazzBalladPianoPlanner::reset() {
     m_anchorPcs.clear();
     m_lastArpBar = -1;
     m_lastArpStyle = -1;
+    m_phraseGuideStartBar = -1;
+    m_phraseGuideBars = 4;
+    m_phraseGuidePcByBar.clear();
+    m_lastUpperBar = -1;
+    m_lastUpperPcs.clear();
 }
 
 int JazzBalladPianoPlanner::thirdIntervalForQuality(music::ChordQuality q) {
@@ -203,6 +208,51 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     hitsThisBeat.reserve(4);
     for (const auto& hit : m_barHits) {
         if (hit.beatInBar == c.beatInBar) hitsThisBeat.push_back(hit);
+    }
+
+    // Lush ballad broken-chord comp gestures (Bill-ish):
+    // Occasionally split the same harmonic event into two small bites (LH then RH, or RH then LH)
+    // instead of a single block chord. This feels conversational without turning into arpeggios.
+    {
+        const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+        const bool lush = (c.toneDark >= 0.55) && (c.interaction >= 0.35);
+        const bool allow = !userBusy && lush && (c.rhythmicComplexity >= 0.35) && !climaxDense;
+        if (allow && !hitsThisBeat.isEmpty()) {
+            const quint32 hb = quint32(qHash(QString("pno_broken|%1|%2|%3|%4")
+                                                 .arg(c.chordText)
+                                                 .arg(c.playbackBarIndex)
+                                                 .arg(c.beatInBar)
+                                                 .arg(c.determinismSeed)));
+            const int p = qBound(0, int(llround(10.0 + 28.0 * c.rhythmicComplexity + 18.0 * (c.userSilence ? 1.0 : 0.0))), 55);
+            if (int(hb % 100u) < p) {
+                // Duplicate one of the hits and offset by a 16th (count=4), with lighter velocity.
+                const int pick = int((hb / 3u) % uint(hitsThisBeat.size()));
+                const CompHit base = hitsThisBeat[pick];
+                if (base.count != 3) { // don't disturb triplets
+                    CompHit a = base;
+                    CompHit b = base;
+                    a.count = 4; a.sub = 0;
+                    b.count = 4; b.sub = 1;
+                    // Keep the original beat; align to beat start.
+                    a.beatInBar = c.beatInBar;
+                    b.beatInBar = c.beatInBar;
+                    // Make them short-ish so it reads as a gesture, not a smear.
+                    a.dur = qMin(base.dur, virtuoso::groove::Rational(1, 4));
+                    b.dur = qMin(base.dur, virtuoso::groove::Rational(1, 4));
+                    const bool lhFirst = ((hb / 11u) % 2u) == 0u;
+                    a.velDelta = base.velDelta + (lhFirst ? +2 : -4);
+                    b.velDelta = base.velDelta + (lhFirst ? -6 : +1);
+                    a.density = "guide";
+                    b.density = base.density;
+                    a.rhythmTag = base.rhythmTag + (lhFirst ? "|broken_lh_first" : "|broken_rh_first");
+                    b.rhythmTag = base.rhythmTag + (lhFirst ? "|broken_rh_second" : "|broken_lh_second");
+                    // Replace the picked hit with the two-part gesture.
+                    hitsThisBeat.removeAt(pick);
+                    hitsThisBeat.push_back(a);
+                    hitsThisBeat.push_back(b);
+                }
+            }
+        }
     }
     // Ensure we land on chord changes: if downbeat of a new chord has no scheduled hit, add one.
     if (hitsThisBeat.isEmpty() && !climaxDense) {
@@ -450,8 +500,30 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     const int rhLo = c.rhLo;
     const int rhHi = c.rhHi;
 
+    // Phrase-level register planning (lush ballad feel):
+    // Keep hands in a coherent zone for the full phrase, with a gentle arc into cadences.
+    const int phraseBars = qMax(1, c.phraseBars);
+    const int phraseStart = (qMax(0, c.playbackBarIndex) / phraseBars) * phraseBars;
+    if (m_phraseGuideStartBar != phraseStart || m_phraseGuideBars != phraseBars) {
+        m_phraseGuideStartBar = phraseStart;
+        m_phraseGuideBars = phraseBars;
+        // Note: guide pcs are planned elsewhere; here we just keep the register arc stable per phrase.
+    }
+    const double phrasePos01 = (phraseBars > 1)
+        ? (double(qBound(0, c.barInPhrase, phraseBars - 1)) / double(phraseBars - 1))
+        : 0.0;
+    // (cadence already computed above)
+    const quint32 hrz = quint32(qHash(QString("pno_reg|%1|%2|%3")
+                                          .arg(phraseStart)
+                                          .arg(phraseBars)
+                                          .arg(c.determinismSeed)));
+    const int baseShift = int((hrz % 3u)) - 1; // -1..+1 semitones
+    const int arcShift = int(llround(3.0 * qSin(3.1415926535 * phrasePos01))); // 0..3..0
+    const int cadenceLift = cadence ? 1 : 0;
+    const int regShift = qBound(-2, baseShift + arcShift + cadenceLift, 4);
+
     // LH target around: stable bed; avoid jumping.
-    int lhAround = (lhLo + lhHi) / 2;
+    int lhAround = qBound(lhLo + 3, (lhLo + lhHi) / 2 + regShift, lhHi - 3);
     if (!prevVoicing.isEmpty()) {
         // pick the lowest previous note as LH anchor
         const int prevLow = *std::min_element(prevVoicing.begin(), prevVoicing.end());
@@ -480,7 +552,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     sortUnique(rhPcs);
 
     // Choose top note around last top / mid-high target.
-    int topAround = (rhLo + rhHi) / 2 + 8;
+    int topAround = qBound(rhLo + 8, (rhLo + rhHi) / 2 + 8 + regShift * 2, rhHi - 4);
     if (m_lastTopMidi >= 0) topAround = qBound(rhLo + 6, m_lastTopMidi, rhHi - 4);
     if (cadence) topAround = qBound(rhLo + 8, topAround + 2, rhHi - 3);
 
@@ -593,8 +665,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
     // voicingType chosen by solver (above)
     const int baseVel0 = climaxDense ? (c.chordIsNew ? 64 : 58) : (c.chordIsNew ? 50 : 44);
-    const double phrasePos01 = (c.phraseBars > 1) ? (double(qBound(0, c.barInPhrase, c.phraseBars - 1)) / double(c.phraseBars - 1)) : 0.0;
-    const double phraseArc = 0.90 + 0.08 * qSin(3.1415926535 * phrasePos01); // gentle arc
+    const double phrasePos01_dyn = (c.phraseBars > 1) ? (double(qBound(0, c.barInPhrase, c.phraseBars - 1)) / double(c.phraseBars - 1)) : 0.0;
+    const double phraseArc = 0.90 + 0.08 * qSin(3.1415926535 * phrasePos01_dyn); // gentle arc
     const double cadenceBoost = 1.0 + 0.22 * qBound(0.0, c.cadence01, 1.0);
     const double energyBoost = 0.92 + 0.28 * qBound(0.0, c.energy, 1.0);
     const double silenceBoost = c.userSilence ? 1.08 : 1.0;
@@ -738,7 +810,47 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         };
         const int base16 = to16thSub(hit.sub, hit.count);
 
-        const bool isPedalWash = !userBusy && (cadence || arrival || (c.userSilence && c.energy <= 0.55));
+        // --- Comp articulation model (deterministic) ---
+        // Goal: avoid "MIDI robot" by varying attack + release shapes like a real pianist:
+        // - Stab: shorter, clearer, slightly less pedal smear
+        // - Tenuto: default, singy
+        // - HalfPedalWash: longer ring, more pedal-ish wash
+        // - ReStrike: allow re-articulating held notes (esp. arrivals) for touch/definition
+        // - Ghost: very soft, short "breath" comp
+        enum class CompArt { Stab, Tenuto, HalfPedalWash, ReStrike, Ghost };
+        const quint32 ha = quint32(qHash(QString("pno_art|%1|%2|%3|%4|%5")
+                                             .arg(c.chordText)
+                                             .arg(c.playbackBarIndex)
+                                             .arg(hit.beatInBar)
+                                             .arg(hit.sub)
+                                             .arg(c.determinismSeed)));
+        const bool isUpbeat = (hit.count >= 2) ? (hit.sub > 0) : false;
+        const bool wantsGhost = hit.rhythmTag.contains("breath") || hit.rhythmTag.contains("jab") || hit.rhythmTag.contains("delay");
+        CompArt art = CompArt::Tenuto;
+        if (userBusy) art = CompArt::Stab;
+        else if (wantsGhost && int(ha % 100u) < 75) art = CompArt::Ghost;
+        else if ((cadence || arrival) && !isUpbeat && int((ha / 3u) % 100u) < int(llround(35.0 + 40.0 * c.cadence01))) art = CompArt::HalfPedalWash;
+        else if ((arrival || hit.rhythmTag.contains("touch1") || hit.rhythmTag.contains("arrival")) && int((ha / 5u) % 100u) < 45) art = CompArt::ReStrike;
+        else if (int((ha / 7u) % 100u) < int(llround(20.0 + 35.0 * qBound(0.0, c.rhythmicComplexity, 1.0)))) art = CompArt::Stab;
+
+        const bool isPedalWash = !userBusy && (cadence || arrival || (c.userSilence && c.energy <= 0.55) || (art == CompArt::HalfPedalWash));
+        const bool forceRestrike = (art == CompArt::ReStrike);
+        const int velArtDelta = (art == CompArt::Ghost) ? -10
+                              : (art == CompArt::Stab) ? +1
+                              : (art == CompArt::HalfPedalWash) ? -2
+                              : 0;
+
+        // Timing feel: ballad comp is often slightly laid-back; arrivals can sit more on the grid.
+        const int hitLate128 = (userBusy ? 0
+                             : (arrival ? 0
+                             : (art == CompArt::Stab ? 0
+                             : (art == CompArt::Ghost ? 1
+                             : (cadence ? 1 : 2)))));
+
+        // LH independence: occasionally re-articulate just the LH anchor under a RH wash
+        // (feels like the left hand "breathes" while RH stays connected).
+        const bool allowLhInd = !userBusy && isPedalWash && !arrival && (art == CompArt::HalfPedalWash || art == CompArt::Tenuto);
+        const bool doLhOnly = allowLhInd && (int((ha / 17u) % 100u) < int(llround(10.0 + 22.0 * qBound(0.0, c.cadence01, 1.0) + (c.userSilence ? 12.0 : 0.0))));
 
         for (int idx = 0; idx < notes.size(); ++idx) {
             const int m = notes[idx];
@@ -746,15 +858,19 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
             const bool isTop = (m == topNote);
             const bool isRh = (m > c.lhHi); // heuristic split at LH range ceiling
 
-            // Pedal-aware re-strike avoidance:
+            // Pedal-aware re-strike avoidance (articulation-aware):
             // if we're in a "wash" state and the note was already held from the previous voicing,
             // avoid retriggering it on non-arrival hits (lets the harmony ring like pedal).
-            if (isPedalWash && !arrival && !prevVoicing.isEmpty() && prevVoicing.contains(m)) {
+            if (isPedalWash && !forceRestrike && !arrival && !prevVoicing.isEmpty() && prevVoicing.contains(m)) {
+                if (doLhOnly) {
+                    // In LH-only mode, skip re-triggering everything except LH anchor.
+                    if (!isLow) continue;
+                }
                 // Allow top voice to be re-articulated occasionally for singing line.
                 if (!isTop && (isLow || !isRh || hit.dur >= virtuoso::groove::Rational(1, 4))) continue;
             }
 
-            int vel = baseVel + hit.velDelta;
+            int vel = baseVel + hit.velDelta + velArtDelta;
             // Touch model v2 (Bill-ish): top voice sings, inner voices disappear, LH is a soft bed.
             // Also keep cadences slightly warmer/rounder.
             if (isLow && !isRh) vel += 1;              // LH bed slightly present
@@ -762,6 +878,10 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
             else vel -= 8;                             // inner voices very soft
             if (isRh) vel += 1;
             if (c.toneDark >= 0.65) vel -= 2;
+            if (art == CompArt::Ghost) {
+                if (isTop) vel -= 6;
+                else vel -= 10;
+            }
             // If arpeggiating upward, slightly crescendo; downward, slightly decrescendo.
             if (doArp) {
                 const int order = orderForIdx(idx);
@@ -796,6 +916,14 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                 }
             }
 
+            // Global hit-level laid-back timing (128th grid), applied before per-voice micro-spread.
+            // Skip triplets to avoid mangling tuplets.
+            if (hitLate128 != 0 && count != 3) {
+                const int base32 = to16thSub(sub, count) * 8;
+                count = 32;
+                sub = qBound(0, base32 + hitLate128, 31);
+            }
+
             // Deterministic micro-spread even when not rolling:
             // - top voice slightly late
             // - LH bed slightly early cannot be represented; we keep it at the grid and rely on humanizer
@@ -817,7 +945,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         n.note = clampMidi(m);
             n.baseVelocity = vel;
             n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, beat, sub, count, ts);
-            // --- Pedal-ish performance model (session feel) ---
+            // --- Pedal-ish performance model (session feel) + articulation shaping ---
             // We don't have real CC64, but we can approximate:
             // - LH anchors ring longer (pedal bed)
             // - RH answers are shorter (clarity)
@@ -844,13 +972,35 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                     d = qMax(d, virtuoso::groove::Rational(1, 4));
                 }
             }
+
+            // Articulation overrides (final pass).
+            if (art == CompArt::Stab) {
+                if (isLow && !isRh) d = qMin(d, virtuoso::groove::Rational(1, 4));
+                if (isRh) d = qMin(d, virtuoso::groove::Rational(1, 8));
+                if (isTop && isRh && (cadence || arrival)) d = qMax(d, virtuoso::groove::Rational(1, 4));
+            } else if (art == CompArt::Ghost) {
+                d = qMin(d, virtuoso::groove::Rational(1, 8));
+            } else if (art == CompArt::HalfPedalWash) {
+                if (isRh && !isTop) d = qMax(d, virtuoso::groove::Rational(1, 4));
+                if (isTop && isRh) d = qMax(d, virtuoso::groove::Rational(3, 8));
+                if (cadence) d = qMax(d, barDur());
+            } else if (art == CompArt::ReStrike) {
+                // Give definition: shorten slightly so the re-attack reads.
+                if (isRh && !isTop) d = qMin(d, virtuoso::groove::Rational(3, 16));
+            }
+
             // If RH is rolled late, shorten *inner* RH notes a bit so it doesn't smear (but keep top singing).
             const bool shorten = doRoll && isRh && !isLow && !isTop && (d <= virtuoso::groove::Rational(1, 4));
             n.durationWhole = shorten ? qMin(d, virtuoso::groove::Rational(3, 16)) : d;
         n.structural = c.chordIsNew;
         n.chord_context = c.chordText;
             n.voicing_type = voicingType + (doRoll ? (doArp ? " + Arpeggiated" : " + RolledHands") : "");
-            n.logic_tag = hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag);
+            QString artTag = "tenuto";
+            if (art == CompArt::Stab) artTag = "stab";
+            else if (art == CompArt::HalfPedalWash) artTag = "half_pedal";
+            else if (art == CompArt::ReStrike) artTag = "restrike";
+            else if (art == CompArt::Ghost) artTag = "ghost";
+            n.logic_tag = (hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag)) + "|art=" + artTag;
             n.target_note = isTop ? "Comp (top voice)" : (isLow ? "Comp (LH anchor)" : "Comp (inner)");
         out.push_back(n);
     }
@@ -1256,7 +1406,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
                 const auto pos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
                 const auto dur = Rational(3, 8); // ring a bit
-                auto pushNote = [&](int m, int vel, QString target) {
+            auto pushNote = [&](int m, int vel, QString target) {
                     if (m < 0) return;
         virtuoso::engine::AgentIntentNote n;
         n.agent = "Piano";
@@ -1273,10 +1423,85 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         out.push_back(n);
                 };
                 const int base = baseVel - 22;
-                if (mThird >= 0) pushNote(mThird, base - 3, "UpperStructure (triad low)");
-                if (mLow >= 0) pushNote(mLow, base, "UpperStructure (low)");
-                pushNote(mTop, base + 4, "UpperStructure (top)");
+                QVector<int> pcsUsed;
+                pcsUsed.reserve(3);
+                auto addPcUsed = [&](int m) { if (m >= 0) pcsUsed.push_back(((m % 12) + 12) % 12); };
+                if (mThird >= 0) { pushNote(mThird, base - 3, "UpperStructure (triad low)"); addPcUsed(mThird); }
+                if (mLow >= 0) { pushNote(mLow, base, "UpperStructure (low)"); addPcUsed(mLow); }
+                pushNote(mTop, base + 4, "UpperStructure (top)"); addPcUsed(mTop);
+
+                // Remember for resolution grammar (next bar).
+                sortUnique(pcsUsed);
+                m_lastUpperBar = c.playbackBarIndex;
+                m_lastUpperPcs = pcsUsed;
             }
+        }
+    }
+
+    // Upper-structure resolution grammar (lush ballads):
+    // If we used an upper structure last bar and harmony changes, resolve softly by step to current chord-safe tones.
+    if (m_lastUpperBar == (c.playbackBarIndex - 1) && c.chordIsNew && !m_lastUpperPcs.isEmpty()
+        && !c.userDensityHigh && !c.userIntensityPeak) {
+        const quint32 hr = quint32(qHash(QString("pno_upper_res|%1|%2|%3")
+                                             .arg(c.chordText)
+                                             .arg(c.playbackBarIndex)
+                                             .arg(c.determinismSeed)));
+        const int p = qBound(0, int(llround(18.0 + 35.0 * qBound(0.0, c.interaction, 1.0) + 25.0 * qBound(0.0, c.cadence01, 1.0))), 75);
+        if (int(hr % 100u) < p) {
+            QSet<int> safe;
+            auto addSafe = [&](int pc) { if (pc >= 0) safe.insert((pc % 12 + 12) % 12); };
+            addSafe(pcForDegree(c.chord, 3));
+            addSafe(pcForDegree(c.chord, 5));
+            addSafe(pcForDegree(c.chord, 7));
+            addSafe(pcForDegree(c.chord, 9));
+            if (c.chord.quality == music::ChordQuality::Minor) addSafe(pcForDegree(c.chord, 11));
+            else addSafe(pcForDegree(c.chord, 13));
+            if (safe.isEmpty()) addSafe((c.chord.rootPc >= 0) ? (c.chord.rootPc % 12) : 0);
+
+            auto nearestStep = [&](int fromPc) -> int {
+                const int f = (fromPc % 12 + 12) % 12;
+                int best = f;
+                int bestCost = 999;
+                for (int toPc : safe) {
+                    int d = toPc - f;
+                    while (d > 6) d -= 12;
+                    while (d < -6) d += 12;
+                    const int cost = qAbs(d);
+                    if (cost < bestCost) { bestCost = cost; best = toPc; }
+                }
+                return best;
+            };
+
+            // Place a tiny dyad on & of 1 as a soft "settle".
+            const int lo = qMax(c.rhLo, c.rhHi - 10);
+            const int hi = c.sparkleLo;
+            int around = (lo + hi) / 2;
+            if (m_lastTopMidi >= 0) around = qBound(lo + 2, m_lastTopMidi, hi - 2);
+            const int pcA = nearestStep(m_lastUpperPcs.first());
+            const int pcB = nearestStep(m_lastUpperPcs.size() >= 2 ? m_lastUpperPcs.last() : m_lastUpperPcs.first());
+            const int mA = nearestMidiForPc(pcA, around + 5, lo, hi);
+            const int mB = nearestMidiForPc(pcB, around - 2, lo, hi);
+            const auto pos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 0, 1, 2, ts); // and-of-1
+            const auto dur = virtuoso::groove::Rational(1, 8);
+            const int vel = qBound(1, baseVel - 20, 127);
+            auto push = [&](int m, QString target) {
+                if (m < 0) return;
+                virtuoso::engine::AgentIntentNote n;
+                n.agent = "Piano";
+                n.channel = midiChannel;
+                n.note = clampMidi(m);
+                n.baseVelocity = vel;
+                n.startPos = pos;
+                n.durationWhole = dur;
+                n.structural = false;
+                n.chord_context = c.chordText;
+                n.voicing_type = voicingType + " + UpperResolve";
+                n.logic_tag = "ballad_upper_resolve";
+                n.target_note = std::move(target);
+                out.push_back(n);
+            };
+            if (mB >= 0 && mB != mA) push(mB, "UpperResolve (low)");
+            if (mA >= 0) push(mA, "UpperResolve (high)");
         }
     }
 

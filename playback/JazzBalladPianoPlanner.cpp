@@ -17,6 +17,10 @@ void JazzBalladPianoPlanner::reset() {
     m_lastRhythmBar = -1;
     m_barHits.clear();
     m_lastTopMidi = -1;
+    m_barTopHits.clear();
+    m_motifBlockStartBar = -1;
+    m_motifA.clear();
+    m_motifB.clear();
 }
 
 int JazzBalladPianoPlanner::thirdIntervalForQuality(music::ChordQuality q) {
@@ -283,11 +287,33 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     // Optional high sparkle on beat 4 (very occasional), but only when there's rhythmic space.
     const int pSp = qBound(0, int(llround(c.sparkleProbBeat4 * 100.0)), 100);
     const bool sparkle = (c.beatInBar == 3) && c.userSilence && (pSp > 0) && (int((h / 13u) % 100u) < pSp);
-    int sparkleMidi = -1;
+    int sparklePc = -1;
     if (sparkle) {
-        // Choose a tasteful color (9 or 11) and place it high.
-        const int spPc = pcForDegree(c.chord, ((h % 2u) == 0u) ? 9 : 11);
-        sparkleMidi = nearestMidiForPc(spPc, /*around*/(c.sparkleLo + c.sparkleHi) / 2, c.sparkleLo, c.sparkleHi);
+        // Choose a tasteful color and place it high.
+        // IMPORTANT: avoid dissonant natural 11 over major unless chart explicitly implies #11.
+        int spPc = -1;
+        if (c.chord.quality == music::ChordQuality::Major) {
+            const int pc9 = pcForDegree(c.chord, 9);
+            const int pc13 = pcForDegree(c.chord, 13);
+            // Allow 11 only if explicitly altered (#11) in chart.
+            bool hasSharp11 = false;
+            for (const auto& a : c.chord.alterations) {
+                if (a.degree == 11 && a.delta == 1) { hasSharp11 = true; break; }
+            }
+            const int pc11 = hasSharp11 ? pcForDegree(c.chord, 11) : -1;
+            spPc = ((h % 3u) == 0u && pc13 >= 0) ? pc13 : (pc9 >= 0 ? pc9 : pc11);
+        } else if (c.chord.quality == music::ChordQuality::Minor) {
+            const int pc9 = pcForDegree(c.chord, 9);
+            const int pc11 = pcForDegree(c.chord, 11);
+            spPc = ((h % 3u) == 0u && pc11 >= 0) ? pc11 : pc9;
+        } else if (c.chord.quality == music::ChordQuality::Dominant) {
+            const int pc9 = pcForDegree(c.chord, 9);
+            const int pc13 = pcForDegree(c.chord, 13);
+            spPc = ((h % 3u) == 0u && pc13 >= 0) ? pc13 : pc9;
+        } else {
+            spPc = pcForDegree(c.chord, 9);
+        }
+        if (spPc >= 0) sparklePc = ((spPc % 12) + 12) % 12;
     }
 
     // Helper: derive a "guide tones only" subset from current voicing.
@@ -305,137 +331,384 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     };
 
     auto renderHit = [&](const CompHit& hit) {
-        const QVector<int> notes = (hit.density.trimmed().toLower() == "guide") ? guideSubset(midi) : midi;
-        for (int m : notes) {
+        QVector<int> notes = (hit.density.trimmed().toLower() == "guide") ? guideSubset(midi) : midi;
+        if (notes.isEmpty()) return;
+
+        // Session-player feel: treat pianist as two hands.
+        // - LH anchors are earlier and can sustain
+        // - RH colors/top can be lightly rolled/arpeggiated for floaty/dreamy feel
+        std::sort(notes.begin(), notes.end());
+        const int topNote = notes.last();
+        const int lowNote = notes.first();
+
+        const quint32 hr = quint32(qHash(QString("roll|%1|%2|%3|%4")
+                                             .arg(c.chordText)
+                                             .arg(c.playbackBarIndex)
+                                             .arg(hit.beatInBar)
+                                             .arg(c.determinismSeed)));
+        const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+        const bool doRoll = !userBusy && (c.energy >= 0.25) && (int(hr % 100u) < qBound(0, int(llround(20.0 + 35.0 * c.energy)), 70));
+        const bool doArp = doRoll && (notes.size() >= 3) && (hit.dur >= virtuoso::groove::Rational(1, 8));
+        const bool arpUp = ((hr / 3u) % 2u) == 0u;
+
+        auto to16thSub = [&](int sub, int count) -> int {
+            if (count <= 1) return 0;
+            if (count == 2) return qBound(0, sub * 2, 3);
+            if (count == 4) return qBound(0, sub, 3);
+            // generic mapping
+            const int s = int(llround(double(sub) * 4.0 / double(count)));
+            return qBound(0, s, 3);
+        };
+        const int base16 = to16thSub(hit.sub, hit.count);
+
+        for (int idx = 0; idx < notes.size(); ++idx) {
+            const int m = notes[idx];
+            const bool isLow = (m == lowNote);
+            const bool isTop = (m == topNote);
+            const bool isRh = (m > c.lhHi); // heuristic split at LH range ceiling
+
+            int vel = baseVel + hit.velDelta;
+            // Expressive shaping: top voice sings; inner voices are softer; LH anchor steady.
+            if (isTop) vel += 7;
+            else if (!isLow) vel -= 4;
+            if (isRh) vel += 1;
+            // If arpeggiating upward, slightly crescendo; downward, slightly decrescendo.
+            if (doArp) {
+                const int order = arpUp ? idx : (notes.size() - 1 - idx);
+                vel += arpUp ? qMin(4, order) : -qMin(3, order);
+            }
+            vel = qBound(1, vel, 127);
+
+            int beat = hit.beatInBar;
+            int sub = hit.sub;
+            int count = hit.count;
+
+            // Intra-chord arpeggiation/roll: place notes a few 16ths apart (deterministic),
+            // with RH slightly later than LH to feel "hands" rather than a MIDI block chord.
+            if (doRoll) {
+                const int order = arpUp ? idx : (notes.size() - 1 - idx);
+                const int step = doArp ? qMin(2, order) : (isRh ? 1 : 0); // 0..2 16ths
+                count = 4;
+                sub = qMin(3, base16 + step);
+            }
+
             virtuoso::engine::AgentIntentNote n;
             n.agent = "Piano";
             n.channel = midiChannel;
             n.note = clampMidi(m);
-            n.baseVelocity = qBound(1, baseVel + hit.velDelta, 127);
-            n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, hit.beatInBar, hit.sub, hit.count, ts);
-            n.durationWhole = hit.dur;
+            n.baseVelocity = vel;
+            n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, beat, sub, count, ts);
+            // If RH is rolled late, keep it a bit shorter so it doesn't smear.
+            const bool shorten = doRoll && isRh && !isLow && (hit.dur <= virtuoso::groove::Rational(1, 4));
+            n.durationWhole = shorten ? qMin(hit.dur, virtuoso::groove::Rational(3, 16)) : hit.dur;
             n.structural = c.chordIsNew;
             n.chord_context = c.chordText;
-            n.voicing_type = voicingType;
+            n.voicing_type = voicingType + (doRoll ? (doArp ? " + Arpeggiated" : " + RolledHands") : "");
             n.logic_tag = hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag);
-            n.target_note = "Comp";
+            n.target_note = isTop ? "Comp (top voice)" : (isLow ? "Comp (LH anchor)" : "Comp (inner)");
             out.push_back(n);
-        }
-
-        // --- Right-hand top-line (Bill Evans-ish) ---
-        // Treat pianist as two hands: LH holds shell; RH can sing a line above the comp.
-        // Deterministic and conservative: only add when there is space and the hit isn't ultra-dense.
-        const bool allowTopLine = !c.userDensityHigh && !c.userIntensityPeak && (hit.density != "guide");
-        const bool hasSpace = c.userSilence || (c.energy >= 0.45);
-        if (allowTopLine && hasSpace) {
-            const quint32 ht = quint32(qHash(QString("top|%1|%2|%3|%4")
-                                                 .arg(c.chordText)
-                                                 .arg(c.playbackBarIndex)
-                                                 .arg(hit.beatInBar)
-                                                 .arg(c.determinismSeed)));
-            const int p = int(ht % 100u);
-            // Probability grows with energy, but stays tasteful.
-            const int pOn = qBound(0, int(llround(10.0 + 30.0 * qBound(0.0, c.energy, 1.0))), 55);
-            if (p < pOn) {
-                // Choose a "melodic" top pitch-class (mostly chord colors).
-                QVector<int> topPcs;
-                topPcs.reserve(4);
-                // Prefer 9/13 on major; 9/11 on minor; 9/13 on dominant.
-                if (c.chord.quality == music::ChordQuality::Minor) {
-                    const int pc9 = pcForDegree(c.chord, 9);
-                    const int pc11 = pcForDegree(c.chord, 11);
-                    if (pc9 >= 0) topPcs.push_back(pc9);
-                    if (pc11 >= 0) topPcs.push_back(pc11);
-                } else if (c.chord.quality == music::ChordQuality::Major) {
-                    const int pc9 = pcForDegree(c.chord, 9);
-                    const int pc13 = pcForDegree(c.chord, 13);
-                    if (pc9 >= 0) topPcs.push_back(pc9);
-                    if (pc13 >= 0) topPcs.push_back(pc13);
-                } else if (c.chord.quality == music::ChordQuality::Dominant) {
-                    const int pc9 = pcForDegree(c.chord, 9);
-                    const int pc13 = pcForDegree(c.chord, 13);
-                    if (pc9 >= 0) topPcs.push_back(pc9);
-                    if (pc13 >= 0) topPcs.push_back(pc13);
-                }
-                // Also allow chord tone 3/5 as a safe melodic anchor.
-                if (pc3 >= 0) topPcs.push_back(pc3);
-                if (pc5 >= 0) topPcs.push_back(pc5);
-                sortUnique(topPcs);
-                if (!topPcs.isEmpty()) {
-                    int around = (c.sparkleLo + c.sparkleHi) / 2;
-                    if (m_lastTopMidi >= 0) around = m_lastTopMidi;
-                    // Prefer stepwise motion: try candidates near last top.
-                    int bestMidi = -1;
-                    int bestCost = 999999;
-                    for (int pc : topPcs) {
-                        const int m = nearestMidiForPc(pc, around, c.rhHi - 2, c.sparkleHi);
-                        const int d = (m_lastTopMidi >= 0) ? qAbs(m - m_lastTopMidi) : qAbs(m - around);
-                        const int cost = d + ((pc == pc3 || pc == pc5) ? 4 : 0); // bias to colors
-                        if (cost < bestCost) { bestCost = cost; bestMidi = m; }
-                    }
-                    if (bestMidi >= 0) {
-                        m_lastTopMidi = bestMidi;
-                        virtuoso::engine::AgentIntentNote t;
-                        t.agent = "Piano";
-                        t.channel = midiChannel;
-                        t.note = clampMidi(bestMidi);
-                        t.baseVelocity = qBound(1, baseVel - 10 + qBound(-6, hit.velDelta, 6), 127);
-                        // Place slightly after the comp hit sometimes (human phrasing).
-                        const bool delay = (int((ht / 7u) % 100u) < 45);
-                        const int sub = delay ? qMin(hit.count - 1, hit.sub + 1) : hit.sub;
-                        t.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, hit.beatInBar, sub, hit.count, ts);
-                        t.durationWhole = (hit.dur < virtuoso::groove::Rational(1, 8)) ? virtuoso::groove::Rational(1, 8) : hit.dur;
-                        t.structural = c.chordIsNew;
-                        t.chord_context = c.chordText;
-                        t.voicing_type = voicingType + " + TopLine";
-                        t.logic_tag = "ballad_topline";
-                        t.target_note = "RH top line";
-                        out.push_back(t);
-                    }
-                }
-            }
         }
     };
 
     for (const auto& hit : hitsThisBeat) renderHit(hit);
 
-    if (sparkleMidi >= 0) {
-        virtuoso::engine::AgentIntentNote n;
-        n.agent = "Piano";
-        n.channel = midiChannel;
-        n.note = clampMidi(sparkleMidi);
-        n.baseVelocity = baseVel - 6;
-        n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
-        n.durationWhole = Rational(1, ts.den * 2); // short sparkle
-        n.structural = false;
-        n.chord_context = c.chordText;
-        n.voicing_type = voicingType + " + Sparkle";
-        n.logic_tag = "ballad_sparkle";
-        n.target_note = "High sparkle";
-        out.push_back(n);
+    // RH top-line motifs (2–3 note micro-phrases with tension->release).
+    {
+        const bool allowTop = !c.userDensityHigh && !c.userIntensityPeak;
+        if (allowTop) {
+            // Safe pitch-class pool for dyads (avoid stray dissonance).
+            const int pc1 = (c.chord.rootPc >= 0) ? (c.chord.rootPc % 12) : 0;
+            const int pc3 = pcForDegree(c.chord, 3);
+            const int pc5 = pcForDegree(c.chord, 5);
+            const int pc7 = pcForDegree(c.chord, 7);
+            const int pc9 = pcForDegree(c.chord, 9);
+            const int pc11 = pcForDegree(c.chord, 11);
+            const int pc13 = pcForDegree(c.chord, 13);
+
+            QSet<int> safe;
+            auto addSafe = [&](int pc) { if (pc >= 0) safe.insert((pc % 12 + 12) % 12); };
+            addSafe(pc1);
+            addSafe(pc3);
+            addSafe(pc5);
+            if (pc7 >= 0) addSafe(pc7);
+            if (c.chord.quality == music::ChordQuality::Major) {
+                addSafe(pc9);
+                addSafe(pc13);
+                bool hasSharp11 = false;
+                for (const auto& a : c.chord.alterations) {
+                    if (a.degree == 11 && a.delta == 1) { hasSharp11 = true; break; }
+                }
+                if (hasSharp11) addSafe(pc11);
+            } else if (c.chord.quality == music::ChordQuality::Minor) {
+                addSafe(pc9);
+                addSafe(pc11);
+                if (c.chord.extension >= 13) addSafe(pc13);
+            } else if (c.chord.quality == music::ChordQuality::Dominant) {
+                addSafe(pc9);
+                addSafe(pc13);
+                for (const auto& a : c.chord.alterations) {
+                    if (a.degree == 11) addSafe(pc11);
+                }
+            } else {
+                addSafe(pc9);
+            }
+
+            // Pick a dyad partner that is consonant (avoid seconds + tritones).
+            auto chooseDyadLowMidi = [&](int topPc, int mTop, int lo, int hi) -> int {
+                const int t = ((topPc % 12) + 12) % 12;
+                int bestMidi = -1;
+                int bestScore = 999999;
+                for (int pc : safe) {
+                    if (pc == t) continue;
+                    int m = nearestMidiForPc(pc, mTop - 5, lo, hi);
+                    if (m < 0) continue;
+                    while (m >= mTop && (m - 12) >= lo) m -= 12;
+                    while ((mTop - m) > 12 && (m + 12) <= hi) m += 12;
+                    if (m >= mTop) continue;
+                    const int interval = mTop - m; // semitones
+                    // Hard reject: seconds and tritone and major 7.
+                    if (interval <= 2) continue;
+                    if (interval == 6) continue;
+                    if (interval >= 11) continue;
+                    // Score preference: 3rds/6ths highest, then 5ths/4ths.
+                    int s = 0;
+                    if (interval == 3 || interval == 4) s += 0;
+                    else if (interval == 8 || interval == 9) s += 1;
+                    else if (interval == 7 || interval == 5) s += 3;
+                    else if (interval == 10) s += 7;
+                    else s += 12;
+                    // Prefer the lower note not to be too low (keep dyads in a sweet mid-high zone).
+                    const int mid = (lo + hi) / 2;
+                    s += qAbs(mid - m) / 3;
+                    if (s < bestScore) { bestScore = s; bestMidi = m; }
+                }
+                return bestMidi;
+            };
+
+            for (const auto& th : m_barTopHits) {
+                if (th.beatInBar != c.beatInBar) continue;
+                const int pc = th.pc;
+                if (pc < 0) continue;
+                // Range: mid->high (avoid only very top), but allow reaching sparkleHi occasionally.
+                const int lo = c.rhLo;
+                const int hi = c.sparkleHi;
+                int around = (c.rhLo + c.rhHi) / 2 + 6;
+                if (m_lastTopMidi >= 0) around = m_lastTopMidi;
+                around = qBound(lo + 4, around, hi - 4);
+
+                const int mTop = nearestMidiForPc(pc, around, lo, hi);
+                if (mTop < 0) continue;
+
+                // Prefer consonant dyads (no seconds/tritones).
+                const int mLow = chooseDyadLowMidi(pc, mTop, lo, hi);
+
+                if (th.resolve) m_lastTopMidi = mTop;
+
+                const auto pos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, th.beatInBar, th.sub, th.count, ts);
+
+                if (mLow >= 0) {
+                    // Lower dyad tone
+                    virtuoso::engine::AgentIntentNote a;
+                    a.agent = "Piano";
+                    a.channel = midiChannel;
+                    a.note = clampMidi(mLow);
+                    a.baseVelocity = qBound(1, baseVel - 16 + th.velDelta, 127);
+                    a.startPos = pos;
+                    a.durationWhole = th.dur;
+                    a.structural = c.chordIsNew;
+                    a.chord_context = c.chordText;
+                    a.voicing_type = voicingType + " + TopDyad";
+                    a.logic_tag = th.resolve ? ("ballad_topline|resolve|" + th.tag + "|dyad") : ("ballad_topline|tension|" + th.tag + "|dyad");
+                    a.target_note = th.resolve ? "RH resolve (dyad low)" : "RH tension (dyad low)";
+                    out.push_back(a);
+                }
+
+                // Upper dyad tone (always)
+                virtuoso::engine::AgentIntentNote b;
+                b.agent = "Piano";
+                b.channel = midiChannel;
+                b.note = clampMidi(mTop);
+                b.baseVelocity = qBound(1, baseVel - 12 + th.velDelta + 3, 127);
+                b.startPos = pos;
+                b.durationWhole = th.dur;
+                b.structural = c.chordIsNew;
+                b.chord_context = c.chordText;
+                b.voicing_type = voicingType + " + TopDyad";
+                b.logic_tag = th.resolve ? ("ballad_topline|resolve|" + th.tag + "|dyad") : ("ballad_topline|tension|" + th.tag + "|dyad");
+                b.target_note = th.resolve ? "RH resolve (dyad high)" : "RH tension (dyad high)";
+                out.push_back(b);
+            }
+        }
+    }
+
+    if (sparklePc >= 0) {
+        // Sparkle as a small harmony (dyad), and not only the very top register.
+        const int lo = c.rhLo;
+        const int hi = c.sparkleHi;
+        int around = (c.rhHi + c.sparkleLo) / 2;
+        if (m_lastTopMidi >= 0) around = qBound(c.rhHi - 4, m_lastTopMidi + 2, hi - 3);
+        around = qBound(lo + 6, around, hi - 4);
+
+        // Rebuild a minimal safe set for dyad partner selection.
+        QSet<int> safe;
+        auto addSafe = [&](int pc) { if (pc >= 0) safe.insert((pc % 12 + 12) % 12); };
+        addSafe((c.chord.rootPc >= 0) ? (c.chord.rootPc % 12) : 0);
+        addSafe(pcForDegree(c.chord, 3));
+        addSafe(pcForDegree(c.chord, 5));
+        addSafe(pcForDegree(c.chord, 7));
+        addSafe(pcForDegree(c.chord, 9));
+        addSafe(pcForDegree(c.chord, 13));
+        if (c.chord.quality == music::ChordQuality::Minor) addSafe(pcForDegree(c.chord, 11));
+        if (c.chord.quality == music::ChordQuality::Major) {
+            for (const auto& a : c.chord.alterations) {
+                if (a.degree == 11 && a.delta == 1) { addSafe(pcForDegree(c.chord, 11)); break; }
+            }
+        }
+
+        auto chooseDyadLowMidi = [&](int topPc, int mTop, int lo, int hi) -> int {
+            const int t = ((topPc % 12) + 12) % 12;
+            int bestMidi = -1;
+            int bestScore = 999999;
+            for (int pc : safe) {
+                if (pc == t) continue;
+                int m = nearestMidiForPc(pc, mTop - 5, lo, hi);
+                if (m < 0) continue;
+                while (m >= mTop && (m - 12) >= lo) m -= 12;
+                while ((mTop - m) > 12 && (m + 12) <= hi) m += 12;
+                if (m >= mTop) continue;
+                const int interval = mTop - m;
+                if (interval <= 2) continue;
+                if (interval == 6) continue;
+                if (interval >= 11) continue;
+                int s = 0;
+                if (interval == 3 || interval == 4) s += 0;
+                else if (interval == 8 || interval == 9) s += 1;
+                else if (interval == 7 || interval == 5) s += 3;
+                else if (interval == 10) s += 7;
+                else s += 12;
+                const int mid = (lo + hi) / 2;
+                s += qAbs(mid - m) / 3;
+                if (s < bestScore) { bestScore = s; bestMidi = m; }
+            }
+            return bestMidi;
+        };
+
+        const int mTop = nearestMidiForPc(sparklePc, around, lo, hi);
+        const int mLow = chooseDyadLowMidi(sparklePc, mTop, lo, hi);
+
+        const auto pos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
+        if (mLow >= 0) {
+            virtuoso::engine::AgentIntentNote a;
+            a.agent = "Piano";
+            a.channel = midiChannel;
+            a.note = clampMidi(mLow);
+            a.baseVelocity = qBound(1, baseVel - 14, 127);
+            a.startPos = pos;
+            a.durationWhole = Rational(1, ts.den * 2);
+            a.structural = false;
+            a.chord_context = c.chordText;
+            a.voicing_type = voicingType + " + SparkleDyad";
+            a.logic_tag = "ballad_sparkle|dyad";
+            a.target_note = "Sparkle (dyad low)";
+            out.push_back(a);
+        }
+        virtuoso::engine::AgentIntentNote b;
+        b.agent = "Piano";
+        b.channel = midiChannel;
+        b.note = clampMidi(mTop);
+        b.baseVelocity = qBound(1, baseVel - 10, 127);
+        b.startPos = pos;
+        b.durationWhole = Rational(1, ts.den * 2);
+        b.structural = false;
+        b.chord_context = c.chordText;
+        b.voicing_type = voicingType + " + SparkleDyad";
+        b.logic_tag = "ballad_sparkle|dyad";
+        b.target_note = "Sparkle (dyad high)";
+        out.push_back(b);
     }
 
     // Silence-response fill: if user is silent, optionally add a tiny answering dyad on the upbeat of beat 4.
     if (c.userSilence && c.beatInBar == 3 && !m_lastVoicing.isEmpty()) {
         const quint32 hf = quint32(qHash(QString("%1|%2|%3|fill").arg(c.chordText).arg(c.playbackBarIndex).arg(c.determinismSeed)));
         if ((hf % 100u) < 18u) {
-            // Choose a simple color (9) near the last RH cluster.
+            // Tasteful answer as a small harmony (dyad), not a single ping.
+            QSet<int> safe;
+            auto addSafe = [&](int pc) { if (pc >= 0) safe.insert((pc % 12 + 12) % 12); };
+            addSafe((c.chord.rootPc >= 0) ? (c.chord.rootPc % 12) : 0);
+            addSafe(pcForDegree(c.chord, 3));
+            addSafe(pcForDegree(c.chord, 5));
+            addSafe(pcForDegree(c.chord, 7));
+            addSafe(pcForDegree(c.chord, 9));
+            addSafe(pcForDegree(c.chord, 13));
+            if (c.chord.quality == music::ChordQuality::Minor) addSafe(pcForDegree(c.chord, 11));
+            if (c.chord.quality == music::ChordQuality::Major) {
+                for (const auto& a : c.chord.alterations) {
+                    if (a.degree == 11 && a.delta == 1) { addSafe(pcForDegree(c.chord, 11)); break; }
+                }
+            }
+
+            auto chooseDyadLowMidi = [&](int topPc, int mTop, int lo, int hi) -> int {
+                const int t = ((topPc % 12) + 12) % 12;
+                int bestMidi = -1;
+                int bestScore = 999999;
+                for (int pc : safe) {
+                    if (pc == t) continue;
+                    int m = nearestMidiForPc(pc, mTop - 5, lo, hi);
+                    if (m < 0) continue;
+                    while (m >= mTop && (m - 12) >= lo) m -= 12;
+                    while ((mTop - m) > 12 && (m + 12) <= hi) m += 12;
+                    if (m >= mTop) continue;
+                    const int interval = mTop - m;
+                    if (interval <= 2) continue;
+                    if (interval == 6) continue;
+                    if (interval >= 11) continue;
+                    int s = 0;
+                    if (interval == 3 || interval == 4) s += 0;
+                    else if (interval == 8 || interval == 9) s += 1;
+                    else if (interval == 7 || interval == 5) s += 3;
+                    else if (interval == 10) s += 7;
+                    else s += 12;
+                    const int mid = (lo + hi) / 2;
+                    s += qAbs(mid - m) / 3;
+                    if (s < bestScore) { bestScore = s; bestMidi = m; }
+                }
+                return bestMidi;
+            };
+
             const int pc9 = pcForDegree(c.chord, 9);
             const int around = m_lastVoicing.last();
-            const int m1 = nearestMidiForPc(pc9, around + 7, c.rhLo, c.rhHi);
-            virtuoso::engine::AgentIntentNote f;
-            f.agent = "Piano";
-            f.channel = midiChannel;
-            f.note = clampMidi(m1);
-            f.baseVelocity = qMax(1, baseVel - 12);
-            f.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 3, /*sub*/1, /*count*/2, ts); // and-of-4
-            f.durationWhole = Rational(1, 16);
-            f.structural = false;
-            f.chord_context = c.chordText;
-            f.voicing_type = voicingType + " + Fill";
-            f.logic_tag = "ballad_silence_fill";
-            f.target_note = "Answer fill";
-            out.push_back(f);
+            const int mTop = nearestMidiForPc(pc9, around + 7, c.rhLo, c.rhHi);
+            const int mLow = chooseDyadLowMidi(pc9, mTop, c.rhLo, c.rhHi);
+
+            const auto pos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 3, /*sub*/1, /*count*/2, ts); // and-of-4
+            if (mLow >= 0) {
+                virtuoso::engine::AgentIntentNote a;
+                a.agent = "Piano";
+                a.channel = midiChannel;
+                a.note = clampMidi(mLow);
+                a.baseVelocity = qMax(1, baseVel - 18);
+                a.startPos = pos;
+                a.durationWhole = Rational(1, 8);
+                a.structural = false;
+                a.chord_context = c.chordText;
+                a.voicing_type = voicingType + " + FillDyad";
+                a.logic_tag = "ballad_silence_fill|dyad";
+                a.target_note = "Answer fill (dyad low)";
+                out.push_back(a);
+            }
+            virtuoso::engine::AgentIntentNote b;
+            b.agent = "Piano";
+            b.channel = midiChannel;
+            b.note = clampMidi(mTop);
+            b.baseVelocity = qMax(1, baseVel - 14);
+            b.startPos = pos;
+            b.durationWhole = Rational(1, 8);
+            b.structural = false;
+            b.chord_context = c.chordText;
+            b.voicing_type = voicingType + " + FillDyad";
+            b.logic_tag = "ballad_silence_fill|dyad";
+            b.target_note = "Answer fill (dyad high)";
+            out.push_back(b);
         }
     }
     return out;
@@ -446,6 +719,215 @@ void JazzBalladPianoPlanner::ensureBarRhythmPlanned(const Context& c) {
     if (bar == m_lastRhythmBar) return;
     m_lastRhythmBar = bar;
     m_barHits = chooseBarCompRhythm(c);
+    ensureMotifBlockPlanned(c);
+    m_barTopHits = chooseBarTopLine(c);
+}
+
+void JazzBalladPianoPlanner::ensureMotifBlockPlanned(const Context& c) {
+    const int bar = qMax(0, c.playbackBarIndex);
+    const int blockStart = (bar / 2) * 2;
+    if (blockStart == m_motifBlockStartBar) return;
+    m_motifBlockStartBar = blockStart;
+    buildMotifBlockTemplates(c);
+}
+
+void JazzBalladPianoPlanner::buildMotifBlockTemplates(const Context& c) {
+    m_motifA.clear();
+    m_motifB.clear();
+
+    const int bar = qMax(0, c.playbackBarIndex);
+    const int block = bar / 2;
+    const quint32 h = quint32(qHash(QString("pno_motif2|%1|%2|%3")
+                                        .arg(c.chordText)
+                                        .arg(block)
+                                        .arg(c.determinismSeed)));
+    const double e = qBound(0.0, c.energy, 1.0);
+    const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+    const bool allow = !userBusy && (c.userSilence || e >= 0.45);
+    if (!allow) return;
+
+    auto addT = [&](QVector<TopTemplateHit>& v,
+                    int beat, int sub, int count,
+                    virtuoso::groove::Rational dur,
+                    int velDelta,
+                    int degree,
+                    int neighborDir,
+                    bool resolve,
+                    QString tag) {
+        TopTemplateHit t;
+        t.beatInBar = qBound(0, beat, 3);
+        t.sub = qMax(0, sub);
+        t.count = qMax(1, count);
+        if (t.sub >= t.count) t.sub = t.count - 1;
+        t.dur = dur;
+        t.velDelta = velDelta;
+        t.degree = degree;
+        t.neighborDir = neighborDir;
+        t.resolve = resolve;
+        t.tag = std::move(tag);
+        v.push_back(t);
+    };
+
+    // Choose a degree center for this 2-bar motif.
+    int deg = 9;
+    if (c.chord.quality == music::ChordQuality::Major) deg = ((h % 3u) == 0u) ? 13 : 9;
+    else if (c.chord.quality == music::ChordQuality::Minor) deg = ((h % 3u) == 0u) ? 11 : 9;
+    else if (c.chord.quality == music::ChordQuality::Dominant) deg = ((h % 3u) == 0u) ? 13 : 9;
+
+    const int variant = int(h % 4u);
+    const int dir = (((h / 7u) % 2u) == 0u) ? -1 : +1;
+
+    // Bar A: statement (late, floaty)
+    if (variant == 0) {
+        addT(m_motifA, 2, 1, 2, {1, 16}, -16, deg, dir, false, "neighbor_and3");
+        addT(m_motifA, 3, 0, 1, {1, 8}, -10, deg, 0, true, "resolve4");
+    } else if (variant == 1) {
+        addT(m_motifA, 2, 1, 2, {1, 16}, -18, deg, -dir, false, "enclosure_a");
+        addT(m_motifA, 3, 0, 1, {1, 16}, -18, deg, +dir, false, "enclosure_b");
+        addT(m_motifA, 3, 1, 2, {1, 8}, -10, deg, 0, true, "enclosure_resolve");
+    } else if (variant == 2) {
+        int deg2 = deg;
+        if (deg == 9) deg2 = (c.chord.quality == music::ChordQuality::Major) ? 13 : (c.chord.quality == music::ChordQuality::Minor ? 11 : 13);
+        addT(m_motifA, 3, 0, 1, {1, 16}, -14, deg, 0, false, "step_a");
+        addT(m_motifA, 3, 1, 2, {1, 8}, -10, deg2, 0, true, "step_b");
+    } else {
+        addT(m_motifA, 3, 0, 1, {1, 8}, -12, deg, 0, true, "answer4");
+    }
+
+    // Bar B: echo/sequence (same contour, slightly earlier sometimes)
+    if (!m_motifA.isEmpty()) {
+        for (const auto& t : m_motifA) {
+            TopTemplateHit u = t;
+            if (int((h / 11u) % 100u) < qBound(0, int(llround(35.0 + 25.0 * e)), 80)) {
+                u.beatInBar = qMax(0, u.beatInBar - 1);
+                if (u.beatInBar == 0 && u.count == 2 && u.sub > 0) u.sub = 0;
+            }
+            u.velDelta = qBound(-24, u.velDelta - 2, 6);
+            u.tag = "echo_" + u.tag;
+            m_motifB.push_back(u);
+        }
+        // Sequence: sometimes swap resolution degree (9<->13, 9<->11) on bar B.
+        if (int((h / 13u) % 100u) < 35) {
+            for (auto& u : m_motifB) {
+                if (!u.resolve) continue;
+                if (c.chord.quality == music::ChordQuality::Minor) u.degree = (u.degree == 9) ? 11 : 9;
+                else u.degree = (u.degree == 9) ? 13 : 9;
+                u.tag += "_seq";
+            }
+        }
+    }
+}
+
+QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::realizeTopTemplate(
+    const Context& c, const QVector<TopTemplateHit>& tmpl) const {
+    QVector<TopHit> out;
+    out.reserve(tmpl.size());
+
+    const int pc1 = (c.chord.rootPc >= 0) ? (c.chord.rootPc % 12) : 0;
+    const int pc3 = pcForDegree(c.chord, 3);
+    const int pc5 = pcForDegree(c.chord, 5);
+    const int pc7 = pcForDegree(c.chord, 7);
+    const int pc9 = pcForDegree(c.chord, 9);
+    const int pc11 = pcForDegree(c.chord, 11);
+    const int pc13 = pcForDegree(c.chord, 13);
+
+    QSet<int> safe;
+    auto addSafe = [&](int pc) { if (pc >= 0) safe.insert((pc % 12 + 12) % 12); };
+    addSafe(pc1);
+    addSafe(pc3);
+    addSafe(pc5);
+    if (pc7 >= 0) addSafe(pc7);
+    if (c.chord.quality == music::ChordQuality::Major) {
+        addSafe(pc9);
+        addSafe(pc13);
+        bool hasSharp11 = false;
+        for (const auto& a : c.chord.alterations) {
+            if (a.degree == 11 && a.delta == 1) { hasSharp11 = true; break; }
+        }
+        if (hasSharp11) addSafe(pc11);
+    } else if (c.chord.quality == music::ChordQuality::Minor) {
+        addSafe(pc9);
+        addSafe(pc11);
+        if (c.chord.extension >= 13) addSafe(pc13);
+    } else if (c.chord.quality == music::ChordQuality::Dominant) {
+        addSafe(pc9);
+        addSafe(pc13);
+        for (const auto& a : c.chord.alterations) {
+            if (a.degree == 11) addSafe(pc11);
+        }
+    } else {
+        addSafe(pc9);
+    }
+
+    auto pickDegreePc = [&](int degree) -> int {
+        int pc = -1;
+        switch (degree) {
+            case 1: pc = pc1; break;
+            case 3: pc = pc3; break;
+            case 5: pc = pc5; break;
+            case 7: pc = pc7; break;
+            case 9: pc = pc9; break;
+            case 11: pc = pc11; break;
+            case 13: pc = pc13; break;
+            default: pc = pc9; break;
+        }
+        if (pc < 0) pc = pc9;
+        const int p = (pc % 12 + 12) % 12;
+        if (safe.contains(p)) return p;
+        // fallback to a safe color
+        const int p9 = (pc9 % 12 + 12) % 12;
+        const int p13 = (pc13 % 12 + 12) % 12;
+        const int p3 = (pc3 % 12 + 12) % 12;
+        if (safe.contains(p9)) return p9;
+        if (safe.contains(p13)) return p13;
+        if (safe.contains(p3)) return p3;
+        return p;
+    };
+
+    auto nearestOtherSafePc = [&](int aroundPc, int preferDir) -> int {
+        int best = -1;
+        int bestDist = 999;
+        for (int pc : safe) {
+            if (pc == aroundPc) continue;
+            int d = pc - aroundPc;
+            while (d > 6) d -= 12;
+            while (d < -6) d += 12;
+            const int dist = qAbs(d) * 10 + ((preferDir < 0 && d > 0) || (preferDir > 0 && d < 0) ? 3 : 0);
+            if (dist < bestDist) { bestDist = dist; best = pc; }
+        }
+        return best;
+    };
+
+    for (const auto& t : tmpl) {
+        const int targetPc = pickDegreePc(t.degree);
+        int pc = targetPc;
+        if (t.neighborDir != 0) {
+            const int nb = nearestOtherSafePc(targetPc, t.neighborDir);
+            if (nb >= 0) pc = nb;
+        }
+        TopHit o;
+        o.beatInBar = t.beatInBar;
+        o.sub = t.sub;
+        o.count = t.count;
+        o.dur = t.dur;
+        o.velDelta = t.velDelta;
+        o.pc = pc;
+        o.resolve = t.resolve;
+        o.tag = t.tag;
+        out.push_back(o);
+    }
+    return out;
+}
+
+QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine(const Context& c) const {
+    const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+    const double e = qBound(0.0, c.energy, 1.0);
+    if (userBusy) return {};
+    if (!c.userSilence && e < 0.42) return {};
+    const int bar = qMax(0, c.playbackBarIndex);
+    const bool odd = (bar % 2) == 1;
+    const auto& tmpl = odd ? m_motifB : m_motifA;
+    return realizeTopTemplate(c, tmpl);
 }
 
 QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRhythm(const Context& c) const {
@@ -484,11 +966,14 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
     auto padDur = [&]() -> virtuoso::groove::Rational { return virtuoso::groove::Rational(1, 2); };  // 2 beats
 
     auto chooseHold = [&](const QString& tag, bool canPad, bool canLong) -> virtuoso::groove::Rational {
-        Q_UNUSED(tag);
         // Base: short stabs when user is busy; otherwise medium.
         virtuoso::groove::Rational d = userBusy ? shortDur() : medDur();
-        if (canLong && !userBusy && c.userSilence && (holdRoll < 28)) d = longDur();
-        if (canPad && !userBusy && c.userSilence && (holdRoll < 14)) d = padDur();
+        // Let chords ring more in ballads, especially when user is silent.
+        const bool isDownbeatLike = tag.contains("arrival") || tag.contains("touch1") || tag.contains("charleston_1");
+        auto barDur = [&]() -> virtuoso::groove::Rational { return virtuoso::groove::Rational(3, 4); }; // ~3 beats
+        if (canLong && !userBusy && c.userSilence && (holdRoll < 40)) d = longDur();
+        if (canPad && !userBusy && c.userSilence && (holdRoll < 26)) d = padDur();
+        if (isDownbeatLike && canPad && !userBusy && c.userSilence && (holdRoll < 10)) d = barDur();
         // In higher energy, shorten slightly (more motion); in very low energy, lengthen slightly.
         if (!userBusy && e >= 0.65 && d == medDur() && (holdRoll < 35)) d = shortDur();
         if (!userBusy && e <= 0.30 && d == medDur() && (holdRoll < 35)) d = longDur();
@@ -561,8 +1046,18 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
         }
     }
 
+    // Also allow a *very soft* beat-1 touch occasionally even when harmony is stable,
+    // to avoid feeling like comping is "missing the downbeat" forever.
+    if (!c.chordIsNew && !userBusy && complexity > 0.40) {
+        const int pTouch = qBound(0, int(llround(6.0 + 18.0 * complexity)), 28);
+        if (int((h / 31u) % 100u) < pTouch) {
+            add(0, 0, 1, chooseHold("touch1", /*canPad*/false, /*canLong*/true), -8, "guide", "touch1");
+        }
+    }
+
     // Occasional extra jab (and-of-1 or and-of-3) when there is space and energy.
-    if (!userBusy && complexity > 0.55 && (int((h / 17u) % 100u) < 22)) {
+    // Keep it rare; we're aiming for beauty over busy-ness.
+    if (!userBusy && complexity > 0.65 && (int((h / 17u) % 100u) < 10)) {
         const bool on1 = ((h / 19u) % 2u) == 0u;
         add(on1 ? 0 : 2, 1, 2, virtuoso::groove::Rational(1, 16), -10, "guide", on1 ? "jab_and1" : "jab_and3");
     }

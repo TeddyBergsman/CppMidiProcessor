@@ -26,6 +26,29 @@ public:
         QString rhythmTag;         // e.g. "charleston", "push4", "delay2"
     };
 
+    struct TopHit {
+        int beatInBar = 0;     // 0-based
+        int sub = 0;           // sub-index within count
+        int count = 1;         // subdivision count
+        virtuoso::groove::Rational dur{1, 8};
+        int velDelta = -10;
+        int pc = -1;           // 0..11
+        bool resolve = false;  // true if this is the resolution note of a motif
+        QString tag;           // e.g. "neighbor_resolve", "enclosure"
+    };
+
+    struct TopTemplateHit {
+        int beatInBar = 0;
+        int sub = 0;
+        int count = 1;
+        virtuoso::groove::Rational dur{1, 8};
+        int velDelta = -10;
+        int degree = 9;      // preferred degree (1,3,5,7,9,11,13)
+        int neighborDir = 0; // -1/+1 when this is a neighbor/enclosure tone; 0 for direct tones
+        bool resolve = false;
+        QString tag;
+    };
+
     struct Context {
         int bpm = 60;
         int playbackBarIndex = 0;
@@ -87,6 +110,10 @@ private:
 
     void ensureBarRhythmPlanned(const Context& c);
     QVector<CompHit> chooseBarCompRhythm(const Context& c) const;
+    QVector<TopHit> chooseBarTopLine(const Context& c) const;
+    void ensureMotifBlockPlanned(const Context& c);
+    void buildMotifBlockTemplates(const Context& c);
+    QVector<TopHit> realizeTopTemplate(const Context& c, const QVector<TopTemplateHit>& tmpl) const;
 
     virtuoso::constraints::PianoDriver m_driver;
     QVector<int> m_lastVoicing;
@@ -94,6 +121,11 @@ private:
     int m_lastRhythmBar = -1;
     QVector<CompHit> m_barHits;
     int m_lastTopMidi = -1; // right-hand top-line continuity
+    QVector<TopHit> m_barTopHits;
+
+    int m_motifBlockStartBar = -1; // even bar index of current 2-bar block
+    QVector<TopTemplateHit> m_motifA;
+    QVector<TopTemplateHit> m_motifB;
 };
 
 } // namespace playback

@@ -27,6 +27,8 @@ void JazzBalladPianoPlanner::reset() {
     m_anchorBlockStartBar = -1;
     m_anchorChordText.clear();
     m_anchorPcs.clear();
+    m_lastArpBar = -1;
+    m_lastArpStyle = -1;
 }
 
 int JazzBalladPianoPlanner::thirdIntervalForQuality(music::ChordQuality q) {
@@ -256,6 +258,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     const bool allowRootless = chordHas7 && (c.harmonicRisk >= 0.35);
     const bool wantMoreColor = (c.harmonicRisk >= 0.45) || (progress01 >= 0.55);
     const bool allowQuartal = chordHas7 && (c.harmonicRisk >= 0.60);
+    const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
 
     QVector<Cand> candidates;
     candidates.reserve(8);
@@ -291,6 +294,31 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         if (pc9 >= 0) qv.push_back(pc9);
         if (isMinor && pc11 >= 0 && c.harmonicRisk >= 0.70) qv.push_back(pc11);
         if (qv.size() >= 3) candidates.push_back(mk("quartal", "Ballad Quartal", qv, true));
+    }
+
+    // Bill-ish clustered colors / drop-ish stacks (procedural vocab).
+    // Keep it tasteful: only when there is space and risk is moderate+.
+    const bool allowBillVocab = chordHas7 && (c.harmonicRisk >= 0.45) && !userBusy;
+    if (allowBillVocab) {
+        // 6/9-ish cluster on majors (Evans-y) and 9/11 cluster on minors.
+        if (!spicy && c.chord.quality == music::ChordQuality::Major) {
+            if (pc3 >= 0 && pc7 >= 0 && pc9 >= 0) candidates.push_back(mk("evans_clusterA", "Evans Cluster (3-7-9)", QVector<int>{pc3, pc7, pc9}, true));
+            if (pc3 >= 0 && pc7 >= 0 && pc13 >= 0) candidates.push_back(mk("evans_clusterB", "Evans Cluster (3-7-13)", QVector<int>{pc3, pc7, pc13}, true));
+            if (pc3 >= 0 && pc7 >= 0 && pc9 >= 0 && pc13 >= 0 && (progress01 >= 0.45 || c.harmonicRisk >= 0.70))
+                candidates.push_back(mk("evans_6_9", "Evans 6/9 (3-7-9-13)", QVector<int>{pc3, pc7, pc9, pc13}, true));
+        }
+        if (!spicy && c.chord.quality == music::ChordQuality::Minor) {
+            if (pc3 >= 0 && pc7 >= 0 && pc9 >= 0) candidates.push_back(mk("evans_minA", "Evans Minor (3-7-9)", QVector<int>{pc3, pc7, pc9}, true));
+            if (pc3 >= 0 && pc7 >= 0 && pc11 >= 0) candidates.push_back(mk("evans_minB", "Evans Minor (3-7-11)", QVector<int>{pc3, pc7, pc11}, true));
+            if (pc3 >= 0 && pc7 >= 0 && pc9 >= 0 && pc11 >= 0 && (progress01 >= 0.45 || c.harmonicRisk >= 0.70))
+                candidates.push_back(mk("evans_min_9_11", "Evans Minor (3-7-9-11)", QVector<int>{pc3, pc7, pc9, pc11}, true));
+        }
+        // Dominants: allow a slightly spicier upper-structure triad-ish stack, but still beauty-first.
+        if (c.chord.quality == music::ChordQuality::Dominant && pc3 >= 0 && pc7 >= 0 && pc9 >= 0 && (c.harmonicRisk >= 0.65)) {
+            candidates.push_back(mk("evans_domA", "Evans Dom (3-7-9)", QVector<int>{pc3, pc7, pc9}, true));
+            if (pc13 >= 0 && (progress01 >= 0.55 || c.cadence01 >= 0.60))
+                candidates.push_back(mk("evans_domB", "Evans Dom (3-7-9-13)", QVector<int>{pc3, pc7, pc9, pc13}, true));
+        }
     }
 
     auto scoreCand = [&](const Cand& cand) -> double {
@@ -356,6 +384,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     }
 
     pcs = m_anchorPcs;
+
+    const QVector<int> prevVoicing = m_lastVoicing;
 
     // Map to MIDI with LH/RH ranges and voice-leading to last voicing.
     // v2: assign stable voice indices (inner voices move like fingers, not re-sorted blocks).
@@ -524,15 +554,70 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                                              .arg(hit.beatInBar)
                                              .arg(c.determinismSeed)));
         const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
-        // Rolling should be subtle/occasional, but it must respond clearly to Virt sliders.
-        // Make rhythmicComplexity drive "hands/roll" feel even at lower energy.
+        const bool cadence = (c.cadence01 >= 0.55) || c.phraseEndBar;
+        const bool arrival = c.chordIsNew || hit.rhythmTag.contains("arrival") || hit.rhythmTag.contains("forced_arrival1");
+        // Rolling/arpeggiation library:
+        // - Reduce overuse (esp. after adding strong touch/phrase behavior)
+        // - Increase pattern variety
+        // - Add deterministic anti-repeat across bars
         const double rc = qBound(0.0, c.rhythmicComplexity, 1.0);
-        const int pRoll = qBound(0, int(llround(6.0 + 10.0 * c.energy + 28.0 * rc + 10.0 * progress01)), 70);
-        const bool doRoll = !userBusy && ((c.energy >= 0.14) || (rc >= 0.22)) && (int(hr % 100u) < pRoll);
-        const int pBigRoll = qBound(0, int(llround(2.0 + 3.0 * c.energy + 8.0 * rc + 4.0 * progress01)), 22);
+        const int pRoll = qBound(0, int(llround(4.0 + 6.0 * c.energy + 14.0 * rc + 6.0 * progress01 + (cadence ? 6.0 : 0.0))), 45);
+        const bool doRoll = !userBusy && ((c.energy >= 0.18) || (rc >= 0.32) || cadence) && (int(hr % 100u) < pRoll);
+        const int pBigRoll = qBound(0, int(llround(1.0 + 2.0 * c.energy + 5.0 * rc + 2.0 * progress01 + (cadence ? 3.0 : 0.0))), 12);
         const bool bigRoll = doRoll && (int((hr / 97u) % 100u) < pBigRoll);
-        const bool doArp = doRoll && (notes.size() >= 3) && (hit.dur >= virtuoso::groove::Rational(1, 8)) && (int((hr / 13u) % 100u) < (bigRoll ? 80 : 45));
-        const bool arpUp = ((hr / 3u) % 2u) == 0u;
+
+        // Arpeggiation should be rarer than rolling, and more likely only at cadences/arrivals.
+        const int pArp = qBound(0, int(llround((cadence ? 18.0 : 8.0) + 16.0 * rc + (bigRoll ? 14.0 : 0.0))), 55);
+        const bool doArp = doRoll && (notes.size() >= 3) && (hit.dur >= virtuoso::groove::Rational(1, 8)) && (int((hr / 13u) % 100u) < pArp);
+
+        // Style selection (deterministic), with anti-repeat per bar.
+        // 0=none/subtle roll, 1=up, 2=down, 3=inside-out, 4=outside-in, 5=skip, 6=triplet (cadence only)
+        int style = 0;
+        if (doArp) {
+            const quint32 hs = quint32(qHash(QString("arpStyle|%1|%2|%3|%4")
+                                                 .arg(c.chordText)
+                                                 .arg(c.playbackBarIndex)
+                                                 .arg(hit.beatInBar)
+                                                 .arg(c.determinismSeed)));
+            const int wantTrip = (cadence && (int((hs / 11u) % 100u) < 18)) ? 1 : 0;
+            const int pool = wantTrip ? 6 : 5;
+            style = 1 + int((hs % uint(pool)) % uint(pool)); // 1..pool
+            if (m_lastArpBar == c.playbackBarIndex && style == m_lastArpStyle) {
+                style = 1 + ((style) % pool); // rotate
+            }
+            m_lastArpBar = c.playbackBarIndex;
+            m_lastArpStyle = style;
+        } else if (doRoll) {
+            style = 0; // subtle roll only
+        }
+
+        // Order helper (used for both velocity shaping and timing spread).
+        auto orderForIdx = [&](int i) -> int {
+            if (!doArp) return i;
+            auto ordUp = [&](int j) { return j; };
+            auto ordDown = [&](int j) { return (notes.size() - 1 - j); };
+            auto ordInsideOut = [&](int j) {
+                const int a = j / 2;
+                return (j % 2 == 0) ? a : (notes.size() - 1 - a);
+            };
+            auto ordOutsideIn = [&](int j) {
+                const int a = j / 2;
+                return (j % 2 == 0) ? (notes.size() - 1 - a) : a;
+            };
+            auto ordSkip = [&](int j) {
+                if (notes.size() < 4) return ordUp(j);
+                static const int map4[4] = {0, 2, 1, 3};
+                return (j < 4) ? map4[j] : j;
+            };
+
+            if (style == 1) return ordUp(i);
+            if (style == 2) return ordDown(i);
+            if (style == 3) return ordInsideOut(i);
+            if (style == 4) return ordOutsideIn(i);
+            if (style == 5) return ordSkip(i);
+            if (style == 6) return ordUp(i);
+            return ordUp(i);
+        };
 
         auto to16thSub = [&](int sub, int count) -> int {
             if (count <= 1) return 0;
@@ -544,21 +629,35 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         };
         const int base16 = to16thSub(hit.sub, hit.count);
 
+        const bool isPedalWash = !userBusy && (cadence || arrival || (c.userSilence && c.energy <= 0.55));
+
         for (int idx = 0; idx < notes.size(); ++idx) {
             const int m = notes[idx];
             const bool isLow = (m == lowNote);
             const bool isTop = (m == topNote);
             const bool isRh = (m > c.lhHi); // heuristic split at LH range ceiling
 
+            // Pedal-aware re-strike avoidance:
+            // if we're in a "wash" state and the note was already held from the previous voicing,
+            // avoid retriggering it on non-arrival hits (lets the harmony ring like pedal).
+            if (isPedalWash && !arrival && !prevVoicing.isEmpty() && prevVoicing.contains(m)) {
+                // Allow top voice to be re-articulated occasionally for singing line.
+                if (!isTop && (isLow || !isRh || hit.dur >= virtuoso::groove::Rational(1, 4))) continue;
+            }
+
             int vel = baseVel + hit.velDelta;
-            // Expressive shaping: top voice sings; inner voices are softer; LH anchor steady.
-            if (isTop) vel += 7;
-            else if (!isLow) vel -= 4;
+            // Touch model v2 (Bill-ish): top voice sings, inner voices disappear, LH is a soft bed.
+            // Also keep cadences slightly warmer/rounder.
+            if (isLow && !isRh) vel += 1;              // LH bed slightly present
+            else if (isTop) vel += (cadence ? 10 : 8); // singing top
+            else vel -= 8;                             // inner voices very soft
             if (isRh) vel += 1;
+            if (c.toneDark >= 0.65) vel -= 2;
             // If arpeggiating upward, slightly crescendo; downward, slightly decrescendo.
             if (doArp) {
-                const int order = arpUp ? idx : (notes.size() - 1 - idx);
-                vel += arpUp ? qMin(4, order) : -qMin(3, order);
+                const int order = orderForIdx(idx);
+                // Many styles are effectively "up-ish" in time; keep a mild crescendo with order.
+                vel += qMin(4, order);
             }
             vel = qBound(1, vel, 127);
 
@@ -566,16 +665,41 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
             int sub = hit.sub;
             int count = hit.count;
 
-            // Intra-chord arpeggiation/roll: place notes a few 16ths apart (deterministic),
-            // with RH slightly later than LH to feel "hands" rather than a MIDI block chord.
+            // Intra-chord roll/arp: spread notes using a small pattern library.
             if (doRoll) {
-                const int order = arpUp ? idx : (notes.size() - 1 - idx);
-                // Rolled-chord texture: low notes can be slightly earlier, high notes slightly later.
-                int step = 0;
-                if (doArp) step = qMin(bigRoll ? 3 : 2, order); // arpeggiate
-                else step = isLow ? -1 : (isTop ? +1 : 0); // subtle roll
                 count = 4;
-                sub = qBound(0, base16 + step, 3);
+                int step = 0;
+                if (!doArp) {
+                    step = isLow ? -1 : (isTop ? +1 : 0); // subtle roll
+                    sub = qBound(0, base16 + step, 3);
+                } else {
+                    const int order = orderForIdx(idx);
+
+                    const int maxStep = bigRoll ? 3 : 2;
+                    step = qBound(0, qMin(maxStep, order), 3);
+                    sub = qBound(0, base16 + step, 3);
+
+                    // Triplet option (cadence only): use count=3 and spread within the beat.
+                    if (style == 6 && cadence) {
+                        count = 3;
+                        sub = qBound(0, qMin(2, order), 2);
+                    }
+                }
+            }
+
+            // Deterministic micro-spread even when not rolling:
+            // - top voice slightly late
+            // - LH bed slightly early cannot be represented; we keep it at the grid and rely on humanizer
+            if (!doRoll) {
+                // Remap current (sub,count) to 128th grid and add a tiny late offset for the top.
+                const int base32 = to16thSub(sub, count) * 8; // 0..24
+                if (isTop && isRh) {
+                    count = 32;               // 128th-note grid
+                    sub = qBound(0, base32 + (cadence ? 2 : 1), 31); // +1..2 = ~15–30ms at 60bpm
+                } else if (!isLow && isRh) {
+                    count = 32;
+                    sub = qBound(0, base32 + 1, 31); // slight late for RH non-top
+                }
             }
 
         virtuoso::engine::AgentIntentNote n;
@@ -1365,6 +1489,24 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::realizeTopTempla
         return p;
     };
 
+    // Guide-tone line bias (Bill-ish): on phrase cadences and chord changes, prefer guide tones
+    // even if the template asks for a color degree, so the line "tells the harmony".
+    const bool cadence = (c.cadence01 >= 0.55) || c.phraseEndBar;
+    auto guideify = [&](int chosenPc, bool isResolve) -> int {
+        if (isResolve) return chosenPc; // already forced to guides above
+        if (!c.chordIsNew && !cadence) return chosenPc;
+        const bool isColor = (chosenPc == ((pc9 % 12 + 12) % 12) ||
+                              chosenPc == ((pc11 % 12 + 12) % 12) ||
+                              chosenPc == ((pc13 % 12 + 12) % 12) ||
+                              chosenPc == ((pc1 % 12 + 12) % 12));
+        if (!isColor) return chosenPc;
+        const int p7 = (pc7 % 12 + 12) % 12;
+        const int p3 = (pc3 % 12 + 12) % 12;
+        if (pc7 >= 0 && safe.contains(p7)) return p7;
+        if (pc3 >= 0 && safe.contains(p3)) return p3;
+        return chosenPc;
+    };
+
     auto nearestOtherSafePc = [&](int aroundPc, int preferDir) -> int {
         int best = -1;
         int bestDist = 999;
@@ -1380,7 +1522,7 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::realizeTopTempla
     };
 
     for (const auto& t : tmpl) {
-        const int targetPc = pickDegreePc(t.degree, t.resolve);
+        const int targetPc = guideify(pickDegreePc(t.degree, t.resolve), t.resolve);
         int pc = targetPc;
         if (t.neighborDir != 0) {
             const int nb = nearestOtherSafePc(targetPc, t.neighborDir);

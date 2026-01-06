@@ -151,6 +151,10 @@ private:
     int m_anchorBlockStartBar = -1;
     QString m_anchorChordText;
     QVector<int> m_anchorPcs; // pitch classes 0..11
+
+    // Arpeggiation anti-repeat (deterministic).
+    int m_lastArpBar = -1;
+    int m_lastArpStyle = -1;
 };
 
 } // namespace playback

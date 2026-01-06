@@ -544,14 +544,21 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     const int baseShift = int((hrz % 3u)) - 1; // -1..+1 semitones
     const int arcShift = int(llround(3.0 * qSin(3.1415926535 * phrasePos01))); // 0..3..0
     const int cadenceLift = cadence ? 1 : 0;
-    const int regShift = qBound(-2, baseShift + arcShift + cadenceLift, 4);
+    auto safeQBoundInt = [&](int mn, int v, int mx) -> int {
+        // Qt asserts if (mx < mn). This can happen when interaction ducking temporarily
+        // narrows ranges (e.g., rhHi close to rhLo). Never crash; just collapse range.
+        if (mx < mn) mx = mn;
+        return qBound(mn, v, mx);
+    };
+
+    const int regShift = safeQBoundInt(-2, baseShift + arcShift + cadenceLift, 4);
 
     // LH target around: stable bed; avoid jumping.
-    int lhAround = qBound(lhLo + 3, (lhLo + lhHi) / 2 + regShift, lhHi - 3);
+    int lhAround = safeQBoundInt(lhLo + 3, (lhLo + lhHi) / 2 + regShift, lhHi - 3);
     if (!prevVoicing.isEmpty()) {
         // pick the lowest previous note as LH anchor
         const int prevLow = *std::min_element(prevVoicing.begin(), prevVoicing.end());
-        lhAround = qBound(lhLo + 2, prevLow, lhHi - 2);
+        lhAround = safeQBoundInt(lhLo + 2, prevLow, lhHi - 2);
     }
     QVector<int> lhMidi;
     lhMidi.reserve(lhPcs.size());
@@ -577,9 +584,9 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     sortUnique(rhPcs);
 
     // Choose top note around last top / mid-high target.
-    int topAround = qBound(rhLo + 8, (rhLo + rhHi) / 2 + 8 + regShift * 2, rhHi - 4);
-    if (m_lastTopMidi >= 0) topAround = qBound(rhLo + 6, m_lastTopMidi, rhHi - 4);
-    if (cadence) topAround = qBound(rhLo + 8, topAround + 2, rhHi - 3);
+    int topAround = safeQBoundInt(rhLo + 8, (rhLo + rhHi) / 2 + 8 + regShift * 2, rhHi - 4);
+    if (m_lastTopMidi >= 0) topAround = safeQBoundInt(rhLo + 6, m_lastTopMidi, rhHi - 4);
+    if (cadence) topAround = safeQBoundInt(rhLo + 8, topAround + 2, rhHi - 3);
 
     int topPc = -1;
     if (desiredTopPc >= 0 && (guides.contains(desiredTopPc) || rhPcs.contains(desiredTopPc))) topPc = desiredTopPc;

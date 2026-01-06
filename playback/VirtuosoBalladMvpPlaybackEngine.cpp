@@ -463,6 +463,26 @@ static QString intentsToString(const SemanticMidiAnalyzer::IntentState& i) {
 
 } // namespace
 
+void VirtuosoBalladMvpPlaybackEngine::onGuitarNoteOn(int note, int vel) {
+    m_listener.ingestGuitarNoteOn(note, vel, QDateTime::currentMSecsSinceEpoch());
+}
+
+void VirtuosoBalladMvpPlaybackEngine::onGuitarNoteOff(int note) {
+    m_listener.ingestGuitarNoteOff(note, QDateTime::currentMSecsSinceEpoch());
+}
+
+void VirtuosoBalladMvpPlaybackEngine::onVoiceCc2Stream(int cc2) {
+    m_listener.ingestCc2(cc2, QDateTime::currentMSecsSinceEpoch());
+}
+
+void VirtuosoBalladMvpPlaybackEngine::onVoiceNoteOn(int note, int vel) {
+    m_listener.ingestVoiceNoteOn(note, vel, QDateTime::currentMSecsSinceEpoch());
+}
+
+void VirtuosoBalladMvpPlaybackEngine::onVoiceNoteOff(int note) {
+    m_listener.ingestVoiceNoteOff(note, QDateTime::currentMSecsSinceEpoch());
+}
+
 VirtuosoBalladMvpPlaybackEngine::VirtuosoBalladMvpPlaybackEngine(QObject* parent)
     : QObject(parent)
     , m_registry(virtuoso::groove::GrooveRegistry::builtins()) {
@@ -793,23 +813,23 @@ void VirtuosoBalladMvpPlaybackEngine::setMidiProcessor(MidiProcessor* midi) {
 
     // Listening MVP: tap *transposed* live performance notes.
     // Use QueuedConnection because MidiProcessor may emit from its worker thread.
-    connect(m_midi, &MidiProcessor::guitarNoteOn, this, [this](int note, int vel) {
-        m_listener.ingestGuitarNoteOn(note, vel, QDateTime::currentMSecsSinceEpoch());
-    }, Qt::QueuedConnection);
-    connect(m_midi, &MidiProcessor::guitarNoteOff, this, [this](int note) {
-        m_listener.ingestGuitarNoteOff(note, QDateTime::currentMSecsSinceEpoch());
-    }, Qt::QueuedConnection);
-    connect(m_midi, &MidiProcessor::voiceCc2Stream, this, [this](int cc2) {
-        m_listener.ingestCc2(cc2, QDateTime::currentMSecsSinceEpoch());
-    }, Qt::QueuedConnection);
+    connect(m_midi, &MidiProcessor::guitarNoteOn,
+            this, &VirtuosoBalladMvpPlaybackEngine::onGuitarNoteOn,
+            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+    connect(m_midi, &MidiProcessor::guitarNoteOff,
+            this, &VirtuosoBalladMvpPlaybackEngine::onGuitarNoteOff,
+            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+    connect(m_midi, &MidiProcessor::voiceCc2Stream,
+            this, &VirtuosoBalladMvpPlaybackEngine::onVoiceCc2Stream,
+            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
 
     // Vocal melody tracking (NOT used for density): allows later call/response.
-    connect(m_midi, &MidiProcessor::voiceNoteOn, this, [this](int note, int vel) {
-        m_listener.ingestVoiceNoteOn(note, vel, QDateTime::currentMSecsSinceEpoch());
-    }, Qt::QueuedConnection);
-    connect(m_midi, &MidiProcessor::voiceNoteOff, this, [this](int note) {
-        m_listener.ingestVoiceNoteOff(note, QDateTime::currentMSecsSinceEpoch());
-    }, Qt::QueuedConnection);
+    connect(m_midi, &MidiProcessor::voiceNoteOn,
+            this, &VirtuosoBalladMvpPlaybackEngine::onVoiceNoteOn,
+            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+    connect(m_midi, &MidiProcessor::voiceNoteOff,
+            this, &VirtuosoBalladMvpPlaybackEngine::onVoiceNoteOff,
+            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
 }
 
 void VirtuosoBalladMvpPlaybackEngine::setTempoBpm(int bpm) {

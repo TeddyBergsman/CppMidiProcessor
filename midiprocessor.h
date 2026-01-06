@@ -11,6 +11,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <queue>
+#include <deque>
 #include <QMediaPlayer>
 #include <QStringList>
 #include "RtMidi.h"
@@ -104,13 +105,19 @@ private:
         std::string trackId;
     };
     void handleBackingTrackSelection(int note);
+    bool tryEnqueueEvent(MidiEvent&& ev);
+    static bool isCriticalMidiEvent(const MidiEvent& ev);
 
     // --- Threading & Queues ---
     std::thread m_workerThread;
-    std::queue<MidiEvent> m_eventQueue;
+    std::deque<MidiEvent> m_eventQueue; // bounded (see tryEnqueueEvent)
     std::mutex m_eventMutex;
     std::condition_variable m_condition;
     std::atomic<bool> m_isRunning{false};
+
+    // Backpressure: prevent unbounded growth when VirtualBand + live MIDI arrive together.
+    static constexpr size_t kMaxEventQueue = 16384;
+    std::atomic<quint64> m_droppedMidiEvents{0};
     
     QTimer* m_logPollTimer;
     std::queue<std::string> m_logQueue;
@@ -132,6 +139,8 @@ private:
     TrackMetadata loadTrackMetadata(const QString& trackPath);
     void emitPitchIfChanged(bool isGuitar);
     void hzToNoteAndCents(double hz, int& noteOut, double& centsOut) const;
+    // Defensive MIDI output: never crash due to RtMidi exceptions or null output.
+    void safeSendMessage(const std::vector<unsigned char>& msg);
 
     // --- MIDI Ports ---
     RtMidiIn* midiInGuitar = nullptr;

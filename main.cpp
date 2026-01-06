@@ -6,13 +6,44 @@
 #include "PresetData.h"
 // No longer need <QDir>
 #include <QCoreApplication>
+#include <QDebug>
 
 #include "ireal/HtmlPlaylistParser.h"
 #include "chart/IRealProgressionParser.h"
 #include "music/SelfTest.h"
 
+#include <cstdlib>
+#include <execinfo.h>
+
+static void fatalBacktraceMessageHandler(QtMsgType type, const QMessageLogContext& ctx, const QString& msg) {
+    // Always forward the original message.
+    QByteArray localMsg = msg.toLocal8Bit();
+    const char* file = ctx.file ? ctx.file : "";
+    const char* function = ctx.function ? ctx.function : "";
+    fprintf(stderr, "%s (%s:%u, %s)\n", localMsg.constData(), file, ctx.line, function);
+
+    // Optional stack trace for fatal asserts to quickly pinpoint crashes in the field.
+    const bool wantBt = qEnvironmentVariableIntValue("CPPMP_STACKTRACE") != 0;
+    if (wantBt && (type == QtFatalMsg || msg.contains("ASSERT", Qt::CaseInsensitive))) {
+        void* callstack[128];
+        const int frames = ::backtrace(callstack, 128);
+        char** strs = ::backtrace_symbols(callstack, frames);
+        if (strs) {
+            fprintf(stderr, "---- backtrace (%d frames) ----\n", frames);
+            for (int i = 0; i < frames; ++i) {
+                fprintf(stderr, "%s\n", strs[i]);
+            }
+            fprintf(stderr, "-------------------------------\n");
+            free(strs);
+        }
+    }
+
+    if (type == QtFatalMsg) abort();
+}
+
 int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
+    qInstallMessageHandler(fatalBacktraceMessageHandler);
 
     // QSettings identity (needed for Preferences persistence)
     QCoreApplication::setOrganizationName("TeddyBergsman");

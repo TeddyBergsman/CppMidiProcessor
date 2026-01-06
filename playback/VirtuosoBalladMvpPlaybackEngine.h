@@ -88,6 +88,12 @@ signals:
 
 private slots:
     void onTick();
+    // Listening MVP: receive live-performance events from MidiProcessor (queued from worker thread).
+    void onGuitarNoteOn(int note, int vel);
+    void onGuitarNoteOff(int note);
+    void onVoiceCc2Stream(int cc2);
+    void onVoiceNoteOn(int note, int vel);
+    void onVoiceNoteOff(int note);
 
 private:
     void rebuildSequence();

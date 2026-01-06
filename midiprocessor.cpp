@@ -14,6 +14,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <exception>
+#include <deque>
 
 MidiProcessor::MidiProcessor(const Preset& preset, QObject *parent) 
     : QObject(parent), m_preset(preset), m_currentProgramIndex(-1) {
@@ -55,15 +57,93 @@ MidiProcessor::~MidiProcessor() {
     delete m_audioOutput;
 }
 
+void MidiProcessor::safeSendMessage(const std::vector<unsigned char>& msg) {
+    if (!midiOut) return;
+    if (msg.empty()) return;
+    try {
+        midiOut->sendMessage(&msg);
+    } catch (const RtMidiError& e) {
+        std::lock_guard<std::mutex> lock(m_logMutex);
+        m_logQueue.push(std::string("ERROR: RtMidi sendMessage failed: ") + e.getMessage());
+    } catch (const std::exception& e) {
+        std::lock_guard<std::mutex> lock(m_logMutex);
+        m_logQueue.push(std::string("ERROR: MIDI sendMessage threw: ") + e.what());
+    } catch (...) {
+        std::lock_guard<std::mutex> lock(m_logMutex);
+        m_logQueue.push("ERROR: MIDI sendMessage threw unknown exception");
+    }
+}
+
+bool MidiProcessor::isCriticalMidiEvent(const MidiEvent& ev) {
+    // Always keep control events.
+    if (ev.type != EventType::MIDI_MESSAGE) return true;
+    const auto& m = ev.message;
+    if (m.empty()) return false;
+    const unsigned char st = m[0] & 0xF0;
+    const unsigned char stRaw = m[0];
+    if (stRaw >= 0xF0) return false;
+    if (m.size() < 3) return false;
+    const int d1 = int(m[1]);
+    const int d2 = int(m[2]);
+    // NOTE_OFF (incl note-on vel=0) is critical to avoid stuck notes.
+    if (st == 0x80) return true;
+    if (st == 0x90 && d2 == 0) return true;
+    // "All notes off / sound off / sustain off" kills are critical.
+    if (st == 0xB0) {
+        const int cc = d1;
+        const int val = d2;
+        if ((cc == 64 || cc == 120 || cc == 123) && val == 0) return true;
+    }
+    return false;
+}
+
+bool MidiProcessor::tryEnqueueEvent(MidiEvent&& ev) {
+    // Must be called with m_eventMutex held.
+    if (m_eventQueue.size() < kMaxEventQueue) {
+        m_eventQueue.emplace_back(std::move(ev));
+        return true;
+    }
+
+    // Queue full: keep critical events if possible; otherwise drop.
+    const bool critical = isCriticalMidiEvent(ev);
+    if (!critical) {
+        const quint64 dropped = ++m_droppedMidiEvents;
+        // Log occasionally to avoid flooding.
+        if ((dropped % 1024u) == 1u) {
+            std::lock_guard<std::mutex> lock(m_logMutex);
+            m_logQueue.push(QString("WARN: Dropping MIDI events due to overload (dropped=%1, q=%2)")
+                                .arg(qulonglong(dropped))
+                                .arg(qulonglong(m_eventQueue.size()))
+                                .toStdString());
+        }
+        return false;
+    }
+
+    // Try to make room by dropping one non-critical event from the back (cheapest to lose).
+    for (auto it = m_eventQueue.rbegin(); it != m_eventQueue.rend(); ++it) {
+        if (!isCriticalMidiEvent(*it)) {
+            // Erase reverse iterator.
+            m_eventQueue.erase(std::next(it).base());
+            m_eventQueue.emplace_back(std::move(ev));
+            return true;
+        }
+    }
+
+    // Everything in the queue is critical. Drop the oldest one to ensure progress.
+    m_eventQueue.pop_front();
+    m_eventQueue.emplace_back(std::move(ev));
+    return true;
+}
+
 void MidiProcessor::panicAllChannels() {
     if (!midiOut) return;
     for (int ch = 0; ch < 16; ++ch) {
         for (int n = 0; n < 128; ++n) {
             std::vector<unsigned char> offMsg = { (unsigned char)(0x80 | (unsigned char)ch), (unsigned char)n, 0 };
-            midiOut->sendMessage(&offMsg);
+            safeSendMessage(offMsg);
             // Some hosts prefer NoteOn velocity=0 as note-off
             std::vector<unsigned char> on0Msg = { (unsigned char)(0x90 | (unsigned char)ch), (unsigned char)n, 0 };
-            midiOut->sendMessage(&on0Msg);
+            safeSendMessage(on0Msg);
         }
         sendChannelAllNotesOff(ch);
     }
@@ -132,10 +212,12 @@ bool MidiProcessor::initialize() {
     connect(this, &MidiProcessor::_internal_resumeTrack, this, &MidiProcessor::onInternalResume, Qt::QueuedConnection);
 
 
-    midiInGuitar->ignoreTypes(false, true, true);
-    midiInVoice->ignoreTypes(false, true, true);
+    // We don't need SysEx/timing/sensing from live inputs; dropping them avoids
+    // edge cases where system messages get accidentally mangled/forwarded.
+    midiInGuitar->ignoreTypes(true, true, true);
+    midiInVoice->ignoreTypes(true, true, true);
     if (m_voicePitchAvailable) {
-        midiInVoicePitch->ignoreTypes(false, true, true);
+        midiInVoicePitch->ignoreTypes(true, true, true);
     }
 
     precalculateRatios();
@@ -157,14 +239,14 @@ bool MidiProcessor::initialize() {
 
 void MidiProcessor::applyProgram(int programIndex) {
     std::lock_guard<std::mutex> lock(m_eventMutex);
-    m_eventQueue.push({EventType::PROGRAM_CHANGE, std::vector<unsigned char>(), MidiSource::Guitar, programIndex, ""});
+    tryEnqueueEvent({EventType::PROGRAM_CHANGE, std::vector<unsigned char>(), MidiSource::Guitar, programIndex, ""});
     m_condition.notify_one();
 }
 
 void MidiProcessor::applyTranspose(int semitones) {
     std::lock_guard<std::mutex> lock(m_eventMutex);
     // Use programIndex field to carry semitone value for TRANSPOSE_CHANGE
-    m_eventQueue.push({EventType::TRANSPOSE_CHANGE, std::vector<unsigned char>(), MidiSource::Guitar, semitones, ""});
+    tryEnqueueEvent({EventType::TRANSPOSE_CHANGE, std::vector<unsigned char>(), MidiSource::Guitar, semitones, ""});
     m_condition.notify_one();
 }
 
@@ -177,7 +259,7 @@ void MidiProcessor::sendVirtualNoteOn(int channel, int note, int velocity) {
     const unsigned char chan = (unsigned char)(channel - 1);
     std::vector<unsigned char> msg = { (unsigned char)(0x90 | chan), (unsigned char)note, (unsigned char)velocity };
     std::lock_guard<std::mutex> lock(m_eventMutex);
-    m_eventQueue.push({EventType::MIDI_MESSAGE, msg, MidiSource::VirtualBand, -1, ""});
+    tryEnqueueEvent({EventType::MIDI_MESSAGE, msg, MidiSource::VirtualBand, -1, ""});
     m_condition.notify_one();
 }
 
@@ -191,8 +273,8 @@ void MidiProcessor::sendVirtualNoteOff(int channel, int note) {
     // Send BOTH forms to avoid stuck notes / "infinite sustain" symptoms.
     std::vector<unsigned char> msgOff = { (unsigned char)(0x80 | chan), (unsigned char)note, 0 };
     std::vector<unsigned char> msgOn0 = { (unsigned char)(0x90 | chan), (unsigned char)note, 0 };
-    m_eventQueue.push({EventType::MIDI_MESSAGE, msgOff, MidiSource::VirtualBand, -1, ""});
-    m_eventQueue.push({EventType::MIDI_MESSAGE, msgOn0, MidiSource::VirtualBand, -1, ""});
+    tryEnqueueEvent({EventType::MIDI_MESSAGE, msgOff, MidiSource::VirtualBand, -1, ""});
+    tryEnqueueEvent({EventType::MIDI_MESSAGE, msgOn0, MidiSource::VirtualBand, -1, ""});
     m_condition.notify_one();
 }
 
@@ -203,9 +285,9 @@ void MidiProcessor::sendVirtualAllNotesOff(int channel) {
     std::vector<unsigned char> allNotesOff = { (unsigned char)(0xB0 | chan), 123, 0 };
     std::vector<unsigned char> allSoundOff = { (unsigned char)(0xB0 | chan), 120, 0 };
     std::lock_guard<std::mutex> lock(m_eventMutex);
-    m_eventQueue.push({EventType::MIDI_MESSAGE, sustainOff, MidiSource::VirtualBand, -1, ""});
-    m_eventQueue.push({EventType::MIDI_MESSAGE, allNotesOff, MidiSource::VirtualBand, -1, ""});
-    m_eventQueue.push({EventType::MIDI_MESSAGE, allSoundOff, MidiSource::VirtualBand, -1, ""});
+    tryEnqueueEvent({EventType::MIDI_MESSAGE, sustainOff, MidiSource::VirtualBand, -1, ""});
+    tryEnqueueEvent({EventType::MIDI_MESSAGE, allNotesOff, MidiSource::VirtualBand, -1, ""});
+    tryEnqueueEvent({EventType::MIDI_MESSAGE, allSoundOff, MidiSource::VirtualBand, -1, ""});
     m_condition.notify_one();
 }
 
@@ -218,25 +300,25 @@ void MidiProcessor::sendVirtualCC(int channel, int cc, int value) {
     const unsigned char chan = (unsigned char)(channel - 1);
     std::vector<unsigned char> msg = { (unsigned char)(0xB0 | chan), (unsigned char)cc, (unsigned char)value };
     std::lock_guard<std::mutex> lock(m_eventMutex);
-    m_eventQueue.push({EventType::MIDI_MESSAGE, msg, MidiSource::VirtualBand, -1, ""});
+    tryEnqueueEvent({EventType::MIDI_MESSAGE, msg, MidiSource::VirtualBand, -1, ""});
     m_condition.notify_one();
 }
 
 void MidiProcessor::toggleTrack(const std::string& trackId) {
     std::lock_guard<std::mutex> lock(m_eventMutex);
-    m_eventQueue.push({EventType::TRACK_TOGGLE, std::vector<unsigned char>(), MidiSource::Guitar, -1, trackId});
+    tryEnqueueEvent({EventType::TRACK_TOGGLE, std::vector<unsigned char>(), MidiSource::Guitar, -1, trackId});
     m_condition.notify_one();
 }
  
 void MidiProcessor::playTrack(int index) {
     std::lock_guard<std::mutex> lock(m_eventMutex);
-    m_eventQueue.push({EventType::PLAY_TRACK, std::vector<unsigned char>(), MidiSource::Guitar, index, ""});
+    tryEnqueueEvent({EventType::PLAY_TRACK, std::vector<unsigned char>(), MidiSource::Guitar, index, ""});
     m_condition.notify_one();
 }
 
 void MidiProcessor::pauseTrack() {
     std::lock_guard<std::mutex> lock(m_eventMutex);
-    m_eventQueue.push({EventType::PAUSE_TRACK, std::vector<unsigned char>(), MidiSource::Guitar, -1, ""});
+    tryEnqueueEvent({EventType::PAUSE_TRACK, std::vector<unsigned char>(), MidiSource::Guitar, -1, ""});
     m_condition.notify_one();
 }
 
@@ -304,9 +386,10 @@ void MidiProcessor::onPlayerDurationChanged(qint64 duration) {
 void MidiProcessor::guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
     MidiProcessor* self = static_cast<MidiProcessor*>(userData);
     if (!self->m_isRunning) return;
+    if (!message) return;
     {
         std::lock_guard<std::mutex> lock(self->m_eventMutex);
-        self->m_eventQueue.push({EventType::MIDI_MESSAGE, *message, MidiSource::Guitar, -1, ""});
+        self->tryEnqueueEvent({EventType::MIDI_MESSAGE, *message, MidiSource::Guitar, -1, ""});
     }
     self->m_condition.notify_one();
 }
@@ -314,9 +397,10 @@ void MidiProcessor::guitarCallback(double deltatime, std::vector<unsigned char>*
 void MidiProcessor::voiceAmpCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
     MidiProcessor* self = static_cast<MidiProcessor*>(userData);
     if (!self->m_isRunning) return;
+    if (!message) return;
     {
         std::lock_guard<std::mutex> lock(self->m_eventMutex);
-        self->m_eventQueue.push({EventType::MIDI_MESSAGE, *message, MidiSource::VoiceAmp, -1, ""});
+        self->tryEnqueueEvent({EventType::MIDI_MESSAGE, *message, MidiSource::VoiceAmp, -1, ""});
     }
     self->m_condition.notify_one();
 }
@@ -324,9 +408,10 @@ void MidiProcessor::voiceAmpCallback(double deltatime, std::vector<unsigned char
 void MidiProcessor::voicePitchCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
     MidiProcessor* self = static_cast<MidiProcessor*>(userData);
     if (!self->m_isRunning) return;
+    if (!message) return;
     {
         std::lock_guard<std::mutex> lock(self->m_eventMutex);
-        self->m_eventQueue.push({EventType::MIDI_MESSAGE, *message, MidiSource::VoicePitch, -1, ""});
+        self->tryEnqueueEvent({EventType::MIDI_MESSAGE, *message, MidiSource::VoicePitch, -1, ""});
     }
     self->m_condition.notify_one();
 }
@@ -340,8 +425,8 @@ void MidiProcessor::workerLoop() {
             
             if (!m_isRunning && m_eventQueue.empty()) break;
             
-            event = m_eventQueue.front();
-            m_eventQueue.pop();
+            event = std::move(m_eventQueue.front());
+            m_eventQueue.pop_front();
         }
         
         processMidiEvent(event);
@@ -353,7 +438,20 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
         case EventType::MIDI_MESSAGE:
             {
                 const auto& message = event.message;
+                // Defensive: some MIDI sources can produce empty packets (or get truncated by routers).
+                // Never crash the app on malformed input; just ignore.
+                if (message.empty()) {
+                    return;
+                }
                 unsigned char status = message[0] & 0xF0;
+                const unsigned char statusRaw = message[0];
+
+                // Defensive: ignore system common / real-time messages coming from live inputs.
+                // These are not part of our performance/control protocol, and rewriting their
+                // low nibble (channel) is invalid and can destabilize downstream MIDI drivers.
+                if (statusRaw >= 0xF0 && event.source != MidiSource::VirtualBand) {
+                    return;
+                }
 
                 if (event.source == MidiSource::Guitar) {
                     int inputNote = message.size() > 1 ? message[1] : 0;
@@ -389,7 +487,10 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                         }
                     }
                     std::vector<unsigned char> passthroughMsg = message;
-                    passthroughMsg[0] = (passthroughMsg[0] & 0xF0) | 0x00;
+                    // Only channel messages (0x8*..0xE*) should have their channel nibble rewritten.
+                    if (passthroughMsg[0] < 0xF0) {
+                        passthroughMsg[0] = (passthroughMsg[0] & 0xF0) | 0x00;
+                    }
                     
                     // Capture guitar channel pressure as amplitude for visualizer
                     if (status == 0xD0 && message.size() > 1) {
@@ -420,7 +521,7 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                         else if (status == 0x80 || (status == 0x90 && vel == 0)) emit guitarNoteOff(note);
                     }
                     
-                    midiOut->sendMessage(&passthroughMsg);
+                    safeSendMessage(passthroughMsg);
                     
                 } else if (event.source == MidiSource::VoiceAmp) {
                     // Handle aftertouch → CC2 and CC104; ignore voice notes here to avoid duplicates
@@ -429,10 +530,10 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                         int breathValue = std::max(0, value - 16);
                         
                         std::vector<unsigned char> cc2_msg = {0xB0, 2, (unsigned char)breathValue};
-                        midiOut->sendMessage(&cc2_msg);
+                        safeSendMessage(cc2_msg);
 
                         std::vector<unsigned char> cc104_msg = {0xB0, 104, (unsigned char)breathValue};
-                        midiOut->sendMessage(&cc104_msg);
+                        safeSendMessage(cc104_msg);
 
                         // Unthrottled stream for interaction/vibe detection.
                         emit voiceCc2Stream(breathValue);
@@ -448,7 +549,9 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     // Use accurate pitch notes for visualization and optionally for output
                     if (status == 0x90 || status == 0x80) { // Note on/off for voice
                         std::vector<unsigned char> voiceMsg = message;
-                        voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01; // Set to channel 2
+                        if (voiceMsg[0] < 0xF0) {
+                            voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01; // Set to channel 2
+                        }
                         
                         // Apply transpose to voice notes
                         int transposeAmount = m_transposeAmount.load();
@@ -467,12 +570,14 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                             if (status == 0x90 && vel > 0) emit voiceNoteOn(note, vel);
                             else if (status == 0x80 || (status == 0x90 && vel == 0)) emit voiceNoteOff(note);
                         }
-                        midiOut->sendMessage(&voiceMsg);
+                        safeSendMessage(voiceMsg);
                     } else if (status != 0xD0) {
                         // Forward other non-aftertouch messages as-is on channel 2
                         std::vector<unsigned char> voiceMsg = message;
-                        voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01;
-                        midiOut->sendMessage(&voiceMsg);
+                        if (voiceMsg[0] < 0xF0) {
+                            voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01;
+                        }
+                        safeSendMessage(voiceMsg);
                     }
                 } else if (event.source == MidiSource::VirtualBand) {
                     // Virtual musicians: forward as-is (no transpose, no channel remap).
@@ -494,7 +599,7 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                             }
                         }
                     }
-                    midiOut->sendMessage(&event.message);
+                    safeSendMessage(event.message);
                 }
 
                 // Update pitch for guitar always; for voice only from VoicePitch source
@@ -1018,12 +1123,12 @@ void MidiProcessor::processProgramChange(int programIndex) {
 
     if (program.programCC != -1 && program.programValue != -1) {
         std::vector<unsigned char> prog_msg = { 0xB0, (unsigned char)program.programCC, (unsigned char)program.programValue };
-        midiOut->sendMessage(&prog_msg);
+        safeSendMessage(prog_msg);
     }
     
     if (program.volumeCC != -1 && program.volumeValue != -1) {
         std::vector<unsigned char> vol_msg = { 0xB0, (unsigned char)program.volumeCC, (unsigned char)program.volumeValue };
-        midiOut->sendMessage(&vol_msg);
+        safeSendMessage(vol_msg);
     }
 
     {
@@ -1083,9 +1188,9 @@ void MidiProcessor::sendNoteToggle(int note, int channel, int velocity) {
     if (channel < 1 || channel > 16) return;
     unsigned char chan = channel - 1;
     std::vector<unsigned char> msg = {(unsigned char)(0x90 | chan), (unsigned char)note, (unsigned char)velocity};
-    midiOut->sendMessage(&msg);
+    safeSendMessage(msg);
     msg[0] = (0x80 | chan); msg[2] = 0;
-    midiOut->sendMessage(&msg);
+    safeSendMessage(msg);
 }
 
 void MidiProcessor::sendChannelAllNotesOff(int zeroBasedChannel) {
@@ -1093,13 +1198,13 @@ void MidiProcessor::sendChannelAllNotesOff(int zeroBasedChannel) {
     unsigned char chan = (unsigned char)zeroBasedChannel;
     // Sustain Off (CC64 = 0)
     std::vector<unsigned char> sustainOff = { (unsigned char)(0xB0 | chan), 64, 0 };
-    midiOut->sendMessage(&sustainOff);
+    safeSendMessage(sustainOff);
     // All Notes Off (CC123 = 0)
     std::vector<unsigned char> allNotesOff = { (unsigned char)(0xB0 | chan), 123, 0 };
-    midiOut->sendMessage(&allNotesOff);
+    safeSendMessage(allNotesOff);
     // All Sound Off (CC120 = 0)
     std::vector<unsigned char> allSoundOff = { (unsigned char)(0xB0 | chan), 120, 0 };
-    midiOut->sendMessage(&allSoundOff);
+    safeSendMessage(allSoundOff);
 }
 
 void MidiProcessor::panicSilence() {
@@ -1107,25 +1212,33 @@ void MidiProcessor::panicSilence() {
     for (int ch = 0; ch < 2; ++ch) {
         for (int n = 0; n < 128; ++n) {
             std::vector<unsigned char> offMsg = { (unsigned char)(0x80 | ch), (unsigned char)n, 0 };
-            midiOut->sendMessage(&offMsg);
+            safeSendMessage(offMsg);
         }
         sendChannelAllNotesOff(ch);
     }
 }
 
 void MidiProcessor::updatePitch(const std::vector<unsigned char>& message, bool isGuitar) {
-    unsigned char status = message.at(0) & 0xF0;
+    // Defensive: some devices/routers can emit short MIDI packets (e.g., running status edge cases).
+    // We must never crash the app because pitch tracking is "best effort".
+    if (message.empty()) return;
+    unsigned char status = message[0] & 0xF0;
+
+    // Note on/off and pitch bend are 3-byte messages. If we don't have enough data, ignore.
+    if ((status == 0x90 || status == 0x80 || status == 0xE0) && message.size() < 3) {
+        return;
+    }
     
-    if (status == 0x90 && message.at(2) > 0) {
-        int note = message.at(1);
+    if (status == 0x90 && message[2] > 0) {
+        int note = message[1];
         if (isGuitar) { m_lastGuitarNote = note; m_lastGuitarPitchHz = noteToFrequency(note); }
         else { m_lastVoiceNote = note; m_lastVoicePitchHz = noteToFrequency(note); }
-    } else if (status == 0x80 || (status == 0x90 && message.at(2) == 0)) {
-        int note = message.at(1);
+    } else if (status == 0x80 || (status == 0x90 && message[2] == 0)) {
+        int note = message[1];
         if (isGuitar && m_lastGuitarNote == note) { m_lastGuitarPitchHz = 0.0; }
         else if (!isGuitar && m_lastVoiceNote == note) { m_lastVoicePitchHz = 0.0; }
     } else if (status == 0xE0) {
-        int bendValue = ((message.at(1) | (message.at(2) << 7))) - 8192;
+        int bendValue = ((message[1] | (message[2] << 7))) - 8192;
         double centsOffset = (static_cast<double>(bendValue) / 8192.0) * 200.0;
         int baseNote = isGuitar ? m_lastGuitarNote : m_lastVoiceNote;
         if (baseNote != -1) {
@@ -1133,6 +1246,9 @@ void MidiProcessor::updatePitch(const std::vector<unsigned char>& message, bool 
             if (isGuitar) { m_lastGuitarPitchHz = bentFreq; }
             else { m_lastVoicePitchHz = bentFreq; }
         }
+    } else {
+        // Not a pitch-relevant message.
+        return;
     }
     
     processPitchBend();
@@ -1158,8 +1274,10 @@ void MidiProcessor::updatePitch(const std::vector<unsigned char>& message, bool 
 }
 
 void MidiProcessor::precalculateRatios() {
-    m_ratioUpDeadZone = pow(2.0, m_preset.settings.pitchBendDeadZoneCents / 1200.0);
-    m_ratioDownDeadZone = pow(2.0, -m_preset.settings.pitchBendDeadZoneCents / 1200.0);
+    // Defensive: presets can accidentally set these to 0/negative; never allow UB downstream.
+    const int deadZoneCents = std::max(0, m_preset.settings.pitchBendDeadZoneCents);
+    m_ratioUpDeadZone = pow(2.0, double(deadZoneCents) / 1200.0);
+    m_ratioDownDeadZone = pow(2.0, -double(deadZoneCents) / 1200.0);
 }
 
 void MidiProcessor::processPitchBend() {
@@ -1169,9 +1287,9 @@ void MidiProcessor::processPitchBend() {
     if (guitarHz <= 1.0 || voiceHz <= 1.0) {
         if (m_lastCC102Value != 0 || m_lastCC103Value != 0) {
             std::vector<unsigned char> msg102 = { 0xB0, (unsigned char)BEND_DOWN_CC, 0 };
-            midiOut->sendMessage(&msg102);
+            safeSendMessage(msg102);
             std::vector<unsigned char> msg103 = { 0xB0, (unsigned char)BEND_UP_CC, 0 };
-            midiOut->sendMessage(&msg103);
+            safeSendMessage(msg103);
             m_lastCC102Value = 0;
             m_lastCC103Value = 0;
         }
@@ -1179,17 +1297,24 @@ void MidiProcessor::processPitchBend() {
     }
 
     double currentRatio = voiceHz / guitarHz;
+    if (!std::isfinite(currentRatio) || currentRatio <= 0.0) {
+        return;
+    }
     int cc102_val = 0;
     int cc103_val = 0;
 
+    const int deadZoneCents = std::max(0, m_preset.settings.pitchBendDeadZoneCents);
+    const double downRange = double(std::max(1, m_preset.settings.pitchBendDownRangeCents));
+    const double upRange = double(std::max(1, m_preset.settings.pitchBendUpRangeCents));
+
     if (currentRatio < m_ratioDownDeadZone) {
         double diffCents = -1200.0 * log2(currentRatio);
-        double deviation = diffCents - m_preset.settings.pitchBendDeadZoneCents;
-        cc102_val = static_cast<int>((deviation / m_preset.settings.pitchBendDownRangeCents) * 127.0);
+        double deviation = diffCents - double(deadZoneCents);
+        cc102_val = static_cast<int>((deviation / downRange) * 127.0);
     } else if (currentRatio > m_ratioUpDeadZone) {
         double diffCents = 1200.0 * log2(currentRatio);
-        double deviation = diffCents - m_preset.settings.pitchBendDeadZoneCents;
-        cc103_val = static_cast<int>((deviation / m_preset.settings.pitchBendUpRangeCents) * 127.0);
+        double deviation = diffCents - double(deadZoneCents);
+        cc103_val = static_cast<int>((deviation / upRange) * 127.0);
     }
     
     cc102_val = std::min(127, std::max(0, cc102_val));
@@ -1197,12 +1322,12 @@ void MidiProcessor::processPitchBend() {
 
     if (cc102_val != m_lastCC102Value) {
         std::vector<unsigned char> msg = { 0xB0, (unsigned char)BEND_DOWN_CC, (unsigned char)cc102_val };
-        midiOut->sendMessage(&msg);
+        safeSendMessage(msg);
         m_lastCC102Value = cc102_val;
     }
     if (cc103_val != m_lastCC103Value) {
         std::vector<unsigned char> msg = { 0xB0, (unsigned char)BEND_UP_CC, (unsigned char)cc103_val };
-        midiOut->sendMessage(&msg);
+        safeSendMessage(msg);
         m_lastCC103Value = cc103_val;
     }
 

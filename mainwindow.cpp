@@ -564,19 +564,26 @@ void MainWindow::createConnections() {
     // Wire pitch updates to minimal NoteMonitor UI
     if (noteMonitorWidget) {
         connect(m_midiProcessor, &MidiProcessor::guitarPitchUpdated,
-                noteMonitorWidget, &NoteMonitorWidget::setGuitarNote);
+                noteMonitorWidget, &NoteMonitorWidget::setGuitarNote,
+                static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
         connect(m_midiProcessor, &MidiProcessor::voicePitchUpdated,
-                noteMonitorWidget, &NoteMonitorWidget::setVoiceNote);
+                noteMonitorWidget, &NoteMonitorWidget::setVoiceNote,
+                static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
         connect(m_midiProcessor, &MidiProcessor::guitarHzUpdated,
-                noteMonitorWidget, &NoteMonitorWidget::setGuitarHz);
+                noteMonitorWidget, &NoteMonitorWidget::setGuitarHz,
+                static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
         connect(m_midiProcessor, &MidiProcessor::voiceHzUpdated,
-                noteMonitorWidget, &NoteMonitorWidget::setVoiceHz);
+                noteMonitorWidget, &NoteMonitorWidget::setVoiceHz,
+                static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
         connect(m_midiProcessor, &MidiProcessor::guitarAftertouchUpdated,
-                noteMonitorWidget, &NoteMonitorWidget::setGuitarAmplitude);
+                noteMonitorWidget, &NoteMonitorWidget::setGuitarAmplitude,
+                static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
         connect(m_midiProcessor, &MidiProcessor::voiceCc2Updated,
-                noteMonitorWidget, &NoteMonitorWidget::setVoiceAmplitude);
+                noteMonitorWidget, &NoteMonitorWidget::setVoiceAmplitude,
+                static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
         connect(m_midiProcessor, &MidiProcessor::guitarVelocityUpdated,
-                noteMonitorWidget, &NoteMonitorWidget::setGuitarVelocity);
+                noteMonitorWidget, &NoteMonitorWidget::setGuitarVelocity,
+                static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
     }
 
     // --- Shutdown safety: stop playback engines before MIDI teardown ---

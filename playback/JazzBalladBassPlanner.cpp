@@ -97,9 +97,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     const double progress01 = qBound(0.0, double(qMax(0, c.playbackBarIndex)) / 24.0, 1.0);
     const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
     const bool climaxWalk = c.forceClimax && (c.energy >= 0.75);
-    // Virt slider should be audibly testable even if Energy is low:
-    // allow rhythmicComplexity to trigger a light walking texture later in the song.
-    const bool solverWalk = (!userBusy && progress01 >= 0.35 && c.rhythmicComplexity >= 0.85);
+    // Phrase cadence + Virt: allow walking texture later in the song, and at cadence moments.
+    const bool solverWalk = (!userBusy && ((progress01 >= 0.35 && c.rhythmicComplexity >= 0.85) || (c.cadence01 >= 0.80 && c.rhythmicComplexity >= 0.70)));
     const bool doWalk = climaxWalk || solverWalk;
 
     // Two-feel foundation on beats 1 and 3, plus optional pickup on beat 4 when approaching.

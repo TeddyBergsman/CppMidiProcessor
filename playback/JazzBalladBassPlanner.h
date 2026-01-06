@@ -39,6 +39,12 @@ public:
         bool forceClimax = false;
         double energy = 0.25; // 0..1
 
+        // Phrase model (lightweight, deterministic): 4-bar phrases by default.
+        int phraseBars = 4;
+        int barInPhrase = 0;     // 0..phraseBars-1
+        bool phraseEndBar = false;
+        double cadence01 = 0.0;  // 0..1
+
         // Stage 3 solver weights (Virtuosity Matrix-style, 0..1).
         double harmonicRisk = 0.20;
         double rhythmicComplexity = 0.25;

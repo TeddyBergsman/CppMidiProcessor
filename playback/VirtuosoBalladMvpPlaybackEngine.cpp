@@ -595,6 +595,18 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
             }
         }
 
+        const bool nextChanges = haveNext && !nextChord.noChord && (nextChord.rootPc >= 0) &&
+                                 ((nextChord.rootPc != chord.rootPc) || (nextChord.bassPc != chord.bassPc));
+
+        // Phrase model (v1): 4-bar phrases with cadence intent on bar 4 and setup on bar 3.
+        const int phraseBars = 4;
+        const int barInPhrase = (phraseBars > 0) ? (qMax(0, playbackBarIndex) % phraseBars) : 0;
+        const bool phraseEndBar = (phraseBars > 0) ? (barInPhrase == (phraseBars - 1)) : false;
+        const bool phraseSetupBar = (phraseBars > 1) ? (barInPhrase == (phraseBars - 2)) : false;
+        double cadence01 = 0.0;
+        if (phraseEndBar) cadence01 = (nextChanges || chordIsNew) ? 1.0 : 0.65;
+        else if (phraseSetupBar) cadence01 = (nextChanges ? 0.60 : 0.35);
+
         const QString chordText = chord.originalText.trimmed().isEmpty() ? QString("pc=%1").arg(chord.rootPc) : chord.originalText.trimmed();
         const bool structural = (beatInBar == 0 || beatInBar == 2) || chordIsNew;
         const int barIdx = cellIndex / 4;
@@ -643,6 +655,10 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
             bc.hasNextChord = haveNext && !nextChord.noChord;
             bc.nextChord = nextChord;
             bc.chordText = chordText;
+            bc.phraseBars = phraseBars;
+            bc.barInPhrase = barInPhrase;
+            bc.phraseEndBar = phraseEndBar;
+            bc.cadence01 = cadence01;
             const quint32 detSeed = quint32(qHash(QString("ballad|") + m_stylePresetKey));
             bc.determinismSeed = detSeed;
             bc.userDensityHigh = intent.densityHigh;
@@ -686,6 +702,13 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
             pc.chordIsNew = chordIsNew;
             pc.chord = chord;
             pc.chordText = chordText;
+            pc.phraseBars = phraseBars;
+            pc.barInPhrase = barInPhrase;
+            pc.phraseEndBar = phraseEndBar;
+            pc.cadence01 = cadence01;
+            pc.hasNextChord = haveNext && !nextChord.noChord;
+            pc.nextChord = nextChord;
+            pc.nextChanges = nextChanges;
             pc.determinismSeed = detSeed ^ 0xBADC0FFEu;
             pc.userDensityHigh = intent.densityHigh;
             pc.userIntensityPeak = intent.intensityPeak;
@@ -1247,6 +1270,18 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
         }
     }
 
+    const bool nextChanges = haveNext && !nextChord.noChord && (nextChord.rootPc >= 0) &&
+                             ((nextChord.rootPc != chord.rootPc) || (nextChord.bassPc != chord.bassPc));
+
+    // Phrase model (v1): 4-bar phrases with cadence intent on bar 4 and setup on bar 3.
+    const int phraseBars = 4;
+    const int barInPhrase = (phraseBars > 0) ? (qMax(0, playbackBarIndex) % phraseBars) : 0;
+    const bool phraseEndBar = (phraseBars > 0) ? (barInPhrase == (phraseBars - 1)) : false;
+    const bool phraseSetupBar = (phraseBars > 1) ? (barInPhrase == (phraseBars - 2)) : false;
+    double cadence01 = 0.0;
+    if (phraseEndBar) cadence01 = (nextChanges || chordIsNew) ? 1.0 : 0.65;
+    else if (phraseSetupBar) cadence01 = (nextChanges ? 0.60 : 0.35);
+
     const bool strongBeat = (beatInBar == 0 || beatInBar == 2);
     const bool structural = strongBeat || chordIsNew;
 
@@ -1364,6 +1399,10 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     bc.hasNextChord = haveNext && !nextChord.noChord;
     bc.nextChord = nextChord;
     bc.chordText = chordText;
+    bc.phraseBars = phraseBars;
+    bc.barInPhrase = barInPhrase;
+    bc.phraseEndBar = phraseEndBar;
+    bc.cadence01 = cadence01;
     bc.determinismSeed = detSeed;
     bc.approachProbBeat3 = tune.bassApproachProbBeat3;
     bc.skipBeat3ProbStable = tune.bassSkipBeat3ProbStable;
@@ -1396,6 +1435,11 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     if (intent.densityHigh || intent.intensityPeak) {
         bc.approachProbBeat3 *= 0.35;
         bc.skipBeat3ProbStable = qMin(0.65, bc.skipBeat3ProbStable + 0.20);
+    }
+    // Phrase cadence: more motion into turnarounds (session bassist sets up the next bar).
+    if (bc.cadence01 >= 0.55) {
+        bc.approachProbBeat3 = qMin(1.0, bc.approachProbBeat3 + 0.25 * bc.cadence01);
+        bc.skipBeat3ProbStable = qMax(0.0, bc.skipBeat3ProbStable - 0.15 * bc.cadence01);
     }
     if (baseEnergy >= 0.85) {
         bc.approachProbBeat3 *= 0.60; // slightly more motion, but still ballad-safe
@@ -1443,6 +1487,13 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     pc.chordIsNew = chordIsNew;
     pc.chord = chord;
     pc.chordText = chordText;
+    pc.phraseBars = phraseBars;
+    pc.barInPhrase = barInPhrase;
+    pc.phraseEndBar = phraseEndBar;
+    pc.cadence01 = cadence01;
+    pc.hasNextChord = haveNext && !nextChord.noChord;
+    pc.nextChord = nextChord;
+    pc.nextChanges = nextChanges;
     pc.determinismSeed = detSeed ^ 0xBADC0FFEu;
     pc.lhLo = tune.pianoLhLo; pc.lhHi = tune.pianoLhHi;
     pc.rhLo = tune.pianoRhLo; pc.rhHi = tune.pianoRhHi;

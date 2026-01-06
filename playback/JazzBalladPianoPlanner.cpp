@@ -572,6 +572,53 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
     for (const auto& hit : hitsThisBeat) renderHit(hit);
 
+    // Phrase cadence anticipation: a soft guide-tone dyad on the and-of-4 into the next chord.
+    // This is one of the quickest "session player" tells (setting up the turnaround).
+    if (c.phraseEndBar && c.beatInBar == 3 && c.cadence01 >= 0.55 && c.hasNextChord && c.nextChanges &&
+        !c.userDensityHigh && !c.userIntensityPeak) {
+        const quint32 ha = quint32(qHash(QString("pno_cad_ant|%1|%2|%3")
+                                             .arg(c.chordText)
+                                             .arg(c.playbackBarIndex)
+                                             .arg(c.determinismSeed)));
+        // Keep it tasteful/rare-ish unless user is silent.
+        const int p = qBound(0, int(llround(18.0 + 35.0 * c.cadence01 + (c.userSilence ? 18.0 : 0.0))), 75);
+        if (int(ha % 100u) < p) {
+            const int n3 = pcForDegree(c.nextChord, 3);
+            const int n7 = pcForDegree(c.nextChord, 7);
+            const int n5 = pcForDegree(c.nextChord, 5);
+            const int topPc = (n7 >= 0) ? n7 : (n3 >= 0 ? n3 : n5);
+            const int lowPc = (n3 >= 0 && n3 != topPc) ? n3 : (n5 >= 0 ? n5 : -1);
+            const int lo = c.rhLo;
+            const int hi = c.rhHi;
+            const int around = (lo + hi) / 2;
+            const int mTop = nearestMidiForPc(topPc, around + 7, lo, hi);
+            const int mLow = (lowPc >= 0) ? nearestMidiForPc(lowPc, mTop - 4, lo, hi) : -1;
+            const auto pos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 3, /*sub*/1, /*count*/2, ts); // and-of-4
+            const auto dur = virtuoso::groove::Rational(1, 8); // short pickup
+            const int vel = qBound(1, baseVel - 16, 127);
+
+            auto push = [&](int m, const QString& target) {
+                if (m < 0) return;
+                virtuoso::engine::AgentIntentNote n;
+                n.agent = "Piano";
+                n.channel = midiChannel;
+                n.note = clampMidi(m);
+                n.baseVelocity = vel;
+                n.startPos = pos;
+                n.durationWhole = dur;
+                n.structural = false;
+                n.chord_context = c.chordText;
+                n.voicing_type = voicingType + " + CadenceAnticipation";
+                n.logic_tag = "ballad_cadence_anticipation";
+                n.target_note = target;
+                out.push_back(n);
+            };
+            // Keep dyad consonant-ish: if low is too close, skip it.
+            if (mLow >= 0 && qAbs(mTop - mLow) >= 3) push(mLow, "Cadence anticipation (low)");
+            push(mTop, "Cadence anticipation (top)");
+        }
+    }
+
     // RH top-line motifs (2–3 note micro-phrases with tension->release).
     {
         const bool allowTop = !c.userDensityHigh && !c.userIntensityPeak;
@@ -1290,9 +1337,12 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
         auto barDur = [&]() -> virtuoso::groove::Rational { return virtuoso::groove::Rational(3, 4); }; // ~3 beats
         const double progress01 = qBound(0.0, double(qMax(0, c.playbackBarIndex)) / 24.0, 1.0);
         const bool space = (!userBusy) && (c.userSilence || e <= (0.50 - 0.12 * progress01));
+        // Phrase cadence: at phrase ends, let arrivals/pads ring longer (session "breath").
+        const bool cadence = (c.cadence01 >= 0.55) || c.phraseEndBar;
         if (canLong && space && (holdRoll < (c.userSilence ? 55 : 35))) d = longDur();
         if (canPad && space && (holdRoll < (c.userSilence ? 40 : 22))) d = padDur();
         if (isDownbeatLike && canPad && space && (holdRoll < (c.userSilence ? 18 : 10))) d = barDur();
+        if (cadence && canPad && space && isDownbeatLike && (holdRoll < 55)) d = barDur();
         // In higher energy, shorten slightly (more motion); in very low energy, lengthen slightly.
         if (!userBusy && e >= 0.65 && d == medDur() && (holdRoll < 35)) d = shortDur();
         if (!userBusy && e <= 0.30 && d == medDur() && (holdRoll < 35)) d = longDur();
@@ -1380,6 +1430,13 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
         s += 0.8 * qAbs(double(nHits) - targetHits);
         // Land on chord changes: if chord is new, prefer beat-1 arrivals.
         if (c.chordIsNew && !hasBeat0) s += 1.2;
+        // Phrase cadence: strongly prefer an end-of-bar push (or at least beat 4) to set up the turnaround.
+        if (c.cadence01 >= 0.55 || c.phraseEndBar) {
+            const bool hasBeat3 = std::any_of(v.begin(), v.end(), [](const CompHit& x) { return x.beatInBar == 3; });
+            const bool hasAnd4 = std::any_of(v.begin(), v.end(), [](const CompHit& x) { return x.beatInBar == 3 && x.sub != 0; });
+            if (!hasBeat3) s += 1.0;
+            if (c.nextChanges && !hasAnd4) s += 0.7;
+        }
         // Dark tone wants fewer offbeats.
         s += 0.35 * c.toneDark * double(nOff);
         // Interaction: if user isn't silent and interaction is low, keep sparser.

@@ -582,17 +582,35 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
         }
         if (!simHasLast) continue;
 
-        // Next chord (for bass approach logic)
+        // Next chord boundary (prefer within-bar explicit change; fallback to barline).
         music::ChordSymbol nextChord = chord;
         bool haveNext = false;
+        int beatsUntilChange = 0;
         {
-            const int stepNextBar = step + (beatsPerBar - beatInBar);
-            if (stepNextBar < total) {
-                const int cellNext = m_sequence[stepNextBar % seqLen];
+            const int maxLook = qMax(1, beatsPerBar - beatInBar);
+            for (int k = 1; k <= maxLook; ++k) {
+                const int stepFwd = step + k;
+                if (stepFwd >= total) break;
+                const int cellNext = m_sequence[stepFwd % seqLen];
                 bool explicitNext = false;
-                nextChord = parseCellChordNoStateLocal(cellNext, /*fallback*/chord, &explicitNext);
-                haveNext = explicitNext || (nextChord.rootPc >= 0);
-                if (nextChord.noChord) haveNext = false;
+                const music::ChordSymbol cand = parseCellChordNoStateLocal(cellNext, /*fallback*/chord, &explicitNext);
+                if (!explicitNext || cand.noChord) continue;
+                if (!sameChordKey(cand, chord)) {
+                    nextChord = cand;
+                    haveNext = true;
+                    beatsUntilChange = k;
+                    break;
+                }
+            }
+            if (!haveNext) {
+                const int stepNextBar = step + (beatsPerBar - beatInBar);
+                if (stepNextBar < total) {
+                    const int cellNext = m_sequence[stepNextBar % seqLen];
+                    bool explicitNext = false;
+                    nextChord = parseCellChordNoStateLocal(cellNext, /*fallback*/chord, &explicitNext);
+                    haveNext = explicitNext || (nextChord.rootPc >= 0);
+                    if (nextChord.noChord) haveNext = false;
+                }
             }
         }
 
@@ -720,6 +738,7 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
             pc.hasNextChord = haveNext && !nextChord.noChord;
             pc.nextChord = nextChord;
             pc.nextChanges = nextChanges;
+            pc.beatsUntilChordChange = beatsUntilChange;
             pc.determinismSeed = detSeed ^ 0xBADC0FFEu;
             pc.userDensityHigh = intent.densityHigh;
             pc.userIntensityPeak = intent.intensityPeak;
@@ -1279,7 +1298,7 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     // Update listener harmonic context for "playing outside" classification.
     if (haveChord && !chord.noChord) m_listener.setChordContext(chord);
 
-    // Lookahead: next bar's beat-1 chord (for bass approaches / piano anticipation later).
+    // Lookahead: next harmony boundary (prefer within-bar chord changes; fallback to barline).
     // IMPORTANT: do NOT call chordForCellIndex() here, because it mutates last-chord state.
     auto parseCellChordNoState = [&](int anyCellIndex, const music::ChordSymbol& fallback, bool* outIsExplicit = nullptr) -> music::ChordSymbol {
         if (outIsExplicit) *outIsExplicit = false;
@@ -1296,16 +1315,36 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
 
     music::ChordSymbol nextChord;
     bool haveNext = false;
+    int beatsUntilChange = 0;
     if (seqLen > 0 && haveChord) {
         const int beatsPerBar = (ts.num > 0) ? ts.num : 4;
-        const int stepNextBar = stepIndex + (beatsPerBar - beatInBar);
         const int total = seqLen * qMax(1, m_repeats);
-        if (stepNextBar < total) {
-            const int cellNext = m_sequence[stepNextBar % seqLen];
+        // 1) Within-bar scan for explicit chord change (prevents "old chord rings until beat 4" on mid-bar changes).
+        const int maxLook = qMax(1, beatsPerBar - beatInBar);
+        for (int k = 1; k <= maxLook; ++k) {
+            const int stepFwd = stepIndex + k;
+            if (stepFwd >= total) break;
+            const int cellNext = m_sequence[stepFwd % seqLen];
             bool explicitNext = false;
-            nextChord = parseCellChordNoState(cellNext, /*fallback*/chord, &explicitNext);
-            haveNext = explicitNext || (nextChord.rootPc >= 0);
-            if (nextChord.noChord) haveNext = false;
+            const music::ChordSymbol cand = parseCellChordNoState(cellNext, /*fallback*/chord, &explicitNext);
+            if (!explicitNext || cand.noChord) continue;
+            if (!sameChordKey(cand, chord)) {
+                nextChord = cand;
+                haveNext = true;
+                beatsUntilChange = k;
+                break;
+            }
+        }
+        // 2) Fallback: barline chord (for bass approaches / phrase cadence intent).
+        if (!haveNext) {
+            const int stepNextBar = stepIndex + (beatsPerBar - beatInBar);
+            if (stepNextBar < total) {
+                const int cellNext = m_sequence[stepNextBar % seqLen];
+                bool explicitNext = false;
+                nextChord = parseCellChordNoState(cellNext, /*fallback*/chord, &explicitNext);
+                haveNext = explicitNext || (nextChord.rootPc >= 0);
+                if (nextChord.noChord) haveNext = false;
+            }
         }
     }
 
@@ -1552,6 +1591,7 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     pc.hasNextChord = haveNext && !nextChord.noChord;
     pc.nextChord = nextChord;
     pc.nextChanges = nextChanges;
+    pc.beatsUntilChordChange = beatsUntilChange;
     pc.determinismSeed = detSeed ^ 0xBADC0FFEu;
     pc.lhLo = tune.pianoLhLo; pc.lhHi = tune.pianoLhHi;
     pc.rhLo = tune.pianoRhLo; pc.rhHi = tune.pianoRhHi;

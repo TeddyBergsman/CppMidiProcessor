@@ -95,6 +95,9 @@ public:
         music::ChordSymbol nextChord;
         bool hasNextChord = false;
         bool nextChanges = false;
+        // If we know the next harmony boundary *within the current bar* (or at the barline),
+        // this tells how many beats away it is (1..beatsRemaining). Used to prevent ringing across changes.
+        int beatsUntilChordChange = 0;
 
         // Stage 3 solver weights (Virtuosity Matrix-style, 0..1).
         double harmonicRisk = 0.20;        // 0=triads/shells, 1=more tensions/UST-ish

@@ -257,16 +257,20 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         }
     }
     // Ensure we land on chord changes: if downbeat of a new chord has no scheduled hit, add one.
+    // IMPORTANT: do this even if the user is active; otherwise harmony updates feel "late" (old chord rings, new chord appears on beat 4).
     if (hitsThisBeat.isEmpty() && !climaxDense) {
-        if (c.chordIsNew && c.beatInBar == 0 && !c.userDensityHigh && !c.userIntensityPeak) {
+        if (c.chordIsNew && c.beatInBar == 0) {
             CompHit arrival;
             arrival.beatInBar = 0;
             arrival.sub = 0;
             arrival.count = 1;
             arrival.density = "guide";
-            arrival.velDelta = +2;
+            // If user is busy, keep it short/quiet but present so harmony updates on time.
+            const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+            arrival.velDelta = userBusy ? -6 : +2;
             // Ring into the bar; long but not full smear.
-            arrival.dur = (c.userSilence ? virtuoso::groove::Rational(3, 4) : virtuoso::groove::Rational(1, 2));
+            arrival.dur = userBusy ? virtuoso::groove::Rational(1, 4)
+                                   : (c.userSilence ? virtuoso::groove::Rational(3, 4) : virtuoso::groove::Rational(1, 2));
             arrival.rhythmTag = "forced_arrival1";
             hitsThisBeat.push_back(arrival);
         } else {
@@ -907,6 +911,33 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         const bool allowLhInd = !userBusy && isPedalWash && !arrival && (art == CompArt::HalfPedalWash || art == CompArt::Tenuto);
         const bool doLhOnly = allowLhInd && (int((ha / 17u) % 100u) < int(llround(10.0 + 22.0 * qBound(0.0, c.cadence01, 1.0) + (c.userSilence ? 12.0 : 0.0))));
 
+        // If harmony changes next bar, avoid letting this hit ring into the new chord.
+        // We clamp noteOff earlier than the barline by a small safety margin so humanization doesn't smear.
+        auto clampDurBeforeNextChord = [&](const virtuoso::groove::GridPos& pos,
+                                           virtuoso::groove::Rational d,
+                                           bool structuralNote) -> virtuoso::groove::Rational {
+            // If we don't know a boundary, don't clamp.
+            if (!c.hasNextChord || !c.nextChanges) return d;
+            const int beatsPerBar = qMax(1, ts.num);
+            const int beatsUntil = (c.beatsUntilChordChange > 0) ? c.beatsUntilChordChange : 0;
+            // If the next explicit change is within this bar, clamp to that beat boundary.
+            virtuoso::groove::Rational boundary = GrooveGrid::barDurationWhole(ts);
+            if (beatsUntil > 0) {
+                const auto beatDur = GrooveGrid::beatDurationWhole(ts);
+                const int nextBeat = qBound(0, c.beatInBar + beatsUntil, beatsPerBar);
+                boundary = beatDur * nextBeat;
+            }
+            virtuoso::groove::Rational remaining = boundary - pos.withinBarWhole;
+            // Safety: subtract a few ms worth of whole-notes.
+            const int safetyMs = structuralNote ? 6 : 14;
+            const virtuoso::groove::Rational safetyWhole(qint64(safetyMs) * qint64(qMax(1, c.bpm)), qint64(240000));
+            if (remaining <= safetyWhole) return virtuoso::groove::Rational(1, 64);
+            remaining = remaining - safetyWhole;
+            if (d > remaining) d = remaining;
+            if (d < virtuoso::groove::Rational(1, 64)) d = virtuoso::groove::Rational(1, 64);
+            return d;
+        };
+
         for (int idx = 0; idx < notes.size(); ++idx) {
             const int m = notes[idx];
             const bool isLow = (m == lowNote);
@@ -1044,6 +1075,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                 if (isRh && !isTop) d = qMin(d, virtuoso::groove::Rational(3, 16));
             }
 
+            // Final duration clamp to avoid ringing into the next chord when harmony changes.
+            d = clampDurBeforeNextChord(n.startPos, d, c.chordIsNew);
             // If RH is rolled late, shorten *inner* RH notes a bit so it doesn't smear (but keep top singing).
             const bool shorten = doRoll && isRh && !isLow && !isTop && (d <= virtuoso::groove::Rational(1, 4));
             n.durationWhole = shorten ? qMin(d, virtuoso::groove::Rational(3, 16)) : d;
@@ -1062,6 +1095,128 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     };
 
     for (const auto& hit : hitsThisBeat) renderHit(hit);
+
+    // Reintroduce "alive" RH movement the right way: as a transformation of the current comp voicing
+    // (same pianist, same hands), not as a separate pitch generator.
+    //
+    // We do a very soft RH-only dyad/triad re-strike a 16th late on select beats, using chord-safe + key-safe
+    // pitch classes near the existing RH notes (physically plausible, beautiful).
+    {
+        const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+        // Motif-driven: if we have a planned top-line event on this beat, prefer playing a gesture.
+        bool hasTopEventThisBeat = false;
+        int topTargetPc = -1;
+        int topVelDelta = -12;
+        for (const auto& th : m_barTopHits) {
+            if (th.beatInBar != c.beatInBar) continue;
+            if (th.pc < 0) continue;
+            hasTopEventThisBeat = true;
+            topTargetPc = th.pc;
+            topVelDelta = th.velDelta;
+            break;
+        }
+
+        const bool allow = !userBusy && (c.userSilence || c.interaction >= 0.40 || hasTopEventThisBeat) && (c.rhythmicComplexity >= 0.25);
+        if (allow && !m_lastVoicing.isEmpty()) {
+            const quint32 hg = quint32(qHash(QString("pno_rh_gesture|%1|%2|%3|%4")
+                                                 .arg(c.chordText)
+                                                 .arg(c.playbackBarIndex)
+                                                 .arg(c.beatInBar)
+                                                 .arg(c.determinismSeed)));
+            const bool cadence = (c.cadence01 >= 0.55) || c.phraseEndBar;
+            const int p = qBound(0, int(llround((hasTopEventThisBeat ? 35.0 : 6.0)
+                                               + 18.0 * qBound(0.0, c.rhythmicComplexity, 1.0)
+                                               + 14.0 * qBound(0.0, c.interaction, 1.0)
+                                               + (cadence ? 18.0 : 0.0)
+                                               + (c.userSilence ? 10.0 : 0.0))), 60);
+            if (int(hg % 100u) < p) {
+                // RH notes in the current voicing.
+                QVector<int> rh;
+                for (int m : m_lastVoicing) if (m > c.lhHi) rh.push_back(m);
+                std::sort(rh.begin(), rh.end());
+                if (rh.size() >= 2) {
+                    // Keep gestures in a sweet register (avoid ice-pick highs).
+                    const int hiCap = qMin(c.rhHi, 88);
+                    for (int& m : rh) m = qMin(m, hiCap);
+
+                    // Chord-safe pool (and key-safe if available).
+                    QSet<int> safe;
+                    auto addSafe = [&](int pc) { if (pc >= 0) safe.insert((pc % 12 + 12) % 12); };
+                    addSafe(pcForDegree(c.chord, 3));
+                    addSafe(pcForDegree(c.chord, 5));
+                    addSafe(pcForDegree(c.chord, 7));
+                    addSafe(pcForDegree(c.chord, 9));
+                    if (c.chord.quality == music::ChordQuality::Minor) addSafe(pcForDegree(c.chord, 11));
+                    else addSafe(pcForDegree(c.chord, 13));
+
+                    // Key-safe (major/minor) — optional.
+                    QSet<int> keySafe;
+                    if (c.hasKey) {
+                        const int t = (c.keyTonicPc % 12 + 12) % 12;
+                        const int stepsIonian[7] = {0,2,4,5,7,9,11};
+                        const int stepsAeolian[7] = {0,2,3,5,7,8,10};
+                        const int* steps = (c.keyMode == virtuoso::theory::KeyMode::Minor) ? stepsAeolian : stepsIonian;
+                        for (int i = 0; i < 7; ++i) keySafe.insert((t + steps[i]) % 12);
+                        safe.intersect(keySafe);
+                    }
+                    if (safe.isEmpty()) return out;
+
+                    auto nearestPcInSet = [&](int fromPc) -> int {
+                        const int f = (fromPc % 12 + 12) % 12;
+                        int best = f;
+                        int bestCost = 999;
+                        for (int pc : safe) {
+                            int d = pc - f;
+                            while (d > 6) d -= 12;
+                            while (d < -6) d += 12;
+                            const int cost = qAbs(d);
+                            if (cost < bestCost) { bestCost = cost; best = pc; }
+                        }
+                        return best;
+                    };
+
+                    const bool wantTriad = (cadence || hasTopEventThisBeat) && (int((hg / 7u) % 100u) < 45);
+                    const int n = wantTriad ? 3 : 2;
+                    QVector<int> src = rh;
+                    while (src.size() > n) src.removeFirst(); // top n voices
+
+                    QVector<int> gestureNotes;
+                    gestureNotes.reserve(src.size());
+                    for (int m : src) {
+                        const int fromPc = (m % 12 + 12) % 12;
+                        const int toPc = (hasTopEventThisBeat && m == src.last() && topTargetPc >= 0)
+                            ? nearestPcInSet(topTargetPc)
+                            : nearestPcInSet(fromPc);
+                        int target = nearestMidiForPc(toPc, m, c.rhLo, hiCap);
+                        // Nudge by step if possible (feels like a real small motion).
+                        if (qAbs(target - m) > 2) target = nearestMidiForPc(toPc, m - 2, c.rhLo, hiCap);
+                        if (target >= 0) gestureNotes.push_back(target);
+                    }
+                    sortUnique(gestureNotes);
+                    if (gestureNotes.size() >= 2) {
+                        // Schedule on & of the beat (16th late feel) with short duration.
+                        const auto pos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 1, 4, ts);
+                        for (int i = 0; i < gestureNotes.size(); ++i) {
+                            virtuoso::engine::AgentIntentNote nte;
+                            nte.agent = "Piano";
+                            nte.channel = midiChannel;
+                            nte.note = clampMidi(gestureNotes[i]);
+                            const int extraTop = (i == gestureNotes.size() - 1 ? 6 : 0);
+                            nte.baseVelocity = qBound(1, baseVel - 22 + extraTop + topVelDelta, 127);
+                            nte.startPos = pos;
+                            nte.durationWhole = virtuoso::groove::Rational(1, 8);
+                            nte.structural = false;
+                            nte.chord_context = c.chordText;
+                            nte.voicing_type = voicingType + (wantTriad ? " + RH TriadGesture" : " + RH DyadGesture");
+                            nte.logic_tag = wantTriad ? "ballad_comp|rh_gesture|triad" : "ballad_comp|rh_gesture|dyad";
+                            nte.target_note = (i == gestureNotes.size() - 1) ? "RH gesture (top)" : "RH gesture";
+                            out.push_back(nte);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // NOTE: We intentionally do NOT emit separate cadence dyads/licklets here.
     // Ballad "setup/arrival" feel should come from the same two-handed comp system (voicing + rhythm + articulation),
@@ -1115,7 +1270,7 @@ void JazzBalladPianoPlanner::buildMotifBlockTemplates(const Context& c) {
                                         .arg(c.determinismSeed)));
     const double e = qBound(0.0, c.energy, 1.0);
     const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
-    const bool allow = !userBusy && (c.userSilence || e >= 0.45);
+    const bool allow = !userBusy && (c.userSilence || e >= 0.32 || c.chordIsNew || c.cadence01 >= 0.55 || c.phraseEndBar);
     if (!allow) return;
 
     auto addT = [&](QVector<TopTemplateHit>& v,
@@ -1371,7 +1526,7 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
     const int bar = qMax(0, c.playbackBarIndex);
     const double e = qBound(0.0, c.energy, 1.0);
     const double rc = qBound(0.0, c.rhythmicComplexity, 1.0);
-    const bool cadence = (c.cadence01 >= 0.35) || c.phraseEndBar;
+    const bool cadence = (c.cadence01 >= 0.35) || c.phraseEndBar || c.chordIsNew;
 
     // Phrase guide tone target for this bar (computed in ensurePhraseGuideLinePlanned()).
     const int phraseBars = qMax(1, m_phraseGuideBars);
@@ -1389,7 +1544,7 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
         || c.nextChanges
         || cadence
         || (rc >= 0.55 && int(h % 100u) < int(llround(20.0 + 45.0 * rc)));
-    if (!wantAny && !c.userSilence && e < 0.28) return {};
+    if (!wantAny && !c.userSilence && e < 0.22) return {};
 
     // Build a chord-safe pool, then (if we have a key) keep it diatonic for non-spicy chords.
     const int pc1 = (c.chord.rootPc >= 0) ? (c.chord.rootPc % 12) : 0;

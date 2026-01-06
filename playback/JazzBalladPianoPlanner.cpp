@@ -16,6 +16,7 @@ void JazzBalladPianoPlanner::reset() {
     m_lastVoicing.clear();
     m_lastRhythmBar = -1;
     m_barHits.clear();
+    m_lastTopMidi = -1;
 }
 
 int JazzBalladPianoPlanner::thirdIntervalForQuality(music::ChordQuality q) {
@@ -320,6 +321,80 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
             n.target_note = "Comp";
             out.push_back(n);
         }
+
+        // --- Right-hand top-line (Bill Evans-ish) ---
+        // Treat pianist as two hands: LH holds shell; RH can sing a line above the comp.
+        // Deterministic and conservative: only add when there is space and the hit isn't ultra-dense.
+        const bool allowTopLine = !c.userDensityHigh && !c.userIntensityPeak && (hit.density != "guide");
+        const bool hasSpace = c.userSilence || (c.energy >= 0.45);
+        if (allowTopLine && hasSpace) {
+            const quint32 ht = quint32(qHash(QString("top|%1|%2|%3|%4")
+                                                 .arg(c.chordText)
+                                                 .arg(c.playbackBarIndex)
+                                                 .arg(hit.beatInBar)
+                                                 .arg(c.determinismSeed)));
+            const int p = int(ht % 100u);
+            // Probability grows with energy, but stays tasteful.
+            const int pOn = qBound(0, int(llround(10.0 + 30.0 * qBound(0.0, c.energy, 1.0))), 55);
+            if (p < pOn) {
+                // Choose a "melodic" top pitch-class (mostly chord colors).
+                QVector<int> topPcs;
+                topPcs.reserve(4);
+                // Prefer 9/13 on major; 9/11 on minor; 9/13 on dominant.
+                if (c.chord.quality == music::ChordQuality::Minor) {
+                    const int pc9 = pcForDegree(c.chord, 9);
+                    const int pc11 = pcForDegree(c.chord, 11);
+                    if (pc9 >= 0) topPcs.push_back(pc9);
+                    if (pc11 >= 0) topPcs.push_back(pc11);
+                } else if (c.chord.quality == music::ChordQuality::Major) {
+                    const int pc9 = pcForDegree(c.chord, 9);
+                    const int pc13 = pcForDegree(c.chord, 13);
+                    if (pc9 >= 0) topPcs.push_back(pc9);
+                    if (pc13 >= 0) topPcs.push_back(pc13);
+                } else if (c.chord.quality == music::ChordQuality::Dominant) {
+                    const int pc9 = pcForDegree(c.chord, 9);
+                    const int pc13 = pcForDegree(c.chord, 13);
+                    if (pc9 >= 0) topPcs.push_back(pc9);
+                    if (pc13 >= 0) topPcs.push_back(pc13);
+                }
+                // Also allow chord tone 3/5 as a safe melodic anchor.
+                if (pc3 >= 0) topPcs.push_back(pc3);
+                if (pc5 >= 0) topPcs.push_back(pc5);
+                sortUnique(topPcs);
+                if (!topPcs.isEmpty()) {
+                    int around = (c.sparkleLo + c.sparkleHi) / 2;
+                    if (m_lastTopMidi >= 0) around = m_lastTopMidi;
+                    // Prefer stepwise motion: try candidates near last top.
+                    int bestMidi = -1;
+                    int bestCost = 999999;
+                    for (int pc : topPcs) {
+                        const int m = nearestMidiForPc(pc, around, c.rhHi - 2, c.sparkleHi);
+                        const int d = (m_lastTopMidi >= 0) ? qAbs(m - m_lastTopMidi) : qAbs(m - around);
+                        const int cost = d + ((pc == pc3 || pc == pc5) ? 4 : 0); // bias to colors
+                        if (cost < bestCost) { bestCost = cost; bestMidi = m; }
+                    }
+                    if (bestMidi >= 0) {
+                        m_lastTopMidi = bestMidi;
+                        virtuoso::engine::AgentIntentNote t;
+                        t.agent = "Piano";
+                        t.channel = midiChannel;
+                        t.note = clampMidi(bestMidi);
+                        t.baseVelocity = qBound(1, baseVel - 10 + qBound(-6, hit.velDelta, 6), 127);
+                        // Place slightly after the comp hit sometimes (human phrasing).
+                        const bool delay = (int((ht / 7u) % 100u) < 45);
+                        const int sub = delay ? qMin(hit.count - 1, hit.sub + 1) : hit.sub;
+                        t.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, hit.beatInBar, sub, hit.count, ts);
+                        t.durationWhole = (hit.dur < virtuoso::groove::Rational(1, 8)) ? virtuoso::groove::Rational(1, 8) : hit.dur;
+                        t.structural = c.chordIsNew;
+                        t.chord_context = c.chordText;
+                        t.voicing_type = voicingType + " + TopLine";
+                        t.logic_tag = "ballad_topline";
+                        t.target_note = "RH top line";
+                        out.push_back(t);
+                    }
+                }
+            }
+        }
     };
 
     for (const auto& hit : hitsThisBeat) renderHit(hit);
@@ -435,6 +510,10 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
 
     // Non-climax: choose a session-player-ish bar rhythm.
     switch (variant) {
+        case 6: // Arrival on 1 + 4 (good for chord changes; avoids constant avoidance of beat 1)
+            add(0, 0, 1, chooseHold("arrival1", /*canPad*/true, /*canLong*/true), -2, "guide", "arrival1");
+            add(3, 0, 1, chooseHold("backbeat4_short", /*canPad*/true, /*canLong*/true), 0, "full", phraseEnd ? "only4_end" : "only4");
+            break;
         case 0: // Classic 2&4, but light and short (breathing)
             add(1, 0, 1, shortDur(), -2, "guide", "backbeat2_short");
             add(3, 0, 1, chooseHold("backbeat4_short", /*canPad*/true, /*canLong*/true), 0, "full", "backbeat4_short");
@@ -468,6 +547,18 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
             add(1, 1, 2, shortDur(), -6, "guide", "and2");
             add(3, 1, 2, chooseHold("and4", /*canPad*/true, /*canLong*/true), -8, "full", phraseEnd ? "and4_end" : "and4");
             break;
+    }
+
+    // Chord arrivals: sometimes hit on beat 1 (or and-of-1) so we don't always avoid the downbeat.
+    // This is especially important for chart changes and keeps it from sounding "student-ish".
+    if (c.chordIsNew && !userBusy) {
+        const int pArr = qBound(0, int(llround(18.0 + 30.0 * complexity)), 60);
+        if (int((h / 5u) % 100u) < pArr) {
+            const bool onBeat = int((h / 7u) % 100u) < 70;
+            add(0, onBeat ? 0 : 1, onBeat ? 1 : 2,
+                chooseHold("arrival", /*canPad*/true, /*canLong*/true),
+                +1, "guide", onBeat ? "arrival1" : "arrival_and1");
+        }
     }
 
     // Occasional extra jab (and-of-1 or and-of-3) when there is space and energy.

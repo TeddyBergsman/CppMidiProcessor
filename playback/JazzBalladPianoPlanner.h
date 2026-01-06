@@ -93,6 +93,7 @@ private:
 
     int m_lastRhythmBar = -1;
     QVector<CompHit> m_barHits;
+    int m_lastTopMidi = -1; // right-hand top-line continuity
 };
 
 } // namespace playback

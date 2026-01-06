@@ -972,6 +972,7 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: \
   /opt/homebrew/lib/QtCore.framework/Headers/QVector \
   /opt/homebrew/lib/QtCore.framework/Headers/qvector.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/BassProfile.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/PianoProfile.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/WaveVisualizer.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QElapsedTimer \
   /opt/homebrew/lib/QtCore.framework/Headers/qelapsedtimer.h \
@@ -1037,6 +1038,7 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: \
   /opt/homebrew/lib/QtCore.framework/Headers/qhash.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/WalkingBassGenerator.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordSymbol.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/JazzPianoGenerator.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/midiprocessor.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/thread \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__thread/formatter.h \
@@ -1088,6 +1090,7 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qdialog.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QMetaObject \
   /opt/homebrew/lib/QtCore.framework/Headers/qobjectdefs.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/PianoStyleEditorDialog.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/QtWidgets \
   /opt/homebrew/include/QtWidgets/QtWidgetsDepends \
   /opt/homebrew/include/QtCore/QtCore \

@@ -1,0 +1,34 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/VirtuosoCore_autogen.dir/AutogenUsed.txt"
+  "CMakeFiles/VirtuosoCore_autogen.dir/ParseCache.txt"
+  "VirtuosoCore_autogen"
+  "CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.o"
+  "CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.o.d"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.o"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.o.d"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/PianoDriver.cpp.o"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/PianoDriver.cpp.o.d"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o.d"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.o"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.o.d"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/ontology/OntologyRegistry.cpp.o"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/ontology/OntologyRegistry.cpp.o.d"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.o"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.o.d"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o.d"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o.d"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o.d"
+  "VirtuosoCore_autogen/mocs_compilation.cpp"
+  "VirtuosoCore_autogen/timestamp"
+  "libVirtuosoCore.a"
+  "libVirtuosoCore.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/VirtuosoCore.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

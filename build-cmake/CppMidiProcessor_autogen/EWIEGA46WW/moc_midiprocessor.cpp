@@ -97,6 +97,8 @@ template <> constexpr inline auto MidiProcessor::qt_create_metaobjectdata<qt_met
         "velocity",
         "sendVirtualNoteOff",
         "sendVirtualAllNotesOff",
+        "sendVirtualCC",
+        "cc",
         "pollLogQueue",
         "onPlayerStateChanged",
         "onInternalPlay",
@@ -225,26 +227,30 @@ template <> constexpr inline auto MidiProcessor::qt_create_metaobjectdata<qt_met
         QtMocHelpers::SlotData<void(int)>(58, 2, QMC::AccessPublic, QMetaType::Void, {{
             { QMetaType::Int, 54 },
         }}),
+        // Slot 'sendVirtualCC'
+        QtMocHelpers::SlotData<void(int, int, int)>(59, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 54 }, { QMetaType::Int, 60 }, { QMetaType::Int, 34 },
+        }}),
         // Slot 'pollLogQueue'
-        QtMocHelpers::SlotData<void()>(59, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(61, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onPlayerStateChanged'
-        QtMocHelpers::SlotData<void(QMediaPlayer::PlaybackState)>(60, 2, QMC::AccessPrivate, QMetaType::Void, {{
+        QtMocHelpers::SlotData<void(QMediaPlayer::PlaybackState)>(62, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { 0x80000000 | 14, 15 },
         }}),
         // Slot 'onInternalPlay'
-        QtMocHelpers::SlotData<void(const QUrl &)>(61, 2, QMC::AccessPrivate, QMetaType::Void, {{
+        QtMocHelpers::SlotData<void(const QUrl &)>(63, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::QUrl, 17 },
         }}),
         // Slot 'onInternalPause'
-        QtMocHelpers::SlotData<void()>(62, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(64, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onInternalResume'
-        QtMocHelpers::SlotData<void()>(63, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(65, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onPlayerPositionChanged'
-        QtMocHelpers::SlotData<void(qint64)>(64, 2, QMC::AccessPrivate, QMetaType::Void, {{
+        QtMocHelpers::SlotData<void(qint64)>(66, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::LongLong, 21 },
         }}),
         // Slot 'onPlayerDurationChanged'
-        QtMocHelpers::SlotData<void(qint64)>(65, 2, QMC::AccessPrivate, QMetaType::Void, {{
+        QtMocHelpers::SlotData<void(qint64)>(67, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::LongLong, 23 },
         }}),
     };
@@ -301,13 +307,14 @@ void MidiProcessor::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _i
         case 28: _t->sendVirtualNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3]))); break;
         case 29: _t->sendVirtualNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
         case 30: _t->sendVirtualAllNotesOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 31: _t->pollLogQueue(); break;
-        case 32: _t->onPlayerStateChanged((*reinterpret_cast< std::add_pointer_t<QMediaPlayer::PlaybackState>>(_a[1]))); break;
-        case 33: _t->onInternalPlay((*reinterpret_cast< std::add_pointer_t<QUrl>>(_a[1]))); break;
-        case 34: _t->onInternalPause(); break;
-        case 35: _t->onInternalResume(); break;
-        case 36: _t->onPlayerPositionChanged((*reinterpret_cast< std::add_pointer_t<qint64>>(_a[1]))); break;
-        case 37: _t->onPlayerDurationChanged((*reinterpret_cast< std::add_pointer_t<qint64>>(_a[1]))); break;
+        case 31: _t->sendVirtualCC((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3]))); break;
+        case 32: _t->pollLogQueue(); break;
+        case 33: _t->onPlayerStateChanged((*reinterpret_cast< std::add_pointer_t<QMediaPlayer::PlaybackState>>(_a[1]))); break;
+        case 34: _t->onInternalPlay((*reinterpret_cast< std::add_pointer_t<QUrl>>(_a[1]))); break;
+        case 35: _t->onInternalPause(); break;
+        case 36: _t->onInternalResume(); break;
+        case 37: _t->onPlayerPositionChanged((*reinterpret_cast< std::add_pointer_t<qint64>>(_a[1]))); break;
+        case 38: _t->onPlayerDurationChanged((*reinterpret_cast< std::add_pointer_t<qint64>>(_a[1]))); break;
         default: ;
         }
     }
@@ -370,14 +377,14 @@ int MidiProcessor::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 38)
+        if (_id < 39)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 38;
+        _id -= 39;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 38)
+        if (_id < 39)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 38;
+        _id -= 39;
     }
     return _id;
 }

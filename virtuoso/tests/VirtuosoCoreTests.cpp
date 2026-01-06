@@ -5,6 +5,9 @@
 #include "virtuoso/theory/NegativeHarmony.h"
 #include "virtuoso/theory/ScaleSuggester.h"
 #include "virtuoso/theory/FunctionalHarmony.h"
+#include "virtuoso/groove/GrooveGrid.h"
+#include "virtuoso/groove/FeelTemplate.h"
+#include "virtuoso/groove/TimingHumanizer.h"
 
 #include <QCoreApplication>
 #include <QJsonDocument>
@@ -140,6 +143,11 @@ static void testTheoryStream() {
     e.logic_tag = "Tritone Substitution Response";
     e.target_note = "B (3rd of Cmaj7)";
     e.dynamic_marking = "mf";
+    e.groove_template = "swing_2to1";
+    e.grid_pos = "12.3@1/8w";
+    e.timing_offset_ms = 17;
+    e.velocity_adjustment = -3;
+    e.humanize_seed = 123;
 
     const QString json = e.toJsonString(true);
     const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
@@ -149,6 +157,68 @@ static void testTheoryStream() {
     expectStrEq(o.value("timestamp").toString(), "12.3.1.0", "TheoryEvent.timestamp");
     expectStrEq(o.value("chord_context").toString(), "G7alt", "TheoryEvent.chord_context");
     expectStrEq(o.value("dynamic_marking").toString(), "mf", "TheoryEvent.dynamic_marking");
+    expectStrEq(o.value("groove_template").toString(), "swing_2to1", "TheoryEvent.groove_template");
+    expectStrEq(o.value("grid_pos").toString(), "12.3@1/8w", "TheoryEvent.grid_pos");
+    expectEq(o.value("timing_offset_ms").toInt(), 17, "TheoryEvent.timing_offset_ms");
+    expectEq(o.value("velocity_adjustment").toInt(), -3, "TheoryEvent.velocity_adjustment");
+    expectEq(o.value("humanize_seed").toInt(), 123, "TheoryEvent.humanize_seed");
+}
+
+static void testGrooveGridAndFeel() {
+    using namespace virtuoso::groove;
+    TimeSignature ts{4, 4};
+
+    // Triplet within beat 1: bar1 beat1 subdiv 1/3 => withinBeat = 1/12 whole notes.
+    {
+        const GridPos p = GrooveGrid::fromBarBeatTuplet(/*bar=*/0, /*beat=*/0, /*sub=*/1, /*count=*/3, ts);
+        expectEq(p.barIndex, 0, "GrooveGrid: bar index");
+        expect(p.withinBarWhole == Rational(1, 12), "GrooveGrid: triplet position exact (1/12 whole notes)");
+    }
+
+    // Swing: upbeat 8th (1/2 beat) should be delayed.
+    {
+        const int bpm = 120;
+        const GridPos upbeat8 = GrooveGrid::fromBarBeatTuplet(/*bar=*/0, /*beat=*/0, /*sub=*/1, /*count=*/2, ts); // 1/2 beat
+        const FeelTemplate swing = FeelTemplate::swing2to1(1.0);
+        const int off = swing.offsetMsFor(upbeat8, ts, bpm);
+        expect(off > 0, "FeelTemplate Swing(2:1): upbeat delayed");
+    }
+}
+
+static void testTimingHumanizerDeterminism() {
+    using namespace virtuoso::groove;
+    TimeSignature ts{4, 4};
+    const int bpm = 120;
+
+    InstrumentGrooveProfile p;
+    p.instrument = "Test";
+    p.humanizeSeed = 777;
+    p.microJitterMs = 5;
+    p.attackVarianceMs = 3;
+    p.driftMaxMs = 10;
+    p.driftRate = 0.25;
+    p.velocityJitter = 4;
+    p.accentDownbeat = 1.10;
+    p.accentBackbeat = 0.95;
+    p.laidBackMs = 6;
+    p.pushMs = 1;
+
+    TimingHumanizer h1(p);
+    h1.setFeelTemplate(FeelTemplate::swing2to1(0.8));
+    TimingHumanizer h2(p);
+    h2.setFeelTemplate(FeelTemplate::swing2to1(0.8));
+
+    const GridPos pos = GrooveGrid::fromBarBeatTuplet(/*bar=*/2, /*beat=*/1, /*sub=*/1, /*count=*/2, ts); // bar3 beat2 upbeat
+    const Rational dur(1, 8); // eighth note in whole-note units
+    const auto a = h1.humanizeNote(pos, ts, bpm, /*baseVel=*/90, dur, /*structural=*/false);
+    const auto b = h2.humanizeNote(pos, ts, bpm, /*baseVel=*/90, dur, /*structural=*/false);
+
+    expectEq(int(a.onMs), int(b.onMs), "TimingHumanizer determinism: onMs");
+    expectEq(int(a.offMs), int(b.offMs), "TimingHumanizer determinism: offMs");
+    expectEq(a.velocity, b.velocity, "TimingHumanizer determinism: velocity");
+    expectEq(a.timing_offset_ms, b.timing_offset_ms, "TimingHumanizer determinism: timing_offset_ms");
+    expectStrEq(a.groove_template, b.groove_template, "TimingHumanizer determinism: template");
+    expectStrEq(a.grid_pos, b.grid_pos, "TimingHumanizer determinism: grid_pos");
 }
 
 static void testNegativeHarmony() {
@@ -208,6 +278,8 @@ int main(int argc, char** argv) {
     testPianoConstraints();
     testBassConstraints();
     testTheoryStream();
+    testGrooveGridAndFeel();
+    testTimingHumanizerDeterminism();
     testNegativeHarmony();
     testScaleSuggester();
     testFunctionalHarmony();

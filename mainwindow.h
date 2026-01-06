@@ -26,6 +26,7 @@ QT_END_NAMESPACE
 
 class NoteMonitorWidget;
 class LibraryWindow;
+class GrooveLabWindow;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -158,6 +159,9 @@ protected:
 
     // Library Visualizer window (Window → Library)
     LibraryWindow* m_libraryWindow = nullptr;
+
+    // Groove Lab window (Window → Groove Lab)
+    GrooveLabWindow* m_grooveLabWindow = nullptr;
 };
 
 #endif // MAINWINDOW_H

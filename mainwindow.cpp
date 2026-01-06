@@ -14,6 +14,7 @@
 #include "NoteMonitorWidget.h"
 #include "ireal/HtmlPlaylistParser.h"
 #include "LibraryWindow.h"
+#include "GrooveLabWindow.h"
 
 namespace {
 static const char* kIRealLastHtmlPathKey = "ireal/lastHtmlPath";
@@ -153,6 +154,19 @@ void MainWindow::createWidgets(const Preset& preset) {
             m_libraryWindow->activateWindow();
         });
         windowMenu->addAction(libraryAction);
+
+        QAction* grooveLabAction = new QAction("Groove Lab", this);
+        grooveLabAction->setMenuRole(QAction::NoRole);
+        connect(grooveLabAction, &QAction::triggered, this, [this]() {
+            if (!m_grooveLabWindow) {
+                m_grooveLabWindow = new GrooveLabWindow(m_midiProcessor, this);
+                m_grooveLabWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+            }
+            m_grooveLabWindow->show();
+            m_grooveLabWindow->raise();
+            m_grooveLabWindow->activateWindow();
+        });
+        windowMenu->addAction(grooveLabAction);
     }
 
     // Dynamically create program buttons from preset data

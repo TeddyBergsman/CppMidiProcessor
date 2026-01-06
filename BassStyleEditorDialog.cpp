@@ -687,9 +687,7 @@ void BassStyleEditorDialog::appendLiveLogLine(const QString& line) {
     const QString t = line.trimmed();
     if (t.isEmpty()) return;
     m_pendingLog.push_back(t);
-}
-
-void BassStyleEditorDialog::setLiveLogActive(bool active) {
+}void BassStyleEditorDialog::setLiveLogActive(bool active) {
     // Disconnect first to be safe.
     if (m_logConn) {
         QObject::disconnect(m_logConn);

@@ -65,6 +65,16 @@ CMAKE_BINARY_DIR = "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProces
 #=============================================================================
 # Targets provided globally by CMake.
 
+# Special rule for the target test
+test:
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Running tests..."
+	/opt/homebrew/bin/ctest $(ARGS)
+.PHONY : test
+
+# Special rule for the target test
+test/fast: test
+.PHONY : test/fast
+
 # Special rule for the target edit_cache
 edit_cache:
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Running CMake cache editor..."
@@ -117,6 +127,396 @@ depend:
 .PHONY : depend
 
 #=============================================================================
+# Target rules for targets named Experimental
+
+# Build rule for target.
+Experimental: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 Experimental
+.PHONY : Experimental
+
+# fast build rule for target.
+Experimental/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Experimental.dir/build.make CMakeFiles/Experimental.dir/build
+.PHONY : Experimental/fast
+
+#=============================================================================
+# Target rules for targets named Nightly
+
+# Build rule for target.
+Nightly: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 Nightly
+.PHONY : Nightly
+
+# fast build rule for target.
+Nightly/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Nightly.dir/build.make CMakeFiles/Nightly.dir/build
+.PHONY : Nightly/fast
+
+#=============================================================================
+# Target rules for targets named Continuous
+
+# Build rule for target.
+Continuous: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 Continuous
+.PHONY : Continuous
+
+# fast build rule for target.
+Continuous/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Continuous.dir/build.make CMakeFiles/Continuous.dir/build
+.PHONY : Continuous/fast
+
+#=============================================================================
+# Target rules for targets named NightlyMemoryCheck
+
+# Build rule for target.
+NightlyMemoryCheck: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 NightlyMemoryCheck
+.PHONY : NightlyMemoryCheck
+
+# fast build rule for target.
+NightlyMemoryCheck/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/NightlyMemoryCheck.dir/build.make CMakeFiles/NightlyMemoryCheck.dir/build
+.PHONY : NightlyMemoryCheck/fast
+
+#=============================================================================
+# Target rules for targets named NightlyStart
+
+# Build rule for target.
+NightlyStart: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 NightlyStart
+.PHONY : NightlyStart
+
+# fast build rule for target.
+NightlyStart/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/NightlyStart.dir/build.make CMakeFiles/NightlyStart.dir/build
+.PHONY : NightlyStart/fast
+
+#=============================================================================
+# Target rules for targets named NightlyUpdate
+
+# Build rule for target.
+NightlyUpdate: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 NightlyUpdate
+.PHONY : NightlyUpdate
+
+# fast build rule for target.
+NightlyUpdate/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/NightlyUpdate.dir/build.make CMakeFiles/NightlyUpdate.dir/build
+.PHONY : NightlyUpdate/fast
+
+#=============================================================================
+# Target rules for targets named NightlyConfigure
+
+# Build rule for target.
+NightlyConfigure: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 NightlyConfigure
+.PHONY : NightlyConfigure
+
+# fast build rule for target.
+NightlyConfigure/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/NightlyConfigure.dir/build.make CMakeFiles/NightlyConfigure.dir/build
+.PHONY : NightlyConfigure/fast
+
+#=============================================================================
+# Target rules for targets named NightlyBuild
+
+# Build rule for target.
+NightlyBuild: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 NightlyBuild
+.PHONY : NightlyBuild
+
+# fast build rule for target.
+NightlyBuild/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/NightlyBuild.dir/build.make CMakeFiles/NightlyBuild.dir/build
+.PHONY : NightlyBuild/fast
+
+#=============================================================================
+# Target rules for targets named NightlyTest
+
+# Build rule for target.
+NightlyTest: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 NightlyTest
+.PHONY : NightlyTest
+
+# fast build rule for target.
+NightlyTest/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/NightlyTest.dir/build.make CMakeFiles/NightlyTest.dir/build
+.PHONY : NightlyTest/fast
+
+#=============================================================================
+# Target rules for targets named NightlyCoverage
+
+# Build rule for target.
+NightlyCoverage: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 NightlyCoverage
+.PHONY : NightlyCoverage
+
+# fast build rule for target.
+NightlyCoverage/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/NightlyCoverage.dir/build.make CMakeFiles/NightlyCoverage.dir/build
+.PHONY : NightlyCoverage/fast
+
+#=============================================================================
+# Target rules for targets named NightlyMemCheck
+
+# Build rule for target.
+NightlyMemCheck: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 NightlyMemCheck
+.PHONY : NightlyMemCheck
+
+# fast build rule for target.
+NightlyMemCheck/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/NightlyMemCheck.dir/build.make CMakeFiles/NightlyMemCheck.dir/build
+.PHONY : NightlyMemCheck/fast
+
+#=============================================================================
+# Target rules for targets named NightlySubmit
+
+# Build rule for target.
+NightlySubmit: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 NightlySubmit
+.PHONY : NightlySubmit
+
+# fast build rule for target.
+NightlySubmit/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/NightlySubmit.dir/build.make CMakeFiles/NightlySubmit.dir/build
+.PHONY : NightlySubmit/fast
+
+#=============================================================================
+# Target rules for targets named ExperimentalStart
+
+# Build rule for target.
+ExperimentalStart: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ExperimentalStart
+.PHONY : ExperimentalStart
+
+# fast build rule for target.
+ExperimentalStart/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ExperimentalStart.dir/build.make CMakeFiles/ExperimentalStart.dir/build
+.PHONY : ExperimentalStart/fast
+
+#=============================================================================
+# Target rules for targets named ExperimentalUpdate
+
+# Build rule for target.
+ExperimentalUpdate: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ExperimentalUpdate
+.PHONY : ExperimentalUpdate
+
+# fast build rule for target.
+ExperimentalUpdate/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ExperimentalUpdate.dir/build.make CMakeFiles/ExperimentalUpdate.dir/build
+.PHONY : ExperimentalUpdate/fast
+
+#=============================================================================
+# Target rules for targets named ExperimentalConfigure
+
+# Build rule for target.
+ExperimentalConfigure: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ExperimentalConfigure
+.PHONY : ExperimentalConfigure
+
+# fast build rule for target.
+ExperimentalConfigure/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ExperimentalConfigure.dir/build.make CMakeFiles/ExperimentalConfigure.dir/build
+.PHONY : ExperimentalConfigure/fast
+
+#=============================================================================
+# Target rules for targets named ExperimentalBuild
+
+# Build rule for target.
+ExperimentalBuild: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ExperimentalBuild
+.PHONY : ExperimentalBuild
+
+# fast build rule for target.
+ExperimentalBuild/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ExperimentalBuild.dir/build.make CMakeFiles/ExperimentalBuild.dir/build
+.PHONY : ExperimentalBuild/fast
+
+#=============================================================================
+# Target rules for targets named ExperimentalTest
+
+# Build rule for target.
+ExperimentalTest: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ExperimentalTest
+.PHONY : ExperimentalTest
+
+# fast build rule for target.
+ExperimentalTest/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ExperimentalTest.dir/build.make CMakeFiles/ExperimentalTest.dir/build
+.PHONY : ExperimentalTest/fast
+
+#=============================================================================
+# Target rules for targets named ExperimentalCoverage
+
+# Build rule for target.
+ExperimentalCoverage: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ExperimentalCoverage
+.PHONY : ExperimentalCoverage
+
+# fast build rule for target.
+ExperimentalCoverage/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ExperimentalCoverage.dir/build.make CMakeFiles/ExperimentalCoverage.dir/build
+.PHONY : ExperimentalCoverage/fast
+
+#=============================================================================
+# Target rules for targets named ExperimentalMemCheck
+
+# Build rule for target.
+ExperimentalMemCheck: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ExperimentalMemCheck
+.PHONY : ExperimentalMemCheck
+
+# fast build rule for target.
+ExperimentalMemCheck/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ExperimentalMemCheck.dir/build.make CMakeFiles/ExperimentalMemCheck.dir/build
+.PHONY : ExperimentalMemCheck/fast
+
+#=============================================================================
+# Target rules for targets named ExperimentalSubmit
+
+# Build rule for target.
+ExperimentalSubmit: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ExperimentalSubmit
+.PHONY : ExperimentalSubmit
+
+# fast build rule for target.
+ExperimentalSubmit/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ExperimentalSubmit.dir/build.make CMakeFiles/ExperimentalSubmit.dir/build
+.PHONY : ExperimentalSubmit/fast
+
+#=============================================================================
+# Target rules for targets named ContinuousStart
+
+# Build rule for target.
+ContinuousStart: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ContinuousStart
+.PHONY : ContinuousStart
+
+# fast build rule for target.
+ContinuousStart/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ContinuousStart.dir/build.make CMakeFiles/ContinuousStart.dir/build
+.PHONY : ContinuousStart/fast
+
+#=============================================================================
+# Target rules for targets named ContinuousUpdate
+
+# Build rule for target.
+ContinuousUpdate: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ContinuousUpdate
+.PHONY : ContinuousUpdate
+
+# fast build rule for target.
+ContinuousUpdate/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ContinuousUpdate.dir/build.make CMakeFiles/ContinuousUpdate.dir/build
+.PHONY : ContinuousUpdate/fast
+
+#=============================================================================
+# Target rules for targets named ContinuousConfigure
+
+# Build rule for target.
+ContinuousConfigure: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ContinuousConfigure
+.PHONY : ContinuousConfigure
+
+# fast build rule for target.
+ContinuousConfigure/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ContinuousConfigure.dir/build.make CMakeFiles/ContinuousConfigure.dir/build
+.PHONY : ContinuousConfigure/fast
+
+#=============================================================================
+# Target rules for targets named ContinuousBuild
+
+# Build rule for target.
+ContinuousBuild: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ContinuousBuild
+.PHONY : ContinuousBuild
+
+# fast build rule for target.
+ContinuousBuild/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ContinuousBuild.dir/build.make CMakeFiles/ContinuousBuild.dir/build
+.PHONY : ContinuousBuild/fast
+
+#=============================================================================
+# Target rules for targets named ContinuousTest
+
+# Build rule for target.
+ContinuousTest: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ContinuousTest
+.PHONY : ContinuousTest
+
+# fast build rule for target.
+ContinuousTest/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ContinuousTest.dir/build.make CMakeFiles/ContinuousTest.dir/build
+.PHONY : ContinuousTest/fast
+
+#=============================================================================
+# Target rules for targets named ContinuousCoverage
+
+# Build rule for target.
+ContinuousCoverage: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ContinuousCoverage
+.PHONY : ContinuousCoverage
+
+# fast build rule for target.
+ContinuousCoverage/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ContinuousCoverage.dir/build.make CMakeFiles/ContinuousCoverage.dir/build
+.PHONY : ContinuousCoverage/fast
+
+#=============================================================================
+# Target rules for targets named ContinuousMemCheck
+
+# Build rule for target.
+ContinuousMemCheck: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ContinuousMemCheck
+.PHONY : ContinuousMemCheck
+
+# fast build rule for target.
+ContinuousMemCheck/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ContinuousMemCheck.dir/build.make CMakeFiles/ContinuousMemCheck.dir/build
+.PHONY : ContinuousMemCheck/fast
+
+#=============================================================================
+# Target rules for targets named ContinuousSubmit
+
+# Build rule for target.
+ContinuousSubmit: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ContinuousSubmit
+.PHONY : ContinuousSubmit
+
+# fast build rule for target.
+ContinuousSubmit/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/ContinuousSubmit.dir/build.make CMakeFiles/ContinuousSubmit.dir/build
+.PHONY : ContinuousSubmit/fast
+
+#=============================================================================
+# Target rules for targets named VirtuosoCore
+
+# Build rule for target.
+VirtuosoCore: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VirtuosoCore
+.PHONY : VirtuosoCore
+
+# fast build rule for target.
+VirtuosoCore/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/build
+.PHONY : VirtuosoCore/fast
+
+#=============================================================================
+# Target rules for targets named VirtuosoCoreTests
+
+# Build rule for target.
+VirtuosoCoreTests: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VirtuosoCoreTests
+.PHONY : VirtuosoCoreTests
+
+# fast build rule for target.
+VirtuosoCoreTests/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests.dir/build.make CMakeFiles/VirtuosoCoreTests.dir/build
+.PHONY : VirtuosoCoreTests/fast
+
+#=============================================================================
 # Target rules for targets named CppMidiProcessor
 
 # Build rule for target.
@@ -128,6 +528,58 @@ CppMidiProcessor: cmake_check_build_system
 CppMidiProcessor/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/build
 .PHONY : CppMidiProcessor/fast
+
+#=============================================================================
+# Target rules for targets named VirtuosoCore_autogen_timestamp_deps
+
+# Build rule for target.
+VirtuosoCore_autogen_timestamp_deps: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VirtuosoCore_autogen_timestamp_deps
+.PHONY : VirtuosoCore_autogen_timestamp_deps
+
+# fast build rule for target.
+VirtuosoCore_autogen_timestamp_deps/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore_autogen_timestamp_deps.dir/build.make CMakeFiles/VirtuosoCore_autogen_timestamp_deps.dir/build
+.PHONY : VirtuosoCore_autogen_timestamp_deps/fast
+
+#=============================================================================
+# Target rules for targets named VirtuosoCore_autogen
+
+# Build rule for target.
+VirtuosoCore_autogen: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VirtuosoCore_autogen
+.PHONY : VirtuosoCore_autogen
+
+# fast build rule for target.
+VirtuosoCore_autogen/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore_autogen.dir/build.make CMakeFiles/VirtuosoCore_autogen.dir/build
+.PHONY : VirtuosoCore_autogen/fast
+
+#=============================================================================
+# Target rules for targets named VirtuosoCoreTests_autogen_timestamp_deps
+
+# Build rule for target.
+VirtuosoCoreTests_autogen_timestamp_deps: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VirtuosoCoreTests_autogen_timestamp_deps
+.PHONY : VirtuosoCoreTests_autogen_timestamp_deps
+
+# fast build rule for target.
+VirtuosoCoreTests_autogen_timestamp_deps/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir/build.make CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir/build
+.PHONY : VirtuosoCoreTests_autogen_timestamp_deps/fast
+
+#=============================================================================
+# Target rules for targets named VirtuosoCoreTests_autogen
+
+# Build rule for target.
+VirtuosoCoreTests_autogen: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VirtuosoCoreTests_autogen
+.PHONY : VirtuosoCoreTests_autogen
+
+# fast build rule for target.
+VirtuosoCoreTests_autogen/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests_autogen.dir/build.make CMakeFiles/VirtuosoCoreTests_autogen.dir/build
+.PHONY : VirtuosoCoreTests_autogen/fast
 
 #=============================================================================
 # Target rules for targets named CppMidiProcessor_autogen_timestamp_deps
@@ -227,6 +679,54 @@ CppMidiProcessor_autogen/mocs_compilation.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.s
 .PHONY : CppMidiProcessor_autogen/mocs_compilation.cpp.s
 
+GrooveLabWindow.o: GrooveLabWindow.cpp.o
+.PHONY : GrooveLabWindow.o
+
+# target to build an object file
+GrooveLabWindow.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/GrooveLabWindow.cpp.o
+.PHONY : GrooveLabWindow.cpp.o
+
+GrooveLabWindow.i: GrooveLabWindow.cpp.i
+.PHONY : GrooveLabWindow.i
+
+# target to preprocess a source file
+GrooveLabWindow.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/GrooveLabWindow.cpp.i
+.PHONY : GrooveLabWindow.cpp.i
+
+GrooveLabWindow.s: GrooveLabWindow.cpp.s
+.PHONY : GrooveLabWindow.s
+
+# target to generate assembly for a file
+GrooveLabWindow.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/GrooveLabWindow.cpp.s
+.PHONY : GrooveLabWindow.cpp.s
+
+LibraryWindow.o: LibraryWindow.cpp.o
+.PHONY : LibraryWindow.o
+
+# target to build an object file
+LibraryWindow.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/LibraryWindow.cpp.o
+.PHONY : LibraryWindow.cpp.o
+
+LibraryWindow.i: LibraryWindow.cpp.i
+.PHONY : LibraryWindow.i
+
+# target to preprocess a source file
+LibraryWindow.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/LibraryWindow.cpp.i
+.PHONY : LibraryWindow.cpp.i
+
+LibraryWindow.s: LibraryWindow.cpp.s
+.PHONY : LibraryWindow.s
+
+# target to generate assembly for a file
+LibraryWindow.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/LibraryWindow.cpp.s
+.PHONY : LibraryWindow.cpp.s
+
 NoteMonitorWidget.o: NoteMonitorWidget.cpp.o
 .PHONY : NoteMonitorWidget.o
 
@@ -250,6 +750,30 @@ NoteMonitorWidget.s: NoteMonitorWidget.cpp.s
 NoteMonitorWidget.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.s
 .PHONY : NoteMonitorWidget.cpp.s
+
+PianoStyleEditorDialog.o: PianoStyleEditorDialog.cpp.o
+.PHONY : PianoStyleEditorDialog.o
+
+# target to build an object file
+PianoStyleEditorDialog.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/PianoStyleEditorDialog.cpp.o
+.PHONY : PianoStyleEditorDialog.cpp.o
+
+PianoStyleEditorDialog.i: PianoStyleEditorDialog.cpp.i
+.PHONY : PianoStyleEditorDialog.i
+
+# target to preprocess a source file
+PianoStyleEditorDialog.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/PianoStyleEditorDialog.cpp.i
+.PHONY : PianoStyleEditorDialog.cpp.i
+
+PianoStyleEditorDialog.s: PianoStyleEditorDialog.cpp.s
+.PHONY : PianoStyleEditorDialog.s
+
+# target to generate assembly for a file
+PianoStyleEditorDialog.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/PianoStyleEditorDialog.cpp.s
+.PHONY : PianoStyleEditorDialog.cpp.s
 
 PitchMonitorWidget.o: PitchMonitorWidget.cpp.o
 .PHONY : PitchMonitorWidget.o
@@ -346,6 +870,54 @@ SilentPlaybackEngine.s: SilentPlaybackEngine.cpp.s
 SilentPlaybackEngine.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/SilentPlaybackEngine.cpp.s
 .PHONY : SilentPlaybackEngine.cpp.s
+
+VirtuosoCoreTests_autogen/mocs_compilation.o: VirtuosoCoreTests_autogen/mocs_compilation.cpp.o
+.PHONY : VirtuosoCoreTests_autogen/mocs_compilation.o
+
+# target to build an object file
+VirtuosoCoreTests_autogen/mocs_compilation.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests.dir/build.make CMakeFiles/VirtuosoCoreTests.dir/VirtuosoCoreTests_autogen/mocs_compilation.cpp.o
+.PHONY : VirtuosoCoreTests_autogen/mocs_compilation.cpp.o
+
+VirtuosoCoreTests_autogen/mocs_compilation.i: VirtuosoCoreTests_autogen/mocs_compilation.cpp.i
+.PHONY : VirtuosoCoreTests_autogen/mocs_compilation.i
+
+# target to preprocess a source file
+VirtuosoCoreTests_autogen/mocs_compilation.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests.dir/build.make CMakeFiles/VirtuosoCoreTests.dir/VirtuosoCoreTests_autogen/mocs_compilation.cpp.i
+.PHONY : VirtuosoCoreTests_autogen/mocs_compilation.cpp.i
+
+VirtuosoCoreTests_autogen/mocs_compilation.s: VirtuosoCoreTests_autogen/mocs_compilation.cpp.s
+.PHONY : VirtuosoCoreTests_autogen/mocs_compilation.s
+
+# target to generate assembly for a file
+VirtuosoCoreTests_autogen/mocs_compilation.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests.dir/build.make CMakeFiles/VirtuosoCoreTests.dir/VirtuosoCoreTests_autogen/mocs_compilation.cpp.s
+.PHONY : VirtuosoCoreTests_autogen/mocs_compilation.cpp.s
+
+VirtuosoCore_autogen/mocs_compilation.o: VirtuosoCore_autogen/mocs_compilation.cpp.o
+.PHONY : VirtuosoCore_autogen/mocs_compilation.o
+
+# target to build an object file
+VirtuosoCore_autogen/mocs_compilation.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.o
+.PHONY : VirtuosoCore_autogen/mocs_compilation.cpp.o
+
+VirtuosoCore_autogen/mocs_compilation.i: VirtuosoCore_autogen/mocs_compilation.cpp.i
+.PHONY : VirtuosoCore_autogen/mocs_compilation.i
+
+# target to preprocess a source file
+VirtuosoCore_autogen/mocs_compilation.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.i
+.PHONY : VirtuosoCore_autogen/mocs_compilation.cpp.i
+
+VirtuosoCore_autogen/mocs_compilation.s: VirtuosoCore_autogen/mocs_compilation.cpp.s
+.PHONY : VirtuosoCore_autogen/mocs_compilation.s
+
+# target to generate assembly for a file
+VirtuosoCore_autogen/mocs_compilation.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.s
+.PHONY : VirtuosoCore_autogen/mocs_compilation.cpp.s
 
 WaveVisualizer.o: WaveVisualizer.cpp.o
 .PHONY : WaveVisualizer.o
@@ -635,6 +1207,78 @@ music/ChordSymbol.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.s
 .PHONY : music/ChordSymbol.cpp.s
 
+music/JazzPianoGenerator.o: music/JazzPianoGenerator.cpp.o
+.PHONY : music/JazzPianoGenerator.o
+
+# target to build an object file
+music/JazzPianoGenerator.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/JazzPianoGenerator.cpp.o
+.PHONY : music/JazzPianoGenerator.cpp.o
+
+music/JazzPianoGenerator.i: music/JazzPianoGenerator.cpp.i
+.PHONY : music/JazzPianoGenerator.i
+
+# target to preprocess a source file
+music/JazzPianoGenerator.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/JazzPianoGenerator.cpp.i
+.PHONY : music/JazzPianoGenerator.cpp.i
+
+music/JazzPianoGenerator.s: music/JazzPianoGenerator.cpp.s
+.PHONY : music/JazzPianoGenerator.s
+
+# target to generate assembly for a file
+music/JazzPianoGenerator.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/JazzPianoGenerator.cpp.s
+.PHONY : music/JazzPianoGenerator.cpp.s
+
+music/PianoPresets.o: music/PianoPresets.cpp.o
+.PHONY : music/PianoPresets.o
+
+# target to build an object file
+music/PianoPresets.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/PianoPresets.cpp.o
+.PHONY : music/PianoPresets.cpp.o
+
+music/PianoPresets.i: music/PianoPresets.cpp.i
+.PHONY : music/PianoPresets.i
+
+# target to preprocess a source file
+music/PianoPresets.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/PianoPresets.cpp.i
+.PHONY : music/PianoPresets.cpp.i
+
+music/PianoPresets.s: music/PianoPresets.cpp.s
+.PHONY : music/PianoPresets.s
+
+# target to generate assembly for a file
+music/PianoPresets.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/PianoPresets.cpp.s
+.PHONY : music/PianoPresets.cpp.s
+
+music/PianoProfile.o: music/PianoProfile.cpp.o
+.PHONY : music/PianoProfile.o
+
+# target to build an object file
+music/PianoProfile.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/PianoProfile.cpp.o
+.PHONY : music/PianoProfile.cpp.o
+
+music/PianoProfile.i: music/PianoProfile.cpp.i
+.PHONY : music/PianoProfile.i
+
+# target to preprocess a source file
+music/PianoProfile.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/PianoProfile.cpp.i
+.PHONY : music/PianoProfile.cpp.i
+
+music/PianoProfile.s: music/PianoProfile.cpp.s
+.PHONY : music/PianoProfile.s
+
+# target to generate assembly for a file
+music/PianoProfile.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/PianoProfile.cpp.s
+.PHONY : music/PianoProfile.cpp.s
+
 music/Pitch.o: music/Pitch.cpp.o
 .PHONY : music/Pitch.o
 
@@ -755,6 +1399,294 @@ playback/BandPlaybackEngine.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BandPlaybackEngine.cpp.s
 .PHONY : playback/BandPlaybackEngine.cpp.s
 
+virtuoso/constraints/BassDriver.o: virtuoso/constraints/BassDriver.cpp.o
+.PHONY : virtuoso/constraints/BassDriver.o
+
+# target to build an object file
+virtuoso/constraints/BassDriver.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.o
+.PHONY : virtuoso/constraints/BassDriver.cpp.o
+
+virtuoso/constraints/BassDriver.i: virtuoso/constraints/BassDriver.cpp.i
+.PHONY : virtuoso/constraints/BassDriver.i
+
+# target to preprocess a source file
+virtuoso/constraints/BassDriver.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.i
+.PHONY : virtuoso/constraints/BassDriver.cpp.i
+
+virtuoso/constraints/BassDriver.s: virtuoso/constraints/BassDriver.cpp.s
+.PHONY : virtuoso/constraints/BassDriver.s
+
+# target to generate assembly for a file
+virtuoso/constraints/BassDriver.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.s
+.PHONY : virtuoso/constraints/BassDriver.cpp.s
+
+virtuoso/constraints/PianoDriver.o: virtuoso/constraints/PianoDriver.cpp.o
+.PHONY : virtuoso/constraints/PianoDriver.o
+
+# target to build an object file
+virtuoso/constraints/PianoDriver.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/PianoDriver.cpp.o
+.PHONY : virtuoso/constraints/PianoDriver.cpp.o
+
+virtuoso/constraints/PianoDriver.i: virtuoso/constraints/PianoDriver.cpp.i
+.PHONY : virtuoso/constraints/PianoDriver.i
+
+# target to preprocess a source file
+virtuoso/constraints/PianoDriver.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/PianoDriver.cpp.i
+.PHONY : virtuoso/constraints/PianoDriver.cpp.i
+
+virtuoso/constraints/PianoDriver.s: virtuoso/constraints/PianoDriver.cpp.s
+.PHONY : virtuoso/constraints/PianoDriver.s
+
+# target to generate assembly for a file
+virtuoso/constraints/PianoDriver.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/PianoDriver.cpp.s
+.PHONY : virtuoso/constraints/PianoDriver.cpp.s
+
+virtuoso/engine/VirtuosoEngine.o: virtuoso/engine/VirtuosoEngine.cpp.o
+.PHONY : virtuoso/engine/VirtuosoEngine.o
+
+# target to build an object file
+virtuoso/engine/VirtuosoEngine.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o
+.PHONY : virtuoso/engine/VirtuosoEngine.cpp.o
+
+virtuoso/engine/VirtuosoEngine.i: virtuoso/engine/VirtuosoEngine.cpp.i
+.PHONY : virtuoso/engine/VirtuosoEngine.i
+
+# target to preprocess a source file
+virtuoso/engine/VirtuosoEngine.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.i
+.PHONY : virtuoso/engine/VirtuosoEngine.cpp.i
+
+virtuoso/engine/VirtuosoEngine.s: virtuoso/engine/VirtuosoEngine.cpp.s
+.PHONY : virtuoso/engine/VirtuosoEngine.s
+
+# target to generate assembly for a file
+virtuoso/engine/VirtuosoEngine.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.s
+.PHONY : virtuoso/engine/VirtuosoEngine.cpp.s
+
+virtuoso/engine/VirtuosoScheduler.o: virtuoso/engine/VirtuosoScheduler.cpp.o
+.PHONY : virtuoso/engine/VirtuosoScheduler.o
+
+# target to build an object file
+virtuoso/engine/VirtuosoScheduler.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.o
+.PHONY : virtuoso/engine/VirtuosoScheduler.cpp.o
+
+virtuoso/engine/VirtuosoScheduler.i: virtuoso/engine/VirtuosoScheduler.cpp.i
+.PHONY : virtuoso/engine/VirtuosoScheduler.i
+
+# target to preprocess a source file
+virtuoso/engine/VirtuosoScheduler.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.i
+.PHONY : virtuoso/engine/VirtuosoScheduler.cpp.i
+
+virtuoso/engine/VirtuosoScheduler.s: virtuoso/engine/VirtuosoScheduler.cpp.s
+.PHONY : virtuoso/engine/VirtuosoScheduler.s
+
+# target to generate assembly for a file
+virtuoso/engine/VirtuosoScheduler.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.s
+.PHONY : virtuoso/engine/VirtuosoScheduler.cpp.s
+
+virtuoso/ontology/OntologyRegistry.o: virtuoso/ontology/OntologyRegistry.cpp.o
+.PHONY : virtuoso/ontology/OntologyRegistry.o
+
+# target to build an object file
+virtuoso/ontology/OntologyRegistry.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/ontology/OntologyRegistry.cpp.o
+.PHONY : virtuoso/ontology/OntologyRegistry.cpp.o
+
+virtuoso/ontology/OntologyRegistry.i: virtuoso/ontology/OntologyRegistry.cpp.i
+.PHONY : virtuoso/ontology/OntologyRegistry.i
+
+# target to preprocess a source file
+virtuoso/ontology/OntologyRegistry.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/ontology/OntologyRegistry.cpp.i
+.PHONY : virtuoso/ontology/OntologyRegistry.cpp.i
+
+virtuoso/ontology/OntologyRegistry.s: virtuoso/ontology/OntologyRegistry.cpp.s
+.PHONY : virtuoso/ontology/OntologyRegistry.s
+
+# target to generate assembly for a file
+virtuoso/ontology/OntologyRegistry.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/ontology/OntologyRegistry.cpp.s
+.PHONY : virtuoso/ontology/OntologyRegistry.cpp.s
+
+virtuoso/tests/VirtuosoCoreTests.o: virtuoso/tests/VirtuosoCoreTests.cpp.o
+.PHONY : virtuoso/tests/VirtuosoCoreTests.o
+
+# target to build an object file
+virtuoso/tests/VirtuosoCoreTests.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests.dir/build.make CMakeFiles/VirtuosoCoreTests.dir/virtuoso/tests/VirtuosoCoreTests.cpp.o
+.PHONY : virtuoso/tests/VirtuosoCoreTests.cpp.o
+
+virtuoso/tests/VirtuosoCoreTests.i: virtuoso/tests/VirtuosoCoreTests.cpp.i
+.PHONY : virtuoso/tests/VirtuosoCoreTests.i
+
+# target to preprocess a source file
+virtuoso/tests/VirtuosoCoreTests.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests.dir/build.make CMakeFiles/VirtuosoCoreTests.dir/virtuoso/tests/VirtuosoCoreTests.cpp.i
+.PHONY : virtuoso/tests/VirtuosoCoreTests.cpp.i
+
+virtuoso/tests/VirtuosoCoreTests.s: virtuoso/tests/VirtuosoCoreTests.cpp.s
+.PHONY : virtuoso/tests/VirtuosoCoreTests.s
+
+# target to generate assembly for a file
+virtuoso/tests/VirtuosoCoreTests.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests.dir/build.make CMakeFiles/VirtuosoCoreTests.dir/virtuoso/tests/VirtuosoCoreTests.cpp.s
+.PHONY : virtuoso/tests/VirtuosoCoreTests.cpp.s
+
+virtuoso/theory/FunctionalHarmony.o: virtuoso/theory/FunctionalHarmony.cpp.o
+.PHONY : virtuoso/theory/FunctionalHarmony.o
+
+# target to build an object file
+virtuoso/theory/FunctionalHarmony.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.o
+.PHONY : virtuoso/theory/FunctionalHarmony.cpp.o
+
+virtuoso/theory/FunctionalHarmony.i: virtuoso/theory/FunctionalHarmony.cpp.i
+.PHONY : virtuoso/theory/FunctionalHarmony.i
+
+# target to preprocess a source file
+virtuoso/theory/FunctionalHarmony.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.i
+.PHONY : virtuoso/theory/FunctionalHarmony.cpp.i
+
+virtuoso/theory/FunctionalHarmony.s: virtuoso/theory/FunctionalHarmony.cpp.s
+.PHONY : virtuoso/theory/FunctionalHarmony.s
+
+# target to generate assembly for a file
+virtuoso/theory/FunctionalHarmony.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.s
+.PHONY : virtuoso/theory/FunctionalHarmony.cpp.s
+
+virtuoso/theory/NegativeHarmony.o: virtuoso/theory/NegativeHarmony.cpp.o
+.PHONY : virtuoso/theory/NegativeHarmony.o
+
+# target to build an object file
+virtuoso/theory/NegativeHarmony.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o
+.PHONY : virtuoso/theory/NegativeHarmony.cpp.o
+
+virtuoso/theory/NegativeHarmony.i: virtuoso/theory/NegativeHarmony.cpp.i
+.PHONY : virtuoso/theory/NegativeHarmony.i
+
+# target to preprocess a source file
+virtuoso/theory/NegativeHarmony.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.i
+.PHONY : virtuoso/theory/NegativeHarmony.cpp.i
+
+virtuoso/theory/NegativeHarmony.s: virtuoso/theory/NegativeHarmony.cpp.s
+.PHONY : virtuoso/theory/NegativeHarmony.s
+
+# target to generate assembly for a file
+virtuoso/theory/NegativeHarmony.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.s
+.PHONY : virtuoso/theory/NegativeHarmony.cpp.s
+
+virtuoso/theory/ScaleSuggester.o: virtuoso/theory/ScaleSuggester.cpp.o
+.PHONY : virtuoso/theory/ScaleSuggester.o
+
+# target to build an object file
+virtuoso/theory/ScaleSuggester.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o
+.PHONY : virtuoso/theory/ScaleSuggester.cpp.o
+
+virtuoso/theory/ScaleSuggester.i: virtuoso/theory/ScaleSuggester.cpp.i
+.PHONY : virtuoso/theory/ScaleSuggester.i
+
+# target to preprocess a source file
+virtuoso/theory/ScaleSuggester.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.i
+.PHONY : virtuoso/theory/ScaleSuggester.cpp.i
+
+virtuoso/theory/ScaleSuggester.s: virtuoso/theory/ScaleSuggester.cpp.s
+.PHONY : virtuoso/theory/ScaleSuggester.s
+
+# target to generate assembly for a file
+virtuoso/theory/ScaleSuggester.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.s
+.PHONY : virtuoso/theory/ScaleSuggester.cpp.s
+
+virtuoso/theory/TheoryEvent.o: virtuoso/theory/TheoryEvent.cpp.o
+.PHONY : virtuoso/theory/TheoryEvent.o
+
+# target to build an object file
+virtuoso/theory/TheoryEvent.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o
+.PHONY : virtuoso/theory/TheoryEvent.cpp.o
+
+virtuoso/theory/TheoryEvent.i: virtuoso/theory/TheoryEvent.cpp.i
+.PHONY : virtuoso/theory/TheoryEvent.i
+
+# target to preprocess a source file
+virtuoso/theory/TheoryEvent.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.i
+.PHONY : virtuoso/theory/TheoryEvent.cpp.i
+
+virtuoso/theory/TheoryEvent.s: virtuoso/theory/TheoryEvent.cpp.s
+.PHONY : virtuoso/theory/TheoryEvent.s
+
+# target to generate assembly for a file
+virtuoso/theory/TheoryEvent.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.s
+.PHONY : virtuoso/theory/TheoryEvent.cpp.s
+
+virtuoso/ui/GuitarFretboardWidget.o: virtuoso/ui/GuitarFretboardWidget.cpp.o
+.PHONY : virtuoso/ui/GuitarFretboardWidget.o
+
+# target to build an object file
+virtuoso/ui/GuitarFretboardWidget.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.o
+.PHONY : virtuoso/ui/GuitarFretboardWidget.cpp.o
+
+virtuoso/ui/GuitarFretboardWidget.i: virtuoso/ui/GuitarFretboardWidget.cpp.i
+.PHONY : virtuoso/ui/GuitarFretboardWidget.i
+
+# target to preprocess a source file
+virtuoso/ui/GuitarFretboardWidget.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.i
+.PHONY : virtuoso/ui/GuitarFretboardWidget.cpp.i
+
+virtuoso/ui/GuitarFretboardWidget.s: virtuoso/ui/GuitarFretboardWidget.cpp.s
+.PHONY : virtuoso/ui/GuitarFretboardWidget.s
+
+# target to generate assembly for a file
+virtuoso/ui/GuitarFretboardWidget.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.s
+.PHONY : virtuoso/ui/GuitarFretboardWidget.cpp.s
+
+virtuoso/ui/PianoKeyboardWidget.o: virtuoso/ui/PianoKeyboardWidget.cpp.o
+.PHONY : virtuoso/ui/PianoKeyboardWidget.o
+
+# target to build an object file
+virtuoso/ui/PianoKeyboardWidget.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.o
+.PHONY : virtuoso/ui/PianoKeyboardWidget.cpp.o
+
+virtuoso/ui/PianoKeyboardWidget.i: virtuoso/ui/PianoKeyboardWidget.cpp.i
+.PHONY : virtuoso/ui/PianoKeyboardWidget.i
+
+# target to preprocess a source file
+virtuoso/ui/PianoKeyboardWidget.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.i
+.PHONY : virtuoso/ui/PianoKeyboardWidget.cpp.i
+
+virtuoso/ui/PianoKeyboardWidget.s: virtuoso/ui/PianoKeyboardWidget.cpp.s
+.PHONY : virtuoso/ui/PianoKeyboardWidget.s
+
+# target to generate assembly for a file
+virtuoso/ui/PianoKeyboardWidget.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.s
+.PHONY : virtuoso/ui/PianoKeyboardWidget.cpp.s
+
 voicecontroller.o: voicecontroller.cpp.o
 .PHONY : voicecontroller.o
 
@@ -787,9 +1719,44 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
+	@echo "... test"
+	@echo "... Continuous"
+	@echo "... ContinuousBuild"
+	@echo "... ContinuousConfigure"
+	@echo "... ContinuousCoverage"
+	@echo "... ContinuousMemCheck"
+	@echo "... ContinuousStart"
+	@echo "... ContinuousSubmit"
+	@echo "... ContinuousTest"
+	@echo "... ContinuousUpdate"
 	@echo "... CppMidiProcessor_autogen"
 	@echo "... CppMidiProcessor_autogen_timestamp_deps"
+	@echo "... Experimental"
+	@echo "... ExperimentalBuild"
+	@echo "... ExperimentalConfigure"
+	@echo "... ExperimentalCoverage"
+	@echo "... ExperimentalMemCheck"
+	@echo "... ExperimentalStart"
+	@echo "... ExperimentalSubmit"
+	@echo "... ExperimentalTest"
+	@echo "... ExperimentalUpdate"
+	@echo "... Nightly"
+	@echo "... NightlyBuild"
+	@echo "... NightlyConfigure"
+	@echo "... NightlyCoverage"
+	@echo "... NightlyMemCheck"
+	@echo "... NightlyMemoryCheck"
+	@echo "... NightlyStart"
+	@echo "... NightlySubmit"
+	@echo "... NightlyTest"
+	@echo "... NightlyUpdate"
+	@echo "... VirtuosoCoreTests_autogen"
+	@echo "... VirtuosoCoreTests_autogen_timestamp_deps"
+	@echo "... VirtuosoCore_autogen"
+	@echo "... VirtuosoCore_autogen_timestamp_deps"
 	@echo "... CppMidiProcessor"
+	@echo "... VirtuosoCore"
+	@echo "... VirtuosoCoreTests"
 	@echo "... BassStyleEditorDialog.o"
 	@echo "... BassStyleEditorDialog.i"
 	@echo "... BassStyleEditorDialog.s"
@@ -799,9 +1766,18 @@ help:
 	@echo "... CppMidiProcessor_autogen/mocs_compilation.o"
 	@echo "... CppMidiProcessor_autogen/mocs_compilation.i"
 	@echo "... CppMidiProcessor_autogen/mocs_compilation.s"
+	@echo "... GrooveLabWindow.o"
+	@echo "... GrooveLabWindow.i"
+	@echo "... GrooveLabWindow.s"
+	@echo "... LibraryWindow.o"
+	@echo "... LibraryWindow.i"
+	@echo "... LibraryWindow.s"
 	@echo "... NoteMonitorWidget.o"
 	@echo "... NoteMonitorWidget.i"
 	@echo "... NoteMonitorWidget.s"
+	@echo "... PianoStyleEditorDialog.o"
+	@echo "... PianoStyleEditorDialog.i"
+	@echo "... PianoStyleEditorDialog.s"
 	@echo "... PitchMonitorWidget.o"
 	@echo "... PitchMonitorWidget.i"
 	@echo "... PitchMonitorWidget.s"
@@ -814,6 +1790,12 @@ help:
 	@echo "... SilentPlaybackEngine.o"
 	@echo "... SilentPlaybackEngine.i"
 	@echo "... SilentPlaybackEngine.s"
+	@echo "... VirtuosoCoreTests_autogen/mocs_compilation.o"
+	@echo "... VirtuosoCoreTests_autogen/mocs_compilation.i"
+	@echo "... VirtuosoCoreTests_autogen/mocs_compilation.s"
+	@echo "... VirtuosoCore_autogen/mocs_compilation.o"
+	@echo "... VirtuosoCore_autogen/mocs_compilation.i"
+	@echo "... VirtuosoCore_autogen/mocs_compilation.s"
 	@echo "... WaveVisualizer.o"
 	@echo "... WaveVisualizer.i"
 	@echo "... WaveVisualizer.s"
@@ -850,6 +1832,15 @@ help:
 	@echo "... music/ChordSymbol.o"
 	@echo "... music/ChordSymbol.i"
 	@echo "... music/ChordSymbol.s"
+	@echo "... music/JazzPianoGenerator.o"
+	@echo "... music/JazzPianoGenerator.i"
+	@echo "... music/JazzPianoGenerator.s"
+	@echo "... music/PianoPresets.o"
+	@echo "... music/PianoPresets.i"
+	@echo "... music/PianoPresets.s"
+	@echo "... music/PianoProfile.o"
+	@echo "... music/PianoProfile.i"
+	@echo "... music/PianoProfile.s"
 	@echo "... music/Pitch.o"
 	@echo "... music/Pitch.i"
 	@echo "... music/Pitch.s"
@@ -865,6 +1856,42 @@ help:
 	@echo "... playback/BandPlaybackEngine.o"
 	@echo "... playback/BandPlaybackEngine.i"
 	@echo "... playback/BandPlaybackEngine.s"
+	@echo "... virtuoso/constraints/BassDriver.o"
+	@echo "... virtuoso/constraints/BassDriver.i"
+	@echo "... virtuoso/constraints/BassDriver.s"
+	@echo "... virtuoso/constraints/PianoDriver.o"
+	@echo "... virtuoso/constraints/PianoDriver.i"
+	@echo "... virtuoso/constraints/PianoDriver.s"
+	@echo "... virtuoso/engine/VirtuosoEngine.o"
+	@echo "... virtuoso/engine/VirtuosoEngine.i"
+	@echo "... virtuoso/engine/VirtuosoEngine.s"
+	@echo "... virtuoso/engine/VirtuosoScheduler.o"
+	@echo "... virtuoso/engine/VirtuosoScheduler.i"
+	@echo "... virtuoso/engine/VirtuosoScheduler.s"
+	@echo "... virtuoso/ontology/OntologyRegistry.o"
+	@echo "... virtuoso/ontology/OntologyRegistry.i"
+	@echo "... virtuoso/ontology/OntologyRegistry.s"
+	@echo "... virtuoso/tests/VirtuosoCoreTests.o"
+	@echo "... virtuoso/tests/VirtuosoCoreTests.i"
+	@echo "... virtuoso/tests/VirtuosoCoreTests.s"
+	@echo "... virtuoso/theory/FunctionalHarmony.o"
+	@echo "... virtuoso/theory/FunctionalHarmony.i"
+	@echo "... virtuoso/theory/FunctionalHarmony.s"
+	@echo "... virtuoso/theory/NegativeHarmony.o"
+	@echo "... virtuoso/theory/NegativeHarmony.i"
+	@echo "... virtuoso/theory/NegativeHarmony.s"
+	@echo "... virtuoso/theory/ScaleSuggester.o"
+	@echo "... virtuoso/theory/ScaleSuggester.i"
+	@echo "... virtuoso/theory/ScaleSuggester.s"
+	@echo "... virtuoso/theory/TheoryEvent.o"
+	@echo "... virtuoso/theory/TheoryEvent.i"
+	@echo "... virtuoso/theory/TheoryEvent.s"
+	@echo "... virtuoso/ui/GuitarFretboardWidget.o"
+	@echo "... virtuoso/ui/GuitarFretboardWidget.i"
+	@echo "... virtuoso/ui/GuitarFretboardWidget.s"
+	@echo "... virtuoso/ui/PianoKeyboardWidget.o"
+	@echo "... virtuoso/ui/PianoKeyboardWidget.i"
+	@echo "... virtuoso/ui/PianoKeyboardWidget.s"
 	@echo "... voicecontroller.o"
 	@echo "... voicecontroller.i"
 	@echo "... voicecontroller.s"

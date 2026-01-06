@@ -27,6 +27,14 @@ add_library(VirtuosoCore STATIC
   virtuoso/constraints/PianoDriver.cpp
   virtuoso/constraints/BassDriver.h
   virtuoso/constraints/BassDriver.cpp
+  virtuoso/groove/GrooveGrid.h
+  virtuoso/groove/FeelTemplate.h
+  virtuoso/groove/TimingHumanizer.h
+  virtuoso/engine/VirtuosoClock.h
+  virtuoso/engine/VirtuosoScheduler.h
+  virtuoso/engine/VirtuosoScheduler.cpp
+  virtuoso/engine/VirtuosoEngine.h
+  virtuoso/engine/VirtuosoEngine.cpp
   virtuoso/theory/TheoryEvent.h
   virtuoso/theory/TheoryEvent.cpp
   virtuoso/theory/NegativeHarmony.h
@@ -55,6 +63,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   mainwindow.cpp
   LibraryWindow.h
   LibraryWindow.cpp
+  GrooveLabWindow.h
+  GrooveLabWindow.cpp
   midiprocessor.h
   midiprocessor.cpp
   voicecontroller.h

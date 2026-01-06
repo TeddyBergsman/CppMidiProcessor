@@ -22,6 +22,9 @@
 #include <QCloseEvent>
 
 #include "playback/BrushesBalladDrummer.h"
+#include "playback/JazzBalladPianoPlanner.h"
+#include "playback/JazzBalladBassPlanner.h"
+#include "music/ChordSymbol.h"
 
 #include <algorithm>
 
@@ -326,6 +329,78 @@ static QVector<const virtuoso::ontology::VoicingDef*> orderedVoicingsForUi(const
     return all;
 }
 
+namespace {
+struct SelectionInfo {
+    QString fullLogic;      // exact string to match against AgentIntentNote::logic_tag
+    QString patternId;      // extracted id for Vocab/VocabPhrase patterns (may be empty)
+    bool isVocab = false;
+    bool isPhrase = false;
+};
+
+static SelectionInfo parseSelection(const QString& s) {
+    SelectionInfo out;
+    out.fullLogic = s.trimmed();
+    if (out.fullLogic.startsWith("VocabPhrase:")) {
+        out.isVocab = true;
+        out.isPhrase = true;
+        const int lastColon = out.fullLogic.lastIndexOf(':');
+        if (lastColon >= 0 && lastColon + 1 < out.fullLogic.size()) out.patternId = out.fullLogic.mid(lastColon + 1);
+    } else if (out.fullLogic.startsWith("Vocab:")) {
+        out.isVocab = true;
+        out.isPhrase = false;
+        const int lastColon = out.fullLogic.lastIndexOf(':');
+        if (lastColon >= 0 && lastColon + 1 < out.fullLogic.size()) out.patternId = out.fullLogic.mid(lastColon + 1);
+    }
+    return out;
+}
+
+static music::ChordSymbol chordFromOntology(int rootPc, const virtuoso::ontology::ChordDef* def) {
+    music::ChordSymbol c;
+    c.rootPc = (rootPc < 0) ? 0 : (rootPc % 12);
+    if (!def) return c;
+
+    // Prefer parsing a realistic chord-text if possible.
+    const QString rootNames[12] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+    QString suffix = def->name;
+    suffix.replace("(", "");
+    suffix.replace(")", "");
+    suffix.replace("/", "");
+    suffix.replace(" ", "");
+    const QString chordText = QString("%1%2").arg(rootNames[c.rootPc], suffix);
+    if (music::parseChordSymbol(chordText, c)) return c;
+
+    // Fallback: approximate from key/name/intervals (good enough for preview).
+    c.originalText = chordText;
+    const QString k = def->key.toLower();
+    if (def->bassInterval >= 0) c.bassPc = (c.rootPc + (def->bassInterval % 12) + 12) % 12;
+
+    if (k.contains("m7b5") || k.contains("hdim")) c.quality = music::ChordQuality::HalfDiminished;
+    else if (k.contains("dim")) c.quality = music::ChordQuality::Diminished;
+    else if (k.contains("aug") || k.contains("+")) c.quality = music::ChordQuality::Augmented;
+    else if (k.contains("sus2")) c.quality = music::ChordQuality::Sus2;
+    else if (k.contains("sus")) c.quality = music::ChordQuality::Sus4;
+    else if (k.startsWith("min") || k.startsWith("m")) c.quality = music::ChordQuality::Minor;
+    else if ((k == "7") || (k.startsWith("7") && !k.contains("maj") && !k.contains("min"))) c.quality = music::ChordQuality::Dominant;
+    else c.quality = music::ChordQuality::Major;
+
+    // Extension/seventh heuristics
+    c.extension = 0;
+    for (int iv : def->intervals) {
+        if (iv >= 21) c.extension = qMax(c.extension, 13);
+        else if (iv >= 17) c.extension = qMax(c.extension, 11);
+        else if (iv >= 14) c.extension = qMax(c.extension, 9);
+        else if (iv >= 10) c.extension = qMax(c.extension, 7);
+        else if (iv >= 9) c.extension = qMax(c.extension, 6);
+    }
+    if (k.contains("maj7") || k.contains("m7") || k == "7" || k.contains("dim7")) c.extension = qMax(c.extension, 7);
+    if (k.contains("maj7")) c.seventh = music::SeventhQuality::Major7;
+    else if (k.contains("dim7")) c.seventh = music::SeventhQuality::Dim7;
+    else if (k.contains("7")) c.seventh = music::SeventhQuality::Minor7;
+
+    return c;
+}
+} // namespace
+
 void VirtuosoVocabularyWindow::refreshPatternList() {
     m_list->clear();
     QVector<QString> ids;
@@ -335,11 +410,41 @@ void VirtuosoVocabularyWindow::refreshPatternList() {
                "Drums:RideBackbeat","Drums:RidePulse","Drums:RidePulseUpbeat",
                "Drums:IntensitySupportRide","Drums:PhraseEndSwish"};
     } else if (currentScope() == Scope::Phrase) {
-        if (m_instrument == Instrument::Piano) ids = m_pianoPhraseById.keys().toVector();
-        if (m_instrument == Instrument::Bass) ids = m_bassPhraseById.keys().toVector();
+        if (m_instrument == Instrument::Piano) {
+            for (const auto& k : m_pianoPhraseById.keys()) ids.push_back(QString("VocabPhrase:Piano:%1").arg(k));
+            ids.push_back("ballad_comp");
+            ids.push_back("ballad_anticipation");
+            ids.push_back("ballad_sparkle");
+            ids.push_back("ballad_silence_fill");
+            ids.push_back("climax_comp");
+        }
+        if (m_instrument == Instrument::Bass) {
+            for (const auto& k : m_bassPhraseById.keys()) ids.push_back(QString("VocabPhrase:Bass:%1").arg(k));
+            ids.push_back("two_feel_root");
+            ids.push_back("two_feel_fifth");
+            ids.push_back("two_feel_approach");
+            ids.push_back("two_feel_pickup");
+            ids.push_back("walk");
+            ids.push_back("walk_approach");
+        }
     } else {
-        if (m_instrument == Instrument::Piano) ids = m_pianoById.keys().toVector();
-        if (m_instrument == Instrument::Bass) ids = m_bassById.keys().toVector();
+        if (m_instrument == Instrument::Piano) {
+            for (const auto& k : m_pianoById.keys()) ids.push_back(QString("Vocab:Piano:%1").arg(k));
+            ids.push_back("ballad_comp");
+            ids.push_back("ballad_anticipation");
+            ids.push_back("ballad_sparkle");
+            ids.push_back("ballad_silence_fill");
+            ids.push_back("climax_comp");
+        }
+        if (m_instrument == Instrument::Bass) {
+            for (const auto& k : m_bassById.keys()) ids.push_back(QString("Vocab:Bass:%1").arg(k));
+            ids.push_back("two_feel_root");
+            ids.push_back("two_feel_fifth");
+            ids.push_back("two_feel_approach");
+            ids.push_back("two_feel_pickup");
+            ids.push_back("walk");
+            ids.push_back("walk_approach");
+        }
     }
     std::sort(ids.begin(), ids.end());
     for (const auto& id : ids) m_list->addItem(id);
@@ -451,14 +556,15 @@ void VirtuosoVocabularyWindow::refreshDetailsAndPreview() {
     };
 
     const auto* item = m_list->currentItem();
-    const QString id = item ? item->text() : QString();
-    if (id.isEmpty()) return;
+    const QString selText = item ? item->text() : QString();
+    if (selText.isEmpty()) return;
+    const auto sel = parseSelection(selText);
 
     // Render a preview: beat patterns repeat; phrase patterns span their phraseBars.
     int bars = m_previewBars;
     if (m_instrument != Instrument::Drums && currentScope() == Scope::Phrase) {
-        if (m_instrument == Instrument::Piano && m_pianoPhraseById.contains(id)) bars = qMax(1, m_pianoPhraseById.value(id).phraseBars);
-        if (m_instrument == Instrument::Bass && m_bassPhraseById.contains(id)) bars = qMax(1, m_bassPhraseById.value(id).phraseBars);
+        // Phrase previews are fixed at 4 bars in the current MVP planners.
+        bars = 4;
     }
     const qint64 totalMsPreview = qint64(llround(double(bars) * (60000.0 / double(qMax(1, bpm))) * 4.0));
 
@@ -541,7 +647,7 @@ void VirtuosoVocabularyWindow::refreshDetailsAndPreview() {
 
     if (m_instrument == Instrument::Drums) {
         // Drums preview is sourced from the actual procedural drummer.
-        addRow("Drummer", "procedural", "-", "-", id, "BrushesBalladDrummer");
+        addRow("Drummer", "procedural", "-", "-", selText, "BrushesBalladDrummer");
 
         playback::BrushesBalladDrummer drummer;
         // Keep determinism stable for audition previews.
@@ -560,7 +666,7 @@ void VirtuosoVocabularyWindow::refreshDetailsAndPreview() {
                 ctx.intensityPeak = peak;
                 const auto notes = drummer.planBeat(ctx);
                 for (const auto& n : notes) {
-                    if (!id.isEmpty() && n.logic_tag != id) continue;
+                    if (!selText.isEmpty() && n.logic_tag != selText) continue;
                     const auto he = h.humanizeNote(n.startPos, ts, bpm, n.baseVelocity, n.durationWhole, n.structural);
                     qint64 on = qBound<qint64>(0, he.onMs, totalMsPreview);
                     qint64 off = qBound<qint64>(0, he.offMs, totalMsPreview + 8000);
@@ -577,130 +683,118 @@ void VirtuosoVocabularyWindow::refreshDetailsAndPreview() {
             }
         }
     } else if (m_instrument == Instrument::Piano) {
-        const bool phrase = (currentScope() == Scope::Phrase);
-        QVector<virtuoso::vocab::VocabularyRegistry::PianoPhraseHit> phraseHits;
-        QVector<virtuoso::vocab::VocabularyRegistry::PianoHit> beatHits;
-        QString notesText;
-        if (phrase && m_pianoPhraseById.contains(id)) {
-            const auto p = m_pianoPhraseById.value(id);
-            phraseHits = p.hits;
-            notesText = p.notes;
-            addRow("Piano PHRASE", QString("bars=%1").arg(p.phraseBars),
-                   "-", "-", QString("hits=%1").arg(p.hits.size()), p.notes);
-        } else {
-            const auto p = m_pianoById.value(id);
-            beatHits = p.hits;
-            notesText = p.notes;
-            addRow("Piano pattern", beatsString(p.beats),
-                   QString("%1..%2").arg(p.minEnergy, 0, 'f', 2).arg(p.maxEnergy, 0, 'f', 2),
-                   QString::number(p.weight, 'f', 2),
-                   QString("hits=%1").arg(p.hits.size()),
-                   p.notes);
-        }
-
-        const QString vkey = m_voicingCombo ? m_voicingCombo->currentData().toString() : QString();
-        const auto* vdef = m_ontology.voicing(vkey);
-        const int rootMidi = 60; // middle C as an audition anchor; voicing shape matters more than register here
-        // Use ontology voicing to pick actual chord tones; "guide" means choose a shell voicing if available.
-        QVector<int> fullNotes = midiNotesForVoicing(vdef, chordDef, rootPc, rootMidi);
-        if (fullNotes.isEmpty()) {
-            // fallback: basic chord intervals
-            if (chordDef) for (int iv : chordDef->intervals) fullNotes.push_back(clampMidi(rootMidi + iv));
-        }
-
-        auto renderHit = [&](int bar, int beat, const virtuoso::vocab::VocabularyRegistry::PianoHit& hit) {
-            QVector<int> chordNotes = fullNotes;
-            if (hit.density.trimmed().toLower() == "guide") {
-                const auto* shell37 = m_ontology.voicing("piano_shell_3_7");
-                const auto* shell17 = m_ontology.voicing("piano_shell_1_7");
-                const auto* shell = shell37 ? shell37 : shell17;
-                chordNotes = midiNotesForVoicing(shell, chordDef, rootPc, rootMidi);
-                if (chordNotes.isEmpty()) chordNotes = fullNotes;
-            }
-            for (int m : chordNotes) {
-                addEvent(bar, beat, hit.sub, hit.count, clampMidi(m),
-                         qBound(1, 52 + hit.vel_delta + int(llround(10.0 * energy)), 127),
-                         virtuoso::groove::Rational(qMax(1, hit.dur_num), qMax(1, hit.dur_den)),
-                         QString("%1").arg(id),
-                         /*structural*/(beat == 0));
-            }
-        };
-        if (phrase) {
-            for (const auto& ph : phraseHits) {
-                if (ph.barOffset < 0 || ph.barOffset >= bars) continue;
-                renderHit(ph.barOffset, ph.beatInBar, ph.hit);
+        // Piano preview is sourced from the actual planner (voicing + voice-leading + constraints).
+        if (sel.isVocab) {
+            if (sel.isPhrase && m_pianoPhraseById.contains(sel.patternId)) {
+                const auto p = m_pianoPhraseById.value(sel.patternId);
+                addRow("Piano PHRASE", QString("bars=%1").arg(p.phraseBars), "-", "-", QString("hits=%1").arg(p.hits.size()), p.notes);
+            } else if (!sel.isPhrase && m_pianoById.contains(sel.patternId)) {
+                const auto p = m_pianoById.value(sel.patternId);
+                addRow("Piano pattern", beatsString(p.beats),
+                       QString("%1..%2").arg(p.minEnergy, 0, 'f', 2).arg(p.maxEnergy, 0, 'f', 2),
+                       QString::number(p.weight, 'f', 2),
+                       QString("hits=%1").arg(p.hits.size()),
+                       p.notes);
             }
         } else {
-            const auto p = m_pianoById.value(id);
-            for (int bar = 0; bar < bars; ++bar) {
-                for (int beat = 0; beat < 4; ++beat) {
-                    if (!p.beats.contains(beat)) continue;
-                    for (const auto& hit : p.hits) renderHit(bar, beat, hit);
+            addRow("Piano", "procedural", "-", "-", selText, "JazzBalladPianoPlanner");
+        }
+
+        playback::JazzBalladPianoPlanner planner;
+        planner.setVocabulary(&m_vocab);
+
+        const music::ChordSymbol chord = chordFromOntology(rootPc, chordDef);
+        const QString chordText = (m_rootCombo ? m_rootCombo->currentText() : QString("C")) + (chordDef ? chordDef->name : QString("maj7"));
+        for (int bar = 0; bar < bars; ++bar) {
+            for (int beat = 0; beat < 4; ++beat) {
+                playback::JazzBalladPianoPlanner::Context c;
+                c.bpm = bpm;
+                c.playbackBarIndex = bar;
+                c.beatInBar = beat;
+                c.chordIsNew = (beat == 0);
+                c.chord = chord;
+                c.chordText = chordText;
+                c.determinismSeed = 0xA11CEu;
+                c.forceClimax = false;
+                c.energy = energy;
+                const auto notes = planner.planBeat(c, defaultMidiChannel(m_instrument), ts);
+                for (const auto& n : notes) {
+                    if (!sel.fullLogic.isEmpty() && n.logic_tag != sel.fullLogic) continue;
+                    const auto he = h.humanizeNote(n.startPos, ts, bpm, n.baseVelocity, n.durationWhole, n.structural);
+                    qint64 on = qBound<qint64>(0, he.onMs, totalMsPreview);
+                    qint64 off = qBound<qint64>(0, he.offMs, totalMsPreview + 8000);
+                    if (off <= on) off = on + 60;
+                    virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
+                    ev.lane = lane;
+                    ev.note = n.note;
+                    ev.velocity = he.velocity;
+                    ev.onMs = on;
+                    ev.offMs = off;
+                    ev.label = QString("%1 | %2").arg(n.logic_tag, n.voicing_type);
+                    m_previewEvents.push_back(ev);
                 }
             }
         }
     } else if (m_instrument == Instrument::Bass) {
-        const bool phrase = (currentScope() == Scope::Phrase);
-        if (phrase && m_bassPhraseById.contains(id)) {
-            const auto p = m_bassPhraseById.value(id);
-            addRow("Bass PHRASE", QString("bars=%1").arg(p.phraseBars),
-                   "-", "-", QString("hits=%1").arg(p.hits.size()), p.notes);
-            for (const auto& ph : p.hits) {
-                if (ph.barOffset < 0 || ph.barOffset >= bars) continue;
-                if (ph.action == virtuoso::vocab::VocabularyRegistry::BassAction::Rest) continue;
-                int midi = -1;
-                if (ph.action == virtuoso::vocab::VocabularyRegistry::BassAction::Root) midi = bassMidiForDegree(rootPc, rootPc, 40, 57);
-                else if (ph.action == virtuoso::vocab::VocabularyRegistry::BassAction::Fifth) midi = bassMidiForDegree(rootPc, (rootPc + 7) % 12, 40, 57);
-                else if (ph.action == virtuoso::vocab::VocabularyRegistry::BassAction::Third) {
-                    const int thirdIv = degreeToSemitone(chordDef, 3);
-                    midi = bassMidiForDegree(rootPc, (rootPc + thirdIv) % 12, 40, 57);
-                } else if (ph.action == virtuoso::vocab::VocabularyRegistry::BassAction::PickupToNext ||
-                           ph.action == virtuoso::vocab::VocabularyRegistry::BassAction::ApproachToNext) {
-                    const int nextRootMidi = bassMidiForDegree(nextRootPc, nextRootPc, 40, 57);
-                    midi = nextRootMidi - 1;
-                    while (midi < 40) midi += 12;
-                    while (midi > 57) midi -= 12;
-                }
-                if (midi < 0) continue;
-                addEvent(ph.barOffset, ph.beatInBar, ph.sub, ph.count, clampMidi(midi),
-                         qBound(1, 52 + ph.vel_delta + int(llround(8.0 * energy)), 127),
-                         virtuoso::groove::Rational(qMax(1, ph.dur_num), qMax(1, ph.dur_den)),
-                         QString("%1").arg(id),
-                         /*structural*/(ph.beatInBar == 0));
+        // Bass preview is sourced from the actual planner (device selection + approach + constraints/state).
+        if (sel.isVocab) {
+            if (sel.isPhrase && m_bassPhraseById.contains(sel.patternId)) {
+                const auto p = m_bassPhraseById.value(sel.patternId);
+                addRow("Bass PHRASE", QString("bars=%1").arg(p.phraseBars), "-", "-", QString("hits=%1").arg(p.hits.size()), p.notes);
+            } else if (!sel.isPhrase && m_bassById.contains(sel.patternId)) {
+                const auto p = m_bassById.value(sel.patternId);
+                addRow("Bass pattern", beatsString(p.beats),
+                       QString("%1..%2").arg(p.minEnergy, 0, 'f', 2).arg(p.maxEnergy, 0, 'f', 2),
+                       QString::number(p.weight, 'f', 2),
+                       QString("action=%1").arg(int(p.action)),
+                       p.notes);
             }
         } else {
-            const auto p = m_bassById.value(id);
-            addRow("Bass pattern", beatsString(p.beats),
-                   QString("%1..%2").arg(p.minEnergy, 0, 'f', 2).arg(p.maxEnergy, 0, 'f', 2),
-                   QString::number(p.weight, 'f', 2),
-                   QString("action=%1").arg(int(p.action)),
-                   p.notes);
+            addRow("Bass", "procedural", "-", "-", selText, "JazzBalladBassPlanner");
+        }
 
-            for (int bar = 0; bar < bars; ++bar) {
-                for (int beat = 0; beat < 4; ++beat) {
-                    if (!p.beats.contains(beat)) continue;
-                    int midi = -1;
-                    if (p.action == virtuoso::vocab::VocabularyRegistry::BassAction::Rest) continue;
-                    if (p.action == virtuoso::vocab::VocabularyRegistry::BassAction::Root) {
-                        midi = bassMidiForDegree(rootPc, rootPc, 40, 57);
-                    } else if (p.action == virtuoso::vocab::VocabularyRegistry::BassAction::Fifth) {
-                        midi = bassMidiForDegree(rootPc, (rootPc + 7) % 12, 40, 57);
-                    } else if (p.action == virtuoso::vocab::VocabularyRegistry::BassAction::Third) {
-                        const int thirdIv = degreeToSemitone(chordDef, 3);
-                        midi = bassMidiForDegree(rootPc, (rootPc + thirdIv) % 12, 40, 57);
-                    } else if (p.action == virtuoso::vocab::VocabularyRegistry::BassAction::ApproachToNext ||
-                               p.action == virtuoso::vocab::VocabularyRegistry::BassAction::PickupToNext) {
-                        const int nextRootMidi = bassMidiForDegree(nextRootPc, nextRootPc, 40, 57);
-                        midi = nextRootMidi - 1;
-                        while (midi < 40) midi += 12;
-                        while (midi > 57) midi -= 12;
-                    }
-                    if (midi < 0) continue;
-                    addEvent(bar, beat, p.sub, p.count, clampMidi(midi),
-                             qBound(1, 52 + p.vel_delta + int(llround(8.0 * energy)), 127),
-                             virtuoso::groove::Rational(qMax(1, p.dur_num), qMax(1, p.dur_den)),
-                             QString("%1").arg(id),
-                             /*structural*/(beat == 0));
+        playback::JazzBalladBassPlanner planner;
+        planner.setVocabulary(&m_vocab);
+
+        const music::ChordSymbol chord = chordFromOntology(rootPc, chordDef);
+        const QString chordText = (m_rootCombo ? m_rootCombo->currentText() : QString("C")) + (chordDef ? chordDef->name : QString("maj7"));
+
+        const music::ChordSymbol nextChord = chordFromOntology(nextRootPc, nextChordDef);
+        const QString nextChordText = (m_nextRootCombo ? m_nextRootCombo->currentText() : (m_rootCombo ? m_rootCombo->currentText() : QString("C"))) +
+            (nextChordDef ? nextChordDef->name : (chordDef ? chordDef->name : QString("maj7")));
+
+        for (int bar = 0; bar < bars; ++bar) {
+            for (int beat = 0; beat < 4; ++beat) {
+                playback::JazzBalladBassPlanner::Context c;
+                c.bpm = bpm;
+                c.playbackBarIndex = bar;
+                c.beatInBar = beat;
+                c.chordIsNew = (beat == 0);
+                c.chord = chord;
+                c.chordText = chordText;
+                c.determinismSeed = 0xBADA55u;
+                c.forceClimax = false;
+                c.energy = energy;
+
+                c.hasNextChord = true;
+                c.nextChord = nextChord;
+                Q_UNUSED(nextChordText);
+
+                const auto notes = planner.planBeat(c, defaultMidiChannel(m_instrument), ts);
+                for (const auto& n : notes) {
+                    if (!sel.fullLogic.isEmpty() && n.logic_tag != sel.fullLogic) continue;
+                    const auto he = h.humanizeNote(n.startPos, ts, bpm, n.baseVelocity, n.durationWhole, n.structural);
+                    qint64 on = qBound<qint64>(0, he.onMs, totalMsPreview);
+                    qint64 off = qBound<qint64>(0, he.offMs, totalMsPreview + 8000);
+                    if (off <= on) off = on + 60;
+                    virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
+                    ev.lane = lane;
+                    ev.note = n.note;
+                    ev.velocity = he.velocity;
+                    ev.onMs = on;
+                    ev.offMs = off;
+                    ev.label = QString("%1 | %2").arg(n.logic_tag, n.target_note);
+                    m_previewEvents.push_back(ev);
                 }
             }
         }
@@ -861,18 +955,7 @@ void VirtuosoVocabularyWindow::ingestTheoryEventJson(const QString& json) {
     }
 
     // Always follow during live playback; highlight whichever vocab entry is active.
-    {
-        const QString prefix = QString("Vocab:%1:").arg(instrumentName(m_instrument));
-        if (logic.startsWith(prefix)) {
-            const QString id = logic.mid(prefix.size());
-            highlightPatternId(id);
-        }
-        const QString pfx2 = QString("VocabPhrase:%1:").arg(instrumentName(m_instrument));
-        if (logic.startsWith(pfx2)) {
-            const QString id = logic.mid(pfx2.size());
-            highlightPatternId(id);
-        }
-    }
+    if (logic.startsWith("Vocab:") || logic.startsWith("VocabPhrase:")) highlightPatternId(logic);
 
     // Accumulate for live timeline
     if (onMs > 0 && offMs > onMs) {

@@ -9,6 +9,8 @@
 #include "virtuoso/engine/VirtuosoEngine.h"
 #include "virtuoso/groove/GrooveRegistry.h"
 #include "virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h"
+#include "virtuoso/theory/FunctionalHarmony.h"
+#include "virtuoso/ontology/OntologyRegistry.h"
 
 #include "playback/JazzBalladBassPlanner.h"
 #include "playback/JazzBalladPianoPlanner.h"
@@ -19,6 +21,15 @@
 class MidiProcessor;
 
 namespace playback {
+
+struct LocalKeyEstimate {
+    int tonicPc = 0;
+    QString scaleKey;
+    QString scaleName;
+    virtuoso::theory::KeyMode mode = virtuoso::theory::KeyMode::Major;
+    double score = 0.0;
+    double coverage = 0.0;
+};
 
 // MVP: chart-driven Drums/Bass/Piano for jazz brushes ballad.
 // - Uses the new virtuoso::engine::VirtuosoEngine + groove templates (no legacy generators).
@@ -104,6 +115,7 @@ private:
     // New engine (internal clock domain)
     virtuoso::engine::VirtuosoEngine m_engine;
     virtuoso::groove::GrooveRegistry m_registry;
+    virtuoso::ontology::OntologyRegistry m_ontology = virtuoso::ontology::OntologyRegistry::builtins();
     QString m_stylePresetKey = "jazz_brushes_ballad_60_evans";
 
     MidiProcessor* m_midi = nullptr; // not owned
@@ -111,6 +123,12 @@ private:
     // Harmony tracking
     music::ChordSymbol m_lastChord;
     bool m_hasLastChord = false;
+    int m_keyPcGuess = 0;           // 0..11 (major-key heuristic)
+    bool m_hasKeyPcGuess = false;
+    QString m_keyScaleKey;          // e.g. "ionian", "dorian", "aeolian"
+    QString m_keyScaleName;         // e.g. "Ionian (Major)"
+    virtuoso::theory::KeyMode m_keyMode = virtuoso::theory::KeyMode::Major;
+    QVector<LocalKeyEstimate> m_localKeysByBar; // flattened chart bars
 
     JazzBalladBassPlanner m_bassPlanner;
     JazzBalladPianoPlanner m_pianoPlanner;

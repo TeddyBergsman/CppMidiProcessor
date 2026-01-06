@@ -26,6 +26,9 @@ struct AgentIntentNote {
     // Optional glass-box fields (propagate to TheoryEvent).
     QString chord_context;
     QString scale_used;
+    QString key_center;      // e.g. "C Ionian", "A Aeolian", "D Dorian"
+    QString roman;           // e.g. "V7", "iiø7", "V/ii"
+    QString chord_function;  // "Tonic" | "Subdominant" | "Dominant" | "Other"
     QString voicing_type;
     QString logic_tag;
     QString target_note;

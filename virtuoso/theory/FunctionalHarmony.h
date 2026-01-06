@@ -13,10 +13,26 @@ struct HarmonyLabel {
     double confidence = 0.0; // 0..1
 };
 
+enum class KeyMode {
+    Major = 0,
+    Minor,
+};
+
 // Minimal functional-harmony analyzer for major keys (expandable).
 HarmonyLabel analyzeChordInMajorKey(int tonicPc,
                                    int chordRootPc,
                                    const virtuoso::ontology::ChordDef& chord);
+
+// Minimal functional-harmony analyzer for minor keys (expandable).
+HarmonyLabel analyzeChordInMinorKey(int tonicPc,
+                                   int chordRootPc,
+                                   const virtuoso::ontology::ChordDef& chord);
+
+// Convenience wrapper.
+HarmonyLabel analyzeChordInKey(int tonicPc,
+                               KeyMode mode,
+                               int chordRootPc,
+                               const virtuoso::ontology::ChordDef& chord);
 
 } // namespace virtuoso::theory
 

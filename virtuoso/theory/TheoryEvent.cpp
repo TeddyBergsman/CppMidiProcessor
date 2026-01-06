@@ -10,6 +10,9 @@ QJsonObject TheoryEvent::toJsonObject() const {
     o.insert("timestamp", timestamp);
     o.insert("chord_context", chord_context);
     o.insert("scale_used", scale_used);
+    if (!key_center.trimmed().isEmpty()) o.insert("key_center", key_center);
+    if (!roman.trimmed().isEmpty()) o.insert("roman", roman);
+    if (!chord_function.trimmed().isEmpty()) o.insert("chord_function", chord_function);
     o.insert("voicing_type", voicing_type);
     o.insert("logic_tag", logic_tag);
     o.insert("target_note", target_note);

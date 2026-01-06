@@ -109,6 +109,9 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
     te.timestamp = he.grid_pos; // Stage 1: use grid position as the timestamp string.
     te.chord_context = note.chord_context;
     te.scale_used = note.scale_used;
+    te.key_center = note.key_center;
+    te.roman = note.roman;
+    te.chord_function = note.chord_function;
     te.voicing_type = note.voicing_type;
     te.logic_tag = note.logic_tag;
     te.target_note = note.target_note;
@@ -180,6 +183,9 @@ void VirtuosoEngine::scheduleHumanizedIntentNote(const AgentIntentNote& note,
     te.timestamp = he.grid_pos;
     te.chord_context = note.chord_context;
     te.scale_used = note.scale_used;
+    te.key_center = note.key_center;
+    te.roman = note.roman;
+    te.chord_function = note.chord_function;
     te.voicing_type = note.voicing_type;
     te.logic_tag = logicTagOverride.isEmpty() ? note.logic_tag : logicTagOverride;
     te.target_note = note.target_note;

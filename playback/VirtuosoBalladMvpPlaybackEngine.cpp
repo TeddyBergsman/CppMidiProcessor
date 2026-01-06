@@ -4,12 +4,15 @@
 #include "playback/BalladReferenceTuning.h"
 #include "playback/SemanticMidiAnalyzer.h"
 #include "playback/VibeStateMachine.h"
+#include "virtuoso/theory/FunctionalHarmony.h"
+#include "virtuoso/theory/ScaleSuggester.h"
 
 #include <QHash>
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QtGlobal>
 #include <algorithm>
 #include <limits>
@@ -25,6 +28,282 @@ static QVector<const chart::Bar*> flattenBarsFrom(const chart::ChartModel& model
         }
     }
     return bars;
+}
+
+static int normalizePc(int pc) {
+    int v = pc % 12;
+    if (v < 0) v += 12;
+    return v;
+}
+
+static QString pcName(int pc) {
+    static const char* names[] = {"C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"};
+    return names[normalizePc(pc)];
+}
+
+static QString ontologyChordKeyFor(const music::ChordSymbol& c) {
+    using music::ChordQuality;
+    using music::SeventhQuality;
+    if (c.noChord || c.placeholder) return {};
+    // Dominant family
+    if (c.quality == ChordQuality::Dominant) {
+        if (c.alt) return "7alt";
+        bool hasB9 = false, hasSharp9 = false, hasB13 = false, hasSharp11 = false;
+        for (const auto& a : c.alterations) {
+            if (a.degree == 9 && a.delta < 0) hasB9 = true;
+            if (a.degree == 9 && a.delta > 0) hasSharp9 = true;
+            if (a.degree == 13 && a.delta < 0) hasB13 = true;
+            if (a.degree == 11 && a.delta > 0) hasSharp11 = true;
+        }
+        if (hasB9 && hasSharp9) return "7b9#9";
+        if (hasB9 && hasB13) return "7b9b13";
+        if (hasSharp9 && hasB13) return "7#9b13";
+        if (hasB9) return "7b9";
+        if (hasSharp9) return "7#9";
+        if (hasB13) return "7b13";
+        if (c.extension >= 13 && hasSharp11) return "13#11";
+        if (c.extension >= 13) return "13";
+        if (c.extension >= 11) return "11";
+        if (c.extension >= 9) return "9";
+        if (c.seventh != SeventhQuality::None || c.extension >= 7) return "7";
+        return "7";
+    }
+    // Half diminished
+    if (c.quality == ChordQuality::HalfDiminished) return "m7b5";
+    // Diminished
+    if (c.quality == ChordQuality::Diminished) {
+        if (c.seventh == SeventhQuality::Dim7) return "dim7";
+        return (c.extension >= 7) ? "dim7" : "dim";
+    }
+    // Minor
+    if (c.quality == ChordQuality::Minor) {
+        if (c.seventh == SeventhQuality::Major7) {
+            if (c.extension >= 13) return "minmaj13";
+            if (c.extension >= 11) return "minmaj11";
+            if (c.extension >= 9) return "minmaj9";
+            return "min_maj7";
+        }
+        if (c.extension >= 13) return "min13";
+        if (c.extension >= 11) return "min11";
+        if (c.extension >= 9) return "min9";
+        if (c.seventh != SeventhQuality::None || c.extension >= 7) return "min7";
+        return "min";
+    }
+    // Major
+    if (c.quality == ChordQuality::Major) {
+        bool hasSharp11 = false;
+        for (const auto& a : c.alterations) {
+            if (a.degree == 11 && a.delta > 0) hasSharp11 = true;
+        }
+        if (c.extension >= 13 && hasSharp11) return "maj13#11";
+        if (c.extension >= 13) return "maj13";
+        if (c.extension >= 11) return "maj11";
+        if (c.extension >= 9 && hasSharp11) return "maj9#11";
+        if (c.extension >= 9) return "maj9";
+        if (c.seventh == SeventhQuality::Major7 || c.extension >= 7) return "maj7";
+        if (c.extension >= 6) return "6";
+        return "maj";
+    }
+    // Sus
+    if (c.quality == ChordQuality::Sus2) return "sus2";
+    if (c.quality == ChordQuality::Sus4) {
+        if (c.extension >= 13) return "13sus4";
+        if (c.extension >= 9) return "9sus4";
+        if (c.seventh == SeventhQuality::Minor7 || c.extension >= 7) return "7sus4";
+        return "sus4";
+    }
+    // Aug
+    if (c.quality == ChordQuality::Augmented) {
+        if (c.seventh == SeventhQuality::Minor7 || c.extension >= 7) return "aug7";
+        return "aug";
+    }
+    // Power
+    if (c.quality == ChordQuality::Power5) return "5";
+    return {};
+}
+
+static const virtuoso::ontology::ChordDef* chordDefForSymbol(const virtuoso::ontology::OntologyRegistry& reg,
+                                                             const music::ChordSymbol& c) {
+    const QString key = ontologyChordKeyFor(c);
+    if (key.isEmpty()) return nullptr;
+    return reg.chord(key);
+}
+
+static QSet<int> pitchClassesForChordDef(int rootPc, const virtuoso::ontology::ChordDef& chord) {
+    QSet<int> pcs;
+    const int r = normalizePc(rootPc);
+    pcs.insert(r);
+    for (int iv : chord.intervals) pcs.insert(normalizePc(r + iv));
+    return pcs;
+}
+
+static int estimateMajorKeyPcGuess(const virtuoso::ontology::OntologyRegistry& reg,
+                                   const QVector<music::ChordSymbol>& chords,
+                                   int fallbackPc) {
+    double bestScore = -1.0;
+    int bestTonic = normalizePc(fallbackPc);
+    for (int tonic = 0; tonic < 12; ++tonic) {
+        double score = 0.0;
+        int used = 0;
+        for (const auto& c : chords) {
+            if (c.noChord || c.placeholder || c.rootPc < 0) continue;
+            const auto* def = chordDefForSymbol(reg, c);
+            if (!def) continue;
+            const auto h = virtuoso::theory::analyzeChordInMajorKey(tonic, c.rootPc, *def);
+            score += h.confidence;
+            used++;
+        }
+        score += 0.02 * double(used);
+        if (score > bestScore) { bestScore = score; bestTonic = tonic; }
+    }
+    return bestTonic;
+}
+
+static virtuoso::theory::KeyMode keyModeForScaleKey(const QString& k) {
+    // MVP: treat Ionian/HarmonicMajor as Major; Aeolian/HarmonicMinor/MelodicMinor as Minor.
+    // Modes like Dorian/Phrygian/Mixolydian are treated as Major for functional tagging (Stage 2.5 can improve).
+    const QString s = k.toLower();
+    if (s == "aeolian" || s == "harmonic_minor" || s == "melodic_minor") return virtuoso::theory::KeyMode::Minor;
+    return virtuoso::theory::KeyMode::Major;
+}
+
+static void estimateGlobalKeyByScale(const virtuoso::ontology::OntologyRegistry& reg,
+                                     const QVector<music::ChordSymbol>& chords,
+                                     int fallbackPc,
+                                     int* outTonicPc,
+                                     QString* outScaleKey,
+                                     QString* outScaleName,
+                                     virtuoso::theory::KeyMode* outMode) {
+    if (!outTonicPc || !outScaleKey || !outScaleName || !outMode) return;
+    *outTonicPc = normalizePc(fallbackPc);
+    outScaleKey->clear();
+    outScaleName->clear();
+    *outMode = virtuoso::theory::KeyMode::Major;
+    if (chords.isEmpty()) return;
+
+    QSet<int> pcs;
+    pcs.reserve(24);
+    for (const auto& c : chords) {
+        if (c.noChord || c.placeholder || c.rootPc < 0) continue;
+        const auto* def = chordDefForSymbol(reg, c);
+        if (!def) continue;
+        const auto chordPcs = pitchClassesForChordDef(c.rootPc, *def);
+        for (int pc : chordPcs) pcs.insert(pc);
+    }
+    if (pcs.isEmpty()) return;
+
+    const auto sug = virtuoso::theory::suggestScalesForPitchClasses(reg, pcs, 10);
+    if (sug.isEmpty()) return;
+    const auto& best = sug.first();
+    *outTonicPc = normalizePc(best.bestTranspose);
+    *outScaleKey = best.key;
+    *outScaleName = best.name;
+    *outMode = keyModeForScaleKey(best.key);
+}
+
+static QVector<playback::LocalKeyEstimate> estimateLocalKeysByBar(
+    const virtuoso::ontology::OntologyRegistry& reg,
+    const QVector<const chart::Bar*>& bars,
+    int windowBars,
+    int fallbackTonicPc,
+    const QString& fallbackScaleKey,
+    const QString& fallbackScaleName,
+    virtuoso::theory::KeyMode fallbackMode) {
+    QVector<playback::LocalKeyEstimate> out;
+    out.resize(bars.size());
+    if (bars.isEmpty()) return out;
+    windowBars = qMax(1, windowBars);
+
+    for (int i = 0; i < bars.size(); ++i) {
+        QSet<int> pcs;
+        pcs.reserve(24);
+        QVector<music::ChordSymbol> chords;
+        chords.reserve(windowBars * 2);
+
+        const int end = qMin(bars.size(), i + windowBars);
+        for (int b = i; b < end; ++b) {
+            const auto* bar = bars[b];
+            if (!bar) continue;
+            for (const auto& cell : bar->cells) {
+                const QString t = cell.chord.trimmed();
+                if (t.isEmpty()) continue;
+                music::ChordSymbol parsed;
+                if (!music::parseChordSymbol(t, parsed)) continue;
+                if (parsed.placeholder || parsed.noChord || parsed.rootPc < 0) continue;
+                chords.push_back(parsed);
+                const auto* def = chordDefForSymbol(reg, parsed);
+                if (!def) continue;
+                const auto chordPcs = pitchClassesForChordDef(parsed.rootPc, *def);
+                for (int pc : chordPcs) pcs.insert(pc);
+            }
+        }
+
+        playback::LocalKeyEstimate lk;
+        lk.tonicPc = fallbackTonicPc;
+        lk.scaleKey = fallbackScaleKey;
+        lk.scaleName = fallbackScaleName;
+        lk.mode = fallbackMode;
+        lk.score = 0.0;
+        lk.coverage = 0.0;
+
+        if (!pcs.isEmpty()) {
+            const auto sug = virtuoso::theory::suggestScalesForPitchClasses(reg, pcs, 6);
+            if (!sug.isEmpty()) {
+                const auto& best = sug.first();
+                lk.tonicPc = normalizePc(best.bestTranspose);
+                lk.scaleKey = best.key;
+                lk.scaleName = best.name;
+                lk.mode = keyModeForScaleKey(best.key);
+                lk.score = best.score;
+                lk.coverage = best.coverage;
+            }
+        }
+        out[i] = lk;
+    }
+    return out;
+}
+static QString chooseScaleUsedForChord(const virtuoso::ontology::OntologyRegistry& reg,
+                                       int keyPc,
+                                       virtuoso::theory::KeyMode keyMode,
+                                       const music::ChordSymbol& chordSym,
+                                       const virtuoso::ontology::ChordDef& chordDef,
+                                       QString* outRoman = nullptr,
+                                       QString* outFunction = nullptr) {
+    const QSet<int> pcs = pitchClassesForChordDef(chordSym.rootPc, chordDef);
+    const auto sugg = virtuoso::theory::suggestScalesForPitchClasses(reg, pcs, 12);
+    if (sugg.isEmpty()) return {};
+    const auto h = virtuoso::theory::analyzeChordInKey(keyPc, keyMode, chordSym.rootPc, chordDef);
+    if (outRoman) *outRoman = h.roman;
+    if (outFunction) *outFunction = h.function;
+
+    struct Sc { virtuoso::theory::ScaleSuggestion s; double score = 0.0; };
+    QVector<Sc> ranked;
+    ranked.reserve(sugg.size());
+    const QString chordKey = ontologyChordKeyFor(chordSym);
+    const QVector<QString> hints = virtuoso::theory::explicitHintScalesForContext(/*voicingKey*/QString(), chordKey);
+    for (const auto& s : sugg) {
+        double bonus = 0.0;
+        if (normalizePc(s.bestTranspose) == normalizePc(chordSym.rootPc)) bonus += 0.6;
+        const QString name = s.name.toLower();
+        if (h.function == "Dominant") {
+            if (name.contains("altered") || name.contains("lydian dominant") || name.contains("mixolydian") || name.contains("half-whole")) bonus += 0.35;
+        } else if (h.function == "Subdominant") {
+            if (name.contains("dorian") || name.contains("lydian") || name.contains("phrygian")) bonus += 0.25;
+        } else if (h.function == "Tonic") {
+            if (name.contains("ionian") || name.contains("major") || name.contains("lydian")) bonus += 0.25;
+        }
+        // Explicit hint nudges (UST/dominant language). Earlier hints get more bonus.
+        for (int i = 0; i < hints.size(); ++i) {
+            if (s.key == hints[i]) bonus += (0.45 - 0.08 * double(i));
+        }
+        ranked.push_back({s, s.score + bonus});
+    }
+    std::sort(ranked.begin(), ranked.end(), [](const Sc& a, const Sc& b) {
+        if (a.score != b.score) return a.score > b.score;
+        return a.s.name < b.s.name;
+    });
+    const auto& best = ranked.first().s;
+    return QString("%1 (%2)").arg(best.name).arg(pcName(best.bestTranspose));
 }
 
 // Copied (intentionally) from BandPlaybackEngine/SilentPlaybackEngine to keep repeat/ending behavior stable.
@@ -318,6 +597,18 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
 
         const QString chordText = chord.originalText.trimmed().isEmpty() ? QString("pc=%1").arg(chord.rootPc) : chord.originalText.trimmed();
         const bool structural = (beatInBar == 0 || beatInBar == 2) || chordIsNew;
+        const int barIdx = cellIndex / 4;
+        const playback::LocalKeyEstimate lk = (barIdx >= 0 && barIdx < m_localKeysByBar.size())
+            ? m_localKeysByBar[barIdx]
+            : playback::LocalKeyEstimate{m_keyPcGuess, m_keyScaleKey, m_keyScaleName, m_keyMode, 0.0, 0.0};
+        const int keyPc = m_hasKeyPcGuess ? lk.tonicPc : normalizePc(chord.rootPc);
+        const auto keyCenterStr = QString("%1 %2").arg(pcName(keyPc)).arg(lk.scaleName.isEmpty() ? QString("Ionian (Major)") : lk.scaleName);
+        const auto* chordDef = chordDefForSymbol(m_ontology, chord);
+        QString roman;
+        QString func;
+        const QString scaleUsed = (chordDef && chord.rootPc >= 0)
+            ? chooseScaleUsedForChord(m_ontology, keyPc, lk.mode, chord, *chordDef, &roman, &func)
+            : QString();
 
         // Drums (base drummer)
         {
@@ -362,6 +653,10 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
             bc.energy = qBound(0.0, baseEnergy * bassMult, 1.0);
             auto bnotes = bassSim.planBeat(bc, m_chBass, ts);
             for (auto& n : bnotes) {
+                n.key_center = keyCenterStr;
+                if (!roman.isEmpty()) n.roman = roman;
+                if (!func.isEmpty()) n.chord_function = func;
+                if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
                 n.vibe_state = vibeStr;
                 n.user_intents = intentStr;
                 n.user_outside_ratio = intent.outsideRatio;
@@ -385,6 +680,10 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
             pc.energy = qBound(0.0, baseEnergy * pianoMult, 1.0);
             auto pnotes = pianoSim.planBeat(pc, m_chPiano, ts);
             for (auto& n : pnotes) {
+                n.key_center = keyCenterStr;
+                if (!roman.isEmpty()) n.roman = roman;
+                if (!func.isEmpty()) n.chord_function = func;
+                if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
                 n.vibe_state = vibeStr;
                 n.user_intents = intentStr;
                 n.user_outside_ratio = intent.outsideRatio;
@@ -448,6 +747,51 @@ void VirtuosoBalladMvpPlaybackEngine::setChartModel(const chart::ChartModel& mod
     ts.num = (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4;
     ts.den = (m_model.timeSigDen > 0) ? m_model.timeSigDen : 4;
     m_engine.setTimeSignature(ts);
+
+    // Stage 2: Estimate a global key center + scale (major/minor/modal) from the chart,
+    // and compute a per-bar local key (sliding window) for modulation detection.
+    QVector<music::ChordSymbol> chords;
+    chords.reserve(128);
+    int fallbackPc = 0;
+    bool haveFallback = false;
+    const QVector<const chart::Bar*> bars = flattenBarsFrom(m_model);
+    for (const auto* bar : bars) {
+        if (!bar) continue;
+        for (const auto& cell : bar->cells) {
+            const QString t = cell.chord.trimmed();
+            if (t.isEmpty()) continue;
+            music::ChordSymbol parsed;
+            if (!music::parseChordSymbol(t, parsed)) continue;
+            if (parsed.placeholder || parsed.noChord || parsed.rootPc < 0) continue;
+            chords.push_back(parsed);
+            if (!haveFallback) { fallbackPc = parsed.rootPc; haveFallback = true; }
+        }
+    }
+    if (!chords.isEmpty()) {
+        estimateGlobalKeyByScale(m_ontology, chords, fallbackPc, &m_keyPcGuess, &m_keyScaleKey, &m_keyScaleName, &m_keyMode);
+        // Keep the old major-key heuristic available as fallback for now.
+        if (m_keyScaleKey.trimmed().isEmpty()) {
+            m_keyPcGuess = estimateMajorKeyPcGuess(m_ontology, chords, fallbackPc);
+            m_keyScaleKey = "ionian";
+            m_keyScaleName = "Ionian (Major)";
+            m_keyMode = virtuoso::theory::KeyMode::Major;
+        }
+        m_hasKeyPcGuess = true;
+    } else {
+        m_keyPcGuess = 0;
+        m_keyScaleKey.clear();
+        m_keyScaleName.clear();
+        m_keyMode = virtuoso::theory::KeyMode::Major;
+        m_hasKeyPcGuess = false;
+    }
+
+    m_localKeysByBar = estimateLocalKeysByBar(m_ontology,
+                                              bars,
+                                              /*windowBars=*/8,
+                                              m_keyPcGuess,
+                                              m_keyScaleKey,
+                                              m_keyScaleName,
+                                              m_keyMode);
 }
 
 void VirtuosoBalladMvpPlaybackEngine::setStylePresetKey(const QString& key) {
@@ -934,6 +1278,18 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
 
     // Bass + piano planners (Ballad Brain v1).
     const QString chordText = chord.originalText.trimmed().isEmpty() ? QString("pc=%1").arg(chord.rootPc) : chord.originalText.trimmed();
+    const int barIdx = cellIndex / 4;
+    const playback::LocalKeyEstimate lk = (barIdx >= 0 && barIdx < m_localKeysByBar.size())
+        ? m_localKeysByBar[barIdx]
+        : playback::LocalKeyEstimate{m_keyPcGuess, m_keyScaleKey, m_keyScaleName, m_keyMode, 0.0, 0.0};
+    const int keyPc = m_hasKeyPcGuess ? lk.tonicPc : normalizePc(chord.rootPc);
+    const auto keyCenterStr = QString("%1 %2").arg(pcName(keyPc)).arg(lk.scaleName.isEmpty() ? QString("Ionian (Major)") : lk.scaleName);
+    const auto* chordDef = chordDefForSymbol(m_ontology, chord);
+    QString roman;
+    QString func;
+    const QString scaleUsed = (chordDef && chord.rootPc >= 0)
+        ? chooseScaleUsedForChord(m_ontology, keyPc, lk.mode, chord, *chordDef, &roman, &func)
+        : QString();
     const BalladRefTuning tune = tuningForReferenceTrack(m_stylePresetKey);
 
     JazzBalladBassPlanner::Context bc;
@@ -973,6 +1329,10 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     }
     auto bassIntents = m_bassPlanner.planBeat(bc, m_chBass, ts);
     for (auto& n : bassIntents) {
+        if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
+        n.key_center = keyCenterStr;
+        if (!roman.isEmpty()) n.roman = roman;
+        if (!func.isEmpty()) n.chord_function = func;
         n.vibe_state = vibeStr;
         n.user_intents = intentStr;
         n.user_outside_ratio = intent.outsideRatio;
@@ -1055,6 +1415,10 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     }
     auto pianoIntents = m_pianoPlanner.planBeat(pc, m_chPiano, ts);
     for (auto& n : pianoIntents) {
+        if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
+        n.key_center = keyCenterStr;
+        if (!roman.isEmpty()) n.roman = roman;
+        if (!func.isEmpty()) n.chord_function = func;
         n.vibe_state = vibeStr;
         n.user_intents = intentStr;
         n.user_outside_ratio = intent.outsideRatio;

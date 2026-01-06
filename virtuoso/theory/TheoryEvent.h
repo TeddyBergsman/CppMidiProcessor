@@ -13,6 +13,9 @@ struct TheoryEvent {
     QString timestamp;
     QString chord_context;
     QString scale_used;
+    QString key_center;
+    QString roman;
+    QString chord_function;
     QString voicing_type;
     QString logic_tag;
     QString target_note;

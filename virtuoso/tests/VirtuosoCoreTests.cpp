@@ -367,9 +367,11 @@ static void testFunctionalHarmony() {
     const OntologyRegistry reg = OntologyRegistry::builtins();
     const auto* maj7 = reg.chord("maj7");
     const auto* dom7 = reg.chord("7");
+    const auto* min7 = reg.chord("min7");
     expect(maj7 != nullptr, "FunctionalHarmony: have maj7 chord def");
     expect(dom7 != nullptr, "FunctionalHarmony: have 7 chord def");
-    if (!maj7 || !dom7) return;
+    expect(min7 != nullptr, "FunctionalHarmony: have min7 chord def");
+    if (!maj7 || !dom7 || !min7) return;
 
     // In C major: Cmaj7 -> Imaj7 (Tonic)
     {
@@ -389,6 +391,13 @@ static void testFunctionalHarmony() {
     {
         const auto r = virtuoso::theory::analyzeChordInMajorKey(/*tonicPc=*/0, /*chordRootPc=*/2, *dom7);
         expect(r.roman.startsWith("V/"), "FunctionalHarmony: D7 is V/...");
+    }
+
+    // In A minor: E7 -> V7 (Dominant) [harmonic minor common]
+    {
+        const auto r = virtuoso::theory::analyzeChordInMinorKey(/*tonicPc=*/9, /*chordRootPc=*/4, *dom7); // A=9, E=4
+        expect(r.roman.startsWith("V"), "FunctionalHarmony: E7 is V... in A minor (heuristic)");
+        expectStrEq(r.function, "Dominant", "FunctionalHarmony: V is Dominant in minor");
     }
 }
 

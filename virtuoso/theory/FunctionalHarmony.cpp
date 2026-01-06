@@ -36,6 +36,30 @@ static int diatonicDegreeForMajor(int tonicPc, int chordRootPc) {
     }
 }
 
+static int diatonicDegreeForNaturalMinor(int tonicPc, int chordRootPc) {
+    const int rel = normalizePc(chordRootPc - tonicPc);
+    // Natural minor: 1 2 b3 4 5 b6 b7
+    switch (rel) {
+    case 0:  return 1; // i
+    case 2:  return 2; // ii°
+    case 3:  return 3; // III
+    case 5:  return 4; // iv
+    case 7:  return 5; // v/V
+    case 8:  return 6; // VI
+    case 10: return 7; // VII
+    default: return 0;
+    }
+}
+
+static QString functionForDegreeMinor(int degree) {
+    switch (degree) {
+    case 1: case 3: case 6: return "Tonic";
+    case 2: case 4: return "Subdominant";
+    case 5: case 7: return "Dominant";
+    default: return "Other";
+    }
+}
+
 static QString functionForDegreeMajor(int degree) {
     switch (degree) {
     case 1: case 3: case 6: return "Tonic";
@@ -142,6 +166,75 @@ HarmonyLabel analyzeChordInMajorKey(int tonicPc, int chordRootPc, const virtuoso
     out.detail = "non-diatonic (currently)";
     out.confidence = 0.25;
     return out;
+}
+
+HarmonyLabel analyzeChordInMinorKey(int tonicPc, int chordRootPc, const virtuoso::ontology::ChordDef& chord) {
+    HarmonyLabel out;
+    tonicPc = normalizePc(tonicPc);
+    chordRootPc = normalizePc(chordRootPc);
+
+    bool uppercase = true;
+    bool halfDim = false;
+    const QString suffix = qualitySuffix(chord, &uppercase, &halfDim);
+
+    // Minor key: allow both b7 (natural minor) and leading tone (harmonic/melodic minor).
+    int deg = diatonicDegreeForNaturalMinor(tonicPc, chordRootPc);
+    const int rel = normalizePc(chordRootPc - tonicPc);
+    if (deg == 0 && rel == 11) deg = 7; // leading-tone degree (vii°) in harmonic minor
+
+    const bool isDom7 = hasInterval(chord, 4) && hasInterval(chord, 10);
+
+    // Secondary dominant heuristic as in major.
+    if (isDom7 && deg != 5) {
+        const int targetPc = normalizePc(chordRootPc - 7); // a 5th below
+        int targetDeg = diatonicDegreeForNaturalMinor(tonicPc, targetPc);
+        const int targetRel = normalizePc(targetPc - tonicPc);
+        if (targetDeg == 0 && targetRel == 11) targetDeg = 7;
+        if (targetDeg != 0) {
+            out.roman = "V/" + romanDegree(targetDeg, true);
+            out.function = "Dominant";
+            out.detail = "secondary dominant";
+            out.confidence = 0.70;
+            return out;
+        }
+
+        // Tritone-sub heuristic for dominant: bII7.
+        if (normalizePc(chordRootPc - tonicPc) == 1) {
+            out.roman = "subV7";
+            out.function = "Dominant";
+            out.detail = "tritone sub (heuristic)";
+            out.confidence = 0.50;
+            return out;
+        }
+    }
+
+    if (deg != 0) {
+        // Minor: use the chord quality to choose case (dominant/major => uppercase, minor/dim => lowercase).
+        // This allows V7 in minor to appear as "V7" (harmonic minor common practice).
+        out.roman = romanDegree(deg, uppercase);
+        if (halfDim) out.roman += "ø7";
+        else if (suffix == "°") out.roman += "°";
+        else if (!suffix.isEmpty()) out.roman += suffix;
+        out.function = functionForDegreeMinor(deg);
+        out.detail = (rel == 11) ? "leading-tone (harmonic/melodic minor heuristic)" : "diatonic";
+        out.confidence = (rel == 11) ? 0.75 : 0.90;
+        return out;
+    }
+
+    out.roman = "N/A";
+    out.function = "Other";
+    out.detail = "non-diatonic (currently)";
+    out.confidence = 0.25;
+    return out;
+}
+
+HarmonyLabel analyzeChordInKey(int tonicPc,
+                               KeyMode mode,
+                               int chordRootPc,
+                               const virtuoso::ontology::ChordDef& chord) {
+    return (mode == KeyMode::Minor)
+        ? analyzeChordInMinorKey(tonicPc, chordRootPc, chord)
+        : analyzeChordInMajorKey(tonicPc, chordRootPc, chord);
 }
 
 } // namespace virtuoso::theory

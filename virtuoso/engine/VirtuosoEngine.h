@@ -54,6 +54,15 @@ public slots:
     // Manual scheduling API (used until agent planners are implemented).
     void scheduleNote(const AgentIntentNote& note);
 
+    // Humanize an intent using the engine's per-agent humanizer stream.
+    // IMPORTANT: This advances the agent's RNG/drift state (same as scheduleNote()).
+    groove::HumanizedEvent humanizeIntent(const AgentIntentNote& note);
+
+    // Schedule an already-humanized intent (used for inter-agent groove locking while preserving glass-box fields).
+    void scheduleHumanizedIntentNote(const AgentIntentNote& note,
+                                     const groove::HumanizedEvent& he,
+                                     const QString& logicTagOverride = QString());
+
     // Harness API: schedule an already-humanized event at absolute ms times (engine-clock domain).
     // This enables explicit inter-lane groove locking while still emitting TheoryEvent JSON.
     void scheduleHumanizedNote(const QString& agent,

@@ -4,6 +4,7 @@
 #include "playback/BalladReferenceTuning.h"
 #include "playback/JazzBalladBassPlanner.h"
 #include "playback/JazzBalladPianoPlanner.h"
+#include "playback/BrushesBalladDrummer.h"
 
 #include "virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h"
 #include "virtuoso/groove/GrooveRegistry.h"
@@ -326,6 +327,7 @@ void VirtuosoPresetInspectorWindow::onGeneratePreview() {
 
     playback::JazzBalladBassPlanner bass;
     playback::JazzBalladPianoPlanner piano;
+    playback::BrushesBalladDrummer drums;
     bass.reset();
     piano.reset();
 
@@ -449,70 +451,21 @@ void VirtuosoPresetInspectorWindow::onGeneratePreview() {
 
             for (const auto& n : bnotes) addHumanized("Bass", hBass, n, QString("n%1 %2").arg(n.note).arg(n.logic_tag), /*structural*/(beat == 0));
             for (const auto& n : pnotes) addHumanized("Piano", hPiano, n, QString("n%1 %2").arg(n.note).arg(n.voicing_type), /*structural*/(beat == 0));
-        }
-    }
 
-    // Add drum lane preview:
-    // - A *true looping* brush stir across the whole preview window (F#3 Circle Two Hands - Looping).
-    // - Kick on 1, swish on 2&4 (per bar).
-    {
-        // One continuous loop event (so it actually loops instead of retriggering each bar).
-        {
-            const int holdMs = qMax<qint64>(6000, totalMsPreview); // ensure it reaches the loop body
-            virtuoso::engine::AgentIntentNote n;
-            n.agent = "Drums";
-            n.note = virtuoso::drums::fluffy_brushes::kBrushCircleTwoHands_Fs3;
-            n.baseVelocity = 30;
-            n.durationWhole = virtuoso::groove::Rational(qint64(holdMs) * qint64(bpm), qint64(240000));
-            const auto gp = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(0, 0, 0, 1, ts);
-            const auto he = hDrums.humanizeNote(gp, ts, bpm, n.baseVelocity, n.durationWhole, /*structural*/true);
-            virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
-            ev.lane = "Drums";
-            ev.note = n.note;
-            ev.velocity = he.velocity;
-            ev.onMs = qBound<qint64>(0, he.onMs, totalMsPreview);
-            ev.offMs = qBound<qint64>(ev.onMs + 6000, he.offMs, totalMsPreview + 8000);
-            ev.label = "Brush stir (loop)";
-            m_previewEvents.push_back(ev);
-        }
-
-        for (int bar = 0; bar < m_previewBars; ++bar) {
-            // Kick on 1
-            {
-                virtuoso::engine::AgentIntentNote n;
-                n.agent = "Drums";
-                n.note = virtuoso::drums::fluffy_brushes::kKickLooseNormal_G0;
-                n.baseVelocity = 20;
-                n.durationWhole = virtuoso::groove::Rational(1, 16);
-                const auto gp = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(bar, 0, 0, 1, ts);
-                const auto he = hDrums.humanizeNote(gp, ts, bpm, n.baseVelocity, n.durationWhole, /*structural*/true);
-                virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
-                ev.lane = "Drums";
-                ev.note = n.note;
-                ev.velocity = he.velocity;
-                ev.onMs = qBound<qint64>(0, he.onMs, totalMsPreview);
-                ev.offMs = qBound<qint64>(ev.onMs + 40, he.offMs, totalMsPreview + 8000);
-                ev.label = "Kick";
-                m_previewEvents.push_back(ev);
-            }
-
-            // 2&4 swishes
-            for (int beat : {1, 3}) {
-                virtuoso::engine::AgentIntentNote n;
-                n.agent = "Drums";
-                n.note = virtuoso::drums::fluffy_brushes::kSnareRightHand_D1;
-                n.baseVelocity = 34;
-                n.durationWhole = virtuoso::groove::Rational(1, 16);
-                const auto gp = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(bar, beat, 0, 1, ts);
-                const auto he = hDrums.humanizeNote(gp, ts, bpm, n.baseVelocity, n.durationWhole, /*structural*/true);
-                virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
-                ev.lane = "Drums";
-                ev.note = n.note;
-                ev.velocity = he.velocity;
-                ev.onMs = qBound<qint64>(0, he.onMs, totalMsPreview);
-                ev.offMs = qBound<qint64>(ev.onMs + 40, he.offMs, totalMsPreview + 8000);
-                ev.label = "Swish";
-                m_previewEvents.push_back(ev);
+            // Drums: Brushes Ballad Drummer v1 (same generator used by the real MVP runner).
+            playback::BrushesBalladDrummer::Context dc;
+            dc.bpm = bpm;
+            dc.ts = ts;
+            dc.playbackBarIndex = bar;
+            dc.beatInBar = beat;
+            dc.structural = (beat == 0);
+            dc.determinismSeed = detSeed ^ 0xD00D'BEEFu;
+            auto dnotes = drums.planBeat(dc);
+            for (const auto& dn : dnotes) {
+                const QString label = dn.logic_tag.isEmpty()
+                    ? QString("n%1").arg(dn.note)
+                    : dn.logic_tag;
+                addHumanized("Drums", hDrums, dn, label, /*structural*/dn.structural);
             }
         }
     }

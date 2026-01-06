@@ -115,6 +115,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/JazzBalladBassPlanner.cpp
   playback/JazzBalladPianoPlanner.h
   playback/JazzBalladPianoPlanner.cpp
+  playback/BrushesBalladDrummer.h
+  playback/BrushesBalladDrummer.cpp
   music/Pitch.h
   music/Pitch.cpp
   music/ChordSymbol.h

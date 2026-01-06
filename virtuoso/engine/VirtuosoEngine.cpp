@@ -126,6 +126,64 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
     m_sched.schedule(tj);
 }
 
+groove::HumanizedEvent VirtuosoEngine::humanizeIntent(const AgentIntentNote& note) {
+    groove::HumanizedEvent empty;
+    if (!m_clock.isRunning()) return empty;
+    if (note.channel < 1 || note.channel > 16) return empty;
+    if (note.note < 0 || note.note > 127) return empty;
+    if (note.baseVelocity < 1 || note.baseVelocity > 127) return empty;
+
+    auto& h = humanizerFor(note.agent);
+    return h.humanizeNote(note.startPos, m_ts, m_bpm, note.baseVelocity, note.durationWhole, note.structural);
+}
+
+void VirtuosoEngine::scheduleHumanizedIntentNote(const AgentIntentNote& note,
+                                                const groove::HumanizedEvent& he,
+                                                const QString& logicTagOverride) {
+    if (!m_clock.isRunning()) return;
+    if (note.channel < 1 || note.channel > 16) return;
+    if (note.note < 0 || note.note > 127) return;
+    if (he.velocity < 1 || he.velocity > 127) return;
+    if (he.offMs <= he.onMs) return;
+
+    VirtuosoScheduler::ScheduledEvent on;
+    on.dueMs = he.onMs;
+    on.kind = VirtuosoScheduler::Kind::NoteOn;
+    on.channel = note.channel;
+    on.note = note.note;
+    on.velocity = he.velocity;
+    m_sched.schedule(on);
+
+    VirtuosoScheduler::ScheduledEvent off;
+    off.dueMs = he.offMs;
+    off.kind = VirtuosoScheduler::Kind::NoteOff;
+    off.channel = note.channel;
+    off.note = note.note;
+    m_sched.schedule(off);
+
+    // Explainability: preserve full glass-box fields, but use the provided humanized timing.
+    virtuoso::theory::TheoryEvent te;
+    te.agent = note.agent;
+    te.timestamp = he.grid_pos;
+    te.chord_context = note.chord_context;
+    te.scale_used = note.scale_used;
+    te.voicing_type = note.voicing_type;
+    te.logic_tag = logicTagOverride.isEmpty() ? note.logic_tag : logicTagOverride;
+    te.target_note = note.target_note;
+    te.dynamic_marking = QString::number(he.velocity);
+    te.groove_template = he.groove_template;
+    te.grid_pos = he.grid_pos;
+    te.timing_offset_ms = he.timing_offset_ms;
+    te.velocity_adjustment = he.velocity_adjustment;
+    te.humanize_seed = he.humanize_seed;
+
+    VirtuosoScheduler::ScheduledEvent tj;
+    tj.dueMs = he.onMs;
+    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+    tj.theoryJson = te.toJsonString(true);
+    m_sched.schedule(tj);
+}
+
 void VirtuosoEngine::scheduleHumanizedNote(const QString& agent,
                                            int channel,
                                            int note,

@@ -233,6 +233,15 @@ void VirtuosoBalladMvpPlaybackEngine::play() {
     m_lastChord = music::ChordSymbol{};
     m_bassPlanner.reset();
     m_pianoPlanner.reset();
+    // Keep drummer profile wired to channel/mapping choices.
+    {
+        auto p = m_drummer.profile();
+        p.channel = m_chDrums;
+        p.noteKick = m_noteKick;
+        p.noteSnareSwish = m_noteSnareHit;
+        p.noteBrushLoopA = m_noteBrushLoop;
+        m_drummer.setProfile(p);
+    }
 
     m_tickTimer.start();
 }
@@ -416,14 +425,48 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     const bool structural = strongBeat || chordIsNew;
 
     // Drums always run (ballad texture), even if harmony missing/N.C.
-    scheduleDrumsBrushes(playbackBarIndex, beatInBar, structural);
+    // We schedule Drums first, because Bass groove-lock references Drums kick timing.
+    const quint32 detSeed = quint32(qHash(QString("ballad|") + m_stylePresetKey));
+    virtuoso::engine::AgentIntentNote kickIntent;
+    virtuoso::groove::HumanizedEvent kickHe;
+    bool haveKickHe = false;
+
+    {
+        BrushesBalladDrummer::Context dc;
+        dc.bpm = m_bpm;
+        dc.ts = ts;
+        dc.playbackBarIndex = playbackBarIndex;
+        dc.beatInBar = beatInBar;
+        dc.structural = structural;
+        dc.determinismSeed = detSeed ^ 0xD00D'BEEFu;
+
+        auto drumIntents = m_drummer.planBeat(dc);
+
+        // If there is a kick intent, humanize/schedule it first so bass can lock to its onMs.
+        int kickIndex = -1;
+        for (int i = 0; i < drumIntents.size(); ++i) {
+            if (drumIntents[i].note == m_noteKick) { kickIndex = i; break; }
+        }
+        if (kickIndex >= 0) {
+            kickIntent = drumIntents[kickIndex];
+            kickHe = m_engine.humanizeIntent(kickIntent);
+            haveKickHe = (kickHe.offMs > kickHe.onMs);
+            if (haveKickHe) {
+                m_engine.scheduleHumanizedIntentNote(kickIntent, kickHe);
+            }
+            drumIntents.removeAt(kickIndex);
+        }
+
+        for (const auto& n : drumIntents) {
+            m_engine.scheduleNote(n);
+        }
+    }
 
     if (!haveChord || chord.noChord) return; // leave space on N.C.
 
     // Bass + piano planners (Ballad Brain v1).
     const QString chordText = chord.originalText.trimmed().isEmpty() ? QString("pc=%1").arg(chord.rootPc) : chord.originalText.trimmed();
     const BalladRefTuning tune = tuningForReferenceTrack(m_stylePresetKey);
-    const quint32 detSeed = quint32(qHash(QString("ballad|") + m_stylePresetKey));
 
     JazzBalladBassPlanner::Context bc;
     bc.bpm = m_bpm;
@@ -439,8 +482,24 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     bc.skipBeat3ProbStable = tune.bassSkipBeat3ProbStable;
     bc.allowApproachFromAbove = tune.bassAllowApproachFromAbove;
     auto bassIntents = m_bassPlanner.planBeat(bc, m_chBass, ts);
+    const auto gp = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
     for (auto& n : bassIntents) {
-        n.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
+        n.startPos = gp;
+        // Groove lock (prototype): on beat 1, if a feather kick exists, align bass attack to kick.
+        if (m_kickLocksBass && beatInBar == 0 && haveKickHe) {
+            auto bhe = m_engine.humanizeIntent(n);
+            if (bhe.offMs > bhe.onMs) {
+                const qint64 delta = kickHe.onMs - bhe.onMs;
+                if (qAbs(delta) <= qMax<qint64>(0, m_kickLockMaxMs)) {
+                    bhe.onMs += delta;
+                    bhe.offMs += delta;
+                    bhe.timing_offset_ms += int(delta);
+                    const QString tag = n.logic_tag.isEmpty() ? "GrooveLock:Kick" : (n.logic_tag + "|GrooveLock:Kick");
+                    m_engine.scheduleHumanizedIntentNote(n, bhe, tag);
+                    continue;
+                }
+            }
+        }
         m_engine.scheduleNote(n);
     }
 
@@ -461,65 +520,8 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     pc.preferShells = tune.pianoPreferShells;
     auto pianoIntents = m_pianoPlanner.planBeat(pc, m_chPiano, ts);
     for (auto& n : pianoIntents) {
-        n.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
+        n.startPos = gp;
         m_engine.scheduleNote(n);
-    }
-}
-
-void VirtuosoBalladMvpPlaybackEngine::scheduleDrumsBrushes(int playbackBarIndex, int beatInBar, bool structural) {
-    // Brushes MVP:
-    // - sustained brushing texture (looping articulation; hold long enough to actually loop)
-    // - light swish/accents on 2 & 4 (short hits)
-    // - feather kick occasionally on 1
-    using virtuoso::groove::GrooveGrid;
-    using virtuoso::groove::Rational;
-
-    virtuoso::groove::TimeSignature ts{4, 4};
-    ts.num = (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4;
-    ts.den = (m_model.timeSigDen > 0) ? m_model.timeSigDen : 4;
-
-    // Sustained brushing texture: schedule once per 4 bars to avoid re-triggering every bar.
-    // Hold for at least 6000ms (per FluffyAudio loop sample) and at least 4 bars at this tempo.
-    if (beatInBar == 0 && (playbackBarIndex % 4) == 0) {
-        const double quarterMs = 60000.0 / double(qMax(1, m_bpm));
-        const double beatMs = quarterMs * (4.0 / double(qMax(1, ts.den)));
-        const int holdMs = int(llround(qMax(6000.0, beatMs * double(qMax(1, ts.num)) * 4.0)));
-
-        virtuoso::engine::AgentIntentNote n;
-        n.agent = "Drums";
-        n.channel = m_chDrums; // requested: channel 6
-        n.note = m_noteBrushLoop; // F#3: "Circle Two Hands - Looping"
-        n.baseVelocity = 30;
-        n.startPos = GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
-        n.durationWhole = durationWholeFromHoldMs(holdMs, m_bpm);
-        n.structural = true;
-        m_engine.scheduleNote(n);
-    }
-
-    // Swish on 2&4 (beat starts): short right-hand snare hits (quiet).
-    if ((beatInBar % 2) == 1) {
-        virtuoso::engine::AgentIntentNote sw;
-        sw.agent = "Drums";
-        sw.channel = m_chDrums;
-        sw.note = m_noteSnareHit;
-        sw.baseVelocity = 34;
-        sw.startPos = GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
-        sw.durationWhole = Rational(1, 16);
-        sw.structural = true; // treat as landmark
-        m_engine.scheduleNote(sw);
-    }
-
-    // Feather kick on downbeats (light, deterministic per bar/beat via humanizer seed)
-    if (beatInBar == 0) {
-        virtuoso::engine::AgentIntentNote k;
-        k.agent = "Drums";
-        k.channel = m_chDrums;
-        k.note = m_noteKick;
-        k.baseVelocity = structural ? 22 : 16;
-        k.startPos = GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
-        k.durationWhole = Rational(1, 16);
-        k.structural = structural;
-        m_engine.scheduleNote(k);
     }
 }
 

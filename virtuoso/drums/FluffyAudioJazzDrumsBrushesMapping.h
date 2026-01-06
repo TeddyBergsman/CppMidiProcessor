@@ -27,6 +27,7 @@ static constexpr int kKickLooseSforzando_A0 = 33;
 static constexpr int kSnareRightHand_D1 = 38;
 static constexpr int kSnareBrushing_E3 = 64; // hold ~4000ms for full sample (per mapping)
 static constexpr int kBrushCircleTwoHands_Fs3 = 66; // looping (full sample ~6000ms)
+static constexpr int kBrushCircleRightHand_G3 = 67; // looping (full sample ~4000ms)
 static constexpr int kBrushShortRightHand_Gs3 = 68; // hold ~1000ms for full sample
 static constexpr int kRideSwish2_E2 = 52; // hold ~4000ms for full sample
 } // namespace fluffy_brushes

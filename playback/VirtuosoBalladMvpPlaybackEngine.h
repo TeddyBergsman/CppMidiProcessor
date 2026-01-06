@@ -12,6 +12,7 @@
 
 #include "playback/JazzBalladBassPlanner.h"
 #include "playback/JazzBalladPianoPlanner.h"
+#include "playback/BrushesBalladDrummer.h"
 
 class MidiProcessor;
 
@@ -58,7 +59,6 @@ private:
 
     void scheduleStep(int stepIndex, int seqLen);
 
-    void scheduleDrumsBrushes(int playbackBarIndex, int beatInBar, bool structural);
     void scheduleBassTwoFeel(int playbackBarIndex, int beatInBar, const music::ChordSymbol& chord, bool chordIsNew);
     void schedulePianoComp(int playbackBarIndex, int beatInBar, const music::ChordSymbol& chord, bool chordIsNew);
 
@@ -94,6 +94,7 @@ private:
 
     JazzBalladBassPlanner m_bassPlanner;
     JazzBalladPianoPlanner m_pianoPlanner;
+    BrushesBalladDrummer m_drummer;
 
     // Channels (1..16)
     int m_chDrums = 6;
@@ -104,6 +105,10 @@ private:
     int m_noteKick = virtuoso::drums::fluffy_brushes::kKickLooseNormal_G0;
     int m_noteSnareHit = virtuoso::drums::fluffy_brushes::kSnareRightHand_D1;
     int m_noteBrushLoop = virtuoso::drums::fluffy_brushes::kBrushCircleTwoHands_Fs3;
+
+    // Groove lock (prototype): align Bass downbeat attacks to Drums feather kick if present.
+    bool m_kickLocksBass = true;
+    int m_kickLockMaxMs = 18;
 };
 
 } // namespace playback

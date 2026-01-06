@@ -219,16 +219,21 @@ void VirtuosoBalladMvpPlaybackEngine::setMidiProcessor(MidiProcessor* midi) {
     // Listening MVP: tap *transposed* live performance notes.
     // Use QueuedConnection because MidiProcessor may emit from its worker thread.
     connect(m_midi, &MidiProcessor::guitarNoteOn, this, [this](int note, int vel) {
-        m_listener.ingestNoteOn(SemanticMidiAnalyzer::Source::Guitar, note, vel, QDateTime::currentMSecsSinceEpoch());
+        m_listener.ingestGuitarNoteOn(note, vel, QDateTime::currentMSecsSinceEpoch());
     }, Qt::QueuedConnection);
     connect(m_midi, &MidiProcessor::guitarNoteOff, this, [this](int note) {
-        m_listener.ingestNoteOff(SemanticMidiAnalyzer::Source::Guitar, note, QDateTime::currentMSecsSinceEpoch());
+        m_listener.ingestGuitarNoteOff(note, QDateTime::currentMSecsSinceEpoch());
     }, Qt::QueuedConnection);
+    connect(m_midi, &MidiProcessor::voiceCc2Stream, this, [this](int cc2) {
+        m_listener.ingestCc2(cc2, QDateTime::currentMSecsSinceEpoch());
+    }, Qt::QueuedConnection);
+
+    // Vocal melody tracking (NOT used for density): allows later call/response.
     connect(m_midi, &MidiProcessor::voiceNoteOn, this, [this](int note, int vel) {
-        m_listener.ingestNoteOn(SemanticMidiAnalyzer::Source::Voice, note, vel, QDateTime::currentMSecsSinceEpoch());
+        m_listener.ingestVoiceNoteOn(note, vel, QDateTime::currentMSecsSinceEpoch());
     }, Qt::QueuedConnection);
     connect(m_midi, &MidiProcessor::voiceNoteOff, this, [this](int note) {
-        m_listener.ingestNoteOff(SemanticMidiAnalyzer::Source::Voice, note, QDateTime::currentMSecsSinceEpoch());
+        m_listener.ingestVoiceNoteOff(note, QDateTime::currentMSecsSinceEpoch());
     }, Qt::QueuedConnection);
 }
 
@@ -491,14 +496,16 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     const QString intentStr = intentsToString(intent);
 
     // Debug UI status (emitted once per beat step).
-    emit debugStatus(QString("Vibe=%1  energy=%2  intents=%3  nps=%4  reg=%5  vel=%6  silenceMs=%7  outside=%8")
+    emit debugStatus(QString("Vibe=%1  energy=%2  intents=%3  nps=%4  reg=%5  gVel=%6  cc2=%7  vNote=%8  silenceMs=%9  outside=%10")
                          .arg(vibeStr)
                          .arg(vibeEff.energy, 0, 'f', 2)
                          .arg(intentStr.isEmpty() ? "-" : intentStr)
                          .arg(intent.notesPerSec, 0, 'f', 2)
                          .arg(intent.registerCenterMidi)
-                         .arg(intent.lastVelocity)
-                         .arg(intent.msSinceLastNoteOn == std::numeric_limits<qint64>::max() ? -1 : intent.msSinceLastNoteOn)
+                         .arg(intent.lastGuitarVelocity)
+                         .arg(intent.lastCc2)
+                         .arg(intent.lastVoiceMidi)
+                         .arg(intent.msSinceLastActivity == std::numeric_limits<qint64>::max() ? -1 : intent.msSinceLastActivity)
                          .arg(intent.outsideRatio, 0, 'f', 2));
 
     // Drums always run (ballad texture), even if harmony missing/N.C.
@@ -583,6 +590,11 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
         bc.approachProbBeat3 *= 0.60; // slightly more motion, but still ballad-safe
         bc.skipBeat3ProbStable = qMax(0.10, bc.skipBeat3ProbStable - 0.08);
     }
+    if (vibeEff.vibe == VibeStateMachine::Vibe::Build) {
+        // Make Build audibly different: fewer omissions, slightly more motion.
+        bc.approachProbBeat3 = qMin(1.0, bc.approachProbBeat3 + 0.12);
+        bc.skipBeat3ProbStable = qMax(0.0, bc.skipBeat3ProbStable - 0.12);
+    }
     auto bassIntents = m_bassPlanner.planBeat(bc, m_chBass, ts);
     for (auto& n : bassIntents) {
         n.vibe_state = vibeStr;
@@ -650,6 +662,13 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
         pc.skipBeat2ProbStable = qMax(0.0, pc.skipBeat2ProbStable - 0.10);
         pc.addSecondColorProb = qMin(0.65, pc.addSecondColorProb + 0.10);
         pc.sparkleProbBeat4 = qMin(0.55, pc.sparkleProbBeat4 + 0.08);
+    }
+    if (vibeEff.vibe == VibeStateMachine::Vibe::Build) {
+        // Make Build audibly different without needing huge boost:
+        // more comp density + color, but not full Climax.
+        pc.skipBeat2ProbStable = qMax(0.0, pc.skipBeat2ProbStable - 0.18);
+        pc.addSecondColorProb = qMin(0.60, pc.addSecondColorProb + 0.15);
+        pc.sparkleProbBeat4 = qMin(0.45, pc.sparkleProbBeat4 + 0.10);
     }
     if (vibeEff.vibe == VibeStateMachine::Vibe::CoolDown) {
         pc.skipBeat2ProbStable = qMin(0.98, pc.skipBeat2ProbStable + 0.10);

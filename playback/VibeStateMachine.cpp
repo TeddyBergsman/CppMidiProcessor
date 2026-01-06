@@ -88,10 +88,10 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
     out.vibe = m_vibe;
     // Energy mapping (subtle; used to scale density/velocities).
     switch (m_vibe) {
-        case Vibe::Simmer: out.energy = 0.25; break;
-        case Vibe::Build: out.energy = 0.55; break;
-        case Vibe::Climax: out.energy = 0.90; break;
-        case Vibe::CoolDown: out.energy = 0.18; break;
+        case Vibe::Simmer: out.energy = 0.35; break;
+        case Vibe::Build: out.energy = 0.72; break;
+        case Vibe::Climax: out.energy = 0.98; break;
+        case Vibe::CoolDown: out.energy = 0.22; break;
     }
     return out;
 }

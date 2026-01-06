@@ -414,6 +414,9 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
 
                         std::vector<unsigned char> cc104_msg = {0xB0, 104, (unsigned char)breathValue};
                         midiOut->sendMessage(&cc104_msg);
+
+                        // Unthrottled stream for interaction/vibe detection.
+                        emit voiceCc2Stream(breathValue);
                         
                         // Emit breath (CC2) amplitude for visualizer if changed
                         if (breathValue != m_lastVoiceCc2) {

@@ -3,6 +3,7 @@
 #include <QVector>
 #include <QSet>
 #include <QtGlobal>
+#include <array>
 
 namespace music { struct ChordSymbol; }
 
@@ -16,8 +17,6 @@ namespace playback {
 // - No RNG is used.
 class SemanticMidiAnalyzer {
 public:
-    enum class Source { Guitar, Voice };
-
     struct Settings {
         // Sliding window length for density (ms)
         int densityWindowMs = 1200;
@@ -27,8 +26,9 @@ public:
         // Intent thresholds
         double densityHighNotesPerSec = 6.0;
         int registerHighCenterMidi = 72; // C5-ish
-        int intensityPeakVelocity = 105;
-        double intensityPeakNotesPerSec = 7.5;
+        // CC2 (breath/intensity) drives "Intensity Peak" (vocal energy), not voice note events.
+        int intensityPeakCc2 = 80;      // 0..127 (default lowered; still requires real breath)
+        int cc2ActivityFloor = 10;      // counts as "user active" (not silence)
 
         // Outside detection
         int outsideWindowNotes = 24;
@@ -39,8 +39,12 @@ public:
         // raw metrics
         double notesPerSec = 0.0;
         int registerCenterMidi = 60;
-        int lastVelocity = 0;
-        qint64 msSinceLastNoteOn = 0;
+        int lastGuitarVelocity = 0;
+        int lastCc2 = 0;
+        qint64 msSinceLastGuitarNoteOn = 0;
+        qint64 msSinceLastActivity = 0; // max(guitar attack, cc2 activity)
+        int lastVoiceMidi = -1;         // tracked for future call/response (NOT used for density)
+        qint64 msSinceLastVoiceNoteOn = 0;
         double outsideRatio = 0.0;
 
         // intent flags
@@ -56,8 +60,16 @@ public:
 
     void reset();
 
-    void ingestNoteOn(Source src, int midiNote, int velocity, qint64 timestampMs);
-    void ingestNoteOff(Source src, int midiNote, qint64 timestampMs);
+    // Guitar note attacks (used for density/register/outside)
+    void ingestGuitarNoteOn(int midiNote, int velocity, qint64 timestampMs);
+    void ingestGuitarNoteOff(int midiNote, qint64 timestampMs);
+
+    // Vocal intensity (CC2 / breath) drives intensityPeak and also counts as "activity" to prevent SILENCE.
+    void ingestCc2(int value, qint64 timestampMs);
+
+    // Vocal melody tracking (for future interaction features). Not used for density/register.
+    void ingestVoiceNoteOn(int midiNote, int velocity, qint64 timestampMs);
+    void ingestVoiceNoteOff(int midiNote, qint64 timestampMs);
 
     // Provide current harmonic context for "playing outside" classification.
     // For MVP, allowed pitch classes are derived from chord degrees (incl. alterations).
@@ -75,9 +87,16 @@ private:
     // Recent pitch classes (for outside ratio)
     QVector<int> m_recentPitchClasses;
 
-    int m_lastVelocity = 0;
-    qint64 m_lastNoteOnMs = -1;
+    int m_lastGuitarVelocity = 0;
+    int m_lastCc2 = 0;
+    qint64 m_lastGuitarNoteOnMs = -1;
+    qint64 m_lastActivityMs = -1;
+    int m_lastVoiceMidi = -1;
+    qint64 m_lastVoiceNoteOnMs = -1;
     int m_registerEma = 60; // simple EMA for register center
+
+    // Active guitar notes (dedupe repeated NOTE_ON spam while key is held).
+    std::array<bool, 128> m_guitarActive{};
 
     // Harmonic context (not owned)
     QSet<int> m_allowedPcs;

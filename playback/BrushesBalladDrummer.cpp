@@ -125,27 +125,30 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
         }
     }
 
-    // --- 3c) Climax support: ride pattern (makes "Climax" audibly obvious). ---
-    // When energy is high, add a light ride pulse on every beat, and on upbeats when very high.
-    if (e >= 0.80) {
-        AgentIntentNote ride;
-        ride.agent = "Drums";
-        ride.channel = m_p.channel;
-        ride.note = m_p.noteRideHit;
-        ride.baseVelocity = qBound(1, 26 + int(llround(30.0 * e)), 127);
-        ride.startPos = gp;
-        ride.durationWhole = Rational(1, 16);
-        ride.structural = true;
-        ride.logic_tag = "Drums:RidePulse";
-        out.push_back(ride);
+    // --- 3c) Vibe support: ride pattern (audible Build/Climax). ---
+    // Build: ride on backbeats (2&4). Climax: ride every beat + optional upbeats.
+    if (e >= 0.60) {
+        const bool backbeatOnly = (e < 0.80);
+        const bool doRideThisBeat = backbeatOnly ? isBackbeat : true;
+        if (doRideThisBeat) {
+            AgentIntentNote ride;
+            ride.agent = "Drums";
+            ride.channel = m_p.channel;
+            ride.note = m_p.noteRideHit;
+            ride.baseVelocity = qBound(1, 24 + int(llround(34.0 * e)), 127);
+            ride.startPos = gp;
+            ride.durationWhole = Rational(1, 16);
+            ride.structural = true;
+            ride.logic_tag = backbeatOnly ? "Drums:RideBackbeat" : "Drums:RidePulse";
+            out.push_back(ride);
 
-        if (e >= 0.93) {
-            // Add upbeat 8th for a clear "support" without fully switching grooves.
-            AgentIntentNote up = ride;
-            up.startPos = GrooveGrid::fromBarBeatTuplet(bar, beat, /*sub*/1, /*count*/2, ts);
-            up.baseVelocity = qBound(1, up.baseVelocity - 8, 127);
-            up.logic_tag = "Drums:RidePulseUpbeat";
-            out.push_back(up);
+            if (!backbeatOnly && e >= 0.88) {
+                AgentIntentNote up = ride;
+                up.startPos = GrooveGrid::fromBarBeatTuplet(bar, beat, /*sub*/1, /*count*/2, ts);
+                up.baseVelocity = qBound(1, up.baseVelocity - 10, 127);
+                up.logic_tag = "Drums:RidePulseUpbeat";
+                out.push_back(up);
+            }
         }
     }
 

@@ -77,6 +77,9 @@ signals:
     void voiceHzUpdated(double hz);
     void guitarAftertouchUpdated(int value); // 0-127 channel pressure
     void voiceCc2Updated(int value);         // 0-127 breath (CC2)
+    // Unthrottled CC2 stream (emitted for every incoming voice aftertouch->CC2 conversion).
+    // Use this for interaction/vibe detection; UI can still use voiceCc2Updated (throttled).
+    void voiceCc2Stream(int value);
     void guitarVelocityUpdated(int value);   // 0-127 note velocity
 
     // --- Live performance note events (for Virtuoso Listening MVP) ---

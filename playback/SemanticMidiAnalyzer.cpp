@@ -10,10 +10,15 @@ namespace playback {
 void SemanticMidiAnalyzer::reset() {
     m_noteOnTimesMs.clear();
     m_recentPitchClasses.clear();
-    m_lastVelocity = 0;
-    m_lastNoteOnMs = -1;
+    m_lastGuitarVelocity = 0;
+    m_lastCc2 = 0;
+    m_lastGuitarNoteOnMs = -1;
+    m_lastActivityMs = -1;
+    m_lastVoiceMidi = -1;
+    m_lastVoiceNoteOnMs = -1;
     m_registerEma = 60;
     m_allowedPcs.clear();
+    m_guitarActive.fill(false);
 }
 
 static int thirdIntervalForQuality(music::ChordQuality q) {
@@ -86,11 +91,20 @@ void SemanticMidiAnalyzer::setChordContext(const music::ChordSymbol& chord) {
     m_allowedPcs = allowedPitchClassesForChord(chord);
 }
 
-void SemanticMidiAnalyzer::ingestNoteOn(Source, int midiNote, int velocity, qint64 timestampMs) {
+void SemanticMidiAnalyzer::ingestGuitarNoteOn(int midiNote, int velocity, qint64 timestampMs) {
     midiNote = clampMidi(midiNote);
     velocity = qBound(0, velocity, 127);
-    m_lastVelocity = velocity;
-    m_lastNoteOnMs = timestampMs;
+
+    if (m_guitarActive[midiNote]) {
+        // Duplicate NOTE_ON while key is held: update last velocity,
+        // but do NOT count this as a new attack for density.
+        m_lastGuitarVelocity = velocity;
+        return;
+    }
+    m_guitarActive[midiNote] = true;
+    m_lastGuitarVelocity = velocity;
+    m_lastGuitarNoteOnMs = timestampMs;
+    m_lastActivityMs = timestampMs;
 
     // Register center (EMA): bias toward recent notes but stable enough for comping decisions.
     // alpha chosen empirically for responsiveness without jitter.
@@ -111,25 +125,58 @@ void SemanticMidiAnalyzer::ingestNoteOn(Source, int midiNote, int velocity, qint
     }
 }
 
-void SemanticMidiAnalyzer::ingestNoteOff(Source, int midiNote, qint64) {
+void SemanticMidiAnalyzer::ingestGuitarNoteOff(int midiNote, qint64) {
+    midiNote = clampMidi(midiNote);
+    m_guitarActive[midiNote] = false;
+}
+
+void SemanticMidiAnalyzer::ingestCc2(int value, qint64 timestampMs) {
+    value = qBound(0, value, 127);
+    m_lastCc2 = value;
+    if (value >= qMax(0, m_s.cc2ActivityFloor)) {
+        // Vocal energy counts as "activity" (prevents SILENCE) and can trigger intensity peak.
+        m_lastActivityMs = timestampMs;
+    }
+}
+
+void SemanticMidiAnalyzer::ingestVoiceNoteOn(int midiNote, int velocity, qint64 timestampMs) {
+    Q_UNUSED(velocity);
+    midiNote = clampMidi(midiNote);
+    m_lastVoiceMidi = midiNote;
+    m_lastVoiceNoteOnMs = timestampMs;
+    // Vocal notes do NOT affect density, but they do count as "activity" (we're hearing a melody).
+    m_lastActivityMs = timestampMs;
+}
+
+void SemanticMidiAnalyzer::ingestVoiceNoteOff(int midiNote, qint64) {
     Q_UNUSED(midiNote);
 }
 
 SemanticMidiAnalyzer::IntentState SemanticMidiAnalyzer::compute(qint64 nowMs) const {
     IntentState out;
-    out.lastVelocity = m_lastVelocity;
+    out.lastGuitarVelocity = m_lastGuitarVelocity;
+    out.lastCc2 = m_lastCc2;
     out.registerCenterMidi = m_registerEma;
-    out.msSinceLastNoteOn = (m_lastNoteOnMs < 0) ? std::numeric_limits<qint64>::max() : (nowMs - m_lastNoteOnMs);
+    out.msSinceLastGuitarNoteOn = (m_lastGuitarNoteOnMs < 0) ? std::numeric_limits<qint64>::max() : (nowMs - m_lastGuitarNoteOnMs);
+    out.msSinceLastActivity = (m_lastActivityMs < 0) ? std::numeric_limits<qint64>::max() : (nowMs - m_lastActivityMs);
+    out.lastVoiceMidi = m_lastVoiceMidi;
+    out.msSinceLastVoiceNoteOn = (m_lastVoiceNoteOnMs < 0) ? std::numeric_limits<qint64>::max() : (nowMs - m_lastVoiceNoteOnMs);
 
     const int winMs = qMax(1, m_s.densityWindowMs);
-    out.notesPerSec = double(m_noteOnTimesMs.size()) * (1000.0 / double(winMs));
+    // IMPORTANT: decay density over time even if no new notes arrive.
+    // m_noteOnTimesMs is append-only and time-ordered.
+    const qint64 cutoff = nowMs - qMax(1, m_s.densityWindowMs);
+    int recentCount = 0;
+    for (int i = m_noteOnTimesMs.size() - 1; i >= 0; --i) {
+        if (m_noteOnTimesMs[i] < cutoff) break;
+        recentCount++;
+    }
+    out.notesPerSec = double(recentCount) * (1000.0 / double(winMs));
 
-    out.silence = (out.msSinceLastNoteOn >= qint64(qMax(1, m_s.silenceMs)));
+    out.silence = (out.msSinceLastActivity >= qint64(qMax(1, m_s.silenceMs)));
     out.densityHigh = (out.notesPerSec >= m_s.densityHighNotesPerSec) && !out.silence;
     out.registerHigh = (out.registerCenterMidi >= m_s.registerHighCenterMidi) && !out.silence;
-    out.intensityPeak = (!out.silence) &&
-                        (out.lastVelocity >= m_s.intensityPeakVelocity) &&
-                        (out.notesPerSec >= m_s.intensityPeakNotesPerSec);
+    out.intensityPeak = (!out.silence) && (out.lastCc2 >= m_s.intensityPeakCc2);
 
     // Playing outside: compare recent pitch classes to allowed chord set.
     // If no chord context, do not assert "outside".

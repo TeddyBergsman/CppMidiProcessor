@@ -36,6 +36,13 @@ struct InstrumentGrooveProfile {
     // Structural tightening
     int clampMsStructural = 18; // tighter on chord arrivals / strong beats
     int clampMsLoose = 32;      // looser elsewhere
+
+    // Phrase shaping (MVP):
+    // Adds a tiny, deterministic arc over phrases so performances don't feel "flat".
+    // This is intentionally subtle; groove templates remain the primary feel source.
+    int phraseBars = 4;              // common jazz phrasing unit
+    int phraseTimingMaxMs = 6;       // +/- ms added per phrase (center-weighted)
+    double phraseVelocityMax = 0.10; // +/- relative multiplier (e.g. 0.10 => up to 10%)
 };
 
 struct HumanizedEvent {
@@ -65,7 +72,10 @@ public:
         // Mix with a constant to reduce accidental collisions.
         m_rng.seed(seed ^ 0xA5C3'91E5u);
         m_currentBar = -1;
+        m_currentPhrase = -1;
         m_driftMs = 0;
+        m_phraseOffsetMs = 0;
+        m_phraseVelMul = 1.0;
     }
 
     const InstrumentGrooveProfile& profile() const { return m_profile; }
@@ -78,7 +88,10 @@ public:
 
     void reset() {
         m_currentBar = -1;
+        m_currentPhrase = -1;
         m_driftMs = 0;
+        m_phraseOffsetMs = 0;
+        m_phraseVelMul = 1.0;
     }
 
     HumanizedEvent humanizeNote(const GridPos& start,
@@ -97,13 +110,17 @@ public:
             ? m_grooveTemplate.offsetMsFor(start, ts, bpm)
             : m_feel.offsetMsFor(start, ts, bpm);
 
-        // Random components (uniform for MVP; gaussian can be added later).
-        int jitter = (m_profile.microJitterMs > 0)
-            ? (int(m_rng.bounded(m_profile.microJitterMs * 2 + 1)) - m_profile.microJitterMs)
-            : 0;
-        int attackVar = (m_profile.attackVarianceMs > 0)
-            ? (int(m_rng.bounded(m_profile.attackVarianceMs * 2 + 1)) - m_profile.attackVarianceMs)
-            : 0;
+        // Random components: center-weighted (triangular) instead of uniform.
+        // This better matches human playing: most hits are near the grid with occasional larger deviations.
+        auto tri = [&](int maxAbs) -> int {
+            if (maxAbs <= 0) return 0;
+            // Two uniforms (0..maxAbs) summed minus maxAbs -> [-maxAbs..+maxAbs] with triangular distribution.
+            const int a = int(m_rng.bounded(maxAbs + 1));
+            const int b = int(m_rng.bounded(maxAbs + 1));
+            return (a + b) - maxAbs;
+        };
+        int jitter = tri(m_profile.microJitterMs);
+        int attackVar = tri(m_profile.attackVarianceMs);
 
         int push = m_profile.pushMs;
         int laidBack = m_profile.laidBackMs;
@@ -118,7 +135,20 @@ public:
             driftLocal = int(llround(double(driftLocal) * 0.30));
         }
 
-        int totalOffset = feelMs + laidBack - push + driftLocal + jitter + attackVar;
+        // Phrase shaping: a tiny arc (crescendo toward mid-phrase, then relax),
+        // plus a small per-phrase pocket offset. Deterministic and bar-index driven.
+        int phraseOffset = m_phraseOffsetMs;
+        double phraseVelMul = m_phraseVelMul;
+        if (m_profile.phraseBars > 1) {
+            const int posInPhrase = (start.barIndex >= 0) ? (start.barIndex % m_profile.phraseBars) : 0;
+            const double t = double(posInPhrase) / double(qMax(1, m_profile.phraseBars - 1)); // 0..1
+            const double arc = 1.0 - qAbs(2.0 * t - 1.0); // 0..1 (peaks mid phrase)
+            // Keep it subtle: arc influences less than the per-phrase random multiplier.
+            phraseVelMul *= (1.0 + (arc - 0.5) * m_profile.phraseVelocityMax * 0.40);
+            phraseOffset += int(llround((arc - 0.5) * double(m_profile.phraseTimingMaxMs) * 0.30));
+        }
+
+        int totalOffset = feelMs + laidBack - push + driftLocal + phraseOffset + jitter + attackVar;
         const int clampMs = structural ? m_profile.clampMsStructural : m_profile.clampMsLoose;
         if (totalOffset > clampMs) totalOffset = clampMs;
         if (totalOffset < -clampMs) totalOffset = -clampMs;
@@ -133,11 +163,11 @@ public:
         // Otherwise 8th-note and triplet patterns would "double/triple accent" the beat.
         if (isBeatStart && beatInBar == 0) velMul *= m_profile.accentDownbeat;
         if (isBeatStart && (beatInBar % 2) == 1) velMul *= m_profile.accentBackbeat;
+        // Apply phrase dynamics after beat accents.
+        velMul *= phraseVelMul;
 
         int vel = int(llround(double(baseVelocity) * velMul));
-        int velJ = (m_profile.velocityJitter > 0)
-            ? (int(m_rng.bounded(m_profile.velocityJitter * 2 + 1)) - m_profile.velocityJitter)
-            : 0;
+        int velJ = tri(m_profile.velocityJitter);
         if (structural) velJ = 0;
         vel += velJ;
         if (vel < 1) vel = 1;
@@ -161,16 +191,55 @@ private:
         if (m_currentBar == -1) {
             m_currentBar = barIndex;
             m_driftMs = 0;
+            // Initialize phrase state.
+            m_currentPhrase = -1;
+            m_phraseOffsetMs = 0;
+            m_phraseVelMul = 1.0;
+            // Force phrase calculation for the current bar.
+            const int phraseBars = qMax(1, m_profile.phraseBars);
+            const int phraseIndex = barIndex / phraseBars;
+            m_currentPhrase = phraseIndex - 1;
             return;
         }
         while (m_currentBar < barIndex) {
             m_currentBar++;
+
+            // Update per-phrase parameters when we enter a new phrase (bar-index driven).
+            const int phraseBars = qMax(1, m_profile.phraseBars);
+            const int phraseIndex = m_currentBar / phraseBars;
+            if (phraseIndex != m_currentPhrase) {
+                m_currentPhrase = phraseIndex;
+                // Deterministic phrase RNG seeded by instrument seed + phrase index (independent of note count).
+                const quint32 baseSeed = (m_profile.humanizeSeed == 0u) ? 1u : m_profile.humanizeSeed;
+                QRandomGenerator phraseRng;
+                phraseRng.seed(baseSeed ^ 0x51ED'BEEFu ^ quint32(phraseIndex * 1315423911u));
+
+                auto triLocal = [&](int maxAbs) -> int {
+                    if (maxAbs <= 0) return 0;
+                    const int a = int(phraseRng.bounded(maxAbs + 1));
+                    const int b = int(phraseRng.bounded(maxAbs + 1));
+                    return (a + b) - maxAbs;
+                };
+
+                const int pt = triLocal(qMax(0, m_profile.phraseTimingMaxMs));
+                m_phraseOffsetMs = qBound(-m_profile.phraseTimingMaxMs, pt, m_profile.phraseTimingMaxMs);
+
+                const double vMax = qBound(0.0, m_profile.phraseVelocityMax, 0.50);
+                const double u = double(phraseRng.generateDouble()); // 0..1
+                m_phraseVelMul = 1.0 + ((u * 2.0 - 1.0) * vMax);
+                if (m_phraseVelMul < 0.50) m_phraseVelMul = 0.50;
+                if (m_phraseVelMul > 1.50) m_phraseVelMul = 1.50;
+            }
+
             if (m_profile.driftMaxMs <= 0 || m_profile.driftRate <= 0.0) {
                 m_driftMs = 0;
                 continue;
             }
             const int stepMax = qMax(1, int(llround(double(m_profile.driftMaxMs) * m_profile.driftRate)));
-            const int delta = int(m_rng.bounded(stepMax * 2 + 1)) - stepMax;
+            // Center-weighted drift steps (reduces "random walk jitteriness").
+            const int a = int(m_rng.bounded(stepMax + 1));
+            const int b = int(m_rng.bounded(stepMax + 1));
+            const int delta = (a + b) - stepMax;
             m_driftMs += delta;
             if (m_driftMs > m_profile.driftMaxMs) m_driftMs = m_profile.driftMaxMs;
             if (m_driftMs < -m_profile.driftMaxMs) m_driftMs = -m_profile.driftMaxMs;
@@ -183,7 +252,10 @@ private:
     GrooveTemplate m_grooveTemplate{};
     QRandomGenerator m_rng;
     int m_currentBar = -1;
+    int m_currentPhrase = -1;
     int m_driftMs = 0;
+    int m_phraseOffsetMs = 0;
+    double m_phraseVelMul = 1.0;
 };
 
 } // namespace virtuoso::groove

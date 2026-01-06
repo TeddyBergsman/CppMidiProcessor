@@ -18,6 +18,7 @@
 #include <QCryptographicHash>
 #include <QSettings>
 #include <QJsonDocument>
+#include <QEasingCurve>
 
 namespace {
 static QString normalizeKeyCenter(const QString& s) {
@@ -606,13 +607,32 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::debugEnergy,
             this, [this](double e01, bool isAuto) {
                 if (!m_virtuosoEnergySlider || !m_virtuosoEnergyAuto) return;
-                const bool prev = m_virtuosoEnergySlider->blockSignals(true);
+                const int target = qBound(0, int(llround(e01 * 100.0)), 100);
+
                 m_virtuosoEnergyAuto->blockSignals(true);
                 m_virtuosoEnergyAuto->setChecked(isAuto);
-                m_virtuosoEnergySlider->setEnabled(!isAuto);
-                m_virtuosoEnergySlider->setValue(qBound(0, int(llround(e01 * 100.0)), 100));
                 m_virtuosoEnergyAuto->blockSignals(false);
-                m_virtuosoEnergySlider->blockSignals(prev);
+
+                m_virtuosoEnergySlider->setEnabled(!isAuto);
+
+                // Smoothly animate the slider when in Auto mode so it doesn't jump in discrete steps.
+                if (isAuto) {
+                    if (!m_virtuosoEnergyAnim) {
+                        m_virtuosoEnergyAnim = new QPropertyAnimation(m_virtuosoEnergySlider, "value", this);
+                        m_virtuosoEnergyAnim->setDuration(280);
+                        m_virtuosoEnergyAnim->setEasingCurve(QEasingCurve::InOutQuad);
+                    }
+                    m_virtuosoEnergySlider->blockSignals(true);
+                    m_virtuosoEnergyAnim->stop();
+                    m_virtuosoEnergyAnim->setStartValue(m_virtuosoEnergySlider->value());
+                    m_virtuosoEnergyAnim->setEndValue(target);
+                    m_virtuosoEnergyAnim->start();
+                    m_virtuosoEnergySlider->blockSignals(false);
+                } else {
+                    const bool prev = m_virtuosoEnergySlider->blockSignals(true);
+                    m_virtuosoEnergySlider->setValue(target);
+                    m_virtuosoEnergySlider->blockSignals(prev);
+                }
             });
 
     // Virtuosity Matrix wiring (Stage 3).

@@ -18,12 +18,22 @@ public:
     struct Settings {
         // Hysteresis to avoid rapid flipping.
         int minStateHoldMs = 2500;
+
+        // Build thresholds (lower + more continuous than the old boolean gates).
+        double buildEnterNotesPerSec = 2.0;
+        int buildEnterMs = 250;
+        int buildExitMs = 2600; // linger: require calm for a while before dropping from Build
+
         // How quickly we enter Climax on sustained intensity peaks.
-        int climaxEnterMs = 900;
-        // How quickly we exit Climax once intensity drops.
-        int climaxExitMs = 1600;
+        int climaxEnterMs = 500;   // lowered threshold
+        // How quickly we exit Climax once intensity drops (linger).
+        int climaxExitMs = 2600;
         // If user silence persists, we relax.
-        int coolDownEnterMs = 1800;
+        int coolDownEnterMs = 2400; // don't drop to cooldown on brief rests
+
+        // Energy smoothing (continuous transitions).
+        int energyRiseTauMs = 520;   // faster attack
+        int energyFallTauMs = 1500;  // slower release
     };
 
     struct Output {
@@ -50,6 +60,11 @@ private:
 
     qint64 m_intensitySinceMs = -1;
     qint64 m_silenceSinceMs = -1;
+    qint64 m_buildSinceMs = -1;
+    qint64 m_calmSinceMs = -1;
+
+    double m_energy = 0.35;
+    qint64 m_lastEnergyUpdateMs = -1;
 };
 
 } // namespace playback

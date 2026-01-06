@@ -130,23 +130,24 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
     }
 
     // --- 3c) Vibe support: ride pattern (audible Build/Climax). ---
+    // Start ride/cymbal texture earlier as energy rises.
     // Build: ride on backbeats (2&4). Climax: ride every beat + optional upbeats.
-    if (e >= 0.60) {
-        const bool backbeatOnly = (e < 0.80);
+    if (e >= 0.42) {
+        const bool backbeatOnly = (e < 0.72);
         const bool doRideThisBeat = backbeatOnly ? isBackbeat : true;
         if (doRideThisBeat) {
             AgentIntentNote ride;
             ride.agent = "Drums";
             ride.channel = m_p.channel;
             ride.note = m_p.noteRideHit;
-            ride.baseVelocity = qBound(1, 24 + int(llround(34.0 * e)), 127);
+            ride.baseVelocity = qBound(1, 20 + int(llround(32.0 * e)), 127);
             ride.startPos = gp;
             ride.durationWhole = Rational(1, 16);
             ride.structural = true;
             ride.logic_tag = backbeatOnly ? "Drums:RideBackbeat" : "Drums:RidePulse";
             out.push_back(ride);
 
-            if (!backbeatOnly && e >= 0.88) {
+            if (!backbeatOnly && e >= 0.80) {
                 AgentIntentNote up = ride;
                 up.startPos = GrooveGrid::fromBarBeatTuplet(bar, beat, /*sub*/1, /*count*/2, ts);
                 up.baseVelocity = qBound(1, up.baseVelocity - 10, 127);

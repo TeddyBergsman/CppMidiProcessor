@@ -551,6 +551,26 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
     const QString intentStr = intentsToString(intent);
     const bool userBusy = (intent.densityHigh || intent.intensityPeak || intent.registerHigh);
 
+    // Energy-driven instrument layering:
+    // - energy ~0.0: piano only
+    // - then bass enters
+    // - then drums enter
+    const double eBand = qBound(0.0, baseEnergy, 1.0);
+    const bool allowBass = (eBand >= 0.10);
+    const bool allowDrums = (eBand >= 0.22);
+
+    // If drums just got disabled, immediately stop any looping brush notes.
+    // (Some drum libraries loop until an explicit note-off or all-notes-off arrives.)
+    if (!allowDrums && m_drumsEnabledLast) {
+        if (m_midi) {
+            // Kill the whole drum channel, and also explicitly stop the known loop notes.
+            m_midi->sendVirtualAllNotesOff(m_chDrums);
+            m_midi->sendVirtualNoteOff(m_chDrums, virtuoso::drums::fluffy_brushes::kBrushCircleTwoHands_Fs3);
+            m_midi->sendVirtualNoteOff(m_chDrums, virtuoso::drums::fluffy_brushes::kBrushCircleRightHand_G3);
+        }
+    }
+    m_drumsEnabledLast = allowDrums;
+
     // Clone planners so the lookahead does not mutate live state.
     JazzBalladBassPlanner bassSim = m_bassPlanner;
     JazzBalladPianoPlanner pianoSim = m_pianoPlanner;
@@ -1417,14 +1437,22 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
                          .arg(intent.outsideRatio, 0, 'f', 2));
     emit debugEnergy(baseEnergy, m_debugEnergyAuto);
 
-    // Drums always run (ballad texture), even if harmony missing/N.C.
-    // We schedule Drums first, because Bass groove-lock references Drums kick timing.
+    // Energy-driven instrument layering:
+    // - energy ~0.0: piano only
+    // - then bass enters
+    // - then drums enter
+    const double eBand = qBound(0.0, baseEnergy, 1.0);
+    const bool allowBass = (eBand >= 0.10);
+    const bool allowDrums = (eBand >= 0.22);
+
+    // Drums: enter after bass (energy layering). We schedule Drums first when enabled,
+    // because Bass groove-lock references Drums kick timing.
     const quint32 detSeed = quint32(qHash(QString("ballad|") + m_stylePresetKey));
     virtuoso::engine::AgentIntentNote kickIntent;
     virtuoso::groove::HumanizedEvent kickHe;
     bool haveKickHe = false;
 
-    {
+    if (allowDrums) {
         BrushesBalladDrummer::Context dc;
         dc.bpm = m_bpm;
         dc.ts = ts;
@@ -1465,9 +1493,11 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
         }
 
         for (auto n : drumIntents) {
-            // Macro dynamics: scale drums velocity slightly by energy.
+            // Macro dynamics: scale drums velocity by energy (much softer at low energies).
+            // e=0.22 -> ~0.67x, e=1.0 -> ~1.10x
             const double e = qBound(0.0, baseEnergy, 1.0);
-            n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.85 + 0.35 * e))), 127);
+            const double mult = 0.55 + 0.55 * e;
+            n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * mult)), 127);
             n.vibe_state = vibeStr;
             n.user_intents = intentStr;
             n.user_outside_ratio = intent.outsideRatio;
@@ -1521,6 +1551,13 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
         const double mult = m_agentEnergyMult.value("Bass", 1.0);
         bc.energy = qBound(0.0, baseEnergy * mult, 1.0);
     }
+    // Very low energy (before drums enter): keep bass extremely sparse/supportive.
+    if (!allowDrums) {
+        bc.energy *= 0.70;
+        bc.rhythmicComplexity *= 0.55;
+        bc.approachProbBeat3 *= 0.35;
+        bc.skipBeat3ProbStable = qMin(0.98, bc.skipBeat3ProbStable + 0.12);
+    }
     // Stage 2 context for Stage 3 solver.
     bc.chordFunction = func;
     bc.roman = roman;
@@ -1564,34 +1601,36 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
         bc.approachProbBeat3 = qMin(1.0, bc.approachProbBeat3 + 0.12);
         bc.skipBeat3ProbStable = qMax(0.0, bc.skipBeat3ProbStable - 0.12);
     }
-    auto bassIntents = m_bassPlanner.planBeat(bc, m_chBass, ts);
-    for (auto& n : bassIntents) {
-        if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
-        n.key_center = keyCenterStr;
-        if (!roman.isEmpty()) n.roman = roman;
-        if (!func.isEmpty()) n.chord_function = func;
-        n.vibe_state = vibeStr;
-        n.user_intents = intentStr;
-        n.user_outside_ratio = intent.outsideRatio;
-        // Macro dynamics: small velocity lift under higher energy.
-        const double e = qBound(0.0, baseEnergy, 1.0);
-        n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.90 + 0.25 * e))), 127);
-        // Groove lock (prototype): on beat 1, if a feather kick exists, align bass attack to kick.
-        if (m_kickLocksBass && beatInBar == 0 && haveKickHe) {
-            auto bhe = m_engine.humanizeIntent(n);
-            if (bhe.offMs > bhe.onMs) {
-                const qint64 delta = kickHe.onMs - bhe.onMs;
-                if (qAbs(delta) <= qMax<qint64>(0, m_kickLockMaxMs)) {
-                    bhe.onMs += delta;
-                    bhe.offMs += delta;
-                    bhe.timing_offset_ms += int(delta);
-                    const QString tag = n.logic_tag.isEmpty() ? "GrooveLock:Kick" : (n.logic_tag + "|GrooveLock:Kick");
-                    m_engine.scheduleHumanizedIntentNote(n, bhe, tag);
-                    continue;
+    if (allowBass) {
+        auto bassIntents = m_bassPlanner.planBeat(bc, m_chBass, ts);
+        for (auto& n : bassIntents) {
+            if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
+            n.key_center = keyCenterStr;
+            if (!roman.isEmpty()) n.roman = roman;
+            if (!func.isEmpty()) n.chord_function = func;
+            n.vibe_state = vibeStr;
+            n.user_intents = intentStr;
+            n.user_outside_ratio = intent.outsideRatio;
+            // Macro dynamics: small velocity lift under higher energy.
+            const double e = qBound(0.0, baseEnergy, 1.0);
+            n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.90 + 0.25 * e))), 127);
+            // Groove lock (prototype): on beat 1, if a feather kick exists, align bass attack to kick.
+            if (m_kickLocksBass && beatInBar == 0 && haveKickHe) {
+                auto bhe = m_engine.humanizeIntent(n);
+                if (bhe.offMs > bhe.onMs) {
+                    const qint64 delta = kickHe.onMs - bhe.onMs;
+                    if (qAbs(delta) <= qMax<qint64>(0, m_kickLockMaxMs)) {
+                        bhe.onMs += delta;
+                        bhe.offMs += delta;
+                        bhe.timing_offset_ms += int(delta);
+                        const QString tag = n.logic_tag.isEmpty() ? "GrooveLock:Kick" : (n.logic_tag + "|GrooveLock:Kick");
+                        m_engine.scheduleHumanizedIntentNote(n, bhe, tag);
+                        continue;
+                    }
                 }
             }
+            m_engine.scheduleNote(n);
         }
-        m_engine.scheduleNote(n);
     }
 
     JazzBalladPianoPlanner::Context pc;
@@ -1628,6 +1667,15 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     {
         const double mult = m_agentEnergyMult.value("Piano", 1.0);
         pc.energy = qBound(0.0, baseEnergy * mult, 1.0);
+    }
+    // Very low energy: keep piano extremely sparse/soft and avoid bright features.
+    if (eBand < 0.12) {
+        pc.preferShells = true;
+        pc.skipBeat2ProbStable = qMin(0.995, pc.skipBeat2ProbStable + 0.25);
+        pc.sparkleProbBeat4 = 0.0;
+        pc.rhythmicComplexity *= 0.30;
+        pc.harmonicRisk *= 0.25;
+        pc.cadence01 *= 0.65;
     }
     // Stage 3 solver weights (Virtuosity Matrix).
     const double progress01p = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);

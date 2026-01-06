@@ -1551,7 +1551,7 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
         || c.nextChanges
         || cadence
         || (rc >= 0.55 && int(h % 100u) < int(llround(20.0 + 45.0 * rc)));
-    if (!wantAny && !c.userSilence && e < 0.22) return {};
+    if (!wantAny && !c.userSilence && e < 0.10) return {};
 
     // Build a chord-safe pool, then (if we have a key) keep it diatonic for non-spicy chords.
     const int pc1 = (c.chord.rootPc >= 0) ? (c.chord.rootPc % 12) : 0;

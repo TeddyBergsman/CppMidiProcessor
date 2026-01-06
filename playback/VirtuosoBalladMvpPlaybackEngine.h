@@ -179,6 +179,9 @@ private:
     double m_virtRhythmicComplexity = 0.25;
     double m_virtInteraction = 0.50;
     double m_virtToneDark = 0.60;
+
+    // Track whether drums were enabled last tick (for stopping loops when drums are disabled by energy layering).
+    bool m_drumsEnabledLast = false;
 };
 
 } // namespace playback

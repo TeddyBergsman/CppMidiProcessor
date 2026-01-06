@@ -27,7 +27,7 @@ public:
         double densityHighNotesPerSec = 6.0;
         int registerHighCenterMidi = 72; // C5-ish
         // CC2 (breath/intensity) drives "Intensity Peak" (vocal energy), not voice note events.
-        int intensityPeakCc2 = 80;      // 0..127 (default lowered; still requires real breath)
+        int intensityPeakCc2 = 65;      // 0..127 (lowered: makes Climax reachable without extreme CC2)
         int cc2ActivityFloor = 10;      // counts as "user active" (not silence)
 
         // Outside detection

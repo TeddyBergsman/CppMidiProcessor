@@ -15,6 +15,7 @@ class QSpinBox;
 class QCheckBox;
 class QTextEdit;
 class QSlider;
+class QPropertyAnimation;
 
 namespace ireal { struct Playlist; }
 namespace chart { class SongChartWidget; }
@@ -129,6 +130,7 @@ private:
     QSlider* m_virtuosoInteract = nullptr;
     QSlider* m_virtuosoToneDark = nullptr;
     QTextEdit* m_virtuosoTheoryLog = nullptr;
+    QPropertyAnimation* m_virtuosoEnergyAnim = nullptr;
 
     MidiProcessor* m_midiProcessor = nullptr; // not owned
 

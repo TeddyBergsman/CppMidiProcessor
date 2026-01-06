@@ -62,7 +62,9 @@ int JazzBalladPianoPlanner::pcForDegree(const music::ChordSymbol& c, int degree)
         case 5: pc = (root + fifthIntervalForQuality(c.quality)) % 12; pc = applyAlter(5, pc); break;
         case 7: {
             const int iv = seventhIntervalFor(c);
-            pc = (root + (iv >= 0 ? iv : 10)) % 12;
+            // IMPORTANT: do NOT invent a b7 on triads/6-chords. If there is no 7th, return sentinel.
+            if (iv < 0) return -1;
+            pc = (root + iv) % 12;
         } break;
         case 9: pc = (root + 14) % 12; pc = applyAlter(9, pc); break;
         case 11: pc = (root + 17) % 12; pc = applyAlter(11, pc); break;
@@ -242,19 +244,31 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     const bool pickA = ((h % 2u) == 0u);
     const bool useRootless = chordHas7 && (!c.preferShells || c.chordIsNew || (c.beatInBar == 3 && ((h % 4u) == 0u)));
 
-    // Build a ballad-appropriate set: always guide tones, then 1–2 colors.
+    // Build a ballad-appropriate set:
+    // - Guide tones when chord has a 7th: 3 & 7
+    // - Otherwise: 3 & 5 (avoid inventing a b7 on plain triads)
+    // - Add 1–2 colors (9/13 on maj, 9/11 on min, altered tensions only if chart indicates)
     QVector<int> pcs;
     pcs.reserve(5);
     const int pc3 = pcForDegree(c.chord, 3);
-    const int pc7 = pcForDegree(c.chord, 7);
-    pcs.push_back(pc3);
-    pcs.push_back(pc7);
+    const int pc7 = chordHas7 ? pcForDegree(c.chord, 7) : -1;
+    const int pc5 = pcForDegree(c.chord, 5);
+    if (pc3 >= 0) pcs.push_back(pc3);
+    if (pc7 >= 0) pcs.push_back(pc7);
+    else if (pc5 >= 0) pcs.push_back(pc5);
 
     // Primary color:
     int primaryDeg = 9;
-    if (dominant && alt) primaryDeg = 9;                 // altered colors handled via alterations/defaults
-    else if (c.chord.quality == music::ChordQuality::Major) primaryDeg = ((h % 3u) == 0u) ? 11 : 9; // sometimes #11-ish (if present)
-    else if (c.chord.quality == music::ChordQuality::Minor) primaryDeg = ((h % 3u) == 0u) ? 11 : 9;
+    if (dominant) {
+        // Dominant: 9 is safe; alterations (b9/#9) are only used if chart explicitly encodes them.
+        primaryDeg = 9;
+    } else if (c.chord.quality == music::ChordQuality::Major) {
+        // Major ballad default: 9 (avoid natural 11 over major unless chart indicates lydian/#11).
+        primaryDeg = 9;
+    } else if (c.chord.quality == music::ChordQuality::Minor) {
+        // Minor: 9 is safe.
+        primaryDeg = 9;
+    }
     pcs.push_back(pcForDegree(c.chord, primaryDeg));
 
     // Secondary color (occasional):
@@ -262,9 +276,9 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     const bool add2 = (p2 > 0) && (int((h / 7u) % 100u) < p2);
     if (add2) {
         int deg2 = 13;
-        if (dominant && alt) deg2 = 13;
-        else if (c.chord.quality == music::ChordQuality::Major) deg2 = 13;
-        else if (c.chord.quality == music::ChordQuality::Minor) deg2 = 11;
+        if (dominant) deg2 = 13;                      // 13 is a classic dominant color (unless altered by chart)
+        else if (c.chord.quality == music::ChordQuality::Major) deg2 = 13; // maj: 13 over 11
+        else if (c.chord.quality == music::ChordQuality::Minor) deg2 = 11; // min: 11 is idiomatic
         pcs.push_back(pcForDegree(c.chord, deg2));
     }
 
@@ -277,16 +291,24 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
     sortUnique(pcs);
 
-    // Map to midi with simple LH/RH ranges and voice-leading to last voicing.
+    // Map to midi with LH/RH ranges and voice-leading to last voicing.
+    // v2: keep a stable “voice index” mapping to reduce random re-voicing each beat.
     QVector<int> midi;
     midi.reserve(pcs.size());
 
     // LH anchor tones (3rd + 7th), RH colors with ballad spacing.
-    for (int pc : pcs) {
-        const bool isGuide = (pc == pc3 || pc == pc7);
+    for (int idx = 0; idx < pcs.size(); ++idx) {
+        const int pc = pcs[idx];
+        if (pc < 0) continue;
+        const bool isGuide = (pc == pc3 || (pc7 >= 0 && pc == pc7) || (pc7 < 0 && pc == pc5));
         const int lo = isGuide ? c.lhLo : c.rhLo;
         const int hi = isGuide ? c.lhHi : c.rhHi;
-        const int chosen = bestNearestToPrev(pc, m_lastVoicing, lo, hi);
+        int around = (lo + hi) / 2;
+        if (!m_lastVoicing.isEmpty()) {
+            const int j = qBound(0, idx, m_lastVoicing.size() - 1);
+            around = m_lastVoicing[j];
+        }
+        const int chosen = nearestMidiForPc(pc, around, lo, hi);
         midi.push_back(chosen);
     }
     sortUnique(midi);
@@ -297,7 +319,9 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     // Save for voice-leading.
     m_lastVoicing = midi;
 
-    const QString voicingType = useRootless ? (pickA ? "Ballad Rootless (A-ish)" : "Ballad Rootless (B-ish)") : "Ballad Shell";
+    const QString voicingType = useRootless
+        ? (pickA ? "Ballad Rootless (A-ish)" : "Ballad Rootless (B-ish)")
+        : (chordHas7 ? "Ballad Shell (3-7)" : "Ballad Shell (3-5)");
     const int baseVel = climaxDense ? (c.chordIsNew ? 64 : 58) : (c.chordIsNew ? 50 : 44);
 
     // Optional high sparkle on beat 4 (very occasional).
@@ -310,13 +334,13 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         sparkleMidi = nearestMidiForPc(spPc, /*around*/(c.sparkleLo + c.sparkleHi) / 2, c.sparkleLo, c.sparkleHi);
     }
 
-    // Helper: derive a "guide tones only" subset from current voicing (3rd + 7th).
+    // Helper: derive a "guide tones only" subset from current voicing.
     auto guideSubset = [&](const QVector<int>& full) -> QVector<int> {
         QVector<int> g;
         g.reserve(2);
         for (int m : full) {
             const int pc = ((m % 12) + 12) % 12;
-            if (pc == pc3 || pc == pc7) g.push_back(m);
+            if (pc == pc3 || (pc7 >= 0 && pc == pc7) || (pc7 < 0 && pc == pc5)) g.push_back(m);
         }
         sortUnique(g);
         if (g.size() > 2) g.resize(2);

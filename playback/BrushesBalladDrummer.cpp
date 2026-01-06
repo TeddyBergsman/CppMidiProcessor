@@ -50,8 +50,12 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
 
     const int bar = qMax(0, ctx.playbackBarIndex);
     const int beat = qMax(0, ctx.beatInBar);
-    const bool phraseStart = (m_p.phraseBars > 0) ? ((bar % m_p.phraseBars) == 0) : (bar == 0);
-    const bool phraseEnd = (m_p.phraseBars > 0) ? ((bar % m_p.phraseBars) == (m_p.phraseBars - 1)) : false;
+    const int phraseBars = (ctx.phraseBars > 0) ? ctx.phraseBars : (m_p.phraseBars > 0 ? m_p.phraseBars : 4);
+    const int barInPhrase = (phraseBars > 0) ? (bar % phraseBars) : 0;
+    const bool phraseStart = (phraseBars > 0) ? (barInPhrase == 0) : (bar == 0);
+    const bool phraseEnd = (phraseBars > 0) ? (barInPhrase == (phraseBars - 1)) : false;
+    const bool phraseEndBar = ctx.phraseEndBar || phraseEnd;
+    const double cadence01 = qBound(0.0, ctx.cadence01, 1.0);
     const bool shouldRetriggerLoop = (m_p.loopRetriggerBars > 0) ? ((bar % m_p.loopRetriggerBars) == 0) : phraseStart;
 
     const auto gp = GrooveGrid::fromBarBeatTuplet(bar, beat, 0, 1, ts);
@@ -169,10 +173,11 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
 
     // --- 4) Phrase-end swish (longer ride swish / sweep). ---
     // Small probability on the last beat of the phrase to create a subtle phrase marker.
-    if (phraseEnd && beat == (qMax(1, ts.num) - 1)) {
+    if (phraseEndBar && beat == (qMax(1, ts.num) - 1)) {
         const quint32 s = mixSeed(ctx.determinismSeed, quint32(bar * 23 + 909));
         const double p = unitRand01(s);
-        if (p < qBound(0.0, m_p.phraseEndSwishProb, 1.0)) {
+        const double pSwish = qBound(0.0, m_p.phraseEndSwishProb + 0.35 * cadence01, 1.0);
+        if (p < pSwish) {
             const int holdMs = qMax(800, qMin(2000, msForBars(bpm, ts, 1) / 2));
             AgentIntentNote sw;
             sw.agent = "Drums";
@@ -184,6 +189,45 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
             sw.structural = true;
             sw.logic_tag = "Drums:PhraseEndSwish";
             out.push_back(sw);
+        }
+    }
+
+    // --- 4b) Cadence pickup: soft brush short on the and-of-4 into the next bar. ---
+    // This is a key "session drummer" marker: a tiny pickup, not a fill.
+    if (phraseEndBar && cadence01 >= 0.55 && beat == (qMax(1, ts.num) - 1) && !ctx.intensityPeak) {
+        const quint32 s = mixSeed(ctx.determinismSeed, quint32(bar * 29 + 0xCADEu));
+        const double p = unitRand01(s);
+        const double want = qBound(0.0, 0.10 + 0.55 * cadence01 + 0.20 * e, 0.85);
+        if (p < want) {
+            AgentIntentNote pk;
+            pk.agent = "Drums";
+            pk.channel = m_p.channel;
+            pk.note = m_p.noteBrushShort;
+            pk.baseVelocity = qBound(1, 18 + int(llround(14.0 * e)) + int(llround(10.0 * cadence01)), 127);
+            pk.startPos = GrooveGrid::fromBarBeatTuplet(bar, beat, /*sub*/1, /*count*/2, ts); // and-of-last-beat
+            pk.durationWhole = Rational(1, 16);
+            pk.structural = true;
+            pk.logic_tag = "Drums:CadencePickupBrush";
+            out.push_back(pk);
+        }
+    }
+
+    // --- 4c) Cadence orchestration: occasional ride hit on the last beat (more air / shimmer). ---
+    if (phraseEndBar && cadence01 >= 0.70 && beat == (qMax(1, ts.num) - 1)) {
+        const quint32 s = mixSeed(ctx.determinismSeed, quint32(bar * 37 + 0xBEEFu));
+        const double p = unitRand01(s);
+        const double want = qBound(0.0, 0.08 + 0.30 * cadence01, 0.50);
+        if (p < want) {
+            AgentIntentNote rh;
+            rh.agent = "Drums";
+            rh.channel = m_p.channel;
+            rh.note = m_p.noteRideHit;
+            rh.baseVelocity = qBound(1, 22 + int(llround(26.0 * e)), 127);
+            rh.startPos = gp;
+            rh.durationWhole = Rational(1, 16);
+            rh.structural = true;
+            rh.logic_tag = "Drums:CadenceRideHit";
+            out.push_back(rh);
         }
     }
 

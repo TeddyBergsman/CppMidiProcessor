@@ -632,6 +632,10 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
             dc.structural = structural;
             const quint32 detSeed = quint32(qHash(QString("ballad|") + m_stylePresetKey));
             dc.determinismSeed = detSeed ^ 0xD00D'BEEFu;
+            dc.phraseBars = phraseBars;
+            dc.barInPhrase = barInPhrase;
+            dc.phraseEndBar = phraseEndBar;
+            dc.cadence01 = cadence01;
             const double mult = m_agentEnergyMult.value("Drums", 1.0);
             dc.energy = qBound(0.0, baseEnergy * mult, 1.0);
             dc.intensityPeak = intent.intensityPeak;
@@ -1332,6 +1336,10 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
         dc.beatInBar = beatInBar;
         dc.structural = structural;
         dc.determinismSeed = detSeed ^ 0xD00D'BEEFu;
+        dc.phraseBars = phraseBars;
+        dc.barInPhrase = barInPhrase;
+        dc.phraseEndBar = phraseEndBar;
+        dc.cadence01 = cadence01;
         {
             const double mult = m_agentEnergyMult.value("Drums", 1.0);
             dc.energy = qBound(0.0, baseEnergy * mult, 1.0);

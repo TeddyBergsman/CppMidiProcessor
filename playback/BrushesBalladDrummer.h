@@ -60,6 +60,12 @@ public:
         // Interaction/macro-dynamics (MVP)
         double energy = 0.25;       // 0..1
         bool intensityPeak = false; // user peak -> drummer supports with brief cymbal pattern
+
+        // Phrase model (lightweight, deterministic): 4-bar phrases by default.
+        int phraseBars = 4;
+        int barInPhrase = 0;     // 0..phraseBars-1
+        bool phraseEndBar = false;
+        double cadence01 = 0.0;  // 0..1 (stronger at phrase end / turnarounds)
     };
 
     BrushesBalladDrummer() = default;

@@ -553,6 +553,64 @@ GrooveRegistry GrooveRegistry::builtins() {
         addPreset(p, 21);
     }
     {
+        // Lush variant: more laid-back, warmer micro-dynamics, slightly more drift (ballad rubato feel).
+        StylePreset p;
+        p.key = "jazz_brushes_ballad_60_evans_lush";
+        p.name = "Brushes Ballad (Bill Evans Lush, 60)";
+        p.grooveTemplateKey = "jazz_ballad_brushes_evans";
+        p.templateAmount = 1.0;
+        p.defaultBpm = 60;
+        p.defaultTimeSig = TimeSignature{4, 4};
+
+        InstrumentGrooveProfile piano;
+        piano.instrument = "Piano";
+        piano.humanizeSeed = 144;
+        piano.laidBackMs = 14;
+        piano.microJitterMs = 4;
+        piano.attackVarianceMs = 4;
+        piano.driftMaxMs = 18;
+        piano.driftRate = 0.18;
+        piano.velocityJitter = 10;
+        piano.accentDownbeat = 1.07;
+        piano.accentBackbeat = 0.98;
+        p.instrumentProfiles.insert("Piano", piano);
+
+        InstrumentGrooveProfile bass;
+        bass.instrument = "Bass";
+        bass.humanizeSeed = 145;
+        bass.laidBackMs = 8;
+        bass.microJitterMs = 2;
+        bass.attackVarianceMs = 2;
+        bass.driftMaxMs = 14;
+        bass.driftRate = 0.15;
+        bass.velocityJitter = 5;
+        bass.accentDownbeat = 1.10;
+        bass.accentBackbeat = 0.88;
+        p.instrumentProfiles.insert("Bass", bass);
+
+        InstrumentGrooveProfile drums;
+        drums.instrument = "Drums";
+        drums.humanizeSeed = 146;
+        drums.laidBackMs = 7;
+        drums.microJitterMs = 2;
+        drums.attackVarianceMs = 2;
+        drums.driftMaxMs = 14;
+        drums.driftRate = 0.15;
+        drums.velocityJitter = 7;
+        drums.accentDownbeat = 1.00;
+        drums.accentBackbeat = 1.00;
+        p.instrumentProfiles.insert("Drums", drums);
+
+        p.articulationNotes.insert("Piano",
+            "Lush ballad: more legato/tenuto, gentle laid-back time, warmer dynamics; "
+            "favor connected voicings and phrase arcs over stabs.");
+        p.articulationNotes.insert("Drums",
+            "Lush ballad: continuous brush bed with softer transients; "
+            "keep cymbal wash minimal; phrase swishes at cadences.");
+
+        addPreset(p, 22);
+    }
+    {
         StylePreset p;
         p.key = "jazz_ecm_90";
         p.name = "ECM (Straight 8, 90)";

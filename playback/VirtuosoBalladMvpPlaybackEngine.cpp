@@ -861,7 +861,8 @@ void VirtuosoBalladMvpPlaybackEngine::setStylePresetKey(const QString& key) {
     const QString k = key.trimmed();
     if (k.isEmpty()) return;
     m_stylePresetKey = k;
-    if (m_playing) applyPresetToEngine();
+    // Apply immediately so lookahead/auditions and the next scheduled events reflect the preset.
+    applyPresetToEngine();
 }
 
 void VirtuosoBalladMvpPlaybackEngine::play() {
@@ -1342,7 +1343,8 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
               .arg(m_virtRhythmicComplexity, 0, 'f', 2)
               .arg(m_virtInteraction, 0, 'f', 2)
               .arg(m_virtToneDark, 0, 'f', 2);
-    emit debugStatus(QString("Vibe=%1  energy=%2  %3  intents=%4  nps=%5  reg=%6  gVel=%7  cc2=%8  vNote=%9  silenceMs=%10  outside=%11")
+    emit debugStatus(QString("Preset=%1  Vibe=%2  energy=%3  %4  intents=%5  nps=%6  reg=%7  gVel=%8  cc2=%9  vNote=%10  silenceMs=%11  outside=%12")
+                         .arg(m_stylePresetKey)
                          .arg(vibeStr)
                          .arg(baseEnergy, 0, 'f', 2)
                          .arg(virtStr)

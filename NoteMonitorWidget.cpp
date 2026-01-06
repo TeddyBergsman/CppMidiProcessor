@@ -843,7 +843,14 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     connect(m_virtuosoPresetCombo, &QComboBox::currentIndexChanged, this, [this](int /*idx*/) {
         if (!m_virtuosoPlayback || !m_virtuosoPresetCombo) return;
         const QString key = m_virtuosoPresetCombo->currentData(Qt::UserRole).toString();
-        if (!key.isEmpty()) m_virtuosoPlayback->setStylePresetKey(key);
+        if (!key.isEmpty()) {
+            m_virtuosoPlayback->setStylePresetKey(key);
+            // Persist per-song preset choice.
+            if (!m_isApplyingSongState && !m_currentSongId.isEmpty()) {
+                QSettings s;
+                s.setValue(overrideGroupForSongId(m_currentSongId) + "/virtuosoPresetKey", key);
+            }
+        }
     });
 
     connect(m_playButton, &QPushButton::clicked, this, [this]() {
@@ -1033,6 +1040,13 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
         const auto reg = virtuoso::groove::GrooveRegistry::builtins();
         const auto presets = reg.allStylePresets();
         int sel = -1;
+        QString desiredKey;
+        {
+            QSettings s;
+            // Prefer per-song selection, fallback to Evans.
+            desiredKey = s.value(overrideGroupForSongId(m_currentSongId) + "/virtuosoPresetKey",
+                                 QString("jazz_brushes_ballad_60_evans")).toString();
+        }
         for (int i = 0; i < presets.size(); ++i) {
             const auto* p = presets[i];
             if (!p) continue;
@@ -1041,7 +1055,7 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
             m_virtuosoPresetCombo->addItem(p->name, p->key);
             const int row = m_virtuosoPresetCombo->count() - 1;
             m_virtuosoPresetCombo->setItemData(row, p->key, Qt::UserRole);
-            if (p->key == "jazz_brushes_ballad_60_evans") sel = row;
+            if (p->key == desiredKey) sel = row;
         }
         if (m_virtuosoPresetCombo->count() == 0) {
             // Fallback: show everything.
@@ -1050,7 +1064,7 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
                 m_virtuosoPresetCombo->addItem(p->name, p->key);
                 const int row = m_virtuosoPresetCombo->count() - 1;
                 m_virtuosoPresetCombo->setItemData(row, p->key, Qt::UserRole);
-                if (p->key == "jazz_brushes_ballad_60_evans") sel = row;
+                if (p->key == desiredKey) sel = row;
             }
         }
         if (sel >= 0) m_virtuosoPresetCombo->setCurrentIndex(sel);

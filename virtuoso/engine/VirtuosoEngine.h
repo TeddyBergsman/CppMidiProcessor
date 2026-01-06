@@ -33,6 +33,7 @@ public:
     void setTempoBpm(int bpm);
     void setTimeSignature(const groove::TimeSignature& ts);
     void setFeelTemplate(const groove::FeelTemplate& t);
+    void setGrooveTemplate(const groove::GrooveTemplate& t);
 
     void setInstrumentGrooveProfile(const QString& agent, const groove::InstrumentGrooveProfile& p);
 
@@ -70,6 +71,8 @@ private:
     int m_bpm = 120;
     groove::TimeSignature m_ts{};
     groove::FeelTemplate m_feel = groove::FeelTemplate::straight();
+    bool m_hasGrooveTemplate = false;
+    groove::GrooveTemplate m_grooveTemplate{};
 
     VirtuosoClock m_clock;
     VirtuosoScheduler m_sched;

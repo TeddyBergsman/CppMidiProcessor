@@ -697,6 +697,12 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VirtuosoBalladMvpPlaybackEngine.h",
+			"MU",
+			"QDVNTGK2R4/moc_VirtuosoBalladMvpPlaybackEngine.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/GuitarFretboardWidget.h",
 			"MU",
 			"2AYID5HISM/moc_GuitarFretboardWidget.cpp",
@@ -937,6 +943,11 @@
 		],
 		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BandPlaybackEngine.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VirtuosoBalladMvpPlaybackEngine.cpp",
 			"MU",
 			null
 		],

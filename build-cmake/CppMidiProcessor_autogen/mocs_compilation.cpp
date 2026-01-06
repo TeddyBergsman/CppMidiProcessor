@@ -11,6 +11,7 @@
 #include "EWIEGA46WW/moc_mainwindow.cpp"
 #include "EWIEGA46WW/moc_midiprocessor.cpp"
 #include "QDVNTGK2R4/moc_BandPlaybackEngine.cpp"
+#include "QDVNTGK2R4/moc_VirtuosoBalladMvpPlaybackEngine.cpp"
 #include "2AYID5HISM/moc_GuitarFretboardWidget.cpp"
 #include "2AYID5HISM/moc_PianoKeyboardWidget.cpp"
 #include "EWIEGA46WW/moc_voicecontroller.cpp"

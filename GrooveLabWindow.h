@@ -4,6 +4,7 @@
 #include <QHash>
 
 #include "virtuoso/groove/FeelTemplate.h"
+#include "virtuoso/groove/GrooveRegistry.h"
 #include "virtuoso/groove/TimingHumanizer.h"
 #include "virtuoso/engine/VirtuosoEngine.h"
 
@@ -16,6 +17,7 @@ class QPushButton;
 class QTextEdit;
 class QTimer;
 class QScrollArea;
+class QLabel;
 
 // A dedicated harness window for auditioning the Groove/Grid/Microtiming engine.
 // This intentionally avoids any legacy musician logic and focuses on timing/velocity.
@@ -43,7 +45,7 @@ private:
     void buildUi();
     void wireEngineOutputs();
 
-    virtuoso::groove::FeelTemplate currentFeel() const;
+    virtuoso::groove::GrooveTemplate currentGrooveTemplate() const;
     virtuoso::groove::InstrumentGrooveProfile currentInstrumentProfileLaneA() const;
     virtuoso::groove::InstrumentGrooveProfile currentInstrumentProfileLaneB() const;
     QString laneAAgentId() const;
@@ -70,9 +72,10 @@ private:
     QSpinBox* m_tsNum = nullptr;
     QSpinBox* m_tsDen = nullptr;
 
-    QComboBox* m_feel = nullptr;
-    QDoubleSpinBox* m_feelAmount = nullptr;
-    QSpinBox* m_pocketMs = nullptr;
+    QComboBox* m_preset = nullptr;   // optional jazz preset
+    QComboBox* m_template = nullptr; // groove template
+    QDoubleSpinBox* m_templateAmount = nullptr;
+    QLabel* m_presetNotes = nullptr;
 
     QComboBox* m_agent = nullptr;
     QSpinBox* m_channel = nullptr;
@@ -134,5 +137,7 @@ private:
     // Groove lock controls
     QComboBox* m_lockMode = nullptr;
     QDoubleSpinBox* m_lockStrength = nullptr;
+
+    virtuoso::groove::GrooveRegistry m_grooveRegistry;
 };
 

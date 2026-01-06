@@ -1399,6 +1399,30 @@ playback/BandPlaybackEngine.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BandPlaybackEngine.cpp.s
 .PHONY : playback/BandPlaybackEngine.cpp.s
 
+playback/VirtuosoBalladMvpPlaybackEngine.o: playback/VirtuosoBalladMvpPlaybackEngine.cpp.o
+.PHONY : playback/VirtuosoBalladMvpPlaybackEngine.o
+
+# target to build an object file
+playback/VirtuosoBalladMvpPlaybackEngine.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.o
+.PHONY : playback/VirtuosoBalladMvpPlaybackEngine.cpp.o
+
+playback/VirtuosoBalladMvpPlaybackEngine.i: playback/VirtuosoBalladMvpPlaybackEngine.cpp.i
+.PHONY : playback/VirtuosoBalladMvpPlaybackEngine.i
+
+# target to preprocess a source file
+playback/VirtuosoBalladMvpPlaybackEngine.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.i
+.PHONY : playback/VirtuosoBalladMvpPlaybackEngine.cpp.i
+
+playback/VirtuosoBalladMvpPlaybackEngine.s: playback/VirtuosoBalladMvpPlaybackEngine.cpp.s
+.PHONY : playback/VirtuosoBalladMvpPlaybackEngine.s
+
+# target to generate assembly for a file
+playback/VirtuosoBalladMvpPlaybackEngine.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.s
+.PHONY : playback/VirtuosoBalladMvpPlaybackEngine.cpp.s
+
 virtuoso/constraints/BassDriver.o: virtuoso/constraints/BassDriver.cpp.o
 .PHONY : virtuoso/constraints/BassDriver.o
 
@@ -1447,6 +1471,30 @@ virtuoso/constraints/PianoDriver.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/PianoDriver.cpp.s
 .PHONY : virtuoso/constraints/PianoDriver.cpp.s
 
+virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.o: virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o
+.PHONY : virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.o
+
+# target to build an object file
+virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o
+.PHONY : virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o
+
+virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.i: virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.i
+.PHONY : virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.i
+
+# target to preprocess a source file
+virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.i
+.PHONY : virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.i
+
+virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.s: virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.s
+.PHONY : virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.s
+
+# target to generate assembly for a file
+virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.s
+.PHONY : virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.s
+
 virtuoso/engine/VirtuosoEngine.o: virtuoso/engine/VirtuosoEngine.cpp.o
 .PHONY : virtuoso/engine/VirtuosoEngine.o
 
@@ -1494,6 +1542,54 @@ virtuoso/engine/VirtuosoScheduler.s: virtuoso/engine/VirtuosoScheduler.cpp.s
 virtuoso/engine/VirtuosoScheduler.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.s
 .PHONY : virtuoso/engine/VirtuosoScheduler.cpp.s
+
+virtuoso/groove/GrooveRegistry.o: virtuoso/groove/GrooveRegistry.cpp.o
+.PHONY : virtuoso/groove/GrooveRegistry.o
+
+# target to build an object file
+virtuoso/groove/GrooveRegistry.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o
+.PHONY : virtuoso/groove/GrooveRegistry.cpp.o
+
+virtuoso/groove/GrooveRegistry.i: virtuoso/groove/GrooveRegistry.cpp.i
+.PHONY : virtuoso/groove/GrooveRegistry.i
+
+# target to preprocess a source file
+virtuoso/groove/GrooveRegistry.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.i
+.PHONY : virtuoso/groove/GrooveRegistry.cpp.i
+
+virtuoso/groove/GrooveRegistry.s: virtuoso/groove/GrooveRegistry.cpp.s
+.PHONY : virtuoso/groove/GrooveRegistry.s
+
+# target to generate assembly for a file
+virtuoso/groove/GrooveRegistry.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.s
+.PHONY : virtuoso/groove/GrooveRegistry.cpp.s
+
+virtuoso/groove/GrooveTemplate.o: virtuoso/groove/GrooveTemplate.cpp.o
+.PHONY : virtuoso/groove/GrooveTemplate.o
+
+# target to build an object file
+virtuoso/groove/GrooveTemplate.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.o
+.PHONY : virtuoso/groove/GrooveTemplate.cpp.o
+
+virtuoso/groove/GrooveTemplate.i: virtuoso/groove/GrooveTemplate.cpp.i
+.PHONY : virtuoso/groove/GrooveTemplate.i
+
+# target to preprocess a source file
+virtuoso/groove/GrooveTemplate.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.i
+.PHONY : virtuoso/groove/GrooveTemplate.cpp.i
+
+virtuoso/groove/GrooveTemplate.s: virtuoso/groove/GrooveTemplate.cpp.s
+.PHONY : virtuoso/groove/GrooveTemplate.s
+
+# target to generate assembly for a file
+virtuoso/groove/GrooveTemplate.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.s
+.PHONY : virtuoso/groove/GrooveTemplate.cpp.s
 
 virtuoso/ontology/OntologyRegistry.o: virtuoso/ontology/OntologyRegistry.cpp.o
 .PHONY : virtuoso/ontology/OntologyRegistry.o
@@ -1856,18 +1952,30 @@ help:
 	@echo "... playback/BandPlaybackEngine.o"
 	@echo "... playback/BandPlaybackEngine.i"
 	@echo "... playback/BandPlaybackEngine.s"
+	@echo "... playback/VirtuosoBalladMvpPlaybackEngine.o"
+	@echo "... playback/VirtuosoBalladMvpPlaybackEngine.i"
+	@echo "... playback/VirtuosoBalladMvpPlaybackEngine.s"
 	@echo "... virtuoso/constraints/BassDriver.o"
 	@echo "... virtuoso/constraints/BassDriver.i"
 	@echo "... virtuoso/constraints/BassDriver.s"
 	@echo "... virtuoso/constraints/PianoDriver.o"
 	@echo "... virtuoso/constraints/PianoDriver.i"
 	@echo "... virtuoso/constraints/PianoDriver.s"
+	@echo "... virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.o"
+	@echo "... virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.i"
+	@echo "... virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.s"
 	@echo "... virtuoso/engine/VirtuosoEngine.o"
 	@echo "... virtuoso/engine/VirtuosoEngine.i"
 	@echo "... virtuoso/engine/VirtuosoEngine.s"
 	@echo "... virtuoso/engine/VirtuosoScheduler.o"
 	@echo "... virtuoso/engine/VirtuosoScheduler.i"
 	@echo "... virtuoso/engine/VirtuosoScheduler.s"
+	@echo "... virtuoso/groove/GrooveRegistry.o"
+	@echo "... virtuoso/groove/GrooveRegistry.i"
+	@echo "... virtuoso/groove/GrooveRegistry.s"
+	@echo "... virtuoso/groove/GrooveTemplate.o"
+	@echo "... virtuoso/groove/GrooveTemplate.i"
+	@echo "... virtuoso/groove/GrooveTemplate.s"
 	@echo "... virtuoso/ontology/OntologyRegistry.o"
 	@echo "... virtuoso/ontology/OntologyRegistry.i"
 	@echo "... virtuoso/ontology/OntologyRegistry.s"

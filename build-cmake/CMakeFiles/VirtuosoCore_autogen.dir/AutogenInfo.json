@@ -529,6 +529,12 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h",
+			"MU",
+			"S5EEVERIQV/moc_FluffyAudioJazzDrumsBrushesMapping.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/engine/VirtuosoClock.h",
 			"MU",
 			"TK2HK7UQC3/moc_VirtuosoClock.cpp",
@@ -556,6 +562,18 @@
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/groove/GrooveGrid.h",
 			"MU",
 			"KDITGZVHMO/moc_GrooveGrid.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/groove/GrooveRegistry.h",
+			"MU",
+			"KDITGZVHMO/moc_GrooveRegistry.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.h",
+			"MU",
+			"KDITGZVHMO/moc_GrooveTemplate.cpp",
 			null
 		],
 		[
@@ -662,12 +680,27 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp",
+			"MU",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.cpp",
 			"MU",
 			null
 		],
 		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/engine/VirtuosoScheduler.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/groove/GrooveRegistry.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.cpp",
 			"MU",
 			null
 		],

@@ -17,6 +17,7 @@ class QCheckBox;
 namespace ireal { struct Playlist; }
 namespace chart { class SongChartWidget; }
 namespace playback { class BandPlaybackEngine; }
+namespace playback { class VirtuosoBalladMvpPlaybackEngine; }
 class MidiProcessor;
 
 class NoteMonitorWidget : public QWidget {
@@ -96,9 +97,13 @@ private:
     QComboBox* m_songCombo = nullptr;
     QComboBox* m_keyCombo = nullptr;
     QPushButton* m_playButton = nullptr;
+    // Virtuoso MVP controls (new engine, not legacy players)
+    QComboBox* m_virtuosoPresetCombo = nullptr;
+    QPushButton* m_virtuosoPlayButton = nullptr;
     QSpinBox* m_tempoSpin = nullptr;
     QSpinBox* m_repeatsSpin = nullptr;
     playback::BandPlaybackEngine* m_playback = nullptr;
+    playback::VirtuosoBalladMvpPlaybackEngine* m_virtuosoPlayback = nullptr;
     ireal::Playlist* m_playlist = nullptr; // owned pointer to avoid header includes
 
     MidiProcessor* m_midiProcessor = nullptr; // not owned

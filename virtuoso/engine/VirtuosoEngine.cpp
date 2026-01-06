@@ -31,11 +31,20 @@ void VirtuosoEngine::setFeelTemplate(const groove::FeelTemplate& t) {
     }
 }
 
+void VirtuosoEngine::setGrooveTemplate(const groove::GrooveTemplate& t) {
+    m_hasGrooveTemplate = true;
+    m_grooveTemplate = t;
+    for (auto it = m_humanizers.begin(); it != m_humanizers.end(); ++it) {
+        it.value().setGrooveTemplate(m_grooveTemplate);
+    }
+}
+
 void VirtuosoEngine::setInstrumentGrooveProfile(const QString& agent, const groove::InstrumentGrooveProfile& p) {
     m_profiles.insert(agent, p);
     auto& h = humanizerFor(agent);
     h.setProfile(p);
     h.setFeelTemplate(m_feel);
+    if (m_hasGrooveTemplate) h.setGrooveTemplate(m_grooveTemplate);
 }
 
 void VirtuosoEngine::start() {
@@ -65,6 +74,7 @@ groove::TimingHumanizer& VirtuosoEngine::humanizerFor(const QString& agent) {
 
     groove::TimingHumanizer h(p);
     h.setFeelTemplate(m_feel);
+    if (m_hasGrooveTemplate) h.setGrooveTemplate(m_grooveTemplate);
     m_humanizers.insert(agent, h);
     return m_humanizers[agent];
 }

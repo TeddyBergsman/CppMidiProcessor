@@ -17,18 +17,11 @@
 
 using namespace virtuoso;
 
-namespace {
-
-static QStringList feelKeys() {
-    return {"Straight", "Swing 2:1", "Swing 3:1", "Laid-back pocket"};
-}
-
-} // namespace
-
 GrooveLabWindow::GrooveLabWindow(MidiProcessor* midi, QWidget* parent)
     : QMainWindow(parent)
     , m_midi(midi)
     , m_engine(this) {
+    m_grooveRegistry = groove::GrooveRegistry::builtins();
     setWindowTitle("Groove Lab");
     resize(960, 640);
     buildUi();
@@ -104,34 +97,64 @@ void GrooveLabWindow::buildUi() {
         l->addWidget(box);
     }
 
-    // Feel template
+    // Jazz preset (optional)
     {
-        QGroupBox* box = mkBox("Feel template");
+        QGroupBox* box = mkBox("Jazz preset");
         QGridLayout* g = new QGridLayout(box);
 
-        m_feel = new QComboBox(this);
-        m_feel->addItems(feelKeys());
-        m_feel->setCurrentText("Swing 2:1");
+        m_preset = new QComboBox(this);
+        m_preset->addItem("(none)", "");
+        const auto presets = m_grooveRegistry.allStylePresets();
+        for (const auto* p : presets) {
+            if (!p) continue;
+            m_preset->addItem(p->name, p->key);
+        }
 
-        m_feelAmount = new QDoubleSpinBox(this);
-        m_feelAmount->setRange(0.0, 1.0);
-        m_feelAmount->setSingleStep(0.05);
-        m_feelAmount->setValue(0.80);
-
-        m_pocketMs = new QSpinBox(this);
-        m_pocketMs->setRange(0, 80);
-        m_pocketMs->setValue(18);
-
-        g->addWidget(new QLabel("Template:", this), 0, 0);
-        g->addWidget(m_feel, 0, 1);
-        g->addWidget(new QLabel("Amount:", this), 1, 0);
-        g->addWidget(m_feelAmount, 1, 1);
-        g->addWidget(new QLabel("Pocket ms:", this), 2, 0);
-        g->addWidget(m_pocketMs, 2, 1);
+        g->addWidget(new QLabel("Preset:", this), 0, 0);
+        g->addWidget(m_preset, 0, 1);
 
         l->addWidget(box);
     }
 
+    // Preset notes (driver hooks)
+    {
+        QGroupBox* box = mkBox("Preset notes (driver hooks)");
+        QVBoxLayout* v = new QVBoxLayout(box);
+        m_presetNotes = new QLabel(this);
+        m_presetNotes->setWordWrap(true);
+        m_presetNotes->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        m_presetNotes->setStyleSheet("QLabel { font-weight: normal; font-size: 10pt; color: #ddd; }");
+        m_presetNotes->setText("(select a preset)");
+        v->addWidget(m_presetNotes);
+        l->addWidget(box);
+    }
+
+    // Groove template
+    {
+        QGroupBox* box = mkBox("Groove template");
+        QGridLayout* g = new QGridLayout(box);
+
+        m_template = new QComboBox(this);
+        const auto tpls = m_grooveRegistry.allGrooveTemplates();
+        for (const auto* t : tpls) {
+            if (!t) continue;
+            m_template->addItem(QString("%1 — %2").arg(t->category, t->name), t->key);
+        }
+        const int idx = m_template->findData("jazz_swing_2to1");
+        m_template->setCurrentIndex(idx >= 0 ? idx : 0);
+
+        m_templateAmount = new QDoubleSpinBox(this);
+        m_templateAmount->setRange(0.0, 1.0);
+        m_templateAmount->setSingleStep(0.05);
+        m_templateAmount->setValue(0.80);
+
+        g->addWidget(new QLabel("Template:", this), 0, 0);
+        g->addWidget(m_template, 0, 1);
+        g->addWidget(new QLabel("Amount:", this), 1, 0);
+        g->addWidget(m_templateAmount, 1, 1);
+
+        l->addWidget(box);
+    }
     // Instrument groove profile
     {
         QGroupBox* box = mkBox("Agent lanes");
@@ -433,6 +456,74 @@ void GrooveLabWindow::onClearLog() {
 void GrooveLabWindow::onApplySettings() {
     if (!m_bpm || !m_tsNum || !m_tsDen) return;
 
+    // If a preset is selected, apply it by mutating UI fields (then we fall through to apply).
+    const QString presetKey = m_preset ? m_preset->currentData().toString() : QString();
+    if (!presetKey.trimmed().isEmpty()) {
+        const auto* p = m_grooveRegistry.stylePreset(presetKey);
+        if (p) {
+            if (m_presetNotes) {
+                QStringList lines;
+                if (p->articulationNotes.contains("Drums")) {
+                    lines << QString("Drums: %1").arg(p->articulationNotes.value("Drums"));
+                }
+                if (p->articulationNotes.contains("Piano")) {
+                    lines << QString("Piano: %1").arg(p->articulationNotes.value("Piano"));
+                }
+                if (p->articulationNotes.contains("Bass")) {
+                    lines << QString("Bass: %1").arg(p->articulationNotes.value("Bass"));
+                }
+                m_presetNotes->setText(lines.isEmpty() ? "(no notes)" : lines.join("\n\n"));
+            }
+
+            // Tempo + time signature
+            if (m_bpm) m_bpm->setValue(p->defaultBpm);
+            if (m_tsNum) m_tsNum->setValue(p->defaultTimeSig.num);
+            if (m_tsDen) m_tsDen->setValue(p->defaultTimeSig.den);
+
+            // Template selection
+            if (m_template) {
+                const int ti = m_template->findData(p->grooveTemplateKey);
+                if (ti >= 0) m_template->setCurrentIndex(ti);
+            }
+            if (m_templateAmount) {
+                m_templateAmount->setValue(qBound(0.0, p->templateAmount, 1.0));
+            }
+
+            // Instrument profiles: map Piano->LaneA, Bass->LaneB if present.
+            if (p->instrumentProfiles.contains("Piano")) {
+                const auto ip = p->instrumentProfiles.value("Piano");
+                if (m_agent) m_agent->setCurrentText("Piano");
+                if (m_seed) m_seed->setValue(int(ip.humanizeSeed == 0 ? 1 : ip.humanizeSeed));
+                if (m_laidBackMs) m_laidBackMs->setValue(ip.laidBackMs);
+                if (m_pushMs) m_pushMs->setValue(ip.pushMs);
+                if (m_jitterMs) m_jitterMs->setValue(ip.microJitterMs);
+                if (m_attackVarMs) m_attackVarMs->setValue(ip.attackVarianceMs);
+                if (m_driftMaxMs) m_driftMaxMs->setValue(ip.driftMaxMs);
+                if (m_driftRate) m_driftRate->setValue(ip.driftRate);
+                if (m_velJitter) m_velJitter->setValue(ip.velocityJitter);
+                if (m_accentDownbeat) m_accentDownbeat->setValue(ip.accentDownbeat);
+                if (m_accentBackbeat) m_accentBackbeat->setValue(ip.accentBackbeat);
+            }
+            if (p->instrumentProfiles.contains("Bass")) {
+                const auto ip = p->instrumentProfiles.value("Bass");
+                if (m_laneBEnabled) m_laneBEnabled->setChecked(true);
+                if (m_agentB) m_agentB->setCurrentText("Bass");
+                if (m_seedB) m_seedB->setValue(int(ip.humanizeSeed == 0 ? 1 : ip.humanizeSeed));
+                if (m_laidBackMsB) m_laidBackMsB->setValue(ip.laidBackMs);
+                if (m_pushMsB) m_pushMsB->setValue(ip.pushMs);
+                if (m_jitterMsB) m_jitterMsB->setValue(ip.microJitterMs);
+                if (m_attackVarMsB) m_attackVarMsB->setValue(ip.attackVarianceMs);
+                if (m_driftMaxMsB) m_driftMaxMsB->setValue(ip.driftMaxMs);
+                if (m_driftRateB) m_driftRateB->setValue(ip.driftRate);
+                if (m_velJitterB) m_velJitterB->setValue(ip.velocityJitter);
+                if (m_accentDownbeatB) m_accentDownbeatB->setValue(ip.accentDownbeat);
+                if (m_accentBackbeatB) m_accentBackbeatB->setValue(ip.accentBackbeat);
+            }
+        }
+    } else {
+        if (m_presetNotes) m_presetNotes->setText("(select a preset)");
+    }
+
     m_engine.setTempoBpm(m_bpm->value());
     groove::TimeSignature ts;
     ts.num = m_tsNum->value();
@@ -440,7 +531,11 @@ void GrooveLabWindow::onApplySettings() {
     if (ts.den <= 0) ts.den = 4;
     m_engine.setTimeSignature(ts);
 
-    m_engine.setFeelTemplate(currentFeel());
+    // Select groove template
+    const groove::GrooveTemplate gt = currentGrooveTemplate();
+    m_hA.setGrooveTemplate(gt);
+    m_hB.setGrooveTemplate(gt);
+
     m_engine.setInstrumentGrooveProfile(laneAAgentId(), currentInstrumentProfileLaneA());
     if (m_laneBEnabled && m_laneBEnabled->isChecked()) {
         m_engine.setInstrumentGrooveProfile(laneBAgentId(), currentInstrumentProfileLaneB());
@@ -449,8 +544,6 @@ void GrooveLabWindow::onApplySettings() {
     // Keep local humanizers in sync with UI so we can do deterministic groove-lock blending.
     m_hA.setProfile(currentInstrumentProfileLaneA());
     m_hB.setProfile(currentInstrumentProfileLaneB());
-    m_hA.setFeelTemplate(currentFeel());
-    m_hB.setFeelTemplate(currentFeel());
 }
 
 void GrooveLabWindow::applyNow(bool restartIfRunning) {
@@ -492,9 +585,9 @@ void GrooveLabWindow::onAnySettingChanged() {
     spin(m_bpm);
     spin(m_tsNum);
     spin(m_tsDen);
-    combo(m_feel);
-    dspin(m_feelAmount);
-    spin(m_pocketMs);
+    combo(m_preset);
+    combo(m_template);
+    dspin(m_templateAmount);
 
     combo(m_agent);
     spin(m_channel);
@@ -546,15 +639,18 @@ void GrooveLabWindow::onTheoryJson(const QString& json) {
     m_log->append(json);
 }
 
-groove::FeelTemplate GrooveLabWindow::currentFeel() const {
-    const QString sel = m_feel ? m_feel->currentText() : QString("Straight");
-    const double amt = m_feelAmount ? m_feelAmount->value() : 1.0;
-    const int pocket = m_pocketMs ? m_pocketMs->value() : 0;
-
-    if (sel == "Swing 2:1") return groove::FeelTemplate::swing2to1(amt);
-    if (sel == "Swing 3:1") return groove::FeelTemplate::swing3to1(amt);
-    if (sel == "Laid-back pocket") return groove::FeelTemplate::laidBackPocket(pocket, amt);
-    return groove::FeelTemplate::straight();
+groove::GrooveTemplate GrooveLabWindow::currentGrooveTemplate() const {
+    const QString key = (m_template ? m_template->currentData().toString() : QString("jazz_swing_2to1"));
+    const double amt = m_templateAmount ? m_templateAmount->value() : 1.0;
+    const auto* base = m_grooveRegistry.grooveTemplate(key);
+    groove::GrooveTemplate out = base ? *base : groove::GrooveTemplate{};
+    if (out.key.trimmed().isEmpty()) {
+        // fallback to a known built-in
+        const auto* fb = m_grooveRegistry.grooveTemplate("jazz_swing_2to1");
+        if (fb) out = *fb;
+    }
+    out.amount = amt;
+    return out;
 }
 
 QString GrooveLabWindow::laneAAgentId() const {

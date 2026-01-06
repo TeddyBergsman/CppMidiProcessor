@@ -7,7 +7,10 @@
 #include "virtuoso/theory/FunctionalHarmony.h"
 #include "virtuoso/groove/GrooveGrid.h"
 #include "virtuoso/groove/FeelTemplate.h"
+#include "virtuoso/groove/GrooveRegistry.h"
+#include "virtuoso/groove/GrooveTemplate.h"
 #include "virtuoso/groove/TimingHumanizer.h"
+#include "virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h"
 
 #include <QCoreApplication>
 #include <QJsonDocument>
@@ -221,6 +224,123 @@ static void testTimingHumanizerDeterminism() {
     expectStrEq(a.grid_pos, b.grid_pos, "TimingHumanizer determinism: grid_pos");
 }
 
+static void testGrooveRegistry() {
+    const auto reg = virtuoso::groove::GrooveRegistry::builtins();
+    const auto feels = reg.allFeels();
+    expect(!feels.isEmpty(), "GrooveRegistry has feel templates");
+    const auto* straight = reg.feel("straight");
+    expect(straight != nullptr, "GrooveRegistry: straight exists");
+    const auto* swing = reg.feel("swing_2to1");
+    expect(swing != nullptr, "GrooveRegistry: swing_2to1 exists");
+
+    const auto* jazzSwing = reg.grooveTemplate("jazz_swing_2to1");
+    expect(jazzSwing != nullptr, "GrooveRegistry: jazz_swing_2to1 exists");
+    const auto presets = reg.allStylePresets();
+    expect(!presets.isEmpty(), "GrooveRegistry: style presets exist");
+}
+
+static void testJazzSwingTemplateOffsets() {
+    using namespace virtuoso::groove;
+    const auto reg = GrooveRegistry::builtins();
+    const auto* t = reg.grooveTemplate("jazz_swing_2to1");
+    expect(t != nullptr, "Jazz swing template exists");
+    if (!t) return;
+
+    TimeSignature ts{4, 4};
+    const int bpm = 120;
+
+    // Upbeat 8th within beat 1 should be delayed (>0 ms).
+    const GridPos upbeat8 = GrooveGrid::fromBarBeatTuplet(/*bar=*/0, /*beat=*/0, /*sub=*/1, /*count=*/2, ts);
+    const int off = t->offsetMsFor(upbeat8, ts, bpm);
+    expect(off > 0, "Jazz swing: upbeat 8th delayed");
+}
+
+static void testExpandedJazzLibraryExists() {
+    const auto reg = virtuoso::groove::GrooveRegistry::builtins();
+    expect(reg.grooveTemplate("jazz_swing_light") != nullptr, "Jazz template: swing_light exists");
+    expect(reg.grooveTemplate("jazz_swing_heavy") != nullptr, "Jazz template: swing_heavy exists");
+    expect(reg.grooveTemplate("jazz_shuffle_12_8") != nullptr, "Jazz template: shuffle_12_8 exists");
+    expect(reg.grooveTemplate("jazz_waltz_swing_2to1") != nullptr, "Jazz template: waltz_swing exists");
+
+    expect(reg.stylePreset("jazz_bebop_240") != nullptr, "Jazz preset: bebop_240 exists");
+    expect(reg.stylePreset("jazz_hardbop_160") != nullptr, "Jazz preset: hardbop_160 exists");
+    expect(reg.stylePreset("jazz_waltz_180") != nullptr, "Jazz preset: waltz_180 exists");
+    expect(reg.stylePreset("jazz_shuffle_120") != nullptr, "Jazz preset: shuffle_120 exists");
+}
+
+static void testBalladLibraryExists() {
+    using namespace virtuoso::groove;
+    const auto reg = GrooveRegistry::builtins();
+
+    expect(reg.grooveTemplate("jazz_ballad_pocket_light") != nullptr, "Ballad template: pocket_light exists");
+    expect(reg.grooveTemplate("jazz_ballad_pocket_medium") != nullptr, "Ballad template: pocket_medium exists");
+    expect(reg.grooveTemplate("jazz_ballad_pocket_deep") != nullptr, "Ballad template: pocket_deep exists");
+    expect(reg.grooveTemplate("jazz_ballad_swing_soft") != nullptr, "Ballad template: swing_soft exists");
+    expect(reg.grooveTemplate("jazz_ballad_swing_deep") != nullptr, "Ballad template: swing_deep exists");
+    expect(reg.grooveTemplate("jazz_ballad_triplet_drag") != nullptr, "Ballad template: triplet_drag exists");
+
+    expect(reg.stylePreset("jazz_ballad_50") != nullptr, "Ballad preset: ballad_50 exists");
+    expect(reg.stylePreset("jazz_ballad_60") != nullptr, "Ballad preset: ballad_60 exists");
+    expect(reg.stylePreset("jazz_ballad_72") != nullptr, "Ballad preset: ballad_72 exists");
+    expect(reg.stylePreset("jazz_ballad_90") != nullptr, "Ballad preset: ballad_90 exists");
+
+    // Basic sanity: pocket templates should delay beat start (>0ms) at withinBeat=0.
+    TimeSignature ts{4, 4};
+    const int bpm = 60;
+    const GridPos beatStart = GrooveGrid::fromBarBeatTuplet(/*bar=*/0, /*beat=*/0, /*sub=*/0, /*count=*/1, ts);
+    const auto* pocket = reg.grooveTemplate("jazz_ballad_pocket_deep");
+    expect(pocket != nullptr, "Ballad pocket_deep exists");
+    if (pocket) {
+        const int off = pocket->offsetMsFor(beatStart, ts, bpm);
+        expect(off > 0, "Ballad pocket_deep: beat-start delayed");
+    }
+}
+
+static void testBrushesBalladLibraryExists() {
+    using namespace virtuoso::groove;
+    const auto reg = GrooveRegistry::builtins();
+
+    expect(reg.grooveTemplate("jazz_ballad_brushes_chet") != nullptr, "Brushes ballad template: chet exists");
+    expect(reg.grooveTemplate("jazz_ballad_brushes_evans") != nullptr, "Brushes ballad template: evans exists");
+    expect(reg.stylePreset("jazz_brushes_ballad_60_chet") != nullptr, "Brushes ballad preset: chet exists");
+    expect(reg.stylePreset("jazz_brushes_ballad_60_evans") != nullptr, "Brushes ballad preset: evans exists");
+
+    // Non-timing driver hooks should be present for drums.
+    const auto* pc = reg.stylePreset("jazz_brushes_ballad_60_chet");
+    expect(pc != nullptr, "Brushes chet preset exists");
+    if (pc) {
+        expect(!pc->articulationNotes.value("Drums").trimmed().isEmpty(), "Brushes chet preset has Drums articulation notes");
+    }
+
+    // Upbeat 8th should be delayed (positive ms) for these templates.
+    TimeSignature ts{4, 4};
+    const int bpm = 60;
+    const GridPos upbeat8 = GrooveGrid::fromBarBeatTuplet(/*bar=*/0, /*beat=*/0, /*sub=*/1, /*count=*/2, ts);
+    const auto* t = reg.grooveTemplate("jazz_ballad_brushes_chet");
+    expect(t != nullptr, "Brushes chet template exists");
+    if (t) {
+        const int off = t->offsetMsFor(upbeat8, ts, bpm);
+        expect(off > 0, "Brushes chet: upbeat delayed");
+    }
+}
+
+static void testFluffyAudioBrushesMappingBasics() {
+    const auto notes = virtuoso::drums::fluffyAudioJazzDrumsBrushesNotes();
+    expect(!notes.isEmpty(), "FluffyAudio Jazz Drums - Brushes mapping is non-empty");
+
+    auto hasMidi = [&](int midi) -> bool {
+        for (const auto& n : notes) {
+            if (n.midi == midi) return true;
+        }
+        return false;
+    };
+
+    // MVP-required notes we schedule today:
+    expect(hasMidi(virtuoso::drums::fluffy_brushes::kKickLooseNormal_G0), "Mapping includes Kick/Loose Normal (G0)");
+    expect(hasMidi(virtuoso::drums::fluffy_brushes::kSnareRightHand_D1), "Mapping includes Snare Right Hand (D1)");
+    expect(hasMidi(virtuoso::drums::fluffy_brushes::kSnareBrushing_E3), "Mapping includes Snare Brushing (E3)");
+}
+
 static void testNegativeHarmony() {
     using virtuoso::theory::negativeHarmonyMirrorPc;
     // In C (tonic=0): D(2)->Bb(10), E(4)->Ab(8), F(5)->G(7)
@@ -280,6 +400,12 @@ int main(int argc, char** argv) {
     testTheoryStream();
     testGrooveGridAndFeel();
     testTimingHumanizerDeterminism();
+    testGrooveRegistry();
+    testJazzSwingTemplateOffsets();
+    testExpandedJazzLibraryExists();
+    testBalladLibraryExists();
+    testBrushesBalladLibraryExists();
+    testFluffyAudioBrushesMappingBasics();
     testNegativeHarmony();
     testScaleSuggester();
     testFunctionalHarmony();

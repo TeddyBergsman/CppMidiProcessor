@@ -64,6 +64,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/CppMidiProcessor.dir/music/WalkingBassGenerator.cpp.o.d"
   "CMakeFiles/CppMidiProcessor.dir/playback/BandPlaybackEngine.cpp.o"
   "CMakeFiles/CppMidiProcessor.dir/playback/BandPlaybackEngine.cpp.o.d"
+  "CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.o"
+  "CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.o.d"
   "CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.o"
   "CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.o.d"
   "CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.o"

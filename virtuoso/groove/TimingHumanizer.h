@@ -6,6 +6,7 @@
 
 #include "virtuoso/groove/FeelTemplate.h"
 #include "virtuoso/groove/GrooveGrid.h"
+#include "virtuoso/groove/GrooveTemplate.h"
 
 namespace virtuoso::groove {
 
@@ -72,6 +73,9 @@ public:
     void setFeelTemplate(const FeelTemplate& t) { m_feel = t; }
     const FeelTemplate& feelTemplate() const { return m_feel; }
 
+    void setGrooveTemplate(const GrooveTemplate& t) { m_grooveTemplate = t; m_hasGrooveTemplate = true; }
+    bool hasGrooveTemplate() const { return m_hasGrooveTemplate; }
+
     void reset() {
         m_currentBar = -1;
         m_driftMs = 0;
@@ -89,7 +93,9 @@ public:
         const qint64 baseOff = baseOn + qMax<qint64>(1, GrooveGrid::wholeNotesToMs(durationWhole, bpm));
 
         // Template offset (swing/pocket).
-        const int feelMs = m_feel.offsetMsFor(start, ts, bpm);
+        const int feelMs = m_hasGrooveTemplate
+            ? m_grooveTemplate.offsetMsFor(start, ts, bpm)
+            : m_feel.offsetMsFor(start, ts, bpm);
 
         // Random components (uniform for MVP; gaussian can be added later).
         int jitter = (m_profile.microJitterMs > 0)
@@ -141,7 +147,7 @@ public:
         out.onMs = baseOn + totalOffset;
         out.offMs = baseOff + totalOffset;
         out.velocity = vel;
-        out.groove_template = m_feel.key;
+        out.groove_template = m_hasGrooveTemplate ? m_grooveTemplate.key : m_feel.key;
         out.grid_pos = GrooveGrid::toString(start, ts);
         out.timing_offset_ms = totalOffset;
         out.velocity_adjustment = vel - baseVelocity;
@@ -173,6 +179,8 @@ private:
 
     InstrumentGrooveProfile m_profile;
     FeelTemplate m_feel = FeelTemplate::straight();
+    bool m_hasGrooveTemplate = false;
+    GrooveTemplate m_grooveTemplate{};
     QRandomGenerator m_rng;
     int m_currentBar = -1;
     int m_driftMs = 0;

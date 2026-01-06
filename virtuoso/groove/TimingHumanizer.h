@@ -110,6 +110,17 @@ public:
             ? m_grooveTemplate.offsetMsFor(start, ts, bpm)
             : m_feel.offsetMsFor(start, ts, bpm);
 
+        // Tempo-aware tightening:
+        // At higher BPM, fixed-ms offsets quickly become a large fraction of a 16th note,
+        // which reads as "drunk/stumbling". Scale down profile-driven offsets and clamp them
+        // relative to the beat subdivision.
+        if (bpm <= 0) bpm = 120;
+        const double tempoScale = qBound(0.35, 90.0 / double(bpm), 1.0); // 90bpm=1.0, 150bpm~0.60
+        const double wholeMs = 240000.0 / double(bpm); // ms per whole note
+        const double beatMs = wholeMs / double(qMax(1, ts.den));         // ms per beat (ts.den defines beat)
+        const double sixteenthMs = beatMs / 4.0;
+        const int maxOffsetMusical = qBound(6, int(llround(0.22 * sixteenthMs)), 48); // ~22% of a 16th
+
         // Random components: center-weighted (triangular) instead of uniform.
         // This better matches human playing: most hits are near the grid with occasional larger deviations.
         auto tri = [&](int maxAbs) -> int {
@@ -119,12 +130,14 @@ public:
             const int b = int(m_rng.bounded(maxAbs + 1));
             return (a + b) - maxAbs;
         };
-        int jitter = tri(m_profile.microJitterMs);
-        int attackVar = tri(m_profile.attackVarianceMs);
+        const int jitterMax = int(llround(double(m_profile.microJitterMs) * tempoScale));
+        const int attackMax = int(llround(double(m_profile.attackVarianceMs) * tempoScale));
+        int jitter = tri(jitterMax);
+        int attackVar = tri(attackMax);
 
-        int push = m_profile.pushMs;
-        int laidBack = m_profile.laidBackMs;
-        int driftLocal = m_driftMs;
+        int push = int(llround(double(m_profile.pushMs) * tempoScale));
+        int laidBack = int(llround(double(m_profile.laidBackMs) * tempoScale));
+        int driftLocal = int(llround(double(m_driftMs) * tempoScale));
 
         if (structural) {
             // Tighten timing on strong musical landmarks.
@@ -137,7 +150,7 @@ public:
 
         // Phrase shaping: a tiny arc (crescendo toward mid-phrase, then relax),
         // plus a small per-phrase pocket offset. Deterministic and bar-index driven.
-        int phraseOffset = m_phraseOffsetMs;
+        int phraseOffset = int(llround(double(m_phraseOffsetMs) * tempoScale));
         double phraseVelMul = m_phraseVelMul;
         if (m_profile.phraseBars > 1) {
             const int posInPhrase = (start.barIndex >= 0) ? (start.barIndex % m_profile.phraseBars) : 0;
@@ -145,11 +158,14 @@ public:
             const double arc = 1.0 - qAbs(2.0 * t - 1.0); // 0..1 (peaks mid phrase)
             // Keep it subtle: arc influences less than the per-phrase random multiplier.
             phraseVelMul *= (1.0 + (arc - 0.5) * m_profile.phraseVelocityMax * 0.40);
-            phraseOffset += int(llround((arc - 0.5) * double(m_profile.phraseTimingMaxMs) * 0.30));
+            phraseOffset += int(llround((arc - 0.5) * double(m_profile.phraseTimingMaxMs) * 0.30 * tempoScale));
         }
 
         int totalOffset = feelMs + laidBack - push + driftLocal + phraseOffset + jitter + attackVar;
-        const int clampMs = structural ? m_profile.clampMsStructural : m_profile.clampMsLoose;
+        int clampMs = structural ? m_profile.clampMsStructural : m_profile.clampMsLoose;
+        clampMs = int(llround(double(clampMs) * tempoScale));
+        clampMs = qMin(clampMs, maxOffsetMusical);
+        clampMs = qMax(4, clampMs);
         if (totalOffset > clampMs) totalOffset = clampMs;
         if (totalOffset < -clampMs) totalOffset = -clampMs;
 

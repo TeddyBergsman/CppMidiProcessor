@@ -168,6 +168,8 @@ private:
     int m_anchorBlockStartBar = -1;
     QString m_anchorChordText;
     QVector<int> m_anchorPcs; // pitch classes 0..11
+    QVector<int> m_anchorLhPcs; // explicit LH shell pcs
+    QVector<int> m_anchorRhPcs; // explicit RH color pcs
 
     // Arpeggiation anti-repeat (deterministic).
     int m_lastArpBar = -1;

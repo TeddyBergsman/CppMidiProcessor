@@ -126,6 +126,11 @@ private:
     int m_motifBlockStartBar = -1; // even bar index of current 2-bar block
     QVector<TopTemplateHit> m_motifA;
     QVector<TopTemplateHit> m_motifB;
+
+    // Coherence: keep a stable "hand position" pitch-class set across a 2-bar block.
+    int m_anchorBlockStartBar = -1;
+    QString m_anchorChordText;
+    QVector<int> m_anchorPcs; // pitch classes 0..11
 };
 
 } // namespace playback

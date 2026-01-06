@@ -21,6 +21,9 @@ void JazzBalladPianoPlanner::reset() {
     m_motifBlockStartBar = -1;
     m_motifA.clear();
     m_motifB.clear();
+    m_anchorBlockStartBar = -1;
+    m_anchorChordText.clear();
+    m_anchorPcs.clear();
 }
 
 int JazzBalladPianoPlanner::thirdIntervalForQuality(music::ChordQuality q) {
@@ -196,7 +199,23 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     for (const auto& hit : m_barHits) {
         if (hit.beatInBar == c.beatInBar) hitsThisBeat.push_back(hit);
     }
-    if (hitsThisBeat.isEmpty() && !climaxDense) return out;
+    // Ensure we land on chord changes: if downbeat of a new chord has no scheduled hit, add one.
+    if (hitsThisBeat.isEmpty() && !climaxDense) {
+        if (c.chordIsNew && c.beatInBar == 0 && !c.userDensityHigh && !c.userIntensityPeak) {
+            CompHit arrival;
+            arrival.beatInBar = 0;
+            arrival.sub = 0;
+            arrival.count = 1;
+            arrival.density = "guide";
+            arrival.velDelta = +2;
+            // Ring into the bar; long but not full smear.
+            arrival.dur = (c.userSilence ? virtuoso::groove::Rational(3, 4) : virtuoso::groove::Rational(1, 2));
+            arrival.rhythmTag = "forced_arrival1";
+            hitsThisBeat.push_back(arrival);
+        } else {
+            return out;
+        }
+    }
 
     // Choose voicing family (Chet/Bill ballad: mostly shells, occasional rootless).
     const bool chordHas7 = (c.chord.extension >= 7 || c.chord.seventh != music::SeventhQuality::None);
@@ -214,51 +233,62 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     // - Otherwise: 3 & 5 (avoid inventing a b7 on plain triads)
     // - Add 1–2 colors (9/13 on maj, 9/11 on min, altered tensions only if chart indicates)
     QVector<int> pcs;
-    pcs.reserve(5);
+    pcs.reserve(6);
     const int pc3 = pcForDegree(c.chord, 3);
     const int pc7 = chordHas7 ? pcForDegree(c.chord, 7) : -1;
     const int pc5 = pcForDegree(c.chord, 5);
-    if (pc3 >= 0) pcs.push_back(pc3);
-    if (pc7 >= 0) pcs.push_back(pc7);
-    else if (pc5 >= 0) pcs.push_back(pc5);
 
-    // Primary color:
-    // Beauty-first: on stable non-spicy chords, sometimes omit color entirely and just let shells sing.
-    bool addPrimaryColor = true;
-    if (!spicy && !c.chordIsNew && !climaxDense) {
-        // Later in the song, keep colors more often so it doesn't stay equally sparse.
-        const int pKeep = qBound(0, int(llround(55.0 + 25.0 * c.energy + 20.0 * progress01 + (c.userSilence ? 10.0 : 0.0))), 98);
-        addPrimaryColor = (int((h / 37u) % 100u) < pKeep);
-    }
-    if (addPrimaryColor) {
-        int primaryDeg = 9;
-        if (dominant) primaryDeg = 9;
-        else if (c.chord.quality == music::ChordQuality::Major) primaryDeg = 9;
-        else if (c.chord.quality == music::ChordQuality::Minor) primaryDeg = 9;
-        pcs.push_back(pcForDegree(c.chord, primaryDeg));
+    // Coherence: keep a stable pitch-class set across a 2-bar block (hand position),
+    // refreshing at chord changes.
+    const int blockStart = (qMax(0, c.playbackBarIndex) / 2) * 2;
+    const bool anchorValid = (m_anchorBlockStartBar == blockStart && m_anchorChordText == c.chordText && !m_anchorPcs.isEmpty());
+    const bool refreshAnchor = (!anchorValid) || c.chordIsNew;
+    if (refreshAnchor) {
+        m_anchorBlockStartBar = blockStart;
+        m_anchorChordText = c.chordText;
+        m_anchorPcs.clear();
+
+        if (pc3 >= 0) m_anchorPcs.push_back(pc3);
+        if (pc7 >= 0) m_anchorPcs.push_back(pc7);
+        else if (pc5 >= 0) m_anchorPcs.push_back(pc5);
+
+        // Primary color (beauty-first)
+        bool addPrimaryColor = true;
+        if (!spicy && !c.chordIsNew && !climaxDense) {
+            const int pKeep = qBound(0, int(llround(55.0 + 25.0 * c.energy + 20.0 * progress01 + (c.userSilence ? 10.0 : 0.0))), 98);
+            addPrimaryColor = (int((h / 37u) % 100u) < pKeep);
+        }
+        if (addPrimaryColor) m_anchorPcs.push_back(pcForDegree(c.chord, 9));
+
+        // Secondary color (more likely later in the song, and on chord changes)
+        const int p2 = qBound(0, int(llround(c.addSecondColorProb * 100.0)), 100);
+        const int p2Boost = qBound(0, int(llround((c.chordIsNew ? 12.0 : 0.0) + 18.0 * progress01)), 35);
+        const bool add2 = (p2 > 0) && (int((h / 7u) % 100u) < qMin(100, p2 + p2Boost));
+        if (add2) {
+            int deg2 = 13;
+            if (dominant) deg2 = 13;
+            else if (c.chord.quality == music::ChordQuality::Major) deg2 = 13;
+            else if (c.chord.quality == music::ChordQuality::Minor) deg2 = 11;
+            const bool ok = spicy || c.userSilence || (c.energy >= 0.50 + 0.20 * progress01);
+            if (ok) m_anchorPcs.push_back(pcForDegree(c.chord, deg2));
+        }
+
+        // Occasional extra support tone (5th), slightly more likely later.
+        const int p5 = qBound(0, int(llround(10.0 + 14.0 * progress01 + (c.chordIsNew ? 8.0 : 0.0))), 40);
+        if ((pc5 >= 0) && (int((h / 101u) % 100u) < p5)) m_anchorPcs.push_back(pc5);
+
+        sortUnique(m_anchorPcs);
     }
 
-    // Secondary color (occasional):
-    const int p2 = qBound(0, int(llround(c.addSecondColorProb * 100.0)), 100);
-    const bool add2 = (p2 > 0) && (int((h / 7u) % 100u) < p2);
-    if (add2) {
-        int deg2 = 13;
-        if (dominant) deg2 = 13;                      // 13 is a classic dominant color (unless altered by chart)
-        else if (c.chord.quality == music::ChordQuality::Major) deg2 = 13; // maj: 13 over 11
-        else if (c.chord.quality == music::ChordQuality::Minor) deg2 = 11; // min: 11 is idiomatic
-        // On non-spicy chords, keep thickness down: only add a 2nd color when there's space.
-        const bool ok = spicy || c.userSilence || (c.energy >= 0.55);
-        if (ok) pcs.push_back(pcForDegree(c.chord, deg2));
-    }
+    // Use anchor pcs (stable) as our voicing pcs; this is the core anti-disjointed move.
+    pcs = m_anchorPcs;
 
-    // If we chose rootless, we can swap in Type A/B flavor by optionally including 5th vs extra color.
-    if (useRootless) {
-        // Type A/B: slight re-bias; keep the set mostly the same, just ensure we have a 5 sometimes.
-        if (pickA && ((h % 5u) == 0u)) pcs.push_back(pcForDegree(c.chord, 5));
-        if (!pickA && ((h % 6u) == 0u)) pcs.push_back(pcForDegree(c.chord, 5));
+    // If we chose rootless, we can gently thicken the anchor slightly in later bars.
+    if (useRootless && !pcs.contains(pcForDegree(c.chord, 5))) {
+        const int pRootless5 = qBound(0, int(llround(8.0 + 14.0 * progress01)), 28);
+        if (int((h / 59u) % 100u) < pRootless5) pcs.push_back(pcForDegree(c.chord, 5));
+        sortUnique(pcs);
     }
-
-    sortUnique(pcs);
 
     // Map to midi with LH/RH ranges and voice-leading to last voicing.
     // v2: keep a stable “voice index” mapping to reduce random re-voicing each beat.
@@ -1129,7 +1159,9 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
     const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
     const double e = qBound(0.0, c.energy, 1.0);
     if (userBusy) return {};
-    if (!c.userSilence && e < 0.42) return {};
+    // As the song progresses and on chord changes, allow more RH melodic motion.
+    const double progress01 = qBound(0.0, double(qMax(0, c.playbackBarIndex)) / 24.0, 1.0);
+    if (!c.userSilence && !c.chordIsNew && (e < (0.40 - 0.10 * progress01))) return {};
     const int bar = qMax(0, c.playbackBarIndex);
     const bool odd = (bar % 2) == 1;
     const auto& tmpl = odd ? m_motifB : m_motifA;
@@ -1182,7 +1214,8 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
         // Let chords ring more in ballads, especially when user is silent.
         const bool isDownbeatLike = tag.contains("arrival") || tag.contains("touch1") || tag.contains("charleston_1");
         auto barDur = [&]() -> virtuoso::groove::Rational { return virtuoso::groove::Rational(3, 4); }; // ~3 beats
-        const bool space = (!userBusy) && (c.userSilence || e <= 0.45);
+        const double progress01 = qBound(0.0, double(qMax(0, c.playbackBarIndex)) / 24.0, 1.0);
+        const bool space = (!userBusy) && (c.userSilence || e <= (0.50 - 0.12 * progress01));
         if (canLong && space && (holdRoll < (c.userSilence ? 55 : 35))) d = longDur();
         if (canPad && space && (holdRoll < (c.userSilence ? 40 : 22))) d = padDur();
         if (isDownbeatLike && canPad && space && (holdRoll < (c.userSilence ? 18 : 10))) d = barDur();

@@ -14,6 +14,8 @@ JazzBalladPianoPlanner::JazzBalladPianoPlanner() {
 
 void JazzBalladPianoPlanner::reset() {
     m_lastVoicing.clear();
+    m_lastRhythmBar = -1;
+    m_barHits.clear();
 }
 
 int JazzBalladPianoPlanner::thirdIntervalForQuality(music::ChordQuality q) {
@@ -178,64 +180,17 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
     const bool climaxDense = c.forceClimax && (c.energy >= 0.75);
 
-    // Phrase-level rhythm vocab (primary "when to play" driver in non-climax).
-    QVector<virtuoso::vocab::VocabularyRegistry::PianoHit> phraseHits;
-    QString phraseId, phraseNotes;
-    const bool canUsePhrase = (!climaxDense && m_vocab && m_vocab->isLoaded() && (ts.num == 4) && (ts.den == 4));
-    if (canUsePhrase) {
-        virtuoso::vocab::VocabularyRegistry::PianoPhraseQuery pq;
-        pq.ts = ts;
-        pq.playbackBarIndex = c.playbackBarIndex;
-        pq.beatInBar = c.beatInBar;
-        pq.chordText = c.chordText;
-        pq.chordIsNew = c.chordIsNew;
-        pq.userSilence = c.userSilence;
-        pq.energy = c.energy;
-        pq.determinismSeed = c.determinismSeed;
-        pq.phraseBars = 4;
-        phraseHits = m_vocab->pianoPhraseHitsForBeat(pq, &phraseId, &phraseNotes);
-    }
-
-    // Vocab (optional): beat-scoped rhythm patterns.
-    virtuoso::vocab::VocabularyRegistry::PianoBeatChoice vocabChoice;
-    const bool useVocab = (m_vocab && m_vocab->isLoaded() && (ts.num == 4) && (ts.den == 4));
-    if (useVocab) {
-        virtuoso::vocab::VocabularyRegistry::PianoBeatQuery q;
-        q.ts = ts;
-        q.playbackBarIndex = c.playbackBarIndex;
-        q.beatInBar = c.beatInBar;
-        q.chordText = c.chordText;
-        q.chordIsNew = c.chordIsNew;
-        q.userSilence = c.userSilence;
-        q.energy = c.energy;
-        q.determinismSeed = c.determinismSeed;
-        vocabChoice = m_vocab->choosePianoBeat(q);
-    }
-    const bool haveVocabHits = !vocabChoice.hits.isEmpty();
-    const bool havePhraseHits = !phraseHits.isEmpty() && !phraseId.isEmpty();
-
-    // Ballad comp default: beats 2 and 4 (1 and 3 in 0-based), with occasional anticipations.
-    // In Climax: comp every beat so the difference is audible.
-    if (!havePhraseHits && !haveVocabHits) {
-        if (climaxDense) {
-            if (!(c.beatInBar >= 0 && c.beatInBar <= 3)) return out;
-        } else {
-            // We allow beat 1 for "and-of-1" anticipations and beat 3 for sparse fills.
-            if (!(c.beatInBar == 0 || c.beatInBar == 1 || c.beatInBar == 3)) return out;
-        }
-    }
-
-    // Deterministic sparse variation: sometimes skip beat 2 if chord is stable (fallback mode).
+    // Deterministic hash for this beat.
     const quint32 h = quint32(qHash(QString("%1|%2|%3").arg(c.chordText).arg(c.playbackBarIndex).arg(c.determinismSeed)));
-    const bool stable = !c.chordIsNew;
-    if (!havePhraseHits && !haveVocabHits) {
-        const int pSkip = qBound(0, int(llround(c.skipBeat2ProbStable * 100.0)), 100);
-        const bool skip = (stable && (c.beatInBar == 1) && (pSkip > 0) && (int(h % 100u) < pSkip));
-        if (skip) return out;
-    }
 
-    // Interaction: if user is very dense/intense, piano should mostly comp on beat 4 only (unless forced climax).
-    if (!climaxDense && (c.userDensityHigh || c.userIntensityPeak) && (c.beatInBar == 1 || c.beatInBar == 0)) return out;
+    // Bar-coherent rhythmic planning: choose a small set of syncopated comp hits once per bar.
+    ensureBarRhythmPlanned(c);
+    QVector<CompHit> hitsThisBeat;
+    hitsThisBeat.reserve(4);
+    for (const auto& hit : m_barHits) {
+        if (hit.beatInBar == c.beatInBar) hitsThisBeat.push_back(hit);
+    }
+    if (hitsThisBeat.isEmpty() && !climaxDense) return out;
 
     // Choose voicing family (Chet/Bill ballad: mostly shells, occasional rootless).
     const bool chordHas7 = (c.chord.extension >= 7 || c.chord.seventh != music::SeventhQuality::None);
@@ -324,9 +279,9 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         : (chordHas7 ? "Ballad Shell (3-7)" : "Ballad Shell (3-5)");
     const int baseVel = climaxDense ? (c.chordIsNew ? 64 : 58) : (c.chordIsNew ? 50 : 44);
 
-    // Optional high sparkle on beat 4 (very occasional).
+    // Optional high sparkle on beat 4 (very occasional), but only when there's rhythmic space.
     const int pSp = qBound(0, int(llround(c.sparkleProbBeat4 * 100.0)), 100);
-    const bool sparkle = (c.beatInBar == 3) && (pSp > 0) && (int((h / 13u) % 100u) < pSp);
+    const bool sparkle = (c.beatInBar == 3) && c.userSilence && (pSp > 0) && (int((h / 13u) % 100u) < pSp);
     int sparkleMidi = -1;
     if (sparkle) {
         // Choose a tasteful color (9 or 11) and place it high.
@@ -348,81 +303,26 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         return g;
     };
 
-    if (havePhraseHits) {
-        for (const auto& hit : phraseHits) {
-            const QVector<int> notes = (hit.density.trimmed().toLower() == "guide") ? guideSubset(midi) : midi;
-            for (int m : notes) {
-                virtuoso::engine::AgentIntentNote n;
-                n.agent = "Piano";
-                n.channel = midiChannel;
-                n.note = clampMidi(m);
-                n.baseVelocity = qBound(1, baseVel + hit.vel_delta, 127);
-                n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, hit.sub, hit.count, ts);
-                n.durationWhole = Rational(qMax(1, hit.dur_num), qMax(1, hit.dur_den));
-                n.structural = c.chordIsNew;
-                n.chord_context = c.chordText;
-                n.voicing_type = voicingType;
-                n.logic_tag = QString("VocabPhrase:Piano:%1").arg(phraseId);
-                n.target_note = phraseNotes.isEmpty() ? QString("Phrase comp") : phraseNotes;
-                out.push_back(n);
-            }
-        }
-    } else if (haveVocabHits) {
-        for (const auto& hit : vocabChoice.hits) {
-            const QVector<int> notes = (hit.density.trimmed().toLower() == "guide") ? guideSubset(midi) : midi;
-            for (int m : notes) {
-                virtuoso::engine::AgentIntentNote n;
-                n.agent = "Piano";
-                n.channel = midiChannel;
-                n.note = clampMidi(m);
-                n.baseVelocity = qBound(1, baseVel + hit.vel_delta, 127);
-                n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, hit.sub, hit.count, ts);
-                n.durationWhole = Rational(qMax(1, hit.dur_num), qMax(1, hit.dur_den));
-                n.structural = c.chordIsNew;
-                n.chord_context = c.chordText;
-                n.voicing_type = voicingType;
-                n.logic_tag = QString("Vocab:Piano:%1").arg(vocabChoice.id);
-                n.target_note = vocabChoice.notes.isEmpty() ? QString("Vocab comp") : vocabChoice.notes;
-                out.push_back(n);
-            }
-        }
-    } else {
-        for (int m : midi) {
+    auto renderHit = [&](const CompHit& hit) {
+        const QVector<int> notes = (hit.density.trimmed().toLower() == "guide") ? guideSubset(midi) : midi;
+        for (int m : notes) {
             virtuoso::engine::AgentIntentNote n;
             n.agent = "Piano";
             n.channel = midiChannel;
             n.note = clampMidi(m);
-            n.baseVelocity = baseVel;
-            // Timing:
-            // - main comp hits on beat starts (beats 2/4)
-            // - occasional anticipation on "and of 1" when chord is new
-            if (c.beatInBar == 0) {
-                // Anticipation: only on chord arrivals, and only if not in silence (avoid stepping on vocal).
-                if (!climaxDense) {
-                    if (!c.chordIsNew || c.userSilence) continue;
-                    if ((h % 5u) != 0u) continue;
-                    n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 0, /*sub*/1, /*count*/2, ts); // and-of-1
-                    n.durationWhole = Rational(1, 8);
-                    n.baseVelocity = qMax(1, baseVel - 10);
-                    n.logic_tag = "ballad_anticipation";
-                } else {
-                    // In Climax: hit beat 1 normally (no anticipation).
-                    n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 0, 0, 1, ts);
-                    n.durationWhole = Rational(1, ts.den);
-                    n.logic_tag = "climax_comp";
-                }
-            } else {
-                n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
-                n.durationWhole = Rational(1, ts.den); // 1 beat sustain (ballad comp)
-            }
+            n.baseVelocity = qBound(1, baseVel + hit.velDelta, 127);
+            n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, hit.beatInBar, hit.sub, hit.count, ts);
+            n.durationWhole = hit.dur;
             n.structural = c.chordIsNew;
             n.chord_context = c.chordText;
             n.voicing_type = voicingType;
-            if (n.logic_tag.isEmpty()) n.logic_tag = "ballad_comp";
-            n.target_note = "Guide tones + color";
+            n.logic_tag = hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag);
+            n.target_note = "Comp";
             out.push_back(n);
         }
-    }
+    };
+
+    for (const auto& hit : hitsThisBeat) renderHit(hit);
 
     if (sparkleMidi >= 0) {
         virtuoso::engine::AgentIntentNote n;
@@ -463,6 +363,117 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
             out.push_back(f);
         }
     }
+    return out;
+}
+
+void JazzBalladPianoPlanner::ensureBarRhythmPlanned(const Context& c) {
+    const int bar = qMax(0, c.playbackBarIndex);
+    if (bar == m_lastRhythmBar) return;
+    m_lastRhythmBar = bar;
+    m_barHits = chooseBarCompRhythm(c);
+}
+
+QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRhythm(const Context& c) const {
+    QVector<CompHit> out;
+    out.reserve(6);
+
+    const quint32 h = quint32(qHash(QString("pno_rhy|%1|%2|%3").arg(c.chordText).arg(c.playbackBarIndex).arg(c.determinismSeed)));
+    const double e = qBound(0.0, c.energy, 1.0);
+    const bool climax = c.forceClimax && (e >= 0.75);
+    const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+    const bool phraseEnd = ((qMax(1, c.playbackBarIndex) % 4) == 3);
+
+    // Complexity proxy from energy, reduced if user is busy (make space).
+    double complexity = e;
+    if (userBusy) complexity *= 0.55;
+    if (c.userSilence) complexity = qMin(1.0, complexity + 0.10);
+
+    auto add = [&](int beat, int sub, int count, virtuoso::groove::Rational dur, int velDelta, QString density, QString tag) {
+        CompHit hit;
+        hit.beatInBar = qBound(0, beat, 3);
+        hit.sub = qMax(0, sub);
+        hit.count = qMax(1, count);
+        hit.dur = dur;
+        hit.velDelta = velDelta;
+        hit.density = density;
+        hit.rhythmTag = std::move(tag);
+        out.push_back(hit);
+    };
+
+    // --- Base feel: jazz ballad comping is sparse but syncopated. ---
+    // Patterns are bar-coherent and deterministic via hash.
+    const int variant = int(h % 7u); // 0..6
+
+    if (climax) {
+        // Denser, but still musical: quarters + occasional upbeat pushes.
+        add(0, 0, 1, {1, 4}, +4, "full", "climax_q1");
+        add(1, ((h / 3u) % 2u) ? 1 : 0, 2, {1, 8}, 0, "guide", "climax_push2");
+        add(2, 0, 1, {1, 4}, +2, "full", "climax_q3");
+        add(3, 1, 2, {1, 8}, -6, "guide", phraseEnd ? "climax_push4_end" : "climax_push4");
+        return out;
+    }
+
+    // Non-climax: choose a session-player-ish bar rhythm.
+    switch (variant) {
+        case 0: // Classic 2&4, but light and short (breathing)
+            add(1, 0, 1, {1, 8}, -2, "guide", "backbeat2_short");
+            add(3, 0, 1, {1, 8}, 0, "full", "backbeat4_short");
+            break;
+        case 1: // Delayed 2 (laid-back) + 4
+            add(1, 1, 2, {1, 8}, -4, "guide", "delay2");
+            add(3, 0, 1, {1, 8}, 0, "full", "backbeat4_short");
+            break;
+        case 2: // Charleston-ish: beat 1 + and-of-2
+            if (!c.userSilence && !c.chordIsNew && (int((h / 11u) % 100u) < int(llround(c.skipBeat2ProbStable * 100.0)))) {
+                // leave space; only the push
+                add(1, 1, 2, {1, 8}, -4, "guide", "charleston_push_only");
+            } else {
+                add(0, 0, 1, {1, 8}, -6, "guide", "charleston_1");
+                add(1, 1, 2, {1, 8}, 0, "full", "charleston_and2");
+            }
+            break;
+        case 3: // Anticipate 4 (and-of-4) + maybe 2
+            if (complexity > 0.35) add(1, 0, 1, {1, 8}, -2, "guide", "light2");
+            add(3, 1, 2, {1, 8}, -6, "full", phraseEnd ? "push4_end" : "push4");
+            break;
+        case 4: // 2 only (super sparse, vocalist)
+            add(1, 0, 1, {1, 8}, -4, "guide", "only2");
+            break;
+        case 5: // 4 only + tiny answer on and-of-3 if user silence
+            add(3, 0, 1, {1, 8}, -4, "full", "only4");
+            if (c.userSilence && complexity > 0.30) add(2, 1, 2, {1, 16}, -10, "guide", "answer_and3");
+            break;
+        default: // syncopated 2 (and-of-2) + 4 (and-of-4)
+            add(1, 1, 2, {1, 8}, -6, "guide", "and2");
+            add(3, 1, 2, {1, 8}, -8, "full", phraseEnd ? "and4_end" : "and4");
+            break;
+    }
+
+    // Occasional extra jab (and-of-1 or and-of-3) when there is space and energy.
+    if (!userBusy && complexity > 0.55 && (int((h / 17u) % 100u) < 22)) {
+        const bool on1 = ((h / 19u) % 2u) == 0u;
+        add(on1 ? 0 : 2, 1, 2, {1, 16}, -10, "guide", on1 ? "jab_and1" : "jab_and3");
+    }
+
+    // Phrase end: slightly more likely to add a light push into next bar.
+    if (phraseEnd && !userBusy && (int((h / 23u) % 100u) < 28)) {
+        add(3, 1, 2, {1, 8}, -8, "guide", "phrase_end_push");
+    }
+
+    // If user is very active, bias to single backbeat (beat 4) to stay out of the way.
+    if (userBusy) {
+        QVector<CompHit> filtered;
+        for (const auto& hit : out) {
+            if (hit.beatInBar == 3 && hit.sub == 0) filtered.push_back(hit);
+        }
+        if (!filtered.isEmpty()) return filtered;
+        // fallback: any beat-4 event
+        for (const auto& hit : out) {
+            if (hit.beatInBar == 3) filtered.push_back(hit);
+        }
+        if (!filtered.isEmpty()) return filtered;
+    }
+
     return out;
 }
 

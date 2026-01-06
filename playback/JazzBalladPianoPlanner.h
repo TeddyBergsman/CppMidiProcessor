@@ -6,7 +6,7 @@
 #include "music/ChordSymbol.h"
 #include "virtuoso/constraints/PianoDriver.h"
 #include "virtuoso/engine/VirtuosoEngine.h"
-#include "virtuoso/vocab/VocabularyRegistry.h"
+#include "virtuoso/groove/GrooveGrid.h"
 
 namespace playback {
 
@@ -16,6 +16,16 @@ namespace playback {
 // - Constraint-gated by PianoDriver (polyphony + span)
 class JazzBalladPianoPlanner {
 public:
+    struct CompHit {
+        int beatInBar = 0;     // 0-based
+        int sub = 0;           // sub-index within count
+        int count = 1;         // subdivision count (2=eighths, 4=sixteenths, 3=triplets)
+        virtuoso::groove::Rational dur{1, 4};
+        int velDelta = 0;
+        QString density = "guide"; // "guide" or "full"
+        QString rhythmTag;         // e.g. "charleston", "push4", "delay2"
+    };
+
     struct Context {
         int bpm = 60;
         int playbackBarIndex = 0;
@@ -51,7 +61,8 @@ public:
 
     void reset();
 
-    void setVocabulary(const virtuoso::vocab::VocabularyRegistry* vocab) { m_vocab = vocab; }
+    // Deprecated (kept for compatibility): pianist is fully procedural.
+    void setVocabulary(const void*) {}
 
     QVector<virtuoso::engine::AgentIntentNote> planBeat(const Context& c,
                                                         int midiChannel,
@@ -74,9 +85,14 @@ private:
     bool feasible(const QVector<int>& midiNotes) const;
     QVector<int> repairToFeasible(QVector<int> midiNotes) const;
 
+    void ensureBarRhythmPlanned(const Context& c);
+    QVector<CompHit> chooseBarCompRhythm(const Context& c) const;
+
     virtuoso::constraints::PianoDriver m_driver;
     QVector<int> m_lastVoicing;
-    const virtuoso::vocab::VocabularyRegistry* m_vocab = nullptr; // not owned
+
+    int m_lastRhythmBar = -1;
+    QVector<CompHit> m_barHits;
 };
 
 } // namespace playback

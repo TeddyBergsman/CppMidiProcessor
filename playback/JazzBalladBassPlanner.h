@@ -6,6 +6,7 @@
 #include "music/ChordSymbol.h"
 #include "virtuoso/constraints/BassDriver.h"
 #include "virtuoso/engine/VirtuosoEngine.h"
+#include "virtuoso/vocab/VocabularyRegistry.h"
 
 namespace playback {
 
@@ -43,6 +44,8 @@ public:
 
     void reset();
 
+    void setVocabulary(const virtuoso::vocab::VocabularyRegistry* vocab) { m_vocab = vocab; }
+
     // Returns 0..N intent notes to schedule at this beat.
     QVector<virtuoso::engine::AgentIntentNote> planBeat(const Context& c,
                                                         int midiChannel,
@@ -59,6 +62,7 @@ private:
     virtuoso::constraints::BassDriver m_driver;
     virtuoso::constraints::PerformanceState m_state;
     int m_lastMidi = -1;
+    const virtuoso::vocab::VocabularyRegistry* m_vocab = nullptr; // not owned
 };
 
 } // namespace playback

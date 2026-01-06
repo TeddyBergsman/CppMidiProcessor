@@ -112,6 +112,26 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     if (c.hasNextChord) {
         nextRootPc = (c.nextChord.bassPc >= 0) ? c.nextChord.bassPc : c.nextChord.rootPc;
     }
+    const bool nextChanges = (nextRootPc >= 0 && nextRootPc != rootPc);
+
+    // Vocab (optional): beat-scoped bass device selection (only in non-walking two-feel mode).
+    virtuoso::vocab::VocabularyRegistry::BassBeatChoice vocabChoice;
+    const bool useVocab = (!climaxWalk && m_vocab && m_vocab->isLoaded() && (ts.num == 4) && (ts.den == 4));
+    if (useVocab) {
+        virtuoso::vocab::VocabularyRegistry::BassBeatQuery q;
+        q.ts = ts;
+        q.playbackBarIndex = c.playbackBarIndex;
+        q.beatInBar = c.beatInBar;
+        q.chordText = c.chordText;
+        q.chordIsNew = c.chordIsNew;
+        q.hasNextChord = c.hasNextChord;
+        q.nextChanges = nextChanges;
+        q.userDenseOrPeak = (c.userDensityHigh || c.userIntensityPeak);
+        q.energy = c.energy;
+        q.determinismSeed = c.determinismSeed;
+        vocabChoice = m_vocab->chooseBassBeat(q);
+    }
+    const bool haveVocab = (!vocabChoice.id.isEmpty() && vocabChoice.action != virtuoso::vocab::VocabularyRegistry::BassAction::None);
 
     // Base note selection:
     // - Beat 1: root (clear foundation)
@@ -124,7 +144,6 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         // beat1: root, beat2: 5th or 3rd, beat3: approach/chord tone, beat4: approach into next bar if changing.
         const int pc3 = (rootPc + 4) % 12;
         const int pc5 = (rootPc + 7) % 12;
-        const bool nextChanges = (nextRootPc >= 0 && nextRootPc != rootPc);
         if (c.beatInBar == 0) { chosenPc = rootPc; logic = "Bass:walk root"; }
         else if (c.beatInBar == 1) {
             chosenPc = ((qHash(QString("%1|%2|w2").arg(c.chordText).arg(c.playbackBarIndex)) % 2u) == 0u) ? pc5 : pc3;
@@ -159,36 +178,21 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             logic = "Bass:walk resolve";
         }
     } else if (c.beatInBar == 0) {
-        chosenPc = rootPc;
-        logic = "Bass: two-feel root";
-    } else if (c.beatInBar == 2) {
-        const bool nextChanges = (nextRootPc >= 0 && nextRootPc != rootPc);
-
-        // Chet-style space: on stable harmony, sometimes omit beat 3 entirely.
-        const bool stableHarmony = !nextChanges && !c.chordIsNew;
-        if (stableHarmony) {
-            const quint32 hStable = quint32(qHash(QString("%1|%2|%3|b3")
-                                                 .arg(c.chordText)
-                                                 .arg(c.playbackBarIndex)
-                                                 .arg(c.determinismSeed)));
-            const int p = qBound(0, int(llround(c.skipBeat3ProbStable * 100.0)), 100);
-            if (p > 0 && int(hStable % 100u) < p) {
-                return out;
-            }
+        if (haveVocab) {
+            if (vocabChoice.action == virtuoso::vocab::VocabularyRegistry::BassAction::Rest) return out;
+            chosenPc = rootPc;
+            logic = QString("Vocab: %1").arg(vocabChoice.notes);
+        } else {
+            chosenPc = rootPc;
+            logic = "Bass: two-feel root";
         }
-
-        if (nextChanges) {
-            // Approach tone into the next bar's chord (probabilistic but deterministic).
-            const quint32 hApp = quint32(qHash(QString("%1|%2|%3|app")
-                                               .arg(c.chordText)
-                                               .arg(c.playbackBarIndex)
-                                               .arg(c.determinismSeed)));
-            const int p = qBound(0, int(llround(c.approachProbBeat3 * 100.0)), 100);
-            const bool doApproach = (p > 0) && (int(hApp % 100u) < p);
-            if (doApproach) {
+    } else if (c.beatInBar == 2) {
+        if (haveVocab) {
+            using BA = virtuoso::vocab::VocabularyRegistry::BassAction;
+            if (vocabChoice.action == BA::Rest) return out;
+            if (vocabChoice.action == BA::ApproachToNext && nextChanges) {
                 const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
                 int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
-                // Fold approach toward our bass range.
                 while (approachMidi < 40) approachMidi += 12;
                 while (approachMidi > 57) approachMidi -= 12;
                 int repaired = approachMidi;
@@ -197,30 +201,117 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                     n.agent = "Bass";
                     n.channel = midiChannel;
                     n.note = repaired;
-                    n.baseVelocity = 50;
+                    n.baseVelocity = qBound(1, 50 + vocabChoice.vel_delta, 127);
                     n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
-                    n.durationWhole = Rational(1, ts.den); // 1 beat (beat 3) approach tone
+                    n.durationWhole = Rational(qMax(1, vocabChoice.dur_num), qMax(1, vocabChoice.dur_den));
                     n.structural = false;
                     n.chord_context = c.chordText;
-                    n.logic_tag = "two_feel_approach";
-                    n.target_note = QString("Approach -> next root pc=%1").arg(nextRootPc);
+                    n.logic_tag = QString("Vocab:Bass:%1").arg(vocabChoice.id);
+                    n.target_note = vocabChoice.notes.isEmpty()
+                                        ? QString("Approach -> next root pc=%1").arg(nextRootPc)
+                                        : vocabChoice.notes;
                     out.push_back(n);
                     return out;
                 }
             }
-        }
+            if (vocabChoice.action == BA::Third) {
+                const int thirdIv =
+                    (c.chord.quality == music::ChordQuality::Minor ||
+                     c.chord.quality == music::ChordQuality::HalfDiminished ||
+                     c.chord.quality == music::ChordQuality::Diminished)
+                        ? 3
+                        : 4;
+                chosenPc = (rootPc + thirdIv) % 12;
+            } else if (vocabChoice.action == BA::Root) {
+                chosenPc = rootPc;
+            } else {
+                chosenPc = (rootPc + 7) % 12;
+            }
+            logic = QString("Vocab: %1").arg(vocabChoice.notes);
+        } else {
+            // Chet-style space: on stable harmony, sometimes omit beat 3 entirely.
+            const bool stableHarmony = !nextChanges && !c.chordIsNew;
+            if (stableHarmony) {
+                const quint32 hStable = quint32(qHash(QString("%1|%2|%3|b3")
+                                                     .arg(c.chordText)
+                                                     .arg(c.playbackBarIndex)
+                                                     .arg(c.determinismSeed)));
+                const int p = qBound(0, int(llround(c.skipBeat3ProbStable * 100.0)), 100);
+                if (p > 0 && int(hStable % 100u) < p) {
+                    return out;
+                }
+            }
 
-        // 5th (or root fallback) when not approaching.
-        const int fifthPc = (rootPc + 7) % 12;
-        chosenPc = fifthPc;
-        logic = "Bass: two-feel fifth";
+            if (nextChanges) {
+                // Approach tone into the next bar's chord (probabilistic but deterministic).
+                const quint32 hApp = quint32(qHash(QString("%1|%2|%3|app")
+                                                   .arg(c.chordText)
+                                                   .arg(c.playbackBarIndex)
+                                                   .arg(c.determinismSeed)));
+                const int p = qBound(0, int(llround(c.approachProbBeat3 * 100.0)), 100);
+                const bool doApproach = (p > 0) && (int(hApp % 100u) < p);
+                if (doApproach) {
+                    const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
+                    int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
+                    // Fold approach toward our bass range.
+                    while (approachMidi < 40) approachMidi += 12;
+                    while (approachMidi > 57) approachMidi -= 12;
+                    int repaired = approachMidi;
+                    if (feasibleOrRepair(repaired)) {
+                        virtuoso::engine::AgentIntentNote n;
+                        n.agent = "Bass";
+                        n.channel = midiChannel;
+                        n.note = repaired;
+                        n.baseVelocity = 50;
+                        n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
+                        n.durationWhole = Rational(1, ts.den); // 1 beat (beat 3) approach tone
+                        n.structural = false;
+                        n.chord_context = c.chordText;
+                        n.logic_tag = "two_feel_approach";
+                        n.target_note = QString("Approach -> next root pc=%1").arg(nextRootPc);
+                        out.push_back(n);
+                        return out;
+                    }
+                }
+            }
+
+            // 5th (or root fallback) when not approaching.
+            const int fifthPc = (rootPc + 7) % 12;
+            chosenPc = fifthPc;
+            logic = "Bass: two-feel fifth";
+        }
     } else {
         // Beat 4 pickup: only when the harmony is changing into next bar.
-        const bool nextChanges = (nextRootPc >= 0 && nextRootPc != rootPc);
         if (!nextChanges) return out;
 
         // If the user is extremely dense/intense, avoid extra pickups (keep foundation).
         if (c.userDensityHigh || c.userIntensityPeak) return out;
+
+        if (haveVocab && vocabChoice.action == virtuoso::vocab::VocabularyRegistry::BassAction::PickupToNext) {
+            const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
+            int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
+            while (approachMidi < 40) approachMidi += 12;
+            while (approachMidi > 57) approachMidi -= 12;
+            int repaired = approachMidi;
+            if (!feasibleOrRepair(repaired)) return out;
+
+            virtuoso::engine::AgentIntentNote n;
+            n.agent = "Bass";
+            n.channel = midiChannel;
+            n.note = repaired;
+            n.baseVelocity = qBound(1, 46 + vocabChoice.vel_delta, 127);
+            n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar,
+                                                      vocabChoice.sub, vocabChoice.count, ts);
+            n.durationWhole = Rational(qMax(1, vocabChoice.dur_num), qMax(1, vocabChoice.dur_den));
+            n.structural = false;
+            n.chord_context = c.chordText;
+            n.logic_tag = QString("Vocab:Bass:%1").arg(vocabChoice.id);
+            n.target_note = vocabChoice.notes.isEmpty()
+                                ? QString("Pickup -> next root pc=%1").arg(nextRootPc)
+                                : vocabChoice.notes;
+            out.push_back(n);
+            return out;
+        }
 
         // Deterministic probability, slightly higher at phrase ends (4-bar phrasing).
         const bool phraseEnd = ((c.playbackBarIndex % 4) == 3);
@@ -263,24 +354,36 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     n.agent = "Bass";
     n.channel = midiChannel;
     n.note = repaired;
-    n.baseVelocity = climaxWalk ? 58 : ((c.beatInBar == 0) ? 56 : 50);
+    const int baseVel = climaxWalk ? 58 : ((c.beatInBar == 0) ? 56 : 50);
+    n.baseVelocity = qBound(1, baseVel + (haveVocab ? vocabChoice.vel_delta : 0), 127);
     if (c.beatInBar == 0) {
-        // On stable harmony, occasionally hold the root for the whole bar (Chet ballad vibe).
-        const bool stable = (!c.hasNextChord) || ((c.nextChord.rootPc == c.chord.rootPc) && !c.chordIsNew);
-        const quint32 hLen = quint32(qHash(QString("%1|%2|%3|len")
-                                           .arg(c.chordText)
-                                           .arg(c.playbackBarIndex)
-                                           .arg(c.determinismSeed)));
-        const bool longHold = stable && ((hLen % 4u) == 0u);
         n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
-        n.durationWhole = climaxWalk ? Rational(1, ts.den) : (longHold ? Rational(ts.num, ts.den) : Rational(2, ts.den));
+        if (haveVocab && vocabChoice.action == virtuoso::vocab::VocabularyRegistry::BassAction::Root) {
+            n.durationWhole = Rational(qMax(1, vocabChoice.dur_num), qMax(1, vocabChoice.dur_den));
+        } else {
+            // On stable harmony, occasionally hold the root for the whole bar (Chet ballad vibe).
+            const bool stable = (!c.hasNextChord) || ((c.nextChord.rootPc == c.chord.rootPc) && !c.chordIsNew);
+            const quint32 hLen = quint32(qHash(QString("%1|%2|%3|len")
+                                               .arg(c.chordText)
+                                               .arg(c.playbackBarIndex)
+                                               .arg(c.determinismSeed)));
+            const bool longHold = stable && ((hLen % 4u) == 0u);
+            n.durationWhole = climaxWalk ? Rational(1, ts.den) : (longHold ? Rational(ts.num, ts.den) : Rational(2, ts.den));
+        }
     } else {
         n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
-        n.durationWhole = climaxWalk ? Rational(1, ts.den) : Rational(2, ts.den);
+        if (haveVocab && (vocabChoice.action == virtuoso::vocab::VocabularyRegistry::BassAction::Fifth ||
+                          vocabChoice.action == virtuoso::vocab::VocabularyRegistry::BassAction::Third ||
+                          vocabChoice.action == virtuoso::vocab::VocabularyRegistry::BassAction::Root)) {
+            n.durationWhole = Rational(qMax(1, vocabChoice.dur_num), qMax(1, vocabChoice.dur_den));
+        } else {
+            n.durationWhole = climaxWalk ? Rational(1, ts.den) : Rational(2, ts.den);
+        }
     }
     n.structural = c.chordIsNew || (c.beatInBar == 0);
     n.chord_context = c.chordText;
-    n.logic_tag = climaxWalk ? "walk" : ((c.beatInBar == 0) ? "two_feel_root" : "two_feel_fifth");
+    n.logic_tag = haveVocab ? QString("Vocab:Bass:%1").arg(vocabChoice.id)
+                            : (climaxWalk ? "walk" : ((c.beatInBar == 0) ? "two_feel_root" : "two_feel_fifth"));
     n.target_note = logic;
     out.push_back(n);
     return out;

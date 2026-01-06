@@ -1,5 +1,6 @@
 <!DOCTYPE RCC><RCC version="1.0">
 <qresource prefix="/">
     <file>preset.xml</file>
+    <file>virtuoso/vocab/cool_jazz_vocabulary.json</file>
 </qresource>
 </RCC>

@@ -6,6 +6,7 @@
 #include "music/ChordSymbol.h"
 #include "virtuoso/constraints/PianoDriver.h"
 #include "virtuoso/engine/VirtuosoEngine.h"
+#include "virtuoso/vocab/VocabularyRegistry.h"
 
 namespace playback {
 
@@ -50,6 +51,8 @@ public:
 
     void reset();
 
+    void setVocabulary(const virtuoso::vocab::VocabularyRegistry* vocab) { m_vocab = vocab; }
+
     QVector<virtuoso::engine::AgentIntentNote> planBeat(const Context& c,
                                                         int midiChannel,
                                                         const virtuoso::groove::TimeSignature& ts);
@@ -73,6 +76,7 @@ private:
 
     virtuoso::constraints::PianoDriver m_driver;
     QVector<int> m_lastVoicing;
+    const virtuoso::vocab::VocabularyRegistry* m_vocab = nullptr; // not owned
 };
 
 } // namespace playback

@@ -9,6 +9,7 @@
 #include "virtuoso/engine/VirtuosoEngine.h"
 #include "virtuoso/groove/GrooveRegistry.h"
 #include "virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h"
+#include "virtuoso/vocab/VocabularyRegistry.h"
 
 #include "playback/JazzBalladBassPlanner.h"
 #include "playback/JazzBalladPianoPlanner.h"
@@ -103,6 +104,7 @@ private:
     JazzBalladBassPlanner m_bassPlanner;
     JazzBalladPianoPlanner m_pianoPlanner;
     BrushesBalladDrummer m_drummer;
+    virtuoso::vocab::VocabularyRegistry m_vocab;
 
     // Listening MVP (semantic analysis of user input)
     SemanticMidiAnalyzer m_listener;

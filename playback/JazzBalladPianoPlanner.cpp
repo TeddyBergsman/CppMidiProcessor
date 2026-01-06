@@ -176,26 +176,47 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
     const bool climaxDense = c.forceClimax && (c.energy >= 0.75);
 
+    // Vocab (optional): beat-scoped rhythm patterns.
+    virtuoso::vocab::VocabularyRegistry::PianoBeatChoice vocabChoice;
+    const bool useVocab = (m_vocab && m_vocab->isLoaded() && (ts.num == 4) && (ts.den == 4));
+    if (useVocab) {
+        virtuoso::vocab::VocabularyRegistry::PianoBeatQuery q;
+        q.ts = ts;
+        q.playbackBarIndex = c.playbackBarIndex;
+        q.beatInBar = c.beatInBar;
+        q.chordText = c.chordText;
+        q.chordIsNew = c.chordIsNew;
+        q.userSilence = c.userSilence;
+        q.energy = c.energy;
+        q.determinismSeed = c.determinismSeed;
+        vocabChoice = m_vocab->choosePianoBeat(q);
+    }
+    const bool haveVocabHits = !vocabChoice.hits.isEmpty();
+
     // Ballad comp default: beats 2 and 4 (1 and 3 in 0-based), with occasional anticipations.
     // In Climax: comp every beat so the difference is audible.
-    if (climaxDense) {
-        if (!(c.beatInBar >= 0 && c.beatInBar <= 3)) return out;
-    } else {
-        // We allow beat 1 for "and-of-1" anticipations and beat 3 for sparse fills.
-        if (!(c.beatInBar == 0 || c.beatInBar == 1 || c.beatInBar == 3)) return out;
+    if (!haveVocabHits) {
+        if (climaxDense) {
+            if (!(c.beatInBar >= 0 && c.beatInBar <= 3)) return out;
+        } else {
+            // We allow beat 1 for "and-of-1" anticipations and beat 3 for sparse fills.
+            if (!(c.beatInBar == 0 || c.beatInBar == 1 || c.beatInBar == 3)) return out;
+        }
     }
 
-    // Deterministic sparse variation: sometimes skip beat 2 if chord is stable.
+    // Deterministic sparse variation: sometimes skip beat 2 if chord is stable (fallback mode).
     const quint32 h = quint32(qHash(QString("%1|%2|%3").arg(c.chordText).arg(c.playbackBarIndex).arg(c.determinismSeed)));
     const bool stable = !c.chordIsNew;
-    const int pSkip = qBound(0, int(llround(c.skipBeat2ProbStable * 100.0)), 100);
-    const bool skip = (stable && (c.beatInBar == 1) && (pSkip > 0) && (int(h % 100u) < pSkip));
-    if (skip) return out;
+    if (!haveVocabHits) {
+        const int pSkip = qBound(0, int(llround(c.skipBeat2ProbStable * 100.0)), 100);
+        const bool skip = (stable && (c.beatInBar == 1) && (pSkip > 0) && (int(h % 100u) < pSkip));
+        if (skip) return out;
+    }
 
     // Interaction: if user is very dense/intense, piano should mostly comp on beat 4 only (unless forced climax).
     if (!climaxDense && (c.userDensityHigh || c.userIntensityPeak) && (c.beatInBar == 1 || c.beatInBar == 0)) return out;
 
-    // Choose voicing family (Chet ballad: mostly shells, occasional rootless).
+    // Choose voicing family (Chet/Bill ballad: mostly shells, occasional rootless).
     const bool chordHas7 = (c.chord.extension >= 7 || c.chord.seventh != music::SeventhQuality::None);
     const bool dominant = (c.chord.quality == music::ChordQuality::Dominant);
     const bool alt = c.chord.alt || !c.chord.alterations.isEmpty();
@@ -270,40 +291,75 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         sparkleMidi = nearestMidiForPc(spPc, /*around*/(c.sparkleLo + c.sparkleHi) / 2, c.sparkleLo, c.sparkleHi);
     }
 
-    for (int m : midi) {
-        virtuoso::engine::AgentIntentNote n;
-        n.agent = "Piano";
-        n.channel = midiChannel;
-        n.note = clampMidi(m);
-        n.baseVelocity = baseVel;
-        // Timing:
-        // - main comp hits on beat starts (beats 2/4)
-        // - occasional anticipation on "and of 1" when chord is new
-        if (c.beatInBar == 0) {
-            // Anticipation: only on chord arrivals, and only if not in silence (avoid stepping on vocal).
-            if (!climaxDense) {
-                if (!c.chordIsNew || c.userSilence) continue;
-                if ((h % 5u) != 0u) continue;
-                n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 0, /*sub*/1, /*count*/2, ts); // and-of-1
-                n.durationWhole = Rational(1, 8);
-                n.baseVelocity = qMax(1, baseVel - 10);
-                n.logic_tag = "ballad_anticipation";
-            } else {
-                // In Climax: hit beat 1 normally (no anticipation).
-                n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 0, 0, 1, ts);
-                n.durationWhole = Rational(1, ts.den);
-                n.logic_tag = "climax_comp";
-            }
-        } else {
-            n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
-            n.durationWhole = Rational(1, ts.den); // 1 beat sustain (ballad comp)
+    // Helper: derive a "guide tones only" subset from current voicing (3rd + 7th).
+    auto guideSubset = [&](const QVector<int>& full) -> QVector<int> {
+        QVector<int> g;
+        g.reserve(2);
+        for (int m : full) {
+            const int pc = ((m % 12) + 12) % 12;
+            if (pc == pc3 || pc == pc7) g.push_back(m);
         }
-        n.structural = c.chordIsNew;
-        n.chord_context = c.chordText;
-        n.voicing_type = voicingType;
-        if (n.logic_tag.isEmpty()) n.logic_tag = "ballad_comp";
-        n.target_note = "Guide tones + color";
-        out.push_back(n);
+        sortUnique(g);
+        if (g.size() > 2) g.resize(2);
+        if (g.isEmpty() && !full.isEmpty()) g.push_back(full.first());
+        return g;
+    };
+
+    if (haveVocabHits) {
+        for (const auto& hit : vocabChoice.hits) {
+            const QVector<int> notes = (hit.density.trimmed().toLower() == "guide") ? guideSubset(midi) : midi;
+            for (int m : notes) {
+                virtuoso::engine::AgentIntentNote n;
+                n.agent = "Piano";
+                n.channel = midiChannel;
+                n.note = clampMidi(m);
+                n.baseVelocity = qBound(1, baseVel + hit.vel_delta, 127);
+                n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, hit.sub, hit.count, ts);
+                n.durationWhole = Rational(qMax(1, hit.dur_num), qMax(1, hit.dur_den));
+                n.structural = c.chordIsNew;
+                n.chord_context = c.chordText;
+                n.voicing_type = voicingType;
+                n.logic_tag = QString("Vocab:Piano:%1").arg(vocabChoice.id);
+                n.target_note = vocabChoice.notes.isEmpty() ? QString("Vocab comp") : vocabChoice.notes;
+                out.push_back(n);
+            }
+        }
+    } else {
+        for (int m : midi) {
+            virtuoso::engine::AgentIntentNote n;
+            n.agent = "Piano";
+            n.channel = midiChannel;
+            n.note = clampMidi(m);
+            n.baseVelocity = baseVel;
+            // Timing:
+            // - main comp hits on beat starts (beats 2/4)
+            // - occasional anticipation on "and of 1" when chord is new
+            if (c.beatInBar == 0) {
+                // Anticipation: only on chord arrivals, and only if not in silence (avoid stepping on vocal).
+                if (!climaxDense) {
+                    if (!c.chordIsNew || c.userSilence) continue;
+                    if ((h % 5u) != 0u) continue;
+                    n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 0, /*sub*/1, /*count*/2, ts); // and-of-1
+                    n.durationWhole = Rational(1, 8);
+                    n.baseVelocity = qMax(1, baseVel - 10);
+                    n.logic_tag = "ballad_anticipation";
+                } else {
+                    // In Climax: hit beat 1 normally (no anticipation).
+                    n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 0, 0, 1, ts);
+                    n.durationWhole = Rational(1, ts.den);
+                    n.logic_tag = "climax_comp";
+                }
+            } else {
+                n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
+                n.durationWhole = Rational(1, ts.den); // 1 beat sustain (ballad comp)
+            }
+            n.structural = c.chordIsNew;
+            n.chord_context = c.chordText;
+            n.voicing_type = voicingType;
+            if (n.logic_tag.isEmpty()) n.logic_tag = "ballad_comp";
+            n.target_note = "Guide tones + color";
+            out.push_back(n);
+        }
     }
 
     if (sparkleMidi >= 0) {

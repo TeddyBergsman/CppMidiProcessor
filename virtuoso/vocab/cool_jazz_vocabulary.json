@@ -1,0 +1,221 @@
+{
+  "version": 1,
+  "style": "cool_jazz",
+  "notes": "MVP vocabulary pack: cool jazz ballad language (Chet/Bill Evans/early Miles/Ben Webster). Beat-scoped patterns for 4/4.",
+
+  "piano": [
+    {
+      "id": "EVANS_SHELL_2",
+      "beats": [1],
+      "minEnergy": 0.0,
+      "maxEnergy": 1.0,
+      "weight": 4.0,
+      "stableOnly": true,
+      "hits": [
+        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" }
+      ],
+      "notes": "Sparse Bill Evans-ish shell on beat 2 (guide tones only)."
+    },
+    {
+      "id": "EVANS_SHELL_4",
+      "beats": [3],
+      "minEnergy": 0.0,
+      "maxEnergy": 1.0,
+      "weight": 4.0,
+      "stableOnly": true,
+      "hits": [
+        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" }
+      ],
+      "notes": "Sparse Bill Evans-ish shell on beat 4 (guide tones only)."
+    },
+    {
+      "id": "EVANS_FULL_2",
+      "beats": [1],
+      "minEnergy": 0.25,
+      "maxEnergy": 1.0,
+      "weight": 2.5,
+      "hits": [
+        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" }
+      ],
+      "notes": "Beat 2 full voicing (shell + 1-2 colors)."
+    },
+    {
+      "id": "EVANS_FULL_4",
+      "beats": [3],
+      "minEnergy": 0.25,
+      "maxEnergy": 1.0,
+      "weight": 2.5,
+      "hits": [
+        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" }
+      ],
+      "notes": "Beat 4 full voicing (shell + 1-2 colors)."
+    },
+    {
+      "id": "EVANS_PUSH_AND_OF_1",
+      "beats": [0],
+      "minEnergy": 0.0,
+      "maxEnergy": 0.85,
+      "weight": 2.2,
+      "chordIsNewOnly": true,
+      "allowWhenUserSilence": false,
+      "hits": [
+        { "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -10, "density": "guide" }
+      ],
+      "notes": "Push chord entrance on and-of-1 (tasteful, only on new chords; avoid when user is silent to not step on vocal)."
+    },
+    {
+      "id": "EVANS_4_GHOST_AND",
+      "beats": [3],
+      "minEnergy": 0.30,
+      "maxEnergy": 1.0,
+      "weight": 1.4,
+      "hits": [
+        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" },
+        { "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -14, "density": "guide" }
+      ],
+      "notes": "Beat 4 + tiny guide-tone ghost on and-of-4 (Evans-ish breath)."
+    },
+    {
+      "id": "SPACE_ONLY_4",
+      "beats": [3],
+      "minEnergy": 0.0,
+      "maxEnergy": 0.70,
+      "weight": 1.2,
+      "stableOnly": true,
+      "hits": [
+        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -6, "density": "guide" }
+      ],
+      "notes": "Extra space: keep comp mostly on beat 4 only."
+    }
+  ],
+
+  "bass": [
+    {
+      "id": "TWO_FEEL_ROOT_LONG",
+      "beats": [0],
+      "minEnergy": 0.0,
+      "maxEnergy": 0.85,
+      "weight": 1.8,
+      "stableOnly": true,
+      "action": "root",
+      "dur_num": 2,
+      "dur_den": 4,
+      "vel_delta": 0,
+      "notes": "Chet-ish long root on beat 1 (space)."
+    },
+    {
+      "id": "TWO_FEEL_ROOT_SHORT",
+      "beats": [0],
+      "minEnergy": 0.25,
+      "maxEnergy": 1.0,
+      "weight": 2.2,
+      "action": "root",
+      "dur_num": 1,
+      "dur_den": 2,
+      "vel_delta": 0,
+      "notes": "Beat 1 root (2 beats long)."
+    },
+    {
+      "id": "TWO_FEEL_FIFTH",
+      "beats": [2],
+      "minEnergy": 0.0,
+      "maxEnergy": 1.0,
+      "weight": 2.8,
+      "action": "fifth",
+      "dur_num": 1,
+      "dur_den": 2,
+      "vel_delta": 0,
+      "notes": "Beat 3 fifth (foundation)."
+    },
+    {
+      "id": "TWO_FEEL_THIRD_SOFT",
+      "beats": [2],
+      "minEnergy": 0.0,
+      "maxEnergy": 0.75,
+      "weight": 1.1,
+      "action": "third",
+      "dur_num": 1,
+      "dur_den": 2,
+      "vel_delta": -4,
+      "notes": "Occasional beat 3 third (cool-jazz warmth)."
+    },
+    {
+      "id": "APPROACH_TO_NEXT",
+      "beats": [2],
+      "minEnergy": 0.35,
+      "maxEnergy": 1.0,
+      "weight": 1.6,
+      "nextChangesOnly": true,
+      "forbidWhenUserDenseOrPeak": true,
+      "action": "approach_to_next",
+      "dur_num": 1,
+      "dur_den": 4,
+      "vel_delta": -2,
+      "notes": "Half-step approach on beat 3 into next bar."
+    },
+    {
+      "id": "PICKUP_AND_OF_4",
+      "beats": [3],
+      "minEnergy": 0.30,
+      "maxEnergy": 1.0,
+      "weight": 1.2,
+      "nextChangesOnly": true,
+      "forbidWhenUserDenseOrPeak": true,
+      "action": "pickup_to_next",
+      "sub": 1,
+      "count": 2,
+      "dur_num": 1,
+      "dur_den": 8,
+      "vel_delta": -6,
+      "notes": "Upbeat pickup on and-of-4 into the next bar."
+    },
+    {
+      "id": "REST_BEAT_3",
+      "beats": [2],
+      "minEnergy": 0.0,
+      "maxEnergy": 0.60,
+      "weight": 0.8,
+      "stableOnly": true,
+      "action": "rest",
+      "notes": "Chet space: omit beat 3 when harmony is stable."
+    }
+  ],
+
+  "drums": [
+    {
+      "id": "COOL_RIDE_DING_2",
+      "beats": [1],
+      "minEnergy": 0.25,
+      "maxEnergy": 0.70,
+      "weight": 1.3,
+      "hits": [
+        { "articulation": "ride_hit", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 }
+      ],
+      "notes": "Occasional light ride ding on beat 2 (cool jazz shimmer)."
+    },
+    {
+      "id": "COOL_RIDE_DING_4",
+      "beats": [3],
+      "minEnergy": 0.25,
+      "maxEnergy": 0.70,
+      "weight": 1.3,
+      "hits": [
+        { "articulation": "ride_hit", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 }
+      ],
+      "notes": "Occasional light ride ding on beat 4 (cool jazz shimmer)."
+    },
+    {
+      "id": "PEAK_RIDE_BELL_STAB",
+      "beats": [0],
+      "minEnergy": 0.0,
+      "maxEnergy": 1.0,
+      "weight": 1.0,
+      "intensityPeakOnly": true,
+      "hits": [
+        { "articulation": "ride_bell", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 8 }
+      ],
+      "notes": "When user peaks, add a tasteful ride bell stab on beat 1."
+    }
+  ]
+}
+

@@ -201,6 +201,15 @@ VirtuosoBalladMvpPlaybackEngine::VirtuosoBalladMvpPlaybackEngine(QObject* parent
 
     connect(&m_engine, &virtuoso::engine::VirtuosoEngine::theoryEventJson,
             this, &VirtuosoBalladMvpPlaybackEngine::theoryEventJson);
+
+    // Cool-jazz vocabulary pack (data-driven): used by bass/piano planners and drum add-ons.
+    {
+        QString err;
+        m_vocab.loadFromResourcePath(":/virtuoso/vocab/cool_jazz_vocabulary.json", &err);
+        m_bassPlanner.setVocabulary(&m_vocab);
+        m_pianoPlanner.setVocabulary(&m_vocab);
+        Q_UNUSED(err);
+    }
 }
 
 void VirtuosoBalladMvpPlaybackEngine::setMidiProcessor(MidiProcessor* midi) {
@@ -554,6 +563,56 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
             n.user_intents = intentStr;
             n.user_outside_ratio = intent.outsideRatio;
             m_engine.scheduleNote(n);
+        }
+
+        // --- Cool-jazz drum add-ons (vocabulary): occasional ride dings / bell stabs ---
+        if (m_vocab.isLoaded()) {
+            virtuoso::vocab::VocabularyRegistry::DrumsBeatQuery q;
+            q.ts = ts;
+            q.playbackBarIndex = playbackBarIndex;
+            q.beatInBar = beatInBar;
+            q.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+            q.intensityPeak = intent.intensityPeak;
+            q.determinismSeed = detSeed ^ 0xC001'D00Du;
+            const auto add = m_vocab.chooseDrumsBeat(q);
+            if (!add.hits.isEmpty()) {
+                const auto prof = m_drummer.profile();
+                for (const auto& hit : add.hits) {
+                    virtuoso::engine::AgentIntentNote n;
+                    n.agent = "Drums";
+                    n.channel = prof.channel;
+                    switch (hit.articulation) {
+                        case virtuoso::vocab::VocabularyRegistry::DrumArticulation::RideBell:
+                            n.note = virtuoso::drums::fluffy_brushes::kRideHitBell_F2;
+                            break;
+                        case virtuoso::vocab::VocabularyRegistry::DrumArticulation::SnareSwish:
+                            n.note = prof.noteSnareSwish;
+                            break;
+                        case virtuoso::vocab::VocabularyRegistry::DrumArticulation::BrushShort:
+                            n.note = prof.noteBrushShort;
+                            break;
+                        case virtuoso::vocab::VocabularyRegistry::DrumArticulation::RideHit:
+                        default:
+                            n.note = prof.noteRideHit;
+                            break;
+                    }
+                    n.baseVelocity = qBound(1, 24 + hit.vel_delta + int(llround(10.0 * q.energy)), 127);
+                    n.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar,
+                                                                                 hit.sub, hit.count, ts);
+                    n.durationWhole = virtuoso::groove::Rational(qMax(1, hit.dur_num), qMax(1, hit.dur_den));
+                    n.structural = true;
+                    n.logic_tag = QString("Vocab:Drums:%1").arg(add.id);
+                    n.target_note = add.notes;
+                    n.vibe_state = vibeStr;
+                    n.user_intents = intentStr;
+                    n.user_outside_ratio = intent.outsideRatio;
+
+                    // Apply same macro drum scaling as other drum intents.
+                    const double e = qBound(0.0, vibeEff.energy, 1.0);
+                    n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.85 + 0.35 * e))), 127);
+                    m_engine.scheduleNote(n);
+                }
+            }
         }
     }
 

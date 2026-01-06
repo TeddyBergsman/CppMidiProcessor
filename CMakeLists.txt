@@ -21,6 +21,8 @@ enable_testing()
 add_library(VirtuosoCore STATIC
   virtuoso/ontology/OntologyRegistry.h
   virtuoso/ontology/OntologyRegistry.cpp
+  virtuoso/vocab/VocabularyRegistry.h
+  virtuoso/vocab/VocabularyRegistry.cpp
   virtuoso/constraints/ConstraintsTypes.h
   virtuoso/constraints/IInstrumentDriver.h
   virtuoso/constraints/PianoDriver.h

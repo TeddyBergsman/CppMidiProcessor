@@ -19,6 +19,7 @@
 #include <QPropertyAnimation>
 #include <QCryptographicHash>
 #include <QSettings>
+#include <QJsonDocument>
 
 namespace {
 static QString normalizeKeyCenter(const QString& s) {
@@ -433,6 +434,11 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_virtuosoPlayButton->setEnabled(false);
     m_virtuosoPlayButton->setFixedWidth(92);
 
+    // Virtuoso debug toggle (shows theory stream + live intent/vibe HUD)
+    m_virtuosoDebugToggle = new QCheckBox("Debug", chartHeader);
+    m_virtuosoDebugToggle->setChecked(false);
+    m_virtuosoDebugToggle->setStyleSheet("QCheckBox { color: #bbb; }");
+
     m_tempoSpin = new QSpinBox(chartHeader);
     m_tempoSpin->setRange(30, 300);
     m_tempoSpin->setValue(120);
@@ -455,6 +461,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
 
     headerLayout->addWidget(m_virtuosoPresetCombo, 0);
     headerLayout->addWidget(m_virtuosoPlayButton, 0);
+    headerLayout->addWidget(m_virtuosoDebugToggle, 0);
     headerLayout->addWidget(m_playButton, 0);
     chartHeader->setLayout(headerLayout);
 
@@ -474,6 +481,80 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_virtuosoPlayback = new playback::VirtuosoBalladMvpPlaybackEngine(this);
     connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::currentCellChanged,
             m_chartWidget, &chart::SongChartWidget::setCurrentCellIndex);
+
+    // --- Virtuoso debug panel (hidden by default) ---
+    QGroupBox* virtuosoDbg = new QGroupBox("Virtuoso Debug (Theory Stream + Listening)", m_chartContainer);
+    virtuosoDbg->setVisible(false);
+    {
+        QVBoxLayout* dv = new QVBoxLayout(virtuosoDbg);
+        dv->setContentsMargins(8, 8, 8, 8);
+        dv->setSpacing(6);
+
+        m_virtuosoHud = new QLabel("Vibe=-  energy=-  intents=-", virtuosoDbg);
+        m_virtuosoHud->setWordWrap(true);
+        m_virtuosoHud->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        m_virtuosoHud->setStyleSheet("QLabel { color: #ddd; font-family: Menlo, monospace; font-size: 10pt; }");
+
+        QHBoxLayout* controls = new QHBoxLayout();
+        controls->setContentsMargins(0, 0, 0, 0);
+        controls->setSpacing(8);
+
+        m_virtuosoVibeOverride = new QComboBox(virtuosoDbg);
+        m_virtuosoVibeOverride->addItem("Auto", 0);
+        m_virtuosoVibeOverride->addItem("Simmer", 1);
+        m_virtuosoVibeOverride->addItem("Build", 2);
+        m_virtuosoVibeOverride->addItem("Climax", 3);
+        m_virtuosoVibeOverride->addItem("CoolDown", 4);
+        m_virtuosoVibeOverride->setToolTip("Force vibe state to make changes obvious (validation).");
+        m_virtuosoVibeOverride->setFixedWidth(140);
+
+        m_virtuosoInteractionBoost = new QSlider(Qt::Horizontal, virtuosoDbg);
+        m_virtuosoInteractionBoost->setRange(0, 300); // percent
+        m_virtuosoInteractionBoost->setValue(100);
+        m_virtuosoInteractionBoost->setToolTip("Interaction boost (0%..300%) to exaggerate response for validation.");
+
+        controls->addWidget(new QLabel("Vibe:", virtuosoDbg));
+        controls->addWidget(m_virtuosoVibeOverride, 0);
+        controls->addSpacing(10);
+        controls->addWidget(new QLabel("Boost:", virtuosoDbg));
+        controls->addWidget(m_virtuosoInteractionBoost, 1);
+
+        m_virtuosoTheoryLog = new QTextEdit(virtuosoDbg);
+        m_virtuosoTheoryLog->setReadOnly(true);
+        m_virtuosoTheoryLog->setMinimumHeight(160);
+        m_virtuosoTheoryLog->setStyleSheet("QTextEdit { background: #0b0b0b; color: #ddd; font-family: Menlo, monospace; font-size: 9pt; }");
+
+        dv->addWidget(m_virtuosoHud);
+        dv->addLayout(controls);
+        dv->addWidget(m_virtuosoTheoryLog, 1);
+    }
+    chartLayout->addWidget(virtuosoDbg);
+
+    connect(m_virtuosoDebugToggle, &QCheckBox::toggled, this, [virtuosoDbg](bool on) {
+        virtuosoDbg->setVisible(on);
+    });
+
+    connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::debugStatus,
+            this, [this](const QString& s) {
+                if (m_virtuosoHud) m_virtuosoHud->setText(s);
+            });
+    connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::theoryEventJson,
+            this, [this](const QString& json) {
+                if (!m_virtuosoTheoryLog) return;
+                QString line = json;
+                const QJsonDocument d = QJsonDocument::fromJson(json.toUtf8());
+                if (!d.isNull()) line = QString::fromUtf8(d.toJson(QJsonDocument::Compact));
+                m_virtuosoTheoryLog->append(line);
+            });
+
+    connect(m_virtuosoVibeOverride, &QComboBox::currentIndexChanged, this, [this](int idx) {
+        if (!m_virtuosoPlayback || !m_virtuosoVibeOverride) return;
+        m_virtuosoPlayback->setDebugVibeOverride(m_virtuosoVibeOverride->itemData(idx).toInt());
+    });
+    connect(m_virtuosoInteractionBoost, &QSlider::valueChanged, this, [this](int v) {
+        if (!m_virtuosoPlayback) return;
+        m_virtuosoPlayback->setDebugInteractionBoost(double(v) / 100.0);
+    });
 
     auto makeSection = [&](const QString& title,
                            QLabel*& titleLbl,

@@ -25,6 +25,7 @@ public:
         int noteBrushLoopA = virtuoso::drums::fluffy_brushes::kBrushCircleTwoHands_Fs3; // looping
         int noteBrushLoopB = virtuoso::drums::fluffy_brushes::kBrushCircleRightHand_G3; // looping
         int noteBrushShort = virtuoso::drums::fluffy_brushes::kBrushShortRightHand_Gs3;
+        int noteRideHit = virtuoso::drums::fluffy_brushes::kRideHitBorder_Ds2;
         int noteRideSwish = virtuoso::drums::fluffy_brushes::kRideSwish2_E2;
 
         // Phrase model (bars)
@@ -55,6 +56,10 @@ public:
         int beatInBar = 0;        // 0-based
         bool structural = false;  // strong beat/chord arrival proxy
         quint32 determinismSeed = 1;
+
+        // Interaction/macro-dynamics (MVP)
+        double energy = 0.25;       // 0..1
+        bool intensityPeak = false; // user peak -> drummer supports with brief cymbal pattern
     };
 
     BrushesBalladDrummer() = default;

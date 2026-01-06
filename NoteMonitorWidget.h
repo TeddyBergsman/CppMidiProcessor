@@ -13,6 +13,8 @@ class QComboBox;
 class QPushButton;
 class QSpinBox;
 class QCheckBox;
+class QTextEdit;
+class QSlider;
 
 namespace ireal { struct Playlist; }
 namespace chart { class SongChartWidget; }
@@ -105,6 +107,13 @@ private:
     playback::BandPlaybackEngine* m_playback = nullptr;
     playback::VirtuosoBalladMvpPlaybackEngine* m_virtuosoPlayback = nullptr;
     ireal::Playlist* m_playlist = nullptr; // owned pointer to avoid header includes
+
+    // Virtuoso debug / visualization (glass box)
+    QCheckBox* m_virtuosoDebugToggle = nullptr;
+    QLabel* m_virtuosoHud = nullptr;
+    QComboBox* m_virtuosoVibeOverride = nullptr;
+    QSlider* m_virtuosoInteractionBoost = nullptr;
+    QTextEdit* m_virtuosoTheoryLog = nullptr;
 
     MidiProcessor* m_midiProcessor = nullptr; // not owned
 

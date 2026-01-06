@@ -34,6 +34,16 @@ public:
         double addSecondColorProb = 0.25;    // add a second color tone sometimes
         double sparkleProbBeat4 = 0.18;      // occasional high sparkle on beat 4
         bool preferShells = true;            // favor shells over thicker rootless
+
+        // Listening MVP (optional): comping space + interaction.
+        bool userDensityHigh = false;
+        bool userIntensityPeak = false;
+        bool userRegisterHigh = false;
+        bool userSilence = false;
+
+        // Macro dynamics / debug forcing
+        bool forceClimax = false;
+        double energy = 0.25; // 0..1
     };
 
     JazzBalladPianoPlanner();

@@ -29,6 +29,11 @@ struct AgentIntentNote {
     QString voicing_type;
     QString logic_tag;
     QString target_note;
+
+    // Interaction/macro state (optional, filled by higher-level playback engines).
+    QString vibe_state;
+    QString user_intents;
+    double user_outside_ratio = 0.0;
 };
 
 // Stage 1 engine: schedules intents through groove humanization and emits MIDI + TheoryEvent JSON.

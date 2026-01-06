@@ -13,6 +13,8 @@
 #include "playback/JazzBalladBassPlanner.h"
 #include "playback/JazzBalladPianoPlanner.h"
 #include "playback/BrushesBalladDrummer.h"
+#include "playback/SemanticMidiAnalyzer.h"
+#include "playback/VibeStateMachine.h"
 
 class MidiProcessor;
 
@@ -41,9 +43,15 @@ public slots:
     void play();
     void stop();
 
+    // Debug/validation knobs (for making interaction audible/visible).
+    // vibeOverride: 0=Auto, 1=Simmer, 2=Build, 3=Climax, 4=CoolDown
+    void setDebugVibeOverride(int vibeOverride) { m_debugVibeOverride = vibeOverride; }
+    void setDebugInteractionBoost(double boost) { m_debugInteractionBoost = boost; } // 0..3 recommended
+
 signals:
     void currentCellChanged(int cellIndex);
     void theoryEventJson(const QString& json);
+    void debugStatus(const QString& text);
 
 private slots:
     void onTick();
@@ -96,6 +104,10 @@ private:
     JazzBalladPianoPlanner m_pianoPlanner;
     BrushesBalladDrummer m_drummer;
 
+    // Listening MVP (semantic analysis of user input)
+    SemanticMidiAnalyzer m_listener;
+    VibeStateMachine m_vibe;
+
     // Channels (1..16)
     int m_chDrums = 6;
     int m_chBass = 3;
@@ -109,6 +121,10 @@ private:
     // Groove lock (prototype): align Bass downbeat attacks to Drums feather kick if present.
     bool m_kickLocksBass = true;
     int m_kickLockMaxMs = 18;
+
+    // Debug controls (defaults: Auto vibe, no exaggeration).
+    int m_debugVibeOverride = 0;
+    double m_debugInteractionBoost = 1.0;
 };
 
 } // namespace playback

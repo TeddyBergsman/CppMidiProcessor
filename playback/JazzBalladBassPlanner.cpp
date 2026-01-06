@@ -91,8 +91,18 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                                                                           const virtuoso::groove::TimeSignature& ts) {
     QVector<virtuoso::engine::AgentIntentNote> out;
 
-    // Two-feel: beats 1 and 3 only (0 and 2 in 0-based).
-    if (!(c.beatInBar == 0 || c.beatInBar == 2)) return out;
+    using virtuoso::groove::GrooveGrid;
+    using virtuoso::groove::Rational;
+
+    const bool climaxWalk = c.forceClimax && (c.energy >= 0.75);
+
+    // Two-feel foundation on beats 1 and 3, plus optional pickup on beat 4 when approaching.
+    // In Climax: switch to a light walking feel (quarter notes) to make the change audible.
+    if (climaxWalk) {
+        if (!(c.beatInBar >= 0 && c.beatInBar <= 3)) return out;
+    } else {
+        if (!(c.beatInBar == 0 || c.beatInBar == 2 || c.beatInBar == 3)) return out;
+    }
 
     const int rootPc = (c.chord.bassPc >= 0) ? c.chord.bassPc : c.chord.rootPc;
     if (rootPc < 0) return out;
@@ -108,10 +118,50 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     // - Beat 3: if next chord changes on the next bar, approach next root; else play 5th.
     int chosenPc = rootPc;
     QString logic;
-    if (c.beatInBar == 0) {
+
+    if (climaxWalk) {
+        // Very simple walking grammar (MVP):
+        // beat1: root, beat2: 5th or 3rd, beat3: approach/chord tone, beat4: approach into next bar if changing.
+        const int pc3 = (rootPc + 4) % 12;
+        const int pc5 = (rootPc + 7) % 12;
+        const bool nextChanges = (nextRootPc >= 0 && nextRootPc != rootPc);
+        if (c.beatInBar == 0) { chosenPc = rootPc; logic = "Bass:walk root"; }
+        else if (c.beatInBar == 1) {
+            chosenPc = ((qHash(QString("%1|%2|w2").arg(c.chordText).arg(c.playbackBarIndex)) % 2u) == 0u) ? pc5 : pc3;
+            logic = "Bass:walk chord tone";
+        } else if (c.beatInBar == 2) {
+            chosenPc = pc5;
+            logic = "Bass:walk support";
+        } else { // beat 3 (0-based) => beat 4
+            if (nextChanges) {
+                const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
+                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
+                while (approachMidi < 40) approachMidi += 12;
+                while (approachMidi > 57) approachMidi -= 12;
+                int repaired = approachMidi;
+                if (feasibleOrRepair(repaired)) {
+                    virtuoso::engine::AgentIntentNote n;
+                    n.agent = "Bass";
+                    n.channel = midiChannel;
+                    n.note = repaired;
+                    n.baseVelocity = 58;
+                    n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
+                    n.durationWhole = Rational(1, ts.den);
+                    n.structural = false;
+                    n.chord_context = c.chordText;
+                    n.logic_tag = "walk_approach";
+                    n.target_note = "Walk approach";
+                    out.push_back(n);
+                    return out;
+                }
+            }
+            chosenPc = pc3;
+            logic = "Bass:walk resolve";
+        }
+    } else if (c.beatInBar == 0) {
         chosenPc = rootPc;
         logic = "Bass: two-feel root";
-    } else {
+    } else if (c.beatInBar == 2) {
         const bool nextChanges = (nextRootPc >= 0 && nextRootPc != rootPc);
 
         // Chet-style space: on stable harmony, sometimes omit beat 3 entirely.
@@ -148,7 +198,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                     n.channel = midiChannel;
                     n.note = repaired;
                     n.baseVelocity = 50;
-                    n.durationWhole = virtuoso::groove::Rational(1, ts.den); // 1 beat pickup into next bar
+                    n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
+                    n.durationWhole = Rational(1, ts.den); // 1 beat (beat 3) approach tone
                     n.structural = false;
                     n.chord_context = c.chordText;
                     n.logic_tag = "two_feel_approach";
@@ -163,6 +214,45 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         const int fifthPc = (rootPc + 7) % 12;
         chosenPc = fifthPc;
         logic = "Bass: two-feel fifth";
+    } else {
+        // Beat 4 pickup: only when the harmony is changing into next bar.
+        const bool nextChanges = (nextRootPc >= 0 && nextRootPc != rootPc);
+        if (!nextChanges) return out;
+
+        // If the user is extremely dense/intense, avoid extra pickups (keep foundation).
+        if (c.userDensityHigh || c.userIntensityPeak) return out;
+
+        // Deterministic probability, slightly higher at phrase ends (4-bar phrasing).
+        const bool phraseEnd = ((c.playbackBarIndex % 4) == 3);
+        const quint32 hApp = quint32(qHash(QString("%1|%2|%3|app4")
+                                           .arg(c.chordText)
+                                           .arg(c.playbackBarIndex)
+                                           .arg(c.determinismSeed)));
+        const double baseP = qBound(0.0, c.approachProbBeat3 * 0.65, 1.0);
+        const double p = phraseEnd ? qMin(1.0, baseP + 0.18) : baseP;
+        if (int(hApp % 100u) >= int(llround(p * 100.0))) return out;
+
+        const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
+        int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
+        while (approachMidi < 40) approachMidi += 12;
+        while (approachMidi > 57) approachMidi -= 12;
+        int repaired = approachMidi;
+        if (!feasibleOrRepair(repaired)) return out;
+
+        virtuoso::engine::AgentIntentNote n;
+        n.agent = "Bass";
+        n.channel = midiChannel;
+        n.note = repaired;
+        n.baseVelocity = 46;
+        // Place on the upbeat 8th of beat 4 ("and of 4") as a pickup.
+        n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, /*sub*/1, /*count*/2, ts);
+        n.durationWhole = Rational(1, 8);
+        n.structural = false;
+        n.chord_context = c.chordText;
+        n.logic_tag = "two_feel_pickup";
+        n.target_note = QString("Pickup -> next root pc=%1").arg(nextRootPc);
+        out.push_back(n);
+        return out;
     }
 
     int midi = pcToBassMidiInRange(chosenPc, /*lo*/40, /*hi*/57);
@@ -173,7 +263,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     n.agent = "Bass";
     n.channel = midiChannel;
     n.note = repaired;
-    n.baseVelocity = (c.beatInBar == 0) ? 56 : 50;
+    n.baseVelocity = climaxWalk ? 58 : ((c.beatInBar == 0) ? 56 : 50);
     if (c.beatInBar == 0) {
         // On stable harmony, occasionally hold the root for the whole bar (Chet ballad vibe).
         const bool stable = (!c.hasNextChord) || ((c.nextChord.rootPc == c.chord.rootPc) && !c.chordIsNew);
@@ -182,13 +272,15 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                                            .arg(c.playbackBarIndex)
                                            .arg(c.determinismSeed)));
         const bool longHold = stable && ((hLen % 4u) == 0u);
-        n.durationWhole = longHold ? virtuoso::groove::Rational(ts.num, ts.den) : virtuoso::groove::Rational(2, ts.den);
+        n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
+        n.durationWhole = climaxWalk ? Rational(1, ts.den) : (longHold ? Rational(ts.num, ts.den) : Rational(2, ts.den));
     } else {
-        n.durationWhole = virtuoso::groove::Rational(2, ts.den);
+        n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
+        n.durationWhole = climaxWalk ? Rational(1, ts.den) : Rational(2, ts.den);
     }
     n.structural = c.chordIsNew || (c.beatInBar == 0);
     n.chord_context = c.chordText;
-    n.logic_tag = (c.beatInBar == 0) ? "two_feel_root" : "two_feel_fifth";
+    n.logic_tag = climaxWalk ? "walk" : ((c.beatInBar == 0) ? "two_feel_root" : "two_feel_fifth");
     n.target_note = logic;
     out.push_back(n);
     return out;

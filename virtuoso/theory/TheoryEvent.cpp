@@ -21,6 +21,11 @@ QJsonObject TheoryEvent::toJsonObject() const {
     if (timing_offset_ms != 0) o.insert("timing_offset_ms", timing_offset_ms);
     if (velocity_adjustment != 0) o.insert("velocity_adjustment", velocity_adjustment);
     if (humanize_seed != 0u) o.insert("humanize_seed", int(humanize_seed));
+
+    // Optional interaction fields
+    if (!vibe_state.trimmed().isEmpty()) o.insert("vibe_state", vibe_state);
+    if (!user_intents.trimmed().isEmpty()) o.insert("user_intents", user_intents);
+    if (user_outside_ratio > 0.0) o.insert("user_outside_ratio", user_outside_ratio);
     return o;
 }
 

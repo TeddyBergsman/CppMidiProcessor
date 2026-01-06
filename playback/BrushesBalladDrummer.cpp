@@ -55,19 +55,22 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
     const bool shouldRetriggerLoop = (m_p.loopRetriggerBars > 0) ? ((bar % m_p.loopRetriggerBars) == 0) : phraseStart;
 
     const auto gp = GrooveGrid::fromBarBeatTuplet(bar, beat, 0, 1, ts);
+    const double e = qBound(0.0, ctx.energy, 1.0);
 
     // --- 1) Feather kick on beat 1 (beatInBar==0). ---
     // Keep probability very low; make it slightly more likely on structural beats.
     if (beat == 0) {
         const quint32 s = mixSeed(ctx.determinismSeed, quint32(bar * 17 + beat * 3 + 101));
         const double p = unitRand01(s);
-        const double kickProb = qBound(0.0, m_p.kickProbOnBeat1 * (ctx.structural ? 1.20 : 1.0), 1.0);
+        const double energyBoost = (0.65 + 0.70 * qBound(0.0, ctx.energy, 1.0)); // 0.65..1.35
+        const double kickProb = qBound(0.0, m_p.kickProbOnBeat1 * (ctx.structural ? 1.20 : 1.0) * energyBoost, 1.0);
         if (p < kickProb) {
             AgentIntentNote k;
             k.agent = "Drums";
             k.channel = m_p.channel;
             k.note = m_p.noteKick;
-            k.baseVelocity = qBound(1, m_p.velKick + (ctx.structural ? 4 : 0), 127);
+            const int vel = m_p.velKick + (ctx.structural ? 4 : 0) + int(llround(6.0 * qBound(0.0, ctx.energy, 1.0)));
+            k.baseVelocity = qBound(1, vel, 127);
             k.startPos = gp;
             k.durationWhole = Rational(1, 16);
             k.structural = ctx.structural;
@@ -104,7 +107,8 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
     if (isBackbeat) {
         const quint32 s = mixSeed(ctx.determinismSeed, quint32(bar * 19 + beat * 7 + 202));
         const double p = unitRand01(s);
-        if (p < qBound(0.0, m_p.swishProbOn2And4, 1.0)) {
+        const double swishProb = qBound(0.0, m_p.swishProbOn2And4 * (0.80 + 0.50 * e), 1.0);
+        if (p < swishProb) {
             const double altp = unitRand01(mixSeed(s, 0xB00Bu));
             const bool useAlt = (altp < qBound(0.0, m_p.swishAltShortProb, 1.0));
 
@@ -112,13 +116,52 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
             sw.agent = "Drums";
             sw.channel = m_p.channel;
             sw.note = useAlt ? m_p.noteBrushShort : m_p.noteSnareSwish;
-            sw.baseVelocity = qBound(1, m_p.velSwish, 127);
+            sw.baseVelocity = qBound(1, m_p.velSwish + int(llround(8.0 * e)), 127);
             sw.startPos = gp;
             sw.durationWhole = Rational(1, 16);
             sw.structural = true;
             sw.logic_tag = useAlt ? "Drums:BrushSwishShort" : "Drums:SnareSwish";
             out.push_back(sw);
         }
+    }
+
+    // --- 3c) Climax support: ride pattern (makes "Climax" audibly obvious). ---
+    // When energy is high, add a light ride pulse on every beat, and on upbeats when very high.
+    if (e >= 0.80) {
+        AgentIntentNote ride;
+        ride.agent = "Drums";
+        ride.channel = m_p.channel;
+        ride.note = m_p.noteRideHit;
+        ride.baseVelocity = qBound(1, 26 + int(llround(30.0 * e)), 127);
+        ride.startPos = gp;
+        ride.durationWhole = Rational(1, 16);
+        ride.structural = true;
+        ride.logic_tag = "Drums:RidePulse";
+        out.push_back(ride);
+
+        if (e >= 0.93) {
+            // Add upbeat 8th for a clear "support" without fully switching grooves.
+            AgentIntentNote up = ride;
+            up.startPos = GrooveGrid::fromBarBeatTuplet(bar, beat, /*sub*/1, /*count*/2, ts);
+            up.baseVelocity = qBound(1, up.baseVelocity - 8, 127);
+            up.logic_tag = "Drums:RidePulseUpbeat";
+            out.push_back(up);
+        }
+    }
+
+    // --- 3b) Intensity support: brief ride swish on beat 1 when user is peaking. ---
+    // This is a *support texture*, not a full pattern switch.
+    if (ctx.intensityPeak && beat == 0) {
+        AgentIntentNote r;
+        r.agent = "Drums";
+        r.channel = m_p.channel;
+        r.note = m_p.noteRideSwish;
+        r.baseVelocity = qBound(1, 22 + int(llround(16.0 * e)), 127);
+        r.startPos = gp;
+        r.durationWhole = Rational(1, 8);
+        r.structural = true;
+        r.logic_tag = "Drums:IntensitySupportRide";
+        out.push_back(r);
     }
 
     // --- 4) Phrase-end swish (longer ride swish / sweep). ---

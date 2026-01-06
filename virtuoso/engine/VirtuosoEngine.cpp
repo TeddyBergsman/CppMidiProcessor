@@ -118,6 +118,9 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
     te.timing_offset_ms = he.timing_offset_ms;
     te.velocity_adjustment = he.velocity_adjustment;
     te.humanize_seed = he.humanize_seed;
+    te.vibe_state = note.vibe_state;
+    te.user_intents = note.user_intents;
+    te.user_outside_ratio = note.user_outside_ratio;
 
     VirtuosoScheduler::ScheduledEvent tj;
     tj.dueMs = he.onMs;
@@ -176,6 +179,9 @@ void VirtuosoEngine::scheduleHumanizedIntentNote(const AgentIntentNote& note,
     te.timing_offset_ms = he.timing_offset_ms;
     te.velocity_adjustment = he.velocity_adjustment;
     te.humanize_seed = he.humanize_seed;
+    te.vibe_state = note.vibe_state;
+    te.user_intents = note.user_intents;
+    te.user_outside_ratio = note.user_outside_ratio;
 
     VirtuosoScheduler::ScheduledEvent tj;
     tj.dueMs = he.onMs;

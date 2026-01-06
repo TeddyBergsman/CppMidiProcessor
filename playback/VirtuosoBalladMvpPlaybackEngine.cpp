@@ -2,10 +2,14 @@
 
 #include "midiprocessor.h"
 #include "playback/BalladReferenceTuning.h"
+#include "playback/SemanticMidiAnalyzer.h"
+#include "playback/VibeStateMachine.h"
 
 #include <QHash>
+#include <QDateTime>
 #include <QtGlobal>
 #include <algorithm>
+#include <limits>
 
 namespace playback {
 namespace {
@@ -165,6 +169,27 @@ static virtuoso::groove::Rational durationWholeFromHoldMs(int holdMs, int bpm) {
     return virtuoso::groove::Rational(qint64(holdMs) * qint64(bpm), qint64(240000));
 }
 
+static QString intentsToString(const SemanticMidiAnalyzer::IntentState& i) {
+    QStringList out;
+    if (i.densityHigh) out << "DENSITY_HIGH";
+    if (i.registerHigh) out << "REGISTER_HIGH";
+    if (i.intensityPeak) out << "INTENSITY_PEAK";
+    if (i.playingOutside) out << "PLAYING_OUTSIDE";
+    if (i.silence) out << "SILENCE";
+    return out.join(",");
+}
+
+static double energyForOverride(int overrideVibe) {
+    // 0=Auto (ignored), 1..4 map to vibe energies
+    switch (overrideVibe) {
+        case 1: return 0.25; // Simmer
+        case 2: return 0.55; // Build
+        case 3: return 0.90; // Climax
+        case 4: return 0.18; // CoolDown
+        default: return 0.25;
+    }
+}
+
 } // namespace
 
 VirtuosoBalladMvpPlaybackEngine::VirtuosoBalladMvpPlaybackEngine(QObject* parent)
@@ -190,6 +215,21 @@ void VirtuosoBalladMvpPlaybackEngine::setMidiProcessor(MidiProcessor* midi) {
             m_midi, &MidiProcessor::sendVirtualAllNotesOff, Qt::UniqueConnection);
     connect(&m_engine, &virtuoso::engine::VirtuosoEngine::cc,
             m_midi, &MidiProcessor::sendVirtualCC, Qt::UniqueConnection);
+
+    // Listening MVP: tap *transposed* live performance notes.
+    // Use QueuedConnection because MidiProcessor may emit from its worker thread.
+    connect(m_midi, &MidiProcessor::guitarNoteOn, this, [this](int note, int vel) {
+        m_listener.ingestNoteOn(SemanticMidiAnalyzer::Source::Guitar, note, vel, QDateTime::currentMSecsSinceEpoch());
+    }, Qt::QueuedConnection);
+    connect(m_midi, &MidiProcessor::guitarNoteOff, this, [this](int note) {
+        m_listener.ingestNoteOff(SemanticMidiAnalyzer::Source::Guitar, note, QDateTime::currentMSecsSinceEpoch());
+    }, Qt::QueuedConnection);
+    connect(m_midi, &MidiProcessor::voiceNoteOn, this, [this](int note, int vel) {
+        m_listener.ingestNoteOn(SemanticMidiAnalyzer::Source::Voice, note, vel, QDateTime::currentMSecsSinceEpoch());
+    }, Qt::QueuedConnection);
+    connect(m_midi, &MidiProcessor::voiceNoteOff, this, [this](int note) {
+        m_listener.ingestNoteOff(SemanticMidiAnalyzer::Source::Voice, note, QDateTime::currentMSecsSinceEpoch());
+    }, Qt::QueuedConnection);
 }
 
 void VirtuosoBalladMvpPlaybackEngine::setTempoBpm(int bpm) {
@@ -233,6 +273,8 @@ void VirtuosoBalladMvpPlaybackEngine::play() {
     m_lastChord = music::ChordSymbol{};
     m_bassPlanner.reset();
     m_pianoPlanner.reset();
+    m_listener.reset();
+    m_vibe.reset();
     // Keep drummer profile wired to channel/mapping choices.
     {
         auto p = m_drummer.profile();
@@ -391,6 +433,9 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     const int cellIndex = m_sequence[stepIndex % seqLen];
     const bool haveChord = chordForCellIndex(cellIndex, chord, chordIsNew);
 
+    // Update listener harmonic context for "playing outside" classification.
+    if (haveChord && !chord.noChord) m_listener.setChordContext(chord);
+
     // Lookahead: next bar's beat-1 chord (for bass approaches / piano anticipation later).
     // IMPORTANT: do NOT call chordForCellIndex() here, because it mutates last-chord state.
     auto parseCellChordNoState = [&](int anyCellIndex, const music::ChordSymbol& fallback, bool* outIsExplicit = nullptr) -> music::ChordSymbol {
@@ -424,6 +469,38 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     const bool strongBeat = (beatInBar == 0 || beatInBar == 2);
     const bool structural = strongBeat || chordIsNew;
 
+    // Snapshot live intent state once per scheduled step (ms domain).
+    const qint64 nowMsWall = QDateTime::currentMSecsSinceEpoch();
+    const auto intent = m_listener.compute(nowMsWall);
+    auto vibeEff = m_vibe.update(intent, nowMsWall);
+
+    // Debug override: force vibe to make behavior obvious during validation.
+    QString vibeStr;
+    if (m_debugVibeOverride != 0) {
+        VibeStateMachine::Vibe v = VibeStateMachine::Vibe::Simmer;
+        if (m_debugVibeOverride == 2) v = VibeStateMachine::Vibe::Build;
+        if (m_debugVibeOverride == 3) v = VibeStateMachine::Vibe::Climax;
+        if (m_debugVibeOverride == 4) v = VibeStateMachine::Vibe::CoolDown;
+        vibeEff.vibe = v;
+        vibeEff.energy = energyForOverride(m_debugVibeOverride);
+        vibeStr = VibeStateMachine::vibeName(vibeEff.vibe) + " (forced)";
+    } else {
+        vibeStr = VibeStateMachine::vibeName(vibeEff.vibe);
+    }
+
+    const QString intentStr = intentsToString(intent);
+
+    // Debug UI status (emitted once per beat step).
+    emit debugStatus(QString("Vibe=%1  energy=%2  intents=%3  nps=%4  reg=%5  vel=%6  silenceMs=%7  outside=%8")
+                         .arg(vibeStr)
+                         .arg(vibeEff.energy, 0, 'f', 2)
+                         .arg(intentStr.isEmpty() ? "-" : intentStr)
+                         .arg(intent.notesPerSec, 0, 'f', 2)
+                         .arg(intent.registerCenterMidi)
+                         .arg(intent.lastVelocity)
+                         .arg(intent.msSinceLastNoteOn == std::numeric_limits<qint64>::max() ? -1 : intent.msSinceLastNoteOn)
+                         .arg(intent.outsideRatio, 0, 'f', 2));
+
     // Drums always run (ballad texture), even if harmony missing/N.C.
     // We schedule Drums first, because Bass groove-lock references Drums kick timing.
     const quint32 detSeed = quint32(qHash(QString("ballad|") + m_stylePresetKey));
@@ -439,6 +516,8 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
         dc.beatInBar = beatInBar;
         dc.structural = structural;
         dc.determinismSeed = detSeed ^ 0xD00D'BEEFu;
+        dc.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+        dc.intensityPeak = intent.intensityPeak;
 
         auto drumIntents = m_drummer.planBeat(dc);
 
@@ -449,6 +528,9 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
         }
         if (kickIndex >= 0) {
             kickIntent = drumIntents[kickIndex];
+            kickIntent.vibe_state = vibeStr;
+            kickIntent.user_intents = intentStr;
+            kickIntent.user_outside_ratio = intent.outsideRatio;
             kickHe = m_engine.humanizeIntent(kickIntent);
             haveKickHe = (kickHe.offMs > kickHe.onMs);
             if (haveKickHe) {
@@ -457,7 +539,13 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
             drumIntents.removeAt(kickIndex);
         }
 
-        for (const auto& n : drumIntents) {
+        for (auto n : drumIntents) {
+            // Macro dynamics: scale drums velocity slightly by energy.
+            const double e = qBound(0.0, vibeEff.energy, 1.0);
+            n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.85 + 0.35 * e))), 127);
+            n.vibe_state = vibeStr;
+            n.user_intents = intentStr;
+            n.user_outside_ratio = intent.outsideRatio;
             m_engine.scheduleNote(n);
         }
     }
@@ -481,10 +569,28 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     bc.approachProbBeat3 = tune.bassApproachProbBeat3;
     bc.skipBeat3ProbStable = tune.bassSkipBeat3ProbStable;
     bc.allowApproachFromAbove = tune.bassAllowApproachFromAbove;
+    bc.userDensityHigh = intent.densityHigh;
+    bc.userIntensityPeak = intent.intensityPeak;
+    bc.userSilence = intent.silence;
+    bc.forceClimax = (m_debugVibeOverride == 3) || (vibeEff.vibe == VibeStateMachine::Vibe::Climax);
+    bc.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+    // Interaction heuristics: when user is dense/high/intense, bass simplifies and avoids chromaticism.
+    if (intent.densityHigh || intent.intensityPeak) {
+        bc.approachProbBeat3 *= 0.35;
+        bc.skipBeat3ProbStable = qMin(0.65, bc.skipBeat3ProbStable + 0.20);
+    }
+    if (vibeEff.vibe == VibeStateMachine::Vibe::Climax) {
+        bc.approachProbBeat3 *= 0.60; // slightly more motion, but still ballad-safe
+        bc.skipBeat3ProbStable = qMax(0.10, bc.skipBeat3ProbStable - 0.08);
+    }
     auto bassIntents = m_bassPlanner.planBeat(bc, m_chBass, ts);
-    const auto gp = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
     for (auto& n : bassIntents) {
-        n.startPos = gp;
+        n.vibe_state = vibeStr;
+        n.user_intents = intentStr;
+        n.user_outside_ratio = intent.outsideRatio;
+        // Macro dynamics: small velocity lift under higher energy.
+        const double e = qBound(0.0, vibeEff.energy, 1.0);
+        n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.90 + 0.25 * e))), 127);
         // Groove lock (prototype): on beat 1, if a feather kick exists, align bass attack to kick.
         if (m_kickLocksBass && beatInBar == 0 && haveKickHe) {
             auto bhe = m_engine.humanizeIntent(n);
@@ -518,9 +624,45 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     pc.addSecondColorProb = tune.pianoAddSecondColorProb;
     pc.sparkleProbBeat4 = tune.pianoSparkleProbBeat4;
     pc.preferShells = tune.pianoPreferShells;
+    pc.userDensityHigh = intent.densityHigh;
+    pc.userIntensityPeak = intent.intensityPeak;
+    pc.userRegisterHigh = intent.registerHigh;
+    pc.userSilence = intent.silence;
+    pc.forceClimax = (m_debugVibeOverride == 3) || (vibeEff.vibe == VibeStateMachine::Vibe::Climax);
+    pc.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+    // Interaction heuristics:
+    // - User register high => piano stays lower (and reduces sparkle)
+    // - User density high/intensity peak => piano comp sparser
+    // - User silence => piano is allowed to fill slightly more
+    if (intent.registerHigh) {
+        pc.rhHi = qMax(pc.rhLo + 4, pc.rhHi - 6);
+        pc.sparkleProbBeat4 *= 0.25;
+    }
+    if (intent.densityHigh || intent.intensityPeak) {
+        pc.skipBeat2ProbStable = qMin(0.95, pc.skipBeat2ProbStable + 0.25);
+        pc.preferShells = true;
+        pc.sparkleProbBeat4 *= 0.20;
+    } else if (intent.silence) {
+        pc.skipBeat2ProbStable = qMax(0.0, pc.skipBeat2ProbStable - 0.12);
+        pc.sparkleProbBeat4 = qMin(0.40, pc.sparkleProbBeat4 + 0.08);
+    }
+    if (vibeEff.vibe == VibeStateMachine::Vibe::Climax) {
+        pc.skipBeat2ProbStable = qMax(0.0, pc.skipBeat2ProbStable - 0.10);
+        pc.addSecondColorProb = qMin(0.65, pc.addSecondColorProb + 0.10);
+        pc.sparkleProbBeat4 = qMin(0.55, pc.sparkleProbBeat4 + 0.08);
+    }
+    if (vibeEff.vibe == VibeStateMachine::Vibe::CoolDown) {
+        pc.skipBeat2ProbStable = qMin(0.98, pc.skipBeat2ProbStable + 0.10);
+        pc.sparkleProbBeat4 *= 0.20;
+    }
     auto pianoIntents = m_pianoPlanner.planBeat(pc, m_chPiano, ts);
     for (auto& n : pianoIntents) {
-        n.startPos = gp;
+        n.vibe_state = vibeStr;
+        n.user_intents = intentStr;
+        n.user_outside_ratio = intent.outsideRatio;
+        // Macro dynamics: piano a bit more responsive to vibe energy.
+        const double e = qBound(0.0, vibeEff.energy, 1.0);
+        n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.82 + 0.40 * e))), 127);
         m_engine.scheduleNote(n);
     }
 }

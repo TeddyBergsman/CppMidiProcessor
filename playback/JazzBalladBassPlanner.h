@@ -28,6 +28,15 @@ public:
         double approachProbBeat3 = 0.55;      // probability of chromatic approach into next bar when it changes
         double skipBeat3ProbStable = 0.25;    // when harmony is stable, sometimes omit beat 3 (more space)
         bool allowApproachFromAbove = true;   // allow +1 approach as well as -1
+
+        // Listening MVP (optional): used to simplify or support interaction.
+        bool userDensityHigh = false;
+        bool userIntensityPeak = false;
+        bool userSilence = false;
+
+        // Macro dynamics / debug forcing
+        bool forceClimax = false;
+        double energy = 0.25; // 0..1
     };
 
     JazzBalladBassPlanner();

@@ -171,8 +171,19 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                                                                            const virtuoso::groove::TimeSignature& ts) {
     QVector<virtuoso::engine::AgentIntentNote> out;
 
-    // Ballad comp default: beats 2 and 4 (1 and 3 in 0-based)
-    if (!((c.beatInBar % 2) == 1)) return out;
+    using virtuoso::groove::GrooveGrid;
+    using virtuoso::groove::Rational;
+
+    const bool climaxDense = c.forceClimax && (c.energy >= 0.75);
+
+    // Ballad comp default: beats 2 and 4 (1 and 3 in 0-based), with occasional anticipations.
+    // In Climax: comp every beat so the difference is audible.
+    if (climaxDense) {
+        if (!(c.beatInBar >= 0 && c.beatInBar <= 3)) return out;
+    } else {
+        // We allow beat 1 for "and-of-1" anticipations and beat 3 for sparse fills.
+        if (!(c.beatInBar == 0 || c.beatInBar == 1 || c.beatInBar == 3)) return out;
+    }
 
     // Deterministic sparse variation: sometimes skip beat 2 if chord is stable.
     const quint32 h = quint32(qHash(QString("%1|%2|%3").arg(c.chordText).arg(c.playbackBarIndex).arg(c.determinismSeed)));
@@ -180,6 +191,9 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     const int pSkip = qBound(0, int(llround(c.skipBeat2ProbStable * 100.0)), 100);
     const bool skip = (stable && (c.beatInBar == 1) && (pSkip > 0) && (int(h % 100u) < pSkip));
     if (skip) return out;
+
+    // Interaction: if user is very dense/intense, piano should mostly comp on beat 4 only (unless forced climax).
+    if (!climaxDense && (c.userDensityHigh || c.userIntensityPeak) && (c.beatInBar == 1 || c.beatInBar == 0)) return out;
 
     // Choose voicing family (Chet ballad: mostly shells, occasional rootless).
     const bool chordHas7 = (c.chord.extension >= 7 || c.chord.seventh != music::SeventhQuality::None);
@@ -244,7 +258,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     m_lastVoicing = midi;
 
     const QString voicingType = useRootless ? (pickA ? "Ballad Rootless (A-ish)" : "Ballad Rootless (B-ish)") : "Ballad Shell";
-    const int baseVel = c.chordIsNew ? 50 : 44;
+    const int baseVel = climaxDense ? (c.chordIsNew ? 64 : 58) : (c.chordIsNew ? 50 : 44);
 
     // Optional high sparkle on beat 4 (very occasional).
     const int pSp = qBound(0, int(llround(c.sparkleProbBeat4 * 100.0)), 100);
@@ -262,11 +276,32 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         n.channel = midiChannel;
         n.note = clampMidi(m);
         n.baseVelocity = baseVel;
-        n.durationWhole = virtuoso::groove::Rational(1, ts.den); // 1 beat sustain (ballad comp)
+        // Timing:
+        // - main comp hits on beat starts (beats 2/4)
+        // - occasional anticipation on "and of 1" when chord is new
+        if (c.beatInBar == 0) {
+            // Anticipation: only on chord arrivals, and only if not in silence (avoid stepping on vocal).
+            if (!climaxDense) {
+                if (!c.chordIsNew || c.userSilence) continue;
+                if ((h % 5u) != 0u) continue;
+                n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 0, /*sub*/1, /*count*/2, ts); // and-of-1
+                n.durationWhole = Rational(1, 8);
+                n.baseVelocity = qMax(1, baseVel - 10);
+                n.logic_tag = "ballad_anticipation";
+            } else {
+                // In Climax: hit beat 1 normally (no anticipation).
+                n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 0, 0, 1, ts);
+                n.durationWhole = Rational(1, ts.den);
+                n.logic_tag = "climax_comp";
+            }
+        } else {
+            n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
+            n.durationWhole = Rational(1, ts.den); // 1 beat sustain (ballad comp)
+        }
         n.structural = c.chordIsNew;
         n.chord_context = c.chordText;
         n.voicing_type = voicingType;
-        n.logic_tag = "ballad_comp";
+        if (n.logic_tag.isEmpty()) n.logic_tag = "ballad_comp";
         n.target_note = "Guide tones + color";
         out.push_back(n);
     }
@@ -277,13 +312,38 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         n.channel = midiChannel;
         n.note = clampMidi(sparkleMidi);
         n.baseVelocity = baseVel - 6;
-        n.durationWhole = virtuoso::groove::Rational(1, ts.den * 2); // short sparkle
+        n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
+        n.durationWhole = Rational(1, ts.den * 2); // short sparkle
         n.structural = false;
         n.chord_context = c.chordText;
         n.voicing_type = voicingType + " + Sparkle";
         n.logic_tag = "ballad_sparkle";
         n.target_note = "High sparkle";
         out.push_back(n);
+    }
+
+    // Silence-response fill: if user is silent, optionally add a tiny answering dyad on the upbeat of beat 4.
+    if (c.userSilence && c.beatInBar == 3 && !m_lastVoicing.isEmpty()) {
+        const quint32 hf = quint32(qHash(QString("%1|%2|%3|fill").arg(c.chordText).arg(c.playbackBarIndex).arg(c.determinismSeed)));
+        if ((hf % 100u) < 18u) {
+            // Choose a simple color (9) near the last RH cluster.
+            const int pc9 = pcForDegree(c.chord, 9);
+            const int around = m_lastVoicing.last();
+            const int m1 = nearestMidiForPc(pc9, around + 7, c.rhLo, c.rhHi);
+            virtuoso::engine::AgentIntentNote f;
+            f.agent = "Piano";
+            f.channel = midiChannel;
+            f.note = clampMidi(m1);
+            f.baseVelocity = qMax(1, baseVel - 12);
+            f.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 3, /*sub*/1, /*count*/2, ts); // and-of-4
+            f.durationWhole = Rational(1, 16);
+            f.structural = false;
+            f.chord_context = c.chordText;
+            f.voicing_type = voicingType + " + Fill";
+            f.logic_tag = "ballad_silence_fill";
+            f.target_note = "Answer fill";
+            out.push_back(f);
+        }
     }
     return out;
 }

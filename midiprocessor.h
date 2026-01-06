@@ -79,6 +79,14 @@ signals:
     void voiceCc2Updated(int value);         // 0-127 breath (CC2)
     void guitarVelocityUpdated(int value);   // 0-127 note velocity
 
+    // --- Live performance note events (for Virtuoso Listening MVP) ---
+    // These reflect the *transposed* notes that are actually sent to the synth output.
+    // They are NOT emitted for command/backing-track selection notes.
+    void guitarNoteOn(int midiNote, int velocity);
+    void guitarNoteOff(int midiNote);
+    void voiceNoteOn(int midiNote, int velocity);
+    void voiceNoteOff(int midiNote);
+
 private:
     enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, PLAY_TRACK, PAUSE_TRACK, TRANSPOSE_CHANGE };
     enum class MidiSource { Guitar, VoiceAmp, VoicePitch, VirtualBand };

@@ -392,6 +392,14 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                             passthroughMsg[1] = (unsigned char)transposedNote;
                         }
                     }
+
+                    // Listening MVP hook: emit transposed performance note events (ignore command/backing selection notes).
+                    if (!m_inCommandMode && !m_backingTrackSelectionMode && (status == 0x90 || status == 0x80) && passthroughMsg.size() >= 3) {
+                        const int note = int(passthroughMsg[1]);
+                        const int vel = int(passthroughMsg[2]);
+                        if (status == 0x90 && vel > 0) emit guitarNoteOn(note, vel);
+                        else if (status == 0x80 || (status == 0x90 && vel == 0)) emit guitarNoteOff(note);
+                    }
                     
                     midiOut->sendMessage(&passthroughMsg);
                     
@@ -428,6 +436,14 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                             if (transposedNote < 0) transposedNote = 0;
                             if (transposedNote > 127) transposedNote = 127;
                             voiceMsg[1] = (unsigned char)transposedNote;
+                        }
+
+                        // Listening MVP hook: emit voice note events (transposed).
+                        if (voiceMsg.size() >= 3) {
+                            const int note = int(voiceMsg[1]);
+                            const int vel = int(voiceMsg[2]);
+                            if (status == 0x90 && vel > 0) emit voiceNoteOn(note, vel);
+                            else if (status == 0x80 || (status == 0x90 && vel == 0)) emit voiceNoteOff(note);
                         }
                         midiOut->sendMessage(&voiceMsg);
                     } else if (status != 0xD0) {

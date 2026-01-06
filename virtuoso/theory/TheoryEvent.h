@@ -25,6 +25,11 @@ struct TheoryEvent {
     int velocity_adjustment = 0;
     quint32 humanize_seed = 0;
 
+    // Interaction / macro-dynamics (optional)
+    QString vibe_state;      // e.g. "Simmer", "Build", "Climax", "CoolDown"
+    QString user_intents;    // comma-separated flags (MVP): "DENSITY_HIGH,REGISTER_HIGH,..."
+    double user_outside_ratio = 0.0;
+
     QJsonObject toJsonObject() const;
     QString toJsonString(bool compact = true) const;
 };

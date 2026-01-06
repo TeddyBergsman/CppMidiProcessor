@@ -217,7 +217,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         }
     }
 
-    // Choose voicing family (Chet/Bill ballad: mostly shells, occasional rootless).
+    // Stage 3: candidate + cost-function selection (deterministic).
     const bool chordHas7 = (c.chord.extension >= 7 || c.chord.seventh != music::SeventhQuality::None);
     const bool dominant = (c.chord.quality == music::ChordQuality::Dominant);
     const bool alt = c.chord.alt || !c.chord.alterations.isEmpty();
@@ -226,69 +226,133 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                         || c.chord.quality == music::ChordQuality::HalfDiminished
                         || alt);
     const bool pickA = ((h % 2u) == 0u);
-    const bool useRootless = chordHas7 && (!c.preferShells || c.chordIsNew || (c.beatInBar == 3 && ((h % 4u) == 0u)));
 
     // Build a ballad-appropriate set:
     // - Guide tones when chord has a 7th: 3 & 7
     // - Otherwise: 3 & 5 (avoid inventing a b7 on plain triads)
     // - Add 1–2 colors (9/13 on maj, 9/11 on min, altered tensions only if chart indicates)
-    QVector<int> pcs;
-    pcs.reserve(6);
+    const int pc1 = (c.chord.rootPc >= 0) ? (c.chord.rootPc % 12) : 0;
     const int pc3 = pcForDegree(c.chord, 3);
     const int pc7 = chordHas7 ? pcForDegree(c.chord, 7) : -1;
     const int pc5 = pcForDegree(c.chord, 5);
+    const int pc9 = pcForDegree(c.chord, 9);
+    const int pc11 = pcForDegree(c.chord, 11);
+    const int pc13 = pcForDegree(c.chord, 13);
+
+    struct Cand {
+        QString id;
+        QString voicingType;
+        QVector<int> pcs;
+        bool prefersRootless = false;
+    };
+    auto mk = [&](QString id, QString vt, QVector<int> pcs, bool rootless = false) -> Cand {
+        sortUnique(pcs);
+        return {std::move(id), std::move(vt), std::move(pcs), rootless};
+    };
+
+    const bool allowRootless = chordHas7 && (c.harmonicRisk >= 0.35);
+    const bool wantMoreColor = (c.harmonicRisk >= 0.45) || (progress01 >= 0.55);
+    const bool allowQuartal = chordHas7 && (c.harmonicRisk >= 0.60);
+
+    QVector<Cand> candidates;
+    candidates.reserve(8);
+
+    // Shell/guide core
+    QVector<int> guide;
+    if (pc3 >= 0) guide.push_back(pc3);
+    if (pc7 >= 0) guide.push_back(pc7);
+    else if (pc5 >= 0) guide.push_back(pc5);
+    candidates.push_back(mk("shell", chordHas7 ? "Ballad Shell (3-7)" : "Ballad Shell (3-5)", guide, false));
+
+    // Sweet colors
+    if (pc9 >= 0) candidates.push_back(mk("shell+9", "Ballad Shell + 9", guide + QVector<int>{pc9}, false));
+    const bool isMinor = (c.chord.quality == music::ChordQuality::Minor);
+    const int sweet2 = isMinor ? pc11 : pc13;
+    if (sweet2 >= 0) candidates.push_back(mk("shell+sweet2", isMinor ? "Ballad Shell + 11" : "Ballad Shell + 13", guide + QVector<int>{sweet2}, false));
+    if (wantMoreColor && pc9 >= 0 && sweet2 >= 0) candidates.push_back(mk("shell+2colors", "Ballad Shell + 2 colors", guide + QVector<int>{pc9, sweet2}, false));
+    if (!c.toneDark && pc1 >= 0 && (c.harmonicRisk >= 0.55) && !spicy) candidates.push_back(mk("shell+root", "Ballad Shell + Root (open)", guide + QVector<int>{pc1}, false));
+
+    // Rootless A/B
+    if (allowRootless) {
+        if (pc3 >= 0 && pc5 >= 0 && pc7 >= 0 && pc9 >= 0) {
+            candidates.push_back(mk("rootlessA", "Ballad Rootless (A-ish)", QVector<int>{pc3, pc5, pc7, pc9}, true));
+            candidates.push_back(mk("rootlessB", "Ballad Rootless (B-ish)", QVector<int>{pc7, pc9, pc3, pc5}, true));
+        }
+    }
+
+    // Quartal flavor (beauty-first: only if safe and not too dark)
+    if (allowQuartal && !c.toneDark) {
+        QVector<int> qv;
+        if (pc3 >= 0) qv.push_back(pc3);
+        if (pc7 >= 0) qv.push_back(pc7);
+        if (pc9 >= 0) qv.push_back(pc9);
+        if (isMinor && pc11 >= 0 && c.harmonicRisk >= 0.70) qv.push_back(pc11);
+        if (qv.size() >= 3) candidates.push_back(mk("quartal", "Ballad Quartal", qv, true));
+    }
+
+    auto scoreCand = [&](const Cand& cand) -> double {
+        double s = 0.0;
+        // Prefer consistency within the 2-bar anchor unless chord is new.
+        if (!m_anchorPcs.isEmpty() && !c.chordIsNew) {
+            int common = 0;
+            for (int pc : cand.pcs) if (m_anchorPcs.contains(pc)) ++common;
+            const int total = qMax(1, cand.pcs.size());
+            const double overlap = double(common) / double(total);
+            s += (1.0 - overlap) * 1.4; // penalize big PC-set change
+        }
+        // Penalize thickness early / low risk.
+        const int n = cand.pcs.size();
+        const double target = 2.0 + 2.0 * c.harmonicRisk + 1.0 * progress01;
+        s += 0.55 * qAbs(double(n) - target);
+        // Penalize root-in-RH when dark
+        if (cand.pcs.contains(pc1) && c.toneDark > 0.55) s += 0.8;
+        // Penalize spicy colors on non-spicy chords at low risk
+        if (!spicy && c.harmonicRisk < 0.45) {
+            if (cand.pcs.contains(pc11) && !isMinor) s += 0.8; // natural 11 over major-ish is rough
+        }
+        // Interaction: if user is active, bias simpler (fewer pcs).
+        if (!c.userSilence && (c.userDensityHigh || c.userIntensityPeak)) s += 0.35 * qMax(0, n - 2);
+        // Small bias: shells early; richer later.
+        if (progress01 < 0.25 && cand.prefersRootless) s += 0.4;
+        if (progress01 > 0.60 && cand.id == "shell") s += 0.25;
+        // Deterministic tie breaker
+        s += (double(qHash(cand.id)) / double(std::numeric_limits<uint>::max())) * 1e-6;
+        return s;
+    };
 
     // Coherence: keep a stable pitch-class set across a 2-bar block (hand position),
     // refreshing at chord changes.
     const int blockStart = (qMax(0, c.playbackBarIndex) / 2) * 2;
     const bool anchorValid = (m_anchorBlockStartBar == blockStart && m_anchorChordText == c.chordText && !m_anchorPcs.isEmpty());
     const bool refreshAnchor = (!anchorValid) || c.chordIsNew;
+
+    QString voicingType;
+    QVector<int> pcs;
     if (refreshAnchor) {
         m_anchorBlockStartBar = blockStart;
         m_anchorChordText = c.chordText;
-        m_anchorPcs.clear();
 
-        if (pc3 >= 0) m_anchorPcs.push_back(pc3);
-        if (pc7 >= 0) m_anchorPcs.push_back(pc7);
-        else if (pc5 >= 0) m_anchorPcs.push_back(pc5);
-
-        // Primary color (beauty-first)
-        bool addPrimaryColor = true;
-        if (!spicy && !c.chordIsNew && !climaxDense) {
-            const int pKeep = qBound(0, int(llround(55.0 + 25.0 * c.energy + 20.0 * progress01 + (c.userSilence ? 10.0 : 0.0))), 98);
-            addPrimaryColor = (int((h / 37u) % 100u) < pKeep);
+        const Cand* best = nullptr;
+        double bestScore = 1e9;
+        for (const auto& cand : candidates) {
+            if (cand.pcs.isEmpty()) continue;
+            const double sc = scoreCand(cand);
+            if (sc < bestScore) { bestScore = sc; best = &cand; }
         }
-        if (addPrimaryColor) m_anchorPcs.push_back(pcForDegree(c.chord, 9));
-
-        // Secondary color (more likely later in the song, and on chord changes)
-        const int p2 = qBound(0, int(llround(c.addSecondColorProb * 100.0)), 100);
-        const int p2Boost = qBound(0, int(llround((c.chordIsNew ? 12.0 : 0.0) + 18.0 * progress01)), 35);
-        const bool add2 = (p2 > 0) && (int((h / 7u) % 100u) < qMin(100, p2 + p2Boost));
-        if (add2) {
-            int deg2 = 13;
-            if (dominant) deg2 = 13;
-            else if (c.chord.quality == music::ChordQuality::Major) deg2 = 13;
-            else if (c.chord.quality == music::ChordQuality::Minor) deg2 = 11;
-            const bool ok = spicy || c.userSilence || (c.energy >= 0.50 + 0.20 * progress01);
-            if (ok) m_anchorPcs.push_back(pcForDegree(c.chord, deg2));
+        if (best) {
+            m_anchorPcs = best->pcs;
+            voicingType = best->voicingType;
+        } else {
+            m_anchorPcs = guide;
+            voicingType = chordHas7 ? "Ballad Shell (3-7)" : "Ballad Shell (3-5)";
         }
-
-        // Occasional extra support tone (5th), slightly more likely later.
-        const int p5 = qBound(0, int(llround(10.0 + 14.0 * progress01 + (c.chordIsNew ? 8.0 : 0.0))), 40);
-        if ((pc5 >= 0) && (int((h / 101u) % 100u) < p5)) m_anchorPcs.push_back(pc5);
-
-        sortUnique(m_anchorPcs);
+    } else {
+        pcs = m_anchorPcs;
+        // Reconstruct the label from the stored pcs (best-effort); keeps old behavior if UI relies on text.
+        voicingType = chordHas7 ? "Ballad Shell (3-7)" : "Ballad Shell (3-5)";
     }
 
-    // Use anchor pcs (stable) as our voicing pcs; this is the core anti-disjointed move.
     pcs = m_anchorPcs;
-
-    // If we chose rootless, we can gently thicken the anchor slightly in later bars.
-    if (useRootless && !pcs.contains(pcForDegree(c.chord, 5))) {
-        const int pRootless5 = qBound(0, int(llround(8.0 + 14.0 * progress01)), 28);
-        if (int((h / 59u) % 100u) < pRootless5) pcs.push_back(pcForDegree(c.chord, 5));
-        sortUnique(pcs);
-    }
 
     // Map to midi with LH/RH ranges and voice-leading to last voicing.
     // v2: keep a stable “voice index” mapping to reduce random re-voicing each beat.
@@ -368,9 +432,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     // Save for voice-leading.
     m_lastVoicing = midi;
 
-    const QString voicingType = useRootless
-        ? (pickA ? "Ballad Rootless (A-ish)" : "Ballad Rootless (B-ish)")
-        : (chordHas7 ? "Ballad Shell (3-7)" : "Ballad Shell (3-5)");
+    // voicingType chosen by solver (above)
     const int baseVel = climaxDense ? (c.chordIsNew ? 64 : 58) : (c.chordIsNew ? 50 : 44);
 
     // Optional high sparkle on beat 4 (very occasional), but only when there's rhythmic space.
@@ -436,10 +498,12 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                                              .arg(hit.beatInBar)
                                              .arg(c.determinismSeed)));
         const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
-        // Rolling should be subtle/occasional: mostly straight hits, with rare "pronounced" rolls.
-        const int pRoll = qBound(0, int(llround(10.0 + 18.0 * c.energy + 10.0 * progress01)), 45);
-        const bool doRoll = !userBusy && (c.energy >= 0.18) && (int(hr % 100u) < pRoll);
-        const int pBigRoll = qBound(0, int(llround(3.0 + 6.0 * c.energy + 4.0 * progress01)), 14);
+        // Rolling should be subtle/occasional, but it must respond clearly to Virt sliders.
+        // Make rhythmicComplexity drive "hands/roll" feel even at lower energy.
+        const double rc = qBound(0.0, c.rhythmicComplexity, 1.0);
+        const int pRoll = qBound(0, int(llround(6.0 + 10.0 * c.energy + 28.0 * rc + 10.0 * progress01)), 70);
+        const bool doRoll = !userBusy && ((c.energy >= 0.14) || (rc >= 0.22)) && (int(hr % 100u) < pRoll);
+        const int pBigRoll = qBound(0, int(llround(2.0 + 3.0 * c.energy + 8.0 * rc + 4.0 * progress01)), 22);
         const bool bigRoll = doRoll && (int((hr / 97u) % 100u) < pBigRoll);
         const bool doArp = doRoll && (notes.size() >= 3) && (hit.dur >= virtuoso::groove::Rational(1, 8)) && (int((hr / 13u) % 100u) < (bigRoll ? 80 : 45));
         const bool arpUp = ((hr / 3u) % 2u) == 0u;
@@ -488,22 +552,22 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                 sub = qBound(0, base16 + step, 3);
             }
 
-            virtuoso::engine::AgentIntentNote n;
-            n.agent = "Piano";
-            n.channel = midiChannel;
-            n.note = clampMidi(m);
+        virtuoso::engine::AgentIntentNote n;
+        n.agent = "Piano";
+        n.channel = midiChannel;
+        n.note = clampMidi(m);
             n.baseVelocity = vel;
             n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, beat, sub, count, ts);
             // If RH is rolled late, keep it a bit shorter so it doesn't smear.
             const bool shorten = doRoll && isRh && !isLow && (hit.dur <= virtuoso::groove::Rational(1, 4));
             n.durationWhole = shorten ? qMin(hit.dur, virtuoso::groove::Rational(3, 16)) : hit.dur;
-            n.structural = c.chordIsNew;
-            n.chord_context = c.chordText;
+        n.structural = c.chordIsNew;
+        n.chord_context = c.chordText;
             n.voicing_type = voicingType + (doRoll ? (doArp ? " + Arpeggiated" : " + RolledHands") : "");
             n.logic_tag = hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag);
             n.target_note = isTop ? "Comp (top voice)" : (isLow ? "Comp (LH anchor)" : "Comp (inner)");
-            out.push_back(n);
-        }
+        out.push_back(n);
+    }
     };
 
     for (const auto& hit : hitsThisBeat) renderHit(hit);
@@ -725,12 +789,20 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
     // Upper-structure color cluster: add a second, very soft dyad/triad above the comp sometimes.
     // Beauty-first: keep it consonant (stacked 3rds/6ths) and only when there's space.
-    if (!c.userDensityHigh && !c.userIntensityPeak && (c.energy >= 0.40) && (c.userSilence || c.energy >= 0.55)) {
+    // IMPORTANT: this should respond audibly to Virt sliders (harmonicRisk + toneDark), not just Energy.
+    if (!c.userDensityHigh && !c.userIntensityPeak && (c.userSilence || c.harmonicRisk >= 0.55 || c.rhythmicComplexity >= 0.65)) {
         const quint32 hu = quint32(qHash(QString("pno_upper|%1|%2|%3").arg(c.chordText).arg(c.playbackBarIndex / 2).arg(c.determinismSeed)));
         const double progress01 = qBound(0.0, double(qMax(0, c.playbackBarIndex)) / 24.0, 1.0);
         // Start very subtle; open up later in the song.
-        const double baseP = 6.0 + 14.0 * c.energy + (c.userSilence ? 6.0 : 0.0);
-        const int p = qBound(0, int(llround(baseP * (0.25 + 0.75 * progress01))), 30);
+        // Risk increases probability; dark tone decreases it.
+        const double baseP =
+            3.0
+            + 18.0 * qBound(0.0, c.harmonicRisk, 1.0)
+            + 8.0 * qBound(0.0, c.rhythmicComplexity, 1.0)
+            + 8.0 * progress01
+            + (c.userSilence ? 6.0 : 0.0)
+            - 10.0 * qBound(0.0, c.toneDark, 1.0);
+        const int p = qBound(0, int(llround(baseP)), 45);
         if (int(hu % 100u) < p) {
             // Candidate pitch-classes (sweet colors + guides)
             const int pc3 = pcForDegree(c.chord, 3);
@@ -807,19 +879,19 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                 const auto dur = Rational(3, 8); // ring a bit
                 auto pushNote = [&](int m, int vel, QString target) {
                     if (m < 0) return;
-                    virtuoso::engine::AgentIntentNote n;
-                    n.agent = "Piano";
-                    n.channel = midiChannel;
+        virtuoso::engine::AgentIntentNote n;
+        n.agent = "Piano";
+        n.channel = midiChannel;
                     n.note = clampMidi(m);
                     n.baseVelocity = qBound(1, vel, 127);
                     n.startPos = pos;
                     n.durationWhole = dur;
-                    n.structural = false;
-                    n.chord_context = c.chordText;
+        n.structural = false;
+        n.chord_context = c.chordText;
                     n.voicing_type = voicingType + " + UpperStructure";
                     n.logic_tag = "ballad_upper_structure";
                     n.target_note = std::move(target);
-                    out.push_back(n);
+        out.push_back(n);
                 };
                 const int base = baseVel - 22;
                 if (mThird >= 0) pushNote(mThird, base - 3, "UpperStructure (triad low)");
@@ -1181,8 +1253,10 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
     const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
     const bool phraseEnd = ((qMax(1, c.playbackBarIndex) % 4) == 3);
 
-    // Complexity proxy from energy, reduced if user is busy (make space).
-    double complexity = e;
+    // Complexity driver:
+    // - previously was mostly energy-driven
+    // - Stage 3: rhythmicComplexity should be the primary dial (so Virt slider is audible)
+    double complexity = qBound(0.0, c.rhythmicComplexity, 1.0);
     if (userBusy) complexity *= 0.55;
     if (c.userSilence) complexity = qMin(1.0, complexity + 0.10);
     // As the song progresses, we want a gentle density ramp (starts sparse, becomes a bit fuller).
@@ -1226,13 +1300,7 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
     };
 
     // --- Base feel: jazz ballad comping is sparse but syncopated. ---
-    // Patterns are bar-coherent and deterministic via hash.
-    int variant = int(h % 7u); // 0..6
-    // Later in the song, avoid the super-sparse patterns (only2/only4) unless user is busy.
-    if (!userBusy && progress01 >= 0.55 && (variant == 4 || variant == 5)) {
-        variant = int((h / 3u) % 6u); // 0..5 (no "arrival1+4" bias here; still deterministic)
-    }
-
+    // Stage 3: choose a bar-coherent rhythm via candidate scoring (still deterministic).
     if (climax) {
         // Denser, but still musical: quarters + occasional upbeat pushes.
         add(0, 0, 1, chooseHold("climax_q1", /*canPad*/false, /*canLong*/false), +4, "full", "climax_q1");
@@ -1242,46 +1310,100 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
         return out;
     }
 
-    // Non-climax: choose a session-player-ish bar rhythm.
-    switch (variant) {
-        case 6: // Arrival on 1 + 4 (good for chord changes; avoids constant avoidance of beat 1)
-            add(0, 0, 1, chooseHold("arrival1", /*canPad*/true, /*canLong*/true), -2, "guide", "arrival1");
-            add(3, 0, 1, chooseHold("backbeat4_short", /*canPad*/true, /*canLong*/true), 0, "full", phraseEnd ? "only4_end" : "only4");
-            break;
-        case 0: // Classic 2&4, but let it ring more.
-            add(1, 0, 1, chooseHold("backbeat2", /*canPad*/false, /*canLong*/true), -2, "guide", "backbeat2");
-            add(3, 0, 1, chooseHold("backbeat4_short", /*canPad*/true, /*canLong*/true), 0, "full", "backbeat4_short");
-            break;
-        case 1: // Delayed 2 (laid-back) + 4
-            add(1, 1, 2, chooseHold("delay2", /*canPad*/false, /*canLong*/true), -4, "guide", "delay2");
-            add(3, 0, 1, chooseHold("backbeat4_short", /*canPad*/true, /*canLong*/true), 0, "full", "backbeat4_short");
-            break;
-        case 2: // Charleston-ish: beat 1 + and-of-2
-            if (!c.userSilence && !c.chordIsNew && (int((h / 11u) % 100u) < int(llround(c.skipBeat2ProbStable * 100.0)))) {
-                // leave space; only the push
-                add(1, 1, 2, shortDur(), -4, "guide", "charleston_push_only");
-            } else {
-                add(0, 0, 1, chooseHold("charleston_1", /*canPad*/false, /*canLong*/true), -6, "guide", "charleston_1");
-                add(1, 1, 2, chooseHold("charleston_and2", /*canPad*/true, /*canLong*/true), 0, "full", "charleston_and2");
-            }
-            break;
-        case 3: // Anticipate 4 (and-of-4) + maybe 2
-            if (complexity > 0.35) add(1, 0, 1, shortDur(), -2, "guide", "light2");
-            // Push on and-of-4 often wants to ring into the barline a bit.
-            add(3, 1, 2, chooseHold("push4", /*canPad*/true, /*canLong*/true), -6, "full", phraseEnd ? "push4_end" : "push4");
-            break;
-        case 4: // 2 only (super sparse), but ring more.
-            add(1, 0, 1, chooseHold("only2", /*canPad*/true, /*canLong*/true), -4, "guide", "only2");
-            break;
-        case 5: // 4 only + tiny answer on and-of-3 if user silence
-            add(3, 0, 1, chooseHold("only4", /*canPad*/true, /*canLong*/true), -4, "full", "only4");
-            if (c.userSilence && complexity > 0.30) add(2, 1, 2, virtuoso::groove::Rational(1, 16), -10, "guide", "answer_and3");
-            break;
-        default: // syncopated 2 (and-of-2) + 4 (and-of-4)
-            add(1, 1, 2, shortDur(), -6, "guide", "and2");
-            add(3, 1, 2, chooseHold("and4", /*canPad*/true, /*canLong*/true), -8, "full", phraseEnd ? "and4_end" : "and4");
-            break;
+    auto buildBase = [&](int variant) -> QVector<CompHit> {
+        QVector<CompHit> v;
+        v.reserve(6);
+        auto addV = [&](int beat, int sub, int count, virtuoso::groove::Rational dur, int velDelta, QString density, QString tag) {
+            CompHit hit;
+            hit.beatInBar = qBound(0, beat, 3);
+            hit.sub = qMax(0, sub);
+            hit.count = qMax(1, count);
+            hit.dur = dur;
+            hit.velDelta = velDelta;
+            hit.density = density;
+            hit.rhythmTag = std::move(tag);
+            v.push_back(hit);
+        };
+
+        switch (variant) {
+            case 6: // Arrival on 1 + 4 (good for chord changes)
+                addV(0, 0, 1, chooseHold("arrival1", /*canPad*/true, /*canLong*/true), -2, "guide", "arrival1");
+                addV(3, 0, 1, chooseHold("backbeat4_short", /*canPad*/true, /*canLong*/true), 0, "full", phraseEnd ? "only4_end" : "only4");
+                break;
+            case 0: // Classic 2&4
+                addV(1, 0, 1, chooseHold("backbeat2", /*canPad*/false, /*canLong*/true), -2, "guide", "backbeat2");
+                addV(3, 0, 1, chooseHold("backbeat4_short", /*canPad*/true, /*canLong*/true), 0, "full", "backbeat4_short");
+                break;
+            case 1: // Delayed 2 + 4
+                addV(1, 1, 2, chooseHold("delay2", /*canPad*/false, /*canLong*/true), -4, "guide", "delay2");
+                addV(3, 0, 1, chooseHold("backbeat4_short", /*canPad*/true, /*canLong*/true), 0, "full", "backbeat4_short");
+                break;
+            case 2: // Charleston-ish: beat 1 + and-of-2
+                if (!c.userSilence && !c.chordIsNew && (int((h / 11u) % 100u) < int(llround(c.skipBeat2ProbStable * 100.0)))) {
+                    addV(1, 1, 2, shortDur(), -4, "guide", "charleston_push_only");
+                } else {
+                    addV(0, 0, 1, chooseHold("charleston_1", /*canPad*/false, /*canLong*/true), -6, "guide", "charleston_1");
+                    addV(1, 1, 2, chooseHold("charleston_and2", /*canPad*/true, /*canLong*/true), 0, "full", "charleston_and2");
+                }
+                break;
+            case 3: // Anticipate 4 (and-of-4) + maybe 2
+                if (complexity > 0.35) addV(1, 0, 1, shortDur(), -2, "guide", "light2");
+                addV(3, 1, 2, chooseHold("push4", /*canPad*/true, /*canLong*/true), -6, "full", phraseEnd ? "push4_end" : "push4");
+                break;
+            case 4: // 2 only
+                addV(1, 0, 1, chooseHold("only2", /*canPad*/true, /*canLong*/true), -4, "guide", "only2");
+                break;
+            case 5: // 4 only (+ tiny answer)
+                addV(3, 0, 1, chooseHold("only4", /*canPad*/true, /*canLong*/true), -4, "full", "only4");
+                if (c.userSilence && complexity > 0.30) addV(2, 1, 2, virtuoso::groove::Rational(1, 16), -10, "guide", "answer_and3");
+                break;
+            default: // and2 + and4
+                addV(1, 1, 2, shortDur(), -6, "guide", "and2");
+                addV(3, 1, 2, chooseHold("and4", /*canPad*/true, /*canLong*/true), -8, "full", phraseEnd ? "and4_end" : "and4");
+                break;
+        }
+        return v;
+    };
+
+    auto scoreBase = [&](const QVector<CompHit>& v, int variant) -> double {
+        double s = 0.0;
+        const int nHits = v.size();
+        int nOff = 0;
+        bool hasBeat0 = false;
+        bool hasBeat1 = false;
+        for (const auto& hit : v) {
+            if (hit.beatInBar == 0) hasBeat0 = true;
+            if (hit.beatInBar == 1) hasBeat1 = true;
+            if (hit.sub != 0) nOff++;
+        }
+        const double targetHits = qBound(1.0, 1.2 + 2.2 * c.rhythmicComplexity + 1.2 * progress01, 4.0);
+        s += 0.8 * qAbs(double(nHits) - targetHits);
+        // Land on chord changes: if chord is new, prefer beat-1 arrivals.
+        if (c.chordIsNew && !hasBeat0) s += 1.2;
+        // Dark tone wants fewer offbeats.
+        s += 0.35 * c.toneDark * double(nOff);
+        // Interaction: if user isn't silent and interaction is low, keep sparser.
+        if (!c.userSilence && c.interaction < 0.40) s += 0.25 * double(nHits);
+        // Avoid super-sparse later.
+        if (!userBusy && progress01 >= 0.55 && (variant == 4 || variant == 5)) s += 0.9;
+        // If user is busy, strongly prefer patterns that include beat 4 only.
+        if (userBusy) s += 0.6 * double(nHits);
+        // Prefer having a beat-2 component as song progresses.
+        if (!hasBeat1 && progress01 >= 0.60) s += 0.35;
+        // Deterministic tie breaker
+        s += (double((h ^ quint32(variant * 131u)) & 1023u) / 1024.0) * 1e-6;
+        return s;
+    };
+
+    int bestVar = 0;
+    double bestScore = 1e9;
+    QVector<CompHit> bestBase;
+    for (int v = 0; v <= 6; ++v) {
+        const QVector<CompHit> base = buildBase(v);
+        const double sc = scoreBase(base, v);
+        if (sc < bestScore) { bestScore = sc; bestVar = v; bestBase = base; }
     }
+    out = bestBase;
 
     // Chord arrivals: sometimes hit on beat 1 (or and-of-1) so we don't always avoid the downbeat.
     // This is especially important for chart changes and keeps it from sounding "student-ish".

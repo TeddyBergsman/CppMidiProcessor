@@ -123,6 +123,11 @@ private:
     QLabel* m_virtuosoHud = nullptr;
     QCheckBox* m_virtuosoEnergyAuto = nullptr;
     QSlider* m_virtuosoEnergySlider = nullptr;
+    QCheckBox* m_virtuosoVirtAuto = nullptr;
+    QSlider* m_virtuosoHarmRisk = nullptr;
+    QSlider* m_virtuosoRhythmCx = nullptr;
+    QSlider* m_virtuosoInteract = nullptr;
+    QSlider* m_virtuosoToneDark = nullptr;
     QTextEdit* m_virtuosoTheoryLog = nullptr;
 
     MidiProcessor* m_midiProcessor = nullptr; // not owned

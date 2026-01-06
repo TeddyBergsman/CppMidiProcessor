@@ -38,6 +38,16 @@ public:
         // Macro dynamics / debug forcing
         bool forceClimax = false;
         double energy = 0.25; // 0..1
+
+        // Stage 3 solver weights (Virtuosity Matrix-style, 0..1).
+        double harmonicRisk = 0.20;
+        double rhythmicComplexity = 0.25;
+        double interaction = 0.50;
+        double toneDark = 0.60;
+
+        // Optional Stage 2 context (for smarter choices).
+        QString chordFunction; // "Tonic" | "Subdominant" | "Dominant" | "Other"
+        QString roman;         // e.g. "V7"
     };
 
     JazzBalladBassPlanner();

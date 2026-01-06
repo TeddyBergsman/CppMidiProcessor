@@ -94,11 +94,17 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     using virtuoso::groove::GrooveGrid;
     using virtuoso::groove::Rational;
 
+    const double progress01 = qBound(0.0, double(qMax(0, c.playbackBarIndex)) / 24.0, 1.0);
+    const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
     const bool climaxWalk = c.forceClimax && (c.energy >= 0.75);
+    // Virt slider should be audibly testable even if Energy is low:
+    // allow rhythmicComplexity to trigger a light walking texture later in the song.
+    const bool solverWalk = (!userBusy && progress01 >= 0.35 && c.rhythmicComplexity >= 0.85);
+    const bool doWalk = climaxWalk || solverWalk;
 
     // Two-feel foundation on beats 1 and 3, plus optional pickup on beat 4 when approaching.
-    // In Climax: switch to a light walking feel (quarter notes) to make the change audible.
-    if (climaxWalk) {
+    // In Climax / later-song high-complexity: switch to a light walking feel to make the change audible.
+    if (doWalk) {
         if (!(c.beatInBar >= 0 && c.beatInBar <= 3)) return out;
     } else {
         if (!(c.beatInBar == 0 || c.beatInBar == 2 || c.beatInBar == 3)) return out;
@@ -117,7 +123,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     // Phrase-level rhythm vocab (primary "when to play" driver in non-walking mode).
     QVector<virtuoso::vocab::VocabularyRegistry::BassPhraseHit> phraseHits;
     QString phraseId, phraseNotes;
-    const bool canUsePhrase = (!climaxWalk && m_vocab && m_vocab->isLoaded() && (ts.num == 4) && (ts.den == 4));
+    const bool canUsePhrase = (!doWalk && m_vocab && m_vocab->isLoaded() && (ts.num == 4) && (ts.den == 4));
     if (canUsePhrase) {
         virtuoso::vocab::VocabularyRegistry::BassPhraseQuery pq;
         pq.ts = ts;
@@ -137,7 +143,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
 
     // Vocab (optional): beat-scoped bass device selection (only in non-walking two-feel mode).
     virtuoso::vocab::VocabularyRegistry::BassBeatChoice vocabChoice;
-    const bool useVocab = (!climaxWalk && m_vocab && m_vocab->isLoaded() && (ts.num == 4) && (ts.den == 4));
+    const bool useVocab = (!doWalk && m_vocab && m_vocab->isLoaded() && (ts.num == 4) && (ts.den == 4));
     if (useVocab) {
         virtuoso::vocab::VocabularyRegistry::BassBeatQuery q;
         q.ts = ts;
@@ -160,7 +166,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     int chosenPc = rootPc;
     QString logic;
 
-    if (climaxWalk) {
+    if (doWalk) {
         // Very simple walking grammar (MVP):
         // beat1: root, beat2: 5th or 3rd, beat3: approach/chord tone, beat4: approach into next bar if changing.
         const int pc3 = (rootPc + 4) % 12;
@@ -297,56 +303,104 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             }
             logic = QString("Vocab: %1").arg(vocabChoice.notes);
         } else {
-            // Chet-style space: on stable harmony, sometimes omit beat 3 entirely.
+            // Stage 3: candidate + cost selection for beat-3 support (non-vocab).
+            // Keep the old "Chet space" behavior but modulate by Virtuosity weights.
             const bool stableHarmony = !nextChanges && !c.chordIsNew;
             if (stableHarmony) {
                 const quint32 hStable = quint32(qHash(QString("%1|%2|%3|b3")
                                                      .arg(c.chordText)
                                                      .arg(c.playbackBarIndex)
                                                      .arg(c.determinismSeed)));
-                const int p = qBound(0, int(llround(c.skipBeat3ProbStable * 100.0)), 100);
-                if (p > 0 && int(hStable % 100u) < p) {
+                // If interaction is low or user is busy, omit more; otherwise omit less as song progresses.
+                const double omit = qBound(0.0,
+                                           c.skipBeat3ProbStable
+                                               + 0.20 * (c.interaction < 0.35 ? 1.0 : 0.0)
+                                               + 0.15 * (userBusy ? 1.0 : 0.0)
+                                               - 0.20 * progress01
+                                               - 0.25 * c.rhythmicComplexity,
+                                           0.95);
+                const int p = qBound(0, int(llround(omit * 100.0)), 100);
+                if (p > 0 && int(hStable % 100u) < p) return out;
+            }
+
+            const int thirdIv =
+                (c.chord.quality == music::ChordQuality::Minor ||
+                 c.chord.quality == music::ChordQuality::HalfDiminished ||
+                 c.chord.quality == music::ChordQuality::Diminished)
+                    ? 3
+                    : 4;
+            const int pc3 = (rootPc + thirdIv) % 12;
+            const int pc5 = (rootPc + 7) % 12;
+            const int pc6 = (rootPc + 9) % 12;
+
+            struct Cand { QString id; int pc = 0; bool rest = false; bool approach = false; };
+            QVector<Cand> cands;
+            cands.reserve(6);
+            cands.push_back({"fifth", pc5, false, false});
+            cands.push_back({"third", pc3, false, false});
+            cands.push_back({"root", rootPc, false, false});
+            if (c.harmonicRisk >= 0.70 && (c.chordFunction == "Tonic" || c.chordFunction == "Subdominant")) cands.push_back({"sixth", pc6, false, false});
+            if (nextChanges) cands.push_back({"approach", rootPc, false, true});
+            if (!c.userSilence && (userBusy || c.interaction < 0.35)) cands.push_back({"rest", rootPc, true, false});
+
+            auto score = [&](const Cand& k) -> double {
+                double s = 0.0;
+                if (k.rest) {
+                    // Rest is good when user is busy / interaction low; otherwise we want support.
+                    s += (c.userSilence ? 1.0 : 0.2);
+                    s += (c.interaction < 0.35 ? 0.0 : 0.7);
+                    return s;
+                }
+                if (k.approach) {
+                    // Prefer approaches on dominant function and later in song / higher rhythmicComplexity.
+                    double want = (nextChanges ? 1.0 : 0.0) * (0.18 + 0.70 * c.rhythmicComplexity + 0.25 * progress01);
+                    if (c.chordFunction == "Dominant") want = qMin(1.0, want + 0.15);
+                    s += (1.0 - want) * 0.9;
+                }
+                // Stability: prefer 5th/3rd.
+                if (k.id == "fifth") s -= 0.18;
+                if (k.id == "third") s -= 0.10;
+                if (k.id == "root") s += 0.12;
+                if (c.chordFunction == "Dominant" && k.id == "third") s -= 0.18;
+                // Voice-leading cost (smaller leaps).
+                const int m = pcToBassMidiInRange(k.pc, 40, 57);
+                if (m_lastMidi >= 0) s += 0.012 * double(qAbs(m - m_lastMidi));
+                // Avoid color when user is busy.
+                if (userBusy && k.id == "sixth") s += 0.9;
+                s += (double(qHash(k.id)) / double(std::numeric_limits<uint>::max())) * 1e-6;
+                return s;
+            };
+
+            const Cand* best = nullptr;
+            double bestS = 1e9;
+            for (const auto& k : cands) {
+                const double sc = score(k);
+                if (sc < bestS) { bestS = sc; best = &k; }
+            }
+            if (best && best->rest) return out;
+            if (best && best->approach && nextChanges) {
+                const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
+                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
+                while (approachMidi < 40) approachMidi += 12;
+                while (approachMidi > 57) approachMidi -= 12;
+                int repaired = approachMidi;
+                if (feasibleOrRepair(repaired)) {
+                    virtuoso::engine::AgentIntentNote n;
+                    n.agent = "Bass";
+                    n.channel = midiChannel;
+                    n.note = repaired;
+                    n.baseVelocity = 50;
+                    n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
+                    n.durationWhole = Rational(1, ts.den);
+                    n.structural = false;
+                    n.chord_context = c.chordText;
+                    n.logic_tag = "bass_solver_approach";
+                    n.target_note = QString("Approach -> next root pc=%1").arg(nextRootPc);
+                    out.push_back(n);
                     return out;
                 }
             }
-
-            if (nextChanges) {
-                // Approach tone into the next bar's chord (probabilistic but deterministic).
-                const quint32 hApp = quint32(qHash(QString("%1|%2|%3|app")
-                                                   .arg(c.chordText)
-                                                   .arg(c.playbackBarIndex)
-                                                   .arg(c.determinismSeed)));
-                const int p = qBound(0, int(llround(c.approachProbBeat3 * 100.0)), 100);
-                const bool doApproach = (p > 0) && (int(hApp % 100u) < p);
-                if (doApproach) {
-                    const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-                    int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
-                    // Fold approach toward our bass range.
-                    while (approachMidi < 40) approachMidi += 12;
-                    while (approachMidi > 57) approachMidi -= 12;
-                    int repaired = approachMidi;
-                    if (feasibleOrRepair(repaired)) {
-                        virtuoso::engine::AgentIntentNote n;
-                        n.agent = "Bass";
-                        n.channel = midiChannel;
-                        n.note = repaired;
-                        n.baseVelocity = 50;
-                        n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
-                        n.durationWhole = Rational(1, ts.den); // 1 beat (beat 3) approach tone
-                        n.structural = false;
-                        n.chord_context = c.chordText;
-                        n.logic_tag = "two_feel_approach";
-                        n.target_note = QString("Approach -> next root pc=%1").arg(nextRootPc);
-                        out.push_back(n);
-                        return out;
-                    }
-                }
-            }
-
-            // 5th (or root fallback) when not approaching.
-            const int fifthPc = (rootPc + 7) % 12;
-            chosenPc = fifthPc;
-            logic = "Bass: two-feel fifth";
+            if (best) { chosenPc = best->pc; logic = "Bass: solver " + best->id; }
         }
     } else {
         // Beat 4 pickup: only when the harmony is changing into next bar.
@@ -413,7 +467,9 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                                            .arg(c.chordText)
                                            .arg(c.playbackBarIndex)
                                            .arg(c.determinismSeed)));
-        const double baseP = qBound(0.0, c.approachProbBeat3 * 0.65, 1.0);
+        // Make Virt rhythmicComplexity audibly affect pickup frequency.
+        // (Higher complexity => more pickups/approaches; darker tone does not affect bass much here.)
+        const double baseP = qBound(0.0, (c.approachProbBeat3 * 0.45) * (0.35 + 0.95 * qBound(0.0, c.rhythmicComplexity, 1.0)), 1.0);
         const double p = phraseEnd ? qMin(1.0, baseP + 0.18) : baseP;
         if (int(hApp % 100u) >= int(llround(p * 100.0))) return out;
 
@@ -448,7 +504,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     n.agent = "Bass";
     n.channel = midiChannel;
     n.note = repaired;
-    const int baseVel = climaxWalk ? 58 : ((c.beatInBar == 0) ? 56 : 50);
+    const int baseVel = doWalk ? 58 : ((c.beatInBar == 0) ? 56 : 50);
     const int phraseVelDelta = havePhraseHits ? phraseHits.first().vel_delta : 0;
     n.baseVelocity = qBound(1, baseVel + (havePhraseHits ? phraseVelDelta : (haveVocab ? vocabChoice.vel_delta : 0)), 127);
     if (c.beatInBar == 0) {
@@ -466,7 +522,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                                                .arg(c.playbackBarIndex)
                                                .arg(c.determinismSeed)));
             const bool longHold = stable && ((hLen % 4u) == 0u);
-            n.durationWhole = climaxWalk ? Rational(1, ts.den) : (longHold ? Rational(ts.num, ts.den) : Rational(2, ts.den));
+            n.durationWhole = doWalk ? Rational(1, ts.den) : (longHold ? Rational(ts.num, ts.den) : Rational(2, ts.den));
         }
     } else {
         n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
@@ -480,14 +536,14 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                           vocabChoice.action == virtuoso::vocab::VocabularyRegistry::BassAction::Root)) {
             n.durationWhole = Rational(qMax(1, vocabChoice.dur_num), qMax(1, vocabChoice.dur_den));
         } else {
-            n.durationWhole = climaxWalk ? Rational(1, ts.den) : Rational(2, ts.den);
+            n.durationWhole = doWalk ? Rational(1, ts.den) : Rational(2, ts.den);
         }
     }
     n.structural = c.chordIsNew || (c.beatInBar == 0);
     n.chord_context = c.chordText;
     if (havePhraseHits) n.logic_tag = QString("VocabPhrase:Bass:%1").arg(phraseId);
     else if (haveVocab) n.logic_tag = QString("Vocab:Bass:%1").arg(vocabChoice.id);
-    else n.logic_tag = climaxWalk ? "walk" : ((c.beatInBar == 0) ? "two_feel_root" : "two_feel_fifth");
+    else n.logic_tag = doWalk ? "walk" : ((c.beatInBar == 0) ? "two_feel_root" : "two_feel_fifth");
     n.target_note = logic;
     out.push_back(n);
     return out;

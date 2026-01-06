@@ -651,6 +651,22 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
             const double bassMult = m_agentEnergyMult.value("Bass", 1.0);
             bc.forceClimax = (baseEnergy >= 0.85);
             bc.energy = qBound(0.0, baseEnergy * bassMult, 1.0);
+            // Stage 2 context for Stage 3 solver.
+            bc.chordFunction = func;
+            bc.roman = roman;
+            // Stage 3 solver weights.
+            const double progress01 = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
+            if (m_virtAuto) {
+                bc.harmonicRisk = qBound(0.0, 0.12 + 0.45 * bc.energy + 0.15 * progress01, 1.0);
+                bc.rhythmicComplexity = qBound(0.0, 0.15 + 0.55 * bc.energy + 0.20 * progress01, 1.0);
+                bc.interaction = qBound(0.0, 0.30 + 0.35 * (intent.silence ? 1.0 : 0.0) + 0.15 * bc.energy, 1.0);
+                bc.toneDark = qBound(0.0, 0.65 + 0.20 * (1.0 - bc.energy), 1.0);
+            } else {
+                bc.harmonicRisk = m_virtHarmonicRisk;
+                bc.rhythmicComplexity = m_virtRhythmicComplexity;
+                bc.interaction = m_virtInteraction;
+                bc.toneDark = m_virtToneDark;
+            }
             auto bnotes = bassSim.planBeat(bc, m_chBass, ts);
             for (auto& n : bnotes) {
                 n.key_center = keyCenterStr;
@@ -678,6 +694,19 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
             const double pianoMult = m_agentEnergyMult.value("Piano", 1.0);
             pc.forceClimax = (baseEnergy >= 0.85);
             pc.energy = qBound(0.0, baseEnergy * pianoMult, 1.0);
+            // Stage 3 solver weights (Virtuosity Matrix; match live scheduleStep()).
+            const double progress01p = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
+            if (m_virtAuto) {
+                pc.harmonicRisk = qBound(0.0, 0.15 + 0.55 * pc.energy + 0.20 * progress01p, 1.0);
+                pc.rhythmicComplexity = qBound(0.0, 0.18 + 0.65 * pc.energy + 0.15 * progress01p, 1.0);
+                pc.interaction = qBound(0.0, 0.35 + 0.35 * (intent.silence ? 1.0 : 0.0) + 0.20 * pc.energy, 1.0);
+                pc.toneDark = qBound(0.0, 0.55 + 0.25 * (1.0 - pc.energy) + 0.15 * (intent.registerHigh ? 1.0 : 0.0), 1.0);
+            } else {
+                pc.harmonicRisk = m_virtHarmonicRisk;
+                pc.rhythmicComplexity = m_virtRhythmicComplexity;
+                pc.interaction = m_virtInteraction;
+                pc.toneDark = m_virtToneDark;
+            }
             auto pnotes = pianoSim.planBeat(pc, m_chPiano, ts);
             for (auto& n : pnotes) {
                 n.key_center = keyCenterStr;
@@ -1097,6 +1126,19 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
                 const double bassMult = m_agentEnergyMult.value("Bass", 1.0);
                 bc.forceClimax = (baseEnergy >= 0.85);
                 bc.energy = qBound(0.0, baseEnergy * bassMult, 1.0);
+                // Stage 3 solver weights (Virtuosity Matrix): make lookahead JSON reflect what audio will do.
+                const double progress01 = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
+                if (m_virtAuto) {
+                    bc.harmonicRisk = qBound(0.0, 0.12 + 0.45 * bc.energy + 0.15 * progress01, 1.0);
+                    bc.rhythmicComplexity = qBound(0.0, 0.15 + 0.55 * bc.energy + 0.20 * progress01, 1.0);
+                    bc.interaction = qBound(0.0, 0.30 + 0.35 * (intent.silence ? 1.0 : 0.0) + 0.15 * bc.energy, 1.0);
+                    bc.toneDark = qBound(0.0, 0.65 + 0.20 * (1.0 - bc.energy), 1.0);
+                } else {
+                    bc.harmonicRisk = m_virtHarmonicRisk;
+                    bc.rhythmicComplexity = m_virtRhythmicComplexity;
+                    bc.interaction = m_virtInteraction;
+                    bc.toneDark = m_virtToneDark;
+                }
                 auto bnotes = bassSim.planBeat(bc, m_chBass, ts);
                 for (auto& n : bnotes) {
                     n.vibe_state = vibeStr;
@@ -1120,6 +1162,19 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
                 const double pianoMult = m_agentEnergyMult.value("Piano", 1.0);
                 pc.forceClimax = (baseEnergy >= 0.85);
                 pc.energy = qBound(0.0, baseEnergy * pianoMult, 1.0);
+                // Stage 3 solver weights (Virtuosity Matrix): match scheduleStep().
+                const double progress01p = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
+                if (m_virtAuto) {
+                    pc.harmonicRisk = qBound(0.0, 0.15 + 0.55 * pc.energy + 0.20 * progress01p, 1.0);
+                    pc.rhythmicComplexity = qBound(0.0, 0.18 + 0.65 * pc.energy + 0.15 * progress01p, 1.0);
+                    pc.interaction = qBound(0.0, 0.35 + 0.35 * (intent.silence ? 1.0 : 0.0) + 0.20 * pc.energy, 1.0);
+                    pc.toneDark = qBound(0.0, 0.55 + 0.25 * (1.0 - pc.energy) + 0.15 * (intent.registerHigh ? 1.0 : 0.0), 1.0);
+                } else {
+                    pc.harmonicRisk = m_virtHarmonicRisk;
+                    pc.rhythmicComplexity = m_virtRhythmicComplexity;
+                    pc.interaction = m_virtInteraction;
+                    pc.toneDark = m_virtToneDark;
+                }
                 auto pnotes = pianoSim.planBeat(pc, m_chPiano, ts);
                 for (auto& n : pnotes) {
                     n.vibe_state = vibeStr;
@@ -1206,9 +1261,17 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     const QString intentStr = intentsToString(intent);
 
     // Debug UI status (emitted once per beat step).
-    emit debugStatus(QString("Vibe=%1  energy=%2  intents=%3  nps=%4  reg=%5  gVel=%6  cc2=%7  vNote=%8  silenceMs=%9  outside=%10")
+    const QString virtStr = m_virtAuto
+        ? "Virt=Auto"
+        : QString("Virt=Manual r=%1 rc=%2 i=%3 t=%4")
+              .arg(m_virtHarmonicRisk, 0, 'f', 2)
+              .arg(m_virtRhythmicComplexity, 0, 'f', 2)
+              .arg(m_virtInteraction, 0, 'f', 2)
+              .arg(m_virtToneDark, 0, 'f', 2);
+    emit debugStatus(QString("Vibe=%1  energy=%2  %3  intents=%4  nps=%5  reg=%6  gVel=%7  cc2=%8  vNote=%9  silenceMs=%10  outside=%11")
                          .arg(vibeStr)
                          .arg(baseEnergy, 0, 'f', 2)
+                         .arg(virtStr)
                          .arg(intentStr.isEmpty() ? "-" : intentStr)
                          .arg(intent.notesPerSec, 0, 'f', 2)
                          .arg(intent.registerCenterMidi)
@@ -1313,6 +1376,22 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
         const double mult = m_agentEnergyMult.value("Bass", 1.0);
         bc.energy = qBound(0.0, baseEnergy * mult, 1.0);
     }
+    // Stage 2 context for Stage 3 solver.
+    bc.chordFunction = func;
+    bc.roman = roman;
+    // Stage 3 solver weights.
+    const double progress01 = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
+    if (m_virtAuto) {
+        bc.harmonicRisk = qBound(0.0, 0.12 + 0.45 * bc.energy + 0.15 * progress01, 1.0);
+        bc.rhythmicComplexity = qBound(0.0, 0.15 + 0.55 * bc.energy + 0.20 * progress01, 1.0);
+        bc.interaction = qBound(0.0, 0.30 + 0.35 * (intent.silence ? 1.0 : 0.0) + 0.15 * bc.energy, 1.0);
+        bc.toneDark = qBound(0.0, 0.65 + 0.20 * (1.0 - bc.energy), 1.0);
+    } else {
+        bc.harmonicRisk = m_virtHarmonicRisk;
+        bc.rhythmicComplexity = m_virtRhythmicComplexity;
+        bc.interaction = m_virtInteraction;
+        bc.toneDark = m_virtToneDark;
+    }
     // Interaction heuristics: when user is dense/high/intense, bass simplifies and avoids chromaticism.
     if (intent.densityHigh || intent.intensityPeak) {
         bc.approachProbBeat3 *= 0.35;
@@ -1380,6 +1459,19 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     {
         const double mult = m_agentEnergyMult.value("Piano", 1.0);
         pc.energy = qBound(0.0, baseEnergy * mult, 1.0);
+    }
+    // Stage 3 solver weights (Virtuosity Matrix).
+    const double progress01p = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
+    if (m_virtAuto) {
+        pc.harmonicRisk = qBound(0.0, 0.15 + 0.55 * pc.energy + 0.20 * progress01p, 1.0);
+        pc.rhythmicComplexity = qBound(0.0, 0.18 + 0.65 * pc.energy + 0.15 * progress01p, 1.0);
+        pc.interaction = qBound(0.0, 0.35 + 0.35 * (intent.silence ? 1.0 : 0.0) + 0.20 * pc.energy, 1.0);
+        pc.toneDark = qBound(0.0, 0.55 + 0.25 * (1.0 - pc.energy) + 0.15 * (intent.registerHigh ? 1.0 : 0.0), 1.0);
+    } else {
+        pc.harmonicRisk = m_virtHarmonicRisk;
+        pc.rhythmicComplexity = m_virtRhythmicComplexity;
+        pc.interaction = m_virtInteraction;
+        pc.toneDark = m_virtToneDark;
     }
     // Interaction heuristics:
     // - User register high => piano stays lower (and reduces sparkle)

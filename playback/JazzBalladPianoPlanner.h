@@ -78,6 +78,12 @@ public:
         // Macro dynamics / debug forcing
         bool forceClimax = false;
         double energy = 0.25; // 0..1
+
+        // Stage 3 solver weights (Virtuosity Matrix-style, 0..1).
+        double harmonicRisk = 0.20;        // 0=triads/shells, 1=more tensions/UST-ish
+        double rhythmicComplexity = 0.25;  // 0=simpler placement, 1=more motion
+        double interaction = 0.50;         // 0=backing track, 1=conversational
+        double toneDark = 0.60;            // 0=bright/open, 1=dark/warm (bias register + density)
     };
 
     JazzBalladPianoPlanner();

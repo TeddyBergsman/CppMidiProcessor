@@ -68,6 +68,16 @@ public slots:
         m_agentEnergyMult.insert(agent, qBound(0.0, mult01to2, 2.0));
     }
 
+    // Stage 3 Virtuosity Matrix (global solver weights). When Auto is on (default),
+    // weights are derived from energy + song progress + listening context.
+    void setVirtuosityAuto(bool on) { m_virtAuto = on; }
+    void setVirtuosity(double harmonicRisk01, double rhythmicComplexity01, double interaction01, double toneDark01) {
+        m_virtHarmonicRisk = qBound(0.0, harmonicRisk01, 1.0);
+        m_virtRhythmicComplexity = qBound(0.0, rhythmicComplexity01, 1.0);
+        m_virtInteraction = qBound(0.0, interaction01, 1.0);
+        m_virtToneDark = qBound(0.0, toneDark01, 1.0);
+    }
+
 signals:
     void currentCellChanged(int cellIndex);
     void theoryEventJson(const QString& json);
@@ -156,6 +166,13 @@ private:
     bool m_debugEnergyAuto = true;
     double m_debugEnergy = 0.25;
     QHash<QString, double> m_agentEnergyMult; // agent -> multiplier
+
+    // Stage 3 Virtuosity Matrix (defaults: Auto).
+    bool m_virtAuto = true;
+    double m_virtHarmonicRisk = 0.20;
+    double m_virtRhythmicComplexity = 0.25;
+    double m_virtInteraction = 0.50;
+    double m_virtToneDark = 0.60;
 };
 
 } // namespace playback

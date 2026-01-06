@@ -493,24 +493,61 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
         m_virtuosoHud->setTextInteractionFlags(Qt::TextSelectableByMouse);
         m_virtuosoHud->setStyleSheet("QLabel { color: #ddd; font-family: Menlo, monospace; font-size: 10pt; }");
 
-        QHBoxLayout* controls = new QHBoxLayout();
-        controls->setContentsMargins(0, 0, 0, 0);
-        controls->setSpacing(8);
+        QVBoxLayout* controlsV = new QVBoxLayout();
+        controlsV->setContentsMargins(0, 0, 0, 0);
+        controlsV->setSpacing(6);
 
-        m_virtuosoEnergyAuto = new QCheckBox("Auto", virtuosoDbg);
-        m_virtuosoEnergyAuto->setChecked(true);
-        m_virtuosoEnergyAuto->setToolTip("When enabled, Energy follows the listening/vibe engine automatically.");
+        // --- Energy ---
+        {
+            QHBoxLayout* row = new QHBoxLayout();
+            row->setContentsMargins(0, 0, 0, 0);
+            row->setSpacing(8);
 
-        m_virtuosoEnergySlider = new QSlider(Qt::Horizontal, virtuosoDbg);
-        m_virtuosoEnergySlider->setRange(0, 100); // 0..1
-        m_virtuosoEnergySlider->setValue(25);
-        m_virtuosoEnergySlider->setEnabled(false); // disabled while Auto is on
-        m_virtuosoEnergySlider->setToolTip("Global Energy (0..1). When Auto is off, this directly drives all agents.");
+            m_virtuosoEnergyAuto = new QCheckBox("Auto", virtuosoDbg);
+            m_virtuosoEnergyAuto->setChecked(true);
+            m_virtuosoEnergyAuto->setToolTip("When enabled, Energy follows the listening/vibe engine automatically.");
 
-        controls->addWidget(new QLabel("Energy:", virtuosoDbg));
-        controls->addWidget(m_virtuosoEnergyAuto, 0);
-        controls->addWidget(m_virtuosoEnergySlider, 1);
-        controls->addSpacing(10);
+            m_virtuosoEnergySlider = new QSlider(Qt::Horizontal, virtuosoDbg);
+            m_virtuosoEnergySlider->setRange(0, 100); // 0..1
+            m_virtuosoEnergySlider->setValue(25);
+            m_virtuosoEnergySlider->setEnabled(false); // disabled while Auto is on
+            m_virtuosoEnergySlider->setToolTip("Global Energy (0..1). When Auto is off, this directly drives all agents.");
+
+            row->addWidget(new QLabel("Energy:", virtuosoDbg));
+            row->addWidget(m_virtuosoEnergyAuto, 0);
+            row->addWidget(m_virtuosoEnergySlider, 1);
+            controlsV->addLayout(row);
+        }
+
+        // --- Virtuosity Matrix (Stage 3 solver weights) ---
+        {
+            QHBoxLayout* row = new QHBoxLayout();
+            row->setContentsMargins(0, 0, 0, 0);
+            row->setSpacing(8);
+
+            m_virtuosoVirtAuto = new QCheckBox("Auto", virtuosoDbg);
+            m_virtuosoVirtAuto->setChecked(true);
+            m_virtuosoVirtAuto->setToolTip("When enabled, Virtuosity weights are derived from energy + song progress + listening context.");
+
+            auto mk = [&](const QString& label, QSlider*& s, const QString& tip, int def) {
+                row->addWidget(new QLabel(label, virtuosoDbg));
+                s = new QSlider(Qt::Horizontal, virtuosoDbg);
+                s->setRange(0, 100);
+                s->setValue(def);
+                s->setEnabled(false); // disabled while Auto is on
+                s->setToolTip(tip);
+                row->addWidget(s, 1);
+            };
+
+            row->addWidget(new QLabel("Virt:", virtuosoDbg));
+            row->addWidget(m_virtuosoVirtAuto, 0);
+            mk("Risk", m_virtuosoHarmRisk, "Harmonic Risk (0..1): 0=triads/shells, 1=more tensions/UST-ish", 20);
+            mk("Rhythm", m_virtuosoRhythmCx, "Rhythmic Complexity (0..1): 0=simple, 1=more motion", 25);
+            mk("Interact", m_virtuosoInteract, "Interaction (0..1): 0=backing, 1=conversational", 50);
+            mk("Tone", m_virtuosoToneDark, "Tone (0..1): 0=bright/open, 1=dark/warm", 60);
+
+            controlsV->addLayout(row);
+        }
 
         m_virtuosoTheoryLog = new QTextEdit(virtuosoDbg);
         m_virtuosoTheoryLog->setReadOnly(true);
@@ -518,7 +555,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
         m_virtuosoTheoryLog->setStyleSheet("QTextEdit { background: #0b0b0b; color: #ddd; font-family: Menlo, monospace; font-size: 9pt; }");
 
         dv->addWidget(m_virtuosoHud);
-        dv->addLayout(controls);
+        dv->addLayout(controlsV);
         dv->addWidget(m_virtuosoTheoryLog, 1);
     }
     chartLayout->addWidget(virtuosoDbg);
@@ -577,6 +614,30 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
                 m_virtuosoEnergyAuto->blockSignals(false);
                 m_virtuosoEnergySlider->blockSignals(prev);
             });
+
+    // Virtuosity Matrix wiring (Stage 3).
+    auto pushVirt = [this]() {
+        if (!m_virtuosoPlayback || !m_virtuosoVirtAuto) return;
+        if (m_virtuosoVirtAuto->isChecked()) return;
+        const double hr = m_virtuosoHarmRisk ? double(m_virtuosoHarmRisk->value()) / 100.0 : 0.20;
+        const double rc = m_virtuosoRhythmCx ? double(m_virtuosoRhythmCx->value()) / 100.0 : 0.25;
+        const double it = m_virtuosoInteract ? double(m_virtuosoInteract->value()) / 100.0 : 0.50;
+        const double td = m_virtuosoToneDark ? double(m_virtuosoToneDark->value()) / 100.0 : 0.60;
+        m_virtuosoPlayback->setVirtuosity(hr, rc, it, td);
+    };
+    connect(m_virtuosoVirtAuto, &QCheckBox::toggled, this, [this, pushVirt](bool on) mutable {
+        if (!m_virtuosoPlayback) return;
+        if (m_virtuosoHarmRisk) m_virtuosoHarmRisk->setEnabled(!on);
+        if (m_virtuosoRhythmCx) m_virtuosoRhythmCx->setEnabled(!on);
+        if (m_virtuosoInteract) m_virtuosoInteract->setEnabled(!on);
+        if (m_virtuosoToneDark) m_virtuosoToneDark->setEnabled(!on);
+        m_virtuosoPlayback->setVirtuosityAuto(on);
+        if (!on) pushVirt();
+    });
+    for (QSlider* s : {m_virtuosoHarmRisk, m_virtuosoRhythmCx, m_virtuosoInteract, m_virtuosoToneDark}) {
+        if (!s) continue;
+        connect(s, &QSlider::valueChanged, this, [pushVirt](int) mutable { pushVirt(); });
+    }
 
     auto makeSection = [&](const QString& title,
                            QLabel*& titleLbl,

@@ -182,17 +182,6 @@ static QString intentsToString(const SemanticMidiAnalyzer::IntentState& i) {
     return out.join(",");
 }
 
-static double energyForOverride(int overrideVibe) {
-    // 0=Auto (ignored), 1..4 map to vibe energies
-    switch (overrideVibe) {
-        case 1: return 0.25; // Simmer
-        case 2: return 0.55; // Build
-        case 3: return 0.90; // Climax
-        case 4: return 0.18; // CoolDown
-        default: return 0.25;
-    }
-}
-
 } // namespace
 
 VirtuosoBalladMvpPlaybackEngine::VirtuosoBalladMvpPlaybackEngine(QObject* parent)
@@ -207,14 +196,205 @@ VirtuosoBalladMvpPlaybackEngine::VirtuosoBalladMvpPlaybackEngine(QObject* parent
     connect(&m_engine, &virtuoso::engine::VirtuosoEngine::plannedTheoryEventJson,
             this, &VirtuosoBalladMvpPlaybackEngine::plannedTheoryEventJson);
 
-    // Cool-jazz vocabulary pack (data-driven): used by bass/piano planners and drum add-ons.
-    {
-        QString err;
-        m_vocab.loadFromResourcePath(":/virtuoso/vocab/cool_jazz_vocabulary.json", &err);
-        m_bassPlanner.setVocabulary(&m_vocab);
-        m_pianoPlanner.setVocabulary(&m_vocab);
-        Q_UNUSED(err);
+    // NOTE: Agents are fully procedural (no JSON vocabulary at runtime).
+    // Piano/Bass planners fall back to their internal deterministic grammars.
+    m_bassPlanner.setVocabulary(nullptr);
+    m_pianoPlanner.setVocabulary(nullptr);
+}
+
+void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
+    if (m_sequence.isEmpty()) return;
+    const int seqLen = m_sequence.size();
+
+    virtuoso::groove::TimeSignature ts{4, 4};
+    ts.num = (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4;
+    ts.den = (m_model.timeSigDen > 0) ? m_model.timeSigDen : 4;
+
+    // If we have a live playhead, preview from the current bar; otherwise preview from song start.
+    const int stepNow = (m_lastPlayheadStep >= 0) ? m_lastPlayheadStep : 0;
+
+    // Reuse the same lookahead mechanism as the tick loop by calling onTick's internal logic.
+    // We can't call onTick() directly (it has scheduling side effects), so we duplicate the
+    // lookahead-plan-only portion here by leveraging the existing onTick lookahead emission.
+    //
+    // Minimal approach: simulate the same "now" used in onTick for plan anchoring.
+    // Note: This emits lookaheadPlanJson (JSON array).
+    const int beatsPerBar = qMax(1, ts.num);
+    const int horizonBeats = beatsPerBar * 4; // 4 bars
+    const int total = seqLen * qMax(1, m_repeats);
+    const int startStep = qMax(0, stepNow - (stepNow % beatsPerBar));
+    const int endStep = qMin(total, startStep + horizonBeats);
+
+    // Local chord simulation (no mutation of m_lastChord state).
+    music::ChordSymbol simLast = m_hasLastChord ? m_lastChord : music::ChordSymbol{};
+    bool simHasLast = m_hasLastChord;
+
+    auto parseCellChordNoStateLocal = [&](int anyCellIndex, const music::ChordSymbol& fallback, bool* outIsExplicit = nullptr) -> music::ChordSymbol {
+        if (outIsExplicit) *outIsExplicit = false;
+        const chart::Cell* c = cellForFlattenedIndex(anyCellIndex);
+        if (!c) return fallback;
+        const QString t = c->chord.trimmed();
+        if (t.isEmpty()) return fallback;
+        music::ChordSymbol parsed;
+        if (!music::parseChordSymbol(t, parsed)) return fallback;
+        if (parsed.placeholder) return fallback;
+        if (outIsExplicit) *outIsExplicit = true;
+        return parsed;
+    };
+
+    // Snapshot interaction state once for this lookahead block (stable).
+    const qint64 nowMsWall = QDateTime::currentMSecsSinceEpoch();
+    const auto intent = m_listener.compute(nowMsWall);
+    auto vibeEff = m_vibe.update(intent, nowMsWall);
+    const double baseEnergy = qBound(0.0, m_debugEnergyAuto ? vibeEff.energy : m_debugEnergy, 1.0);
+    const QString vibeStr = m_debugEnergyAuto ? VibeStateMachine::vibeName(vibeEff.vibe)
+                                              : (VibeStateMachine::vibeName(vibeEff.vibe) + " (manual)");
+    const QString intentStr = intentsToString(intent);
+
+    // Clone planners so the lookahead does not mutate live state.
+    JazzBalladBassPlanner bassSim = m_bassPlanner;
+    JazzBalladPianoPlanner pianoSim = m_pianoPlanner;
+
+    QJsonArray arr;
+    auto emitIntentAsJson = [&](const virtuoso::engine::AgentIntentNote& n, int bpm, const virtuoso::groove::TimeSignature& ts) {
+        virtuoso::theory::TheoryEvent te;
+        te.agent = n.agent;
+        te.timestamp = ""; // leave empty; UI uses on_ms/grid_pos
+        te.chord_context = n.chord_context;
+        te.scale_used = n.scale_used;
+        te.voicing_type = n.voicing_type;
+        te.logic_tag = n.logic_tag;
+        te.target_note = n.target_note;
+        te.dynamic_marking = QString::number(n.baseVelocity);
+        te.grid_pos = virtuoso::groove::GrooveGrid::toString(n.startPos, ts);
+        te.channel = n.channel;
+        te.note = n.note;
+        te.tempo_bpm = bpm;
+        te.ts_num = ts.num;
+        te.ts_den = ts.den;
+        te.engine_now_ms = m_engine.elapsedMs();
+        // Use clean grid timing for plan (no micro jitter).
+        const qint64 on = virtuoso::groove::GrooveGrid::posToMs(n.startPos, ts, bpm);
+        const qint64 off = on + qMax<qint64>(1, virtuoso::groove::GrooveGrid::wholeNotesToMs(n.durationWhole, bpm));
+        te.on_ms = on;
+        te.off_ms = off;
+        te.vibe_state = vibeStr;
+        te.user_intents = intentStr;
+        te.user_outside_ratio = n.user_outside_ratio;
+        arr.push_back(te.toJsonObject());
+    };
+
+    for (int step = startStep; step < endStep; ++step) {
+        const int playbackBarIndex = (beatsPerBar > 0) ? (step / beatsPerBar) : (step / 4);
+        const int beatInBar = (beatsPerBar > 0) ? (step % beatsPerBar) : (step % 4);
+        const int cellIndex = m_sequence[step % seqLen];
+
+        // Determine chord and chordIsNew in this simulated stream.
+        music::ChordSymbol chord = simHasLast ? simLast : music::ChordSymbol{};
+        bool chordIsNew = false;
+        {
+            bool explicitChord = false;
+            const music::ChordSymbol parsed = parseCellChordNoStateLocal(cellIndex, chord, &explicitChord);
+            if (explicitChord) chord = parsed;
+            if (!simHasLast) chordIsNew = explicitChord;
+            else chordIsNew = explicitChord && !sameChordKey(chord, simLast);
+            if (explicitChord) { simLast = chord; simHasLast = true; }
+        }
+        if (!simHasLast) continue;
+
+        // Next chord (for bass approach logic)
+        music::ChordSymbol nextChord = chord;
+        bool haveNext = false;
+        {
+            const int stepNextBar = step + (beatsPerBar - beatInBar);
+            if (stepNextBar < total) {
+                const int cellNext = m_sequence[stepNextBar % seqLen];
+                bool explicitNext = false;
+                nextChord = parseCellChordNoStateLocal(cellNext, /*fallback*/chord, &explicitNext);
+                haveNext = explicitNext || (nextChord.rootPc >= 0);
+                if (nextChord.noChord) haveNext = false;
+            }
+        }
+
+        const QString chordText = chord.originalText.trimmed().isEmpty() ? QString("pc=%1").arg(chord.rootPc) : chord.originalText.trimmed();
+        const bool structural = (beatInBar == 0 || beatInBar == 2) || chordIsNew;
+
+        // Drums (base drummer)
+        {
+            BrushesBalladDrummer::Context dc;
+            dc.bpm = m_bpm;
+            dc.ts = ts;
+            dc.playbackBarIndex = playbackBarIndex;
+            dc.beatInBar = beatInBar;
+            dc.structural = structural;
+            const quint32 detSeed = quint32(qHash(QString("ballad|") + m_stylePresetKey));
+            dc.determinismSeed = detSeed ^ 0xD00D'BEEFu;
+            const double mult = m_agentEnergyMult.value("Drums", 1.0);
+            dc.energy = qBound(0.0, baseEnergy * mult, 1.0);
+            dc.intensityPeak = intent.intensityPeak;
+            const auto dnotes = m_drummer.planBeat(dc);
+            for (auto n : dnotes) {
+                n.vibe_state = vibeStr;
+                n.user_intents = intentStr;
+                n.user_outside_ratio = intent.outsideRatio;
+                emitIntentAsJson(n, m_bpm, ts);
+            }
+        }
+
+        // Bass + piano (planner choices)
+        if (!chord.noChord) {
+            JazzBalladBassPlanner::Context bc;
+            bc.bpm = m_bpm;
+            bc.playbackBarIndex = playbackBarIndex;
+            bc.beatInBar = beatInBar;
+            bc.chordIsNew = chordIsNew;
+            bc.chord = chord;
+            bc.hasNextChord = haveNext && !nextChord.noChord;
+            bc.nextChord = nextChord;
+            bc.chordText = chordText;
+            const quint32 detSeed = quint32(qHash(QString("ballad|") + m_stylePresetKey));
+            bc.determinismSeed = detSeed;
+            bc.userDensityHigh = intent.densityHigh;
+            bc.userIntensityPeak = intent.intensityPeak;
+            bc.userSilence = intent.silence;
+            const double bassMult = m_agentEnergyMult.value("Bass", 1.0);
+            bc.forceClimax = (baseEnergy >= 0.85);
+            bc.energy = qBound(0.0, baseEnergy * bassMult, 1.0);
+            auto bnotes = bassSim.planBeat(bc, m_chBass, ts);
+            for (auto& n : bnotes) {
+                n.vibe_state = vibeStr;
+                n.user_intents = intentStr;
+                n.user_outside_ratio = intent.outsideRatio;
+                emitIntentAsJson(n, m_bpm, ts);
+            }
+
+            JazzBalladPianoPlanner::Context pc;
+            pc.bpm = m_bpm;
+            pc.playbackBarIndex = playbackBarIndex;
+            pc.beatInBar = beatInBar;
+            pc.chordIsNew = chordIsNew;
+            pc.chord = chord;
+            pc.chordText = chordText;
+            pc.determinismSeed = detSeed ^ 0xBADC0FFEu;
+            pc.userDensityHigh = intent.densityHigh;
+            pc.userIntensityPeak = intent.intensityPeak;
+            pc.userRegisterHigh = intent.registerHigh;
+            pc.userSilence = intent.silence;
+            const double pianoMult = m_agentEnergyMult.value("Piano", 1.0);
+            pc.forceClimax = (baseEnergy >= 0.85);
+            pc.energy = qBound(0.0, baseEnergy * pianoMult, 1.0);
+            auto pnotes = pianoSim.planBeat(pc, m_chPiano, ts);
+            for (auto& n : pnotes) {
+                n.vibe_state = vibeStr;
+                n.user_intents = intentStr;
+                n.user_outside_ratio = intent.outsideRatio;
+                emitIntentAsJson(n, m_bpm, ts);
+            }
+        }
     }
+
+    const QJsonDocument doc(arr);
+    emit lookaheadPlanJson(QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
 }
 
 void VirtuosoBalladMvpPlaybackEngine::setMidiProcessor(MidiProcessor* midi) {
@@ -458,15 +638,9 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
         const qint64 nowMsWall = QDateTime::currentMSecsSinceEpoch();
         const auto intent = m_listener.compute(nowMsWall);
         auto vibeEff = m_vibe.update(intent, nowMsWall);
-        if (m_debugVibeOverride != 0) {
-            VibeStateMachine::Vibe v = VibeStateMachine::Vibe::Simmer;
-            if (m_debugVibeOverride == 2) v = VibeStateMachine::Vibe::Build;
-            if (m_debugVibeOverride == 3) v = VibeStateMachine::Vibe::Climax;
-            if (m_debugVibeOverride == 4) v = VibeStateMachine::Vibe::CoolDown;
-            vibeEff.vibe = v;
-            vibeEff.energy = energyForOverride(m_debugVibeOverride);
-        }
-        const QString vibeStr = VibeStateMachine::vibeName(vibeEff.vibe);
+        const double baseEnergy = qBound(0.0, m_debugEnergyAuto ? vibeEff.energy : m_debugEnergy, 1.0);
+        const QString vibeStr = m_debugEnergyAuto ? VibeStateMachine::vibeName(vibeEff.vibe)
+                                                  : (VibeStateMachine::vibeName(vibeEff.vibe) + " (manual)");
         const QString intentStr = intentsToString(intent);
 
         // Clone planners so the lookahead does not mutate live state.
@@ -548,7 +722,8 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
                 dc.structural = structural;
                 const quint32 detSeed = quint32(qHash(QString("ballad|") + m_stylePresetKey));
                 dc.determinismSeed = detSeed ^ 0xD00D'BEEFu;
-                dc.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+                const double mult = m_agentEnergyMult.value("Drums", 1.0);
+                dc.energy = qBound(0.0, baseEnergy * mult, 1.0);
                 dc.intensityPeak = intent.intensityPeak;
                 const auto dnotes = m_drummer.planBeat(dc);
                 for (auto n : dnotes) {
@@ -575,8 +750,9 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
                 bc.userDensityHigh = intent.densityHigh;
                 bc.userIntensityPeak = intent.intensityPeak;
                 bc.userSilence = intent.silence;
-                bc.forceClimax = (m_debugVibeOverride == 3) || (vibeEff.vibe == VibeStateMachine::Vibe::Climax);
-                bc.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+                const double bassMult = m_agentEnergyMult.value("Bass", 1.0);
+                bc.forceClimax = (baseEnergy >= 0.85);
+                bc.energy = qBound(0.0, baseEnergy * bassMult, 1.0);
                 auto bnotes = bassSim.planBeat(bc, m_chBass, ts);
                 for (auto& n : bnotes) {
                     n.vibe_state = vibeStr;
@@ -597,8 +773,9 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
                 pc.userIntensityPeak = intent.intensityPeak;
                 pc.userRegisterHigh = intent.registerHigh;
                 pc.userSilence = intent.silence;
-                pc.forceClimax = (m_debugVibeOverride == 3) || (vibeEff.vibe == VibeStateMachine::Vibe::Climax);
-                pc.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+                const double pianoMult = m_agentEnergyMult.value("Piano", 1.0);
+                pc.forceClimax = (baseEnergy >= 0.85);
+                pc.energy = qBound(0.0, baseEnergy * pianoMult, 1.0);
                 auto pnotes = pianoSim.planBeat(pc, m_chPiano, ts);
                 for (auto& n : pnotes) {
                     n.vibe_state = vibeStr;
@@ -678,27 +855,16 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     const qint64 nowMsWall = QDateTime::currentMSecsSinceEpoch();
     const auto intent = m_listener.compute(nowMsWall);
     auto vibeEff = m_vibe.update(intent, nowMsWall);
-
-    // Debug override: force vibe to make behavior obvious during validation.
-    QString vibeStr;
-    if (m_debugVibeOverride != 0) {
-        VibeStateMachine::Vibe v = VibeStateMachine::Vibe::Simmer;
-        if (m_debugVibeOverride == 2) v = VibeStateMachine::Vibe::Build;
-        if (m_debugVibeOverride == 3) v = VibeStateMachine::Vibe::Climax;
-        if (m_debugVibeOverride == 4) v = VibeStateMachine::Vibe::CoolDown;
-        vibeEff.vibe = v;
-        vibeEff.energy = energyForOverride(m_debugVibeOverride);
-        vibeStr = VibeStateMachine::vibeName(vibeEff.vibe) + " (forced)";
-    } else {
-        vibeStr = VibeStateMachine::vibeName(vibeEff.vibe);
-    }
+    const double baseEnergy = qBound(0.0, m_debugEnergyAuto ? vibeEff.energy : m_debugEnergy, 1.0);
+    const QString vibeStr = m_debugEnergyAuto ? VibeStateMachine::vibeName(vibeEff.vibe)
+                                              : (VibeStateMachine::vibeName(vibeEff.vibe) + " (manual)");
 
     const QString intentStr = intentsToString(intent);
 
     // Debug UI status (emitted once per beat step).
     emit debugStatus(QString("Vibe=%1  energy=%2  intents=%3  nps=%4  reg=%5  gVel=%6  cc2=%7  vNote=%8  silenceMs=%9  outside=%10")
                          .arg(vibeStr)
-                         .arg(vibeEff.energy, 0, 'f', 2)
+                         .arg(baseEnergy, 0, 'f', 2)
                          .arg(intentStr.isEmpty() ? "-" : intentStr)
                          .arg(intent.notesPerSec, 0, 'f', 2)
                          .arg(intent.registerCenterMidi)
@@ -707,6 +873,7 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
                          .arg(intent.lastVoiceMidi)
                          .arg(intent.msSinceLastActivity == std::numeric_limits<qint64>::max() ? -1 : intent.msSinceLastActivity)
                          .arg(intent.outsideRatio, 0, 'f', 2));
+    emit debugEnergy(baseEnergy, m_debugEnergyAuto);
 
     // Drums always run (ballad texture), even if harmony missing/N.C.
     // We schedule Drums first, because Bass groove-lock references Drums kick timing.
@@ -723,7 +890,10 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
         dc.beatInBar = beatInBar;
         dc.structural = structural;
         dc.determinismSeed = detSeed ^ 0xD00D'BEEFu;
-        dc.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+        {
+            const double mult = m_agentEnergyMult.value("Drums", 1.0);
+            dc.energy = qBound(0.0, baseEnergy * mult, 1.0);
+        }
         dc.intensityPeak = intent.intensityPeak;
 
         auto drumIntents = m_drummer.planBeat(dc);
@@ -748,7 +918,7 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
 
         for (auto n : drumIntents) {
             // Macro dynamics: scale drums velocity slightly by energy.
-            const double e = qBound(0.0, vibeEff.energy, 1.0);
+            const double e = qBound(0.0, baseEnergy, 1.0);
             n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.85 + 0.35 * e))), 127);
             n.vibe_state = vibeStr;
             n.user_intents = intentStr;
@@ -782,18 +952,21 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     bc.userDensityHigh = intent.densityHigh;
     bc.userIntensityPeak = intent.intensityPeak;
     bc.userSilence = intent.silence;
-    bc.forceClimax = (m_debugVibeOverride == 3) || (vibeEff.vibe == VibeStateMachine::Vibe::Climax);
-    bc.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+    bc.forceClimax = (baseEnergy >= 0.85);
+    {
+        const double mult = m_agentEnergyMult.value("Bass", 1.0);
+        bc.energy = qBound(0.0, baseEnergy * mult, 1.0);
+    }
     // Interaction heuristics: when user is dense/high/intense, bass simplifies and avoids chromaticism.
     if (intent.densityHigh || intent.intensityPeak) {
         bc.approachProbBeat3 *= 0.35;
         bc.skipBeat3ProbStable = qMin(0.65, bc.skipBeat3ProbStable + 0.20);
     }
-    if (vibeEff.vibe == VibeStateMachine::Vibe::Climax) {
+    if (baseEnergy >= 0.85) {
         bc.approachProbBeat3 *= 0.60; // slightly more motion, but still ballad-safe
         bc.skipBeat3ProbStable = qMax(0.10, bc.skipBeat3ProbStable - 0.08);
     }
-    if (vibeEff.vibe == VibeStateMachine::Vibe::Build) {
+    if (baseEnergy >= 0.55 && baseEnergy < 0.85) {
         // Make Build audibly different: fewer omissions, slightly more motion.
         bc.approachProbBeat3 = qMin(1.0, bc.approachProbBeat3 + 0.12);
         bc.skipBeat3ProbStable = qMax(0.0, bc.skipBeat3ProbStable - 0.12);
@@ -804,7 +977,7 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
         n.user_intents = intentStr;
         n.user_outside_ratio = intent.outsideRatio;
         // Macro dynamics: small velocity lift under higher energy.
-        const double e = qBound(0.0, vibeEff.energy, 1.0);
+        const double e = qBound(0.0, baseEnergy, 1.0);
         n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.90 + 0.25 * e))), 127);
         // Groove lock (prototype): on beat 1, if a feather kick exists, align bass attack to kick.
         if (m_kickLocksBass && beatInBar == 0 && haveKickHe) {
@@ -843,8 +1016,11 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     pc.userIntensityPeak = intent.intensityPeak;
     pc.userRegisterHigh = intent.registerHigh;
     pc.userSilence = intent.silence;
-    pc.forceClimax = (m_debugVibeOverride == 3) || (vibeEff.vibe == VibeStateMachine::Vibe::Climax);
-    pc.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+    pc.forceClimax = (baseEnergy >= 0.85);
+    {
+        const double mult = m_agentEnergyMult.value("Piano", 1.0);
+        pc.energy = qBound(0.0, baseEnergy * mult, 1.0);
+    }
     // Interaction heuristics:
     // - User register high => piano stays lower (and reduces sparkle)
     // - User density high/intensity peak => piano comp sparser

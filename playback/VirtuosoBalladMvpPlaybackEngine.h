@@ -9,7 +9,6 @@
 #include "virtuoso/engine/VirtuosoEngine.h"
 #include "virtuoso/groove/GrooveRegistry.h"
 #include "virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h"
-#include "virtuoso/vocab/VocabularyRegistry.h"
 
 #include "playback/JazzBalladBassPlanner.h"
 #include "playback/JazzBalladPianoPlanner.h"
@@ -44,10 +43,19 @@ public slots:
     void play();
     void stop();
 
-    // Debug/validation knobs (for making interaction audible/visible).
-    // vibeOverride: 0=Auto, 1=Simmer, 2=Build, 3=Climax, 4=CoolDown
-    void setDebugVibeOverride(int vibeOverride) { m_debugVibeOverride = vibeOverride; }
-    void setDebugInteractionBoost(double boost) { m_debugInteractionBoost = boost; } // 0..3 recommended
+    // Emit a one-shot 4-bar lookahead plan for the currently selected song/chart, even if stopped.
+    // Used by instrument windows for auditioning the current song context without duplicating controls.
+    void emitLookaheadPlanOnce();
+
+    // Debug/validation knobs (glass-box controllable).
+    // Global energy override (0..1). When Auto is on (default), energy follows the vibe engine.
+    void setDebugEnergyAuto(bool on) { m_debugEnergyAuto = on; }
+    void setDebugEnergy(double energy01) { m_debugEnergy = qBound(0.0, energy01, 1.0); }
+
+    // Per-agent energy multipliers (0..2 recommended).
+    void setAgentEnergyMultiplier(const QString& agent, double mult01to2) {
+        m_agentEnergyMult.insert(agent, qBound(0.0, mult01to2, 2.0));
+    }
 
 signals:
     void currentCellChanged(int cellIndex);
@@ -55,6 +63,7 @@ signals:
     void plannedTheoryEventJson(const QString& json);
     void lookaheadPlanJson(const QString& json);
     void debugStatus(const QString& text);
+    void debugEnergy(double energy01, bool isAuto);
 
 private slots:
     void onTick();
@@ -106,7 +115,6 @@ private:
     JazzBalladBassPlanner m_bassPlanner;
     JazzBalladPianoPlanner m_pianoPlanner;
     BrushesBalladDrummer m_drummer;
-    virtuoso::vocab::VocabularyRegistry m_vocab;
 
     // Listening MVP (semantic analysis of user input)
     SemanticMidiAnalyzer m_listener;
@@ -126,9 +134,10 @@ private:
     bool m_kickLocksBass = true;
     int m_kickLockMaxMs = 18;
 
-    // Debug controls (defaults: Auto vibe, no exaggeration).
-    int m_debugVibeOverride = 0;
-    double m_debugInteractionBoost = 1.0;
+    // Debug controls (defaults: Auto energy, neutral multipliers).
+    bool m_debugEnergyAuto = true;
+    double m_debugEnergy = 0.25;
+    QHash<QString, double> m_agentEnergyMult; // agent -> multiplier
 };
 
 } // namespace playback

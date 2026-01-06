@@ -143,6 +143,12 @@ void MainWindow::createWidgets(const Preset& preset) {
                     connect(noteMonitorWidget, &NoteMonitorWidget::virtuosoLookaheadPlanJson,
                             m_vocabPianoWindow, &VirtuosoVocabularyWindow::ingestTheoryEventJson,
                             Qt::UniqueConnection);
+                    connect(m_vocabPianoWindow, &VirtuosoVocabularyWindow::requestSongPreview,
+                            noteMonitorWidget, &NoteMonitorWidget::requestVirtuosoLookaheadOnce,
+                            Qt::UniqueConnection);
+                    connect(m_vocabPianoWindow, &VirtuosoVocabularyWindow::agentEnergyMultiplierChanged,
+                            noteMonitorWidget, &NoteMonitorWidget::setVirtuosoAgentEnergyMultiplier,
+                            Qt::UniqueConnection);
                 }
             }
             m_vocabPianoWindow->show();
@@ -161,6 +167,12 @@ void MainWindow::createWidgets(const Preset& preset) {
                     connect(noteMonitorWidget, &NoteMonitorWidget::virtuosoLookaheadPlanJson,
                             m_vocabBassWindow, &VirtuosoVocabularyWindow::ingestTheoryEventJson,
                             Qt::UniqueConnection);
+                    connect(m_vocabBassWindow, &VirtuosoVocabularyWindow::requestSongPreview,
+                            noteMonitorWidget, &NoteMonitorWidget::requestVirtuosoLookaheadOnce,
+                            Qt::UniqueConnection);
+                    connect(m_vocabBassWindow, &VirtuosoVocabularyWindow::agentEnergyMultiplierChanged,
+                            noteMonitorWidget, &NoteMonitorWidget::setVirtuosoAgentEnergyMultiplier,
+                            Qt::UniqueConnection);
                 }
             }
             m_vocabBassWindow->show();
@@ -178,6 +190,12 @@ void MainWindow::createWidgets(const Preset& preset) {
                 if (noteMonitorWidget) {
                     connect(noteMonitorWidget, &NoteMonitorWidget::virtuosoLookaheadPlanJson,
                             m_vocabDrumsWindow, &VirtuosoVocabularyWindow::ingestTheoryEventJson,
+                            Qt::UniqueConnection);
+                    connect(m_vocabDrumsWindow, &VirtuosoVocabularyWindow::requestSongPreview,
+                            noteMonitorWidget, &NoteMonitorWidget::requestVirtuosoLookaheadOnce,
+                            Qt::UniqueConnection);
+                    connect(m_vocabDrumsWindow, &VirtuosoVocabularyWindow::agentEnergyMultiplierChanged,
+                            noteMonitorWidget, &NoteMonitorWidget::setVirtuosoAgentEnergyMultiplier,
                             Qt::UniqueConnection);
                 }
             }

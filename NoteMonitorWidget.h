@@ -40,6 +40,10 @@ signals:
 public slots:
     // Used by MainWindow on app quit to guarantee we stop generating/scheduling notes.
     void stopAllPlayback();
+    // Instrument windows request this to preview the currently selected song without starting playback.
+    void requestVirtuosoLookaheadOnce();
+    // Instrument windows send per-agent multipliers (e.g. Energy x 0..2).
+    void setVirtuosoAgentEnergyMultiplier(const QString& agent, double mult01to2);
     void setGuitarNote(int midiNote, double cents);
     void setVoiceNote(int midiNote, double cents);
     void setGuitarHz(double hz);
@@ -117,8 +121,8 @@ private:
     // Virtuoso debug / visualization (glass box)
     QCheckBox* m_virtuosoDebugToggle = nullptr;
     QLabel* m_virtuosoHud = nullptr;
-    QComboBox* m_virtuosoVibeOverride = nullptr;
-    QSlider* m_virtuosoInteractionBoost = nullptr;
+    QCheckBox* m_virtuosoEnergyAuto = nullptr;
+    QSlider* m_virtuosoEnergySlider = nullptr;
     QTextEdit* m_virtuosoTheoryLog = nullptr;
 
     MidiProcessor* m_midiProcessor = nullptr; // not owned

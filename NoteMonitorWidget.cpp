@@ -497,25 +497,20 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
         controls->setContentsMargins(0, 0, 0, 0);
         controls->setSpacing(8);
 
-        m_virtuosoVibeOverride = new QComboBox(virtuosoDbg);
-        m_virtuosoVibeOverride->addItem("Auto", 0);
-        m_virtuosoVibeOverride->addItem("Simmer", 1);
-        m_virtuosoVibeOverride->addItem("Build", 2);
-        m_virtuosoVibeOverride->addItem("Climax", 3);
-        m_virtuosoVibeOverride->addItem("CoolDown", 4);
-        m_virtuosoVibeOverride->setToolTip("Force vibe state to make changes obvious (validation).");
-        m_virtuosoVibeOverride->setFixedWidth(140);
+        m_virtuosoEnergyAuto = new QCheckBox("Auto", virtuosoDbg);
+        m_virtuosoEnergyAuto->setChecked(true);
+        m_virtuosoEnergyAuto->setToolTip("When enabled, Energy follows the listening/vibe engine automatically.");
 
-        m_virtuosoInteractionBoost = new QSlider(Qt::Horizontal, virtuosoDbg);
-        m_virtuosoInteractionBoost->setRange(0, 300); // percent
-        m_virtuosoInteractionBoost->setValue(100);
-        m_virtuosoInteractionBoost->setToolTip("Interaction boost (0%..300%) to exaggerate response for validation.");
+        m_virtuosoEnergySlider = new QSlider(Qt::Horizontal, virtuosoDbg);
+        m_virtuosoEnergySlider->setRange(0, 100); // 0..1
+        m_virtuosoEnergySlider->setValue(25);
+        m_virtuosoEnergySlider->setEnabled(false); // disabled while Auto is on
+        m_virtuosoEnergySlider->setToolTip("Global Energy (0..1). When Auto is off, this directly drives all agents.");
 
-        controls->addWidget(new QLabel("Vibe:", virtuosoDbg));
-        controls->addWidget(m_virtuosoVibeOverride, 0);
+        controls->addWidget(new QLabel("Energy:", virtuosoDbg));
+        controls->addWidget(m_virtuosoEnergyAuto, 0);
+        controls->addWidget(m_virtuosoEnergySlider, 1);
         controls->addSpacing(10);
-        controls->addWidget(new QLabel("Boost:", virtuosoDbg));
-        controls->addWidget(m_virtuosoInteractionBoost, 1);
 
         m_virtuosoTheoryLog = new QTextEdit(virtuosoDbg);
         m_virtuosoTheoryLog->setReadOnly(true);
@@ -558,14 +553,30 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
                 emit virtuosoLookaheadPlanJson(json);
             });
 
-    connect(m_virtuosoVibeOverride, &QComboBox::currentIndexChanged, this, [this](int idx) {
-        if (!m_virtuosoPlayback || !m_virtuosoVibeOverride) return;
-        m_virtuosoPlayback->setDebugVibeOverride(m_virtuosoVibeOverride->itemData(idx).toInt());
+    connect(m_virtuosoEnergyAuto, &QCheckBox::toggled, this, [this](bool on) {
+        if (!m_virtuosoPlayback || !m_virtuosoEnergySlider) return;
+        m_virtuosoEnergySlider->setEnabled(!on);
+        m_virtuosoPlayback->setDebugEnergyAuto(on);
+        if (!on) {
+            m_virtuosoPlayback->setDebugEnergy(double(m_virtuosoEnergySlider->value()) / 100.0);
+        }
     });
-    connect(m_virtuosoInteractionBoost, &QSlider::valueChanged, this, [this](int v) {
-        if (!m_virtuosoPlayback) return;
-        m_virtuosoPlayback->setDebugInteractionBoost(double(v) / 100.0);
+    connect(m_virtuosoEnergySlider, &QSlider::valueChanged, this, [this](int v) {
+        if (!m_virtuosoPlayback || !m_virtuosoEnergyAuto) return;
+        if (m_virtuosoEnergyAuto->isChecked()) return;
+        m_virtuosoPlayback->setDebugEnergy(double(v) / 100.0);
     });
+    connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::debugEnergy,
+            this, [this](double e01, bool isAuto) {
+                if (!m_virtuosoEnergySlider || !m_virtuosoEnergyAuto) return;
+                const bool prev = m_virtuosoEnergySlider->blockSignals(true);
+                m_virtuosoEnergyAuto->blockSignals(true);
+                m_virtuosoEnergyAuto->setChecked(isAuto);
+                m_virtuosoEnergySlider->setEnabled(!isAuto);
+                m_virtuosoEnergySlider->setValue(qBound(0, int(llround(e01 * 100.0)), 100));
+                m_virtuosoEnergyAuto->blockSignals(false);
+                m_virtuosoEnergySlider->blockSignals(prev);
+            });
 
     auto makeSection = [&](const QString& title,
                            QLabel*& titleLbl,
@@ -1050,6 +1061,18 @@ void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
 NoteMonitorWidget::~NoteMonitorWidget() {
     delete m_playlist;
     m_playlist = nullptr;
+}
+
+void NoteMonitorWidget::requestVirtuosoLookaheadOnce() {
+    if (!m_virtuosoPlayback) return;
+    m_virtuosoPlayback->emitLookaheadPlanOnce();
+}
+
+void NoteMonitorWidget::setVirtuosoAgentEnergyMultiplier(const QString& agent, double mult01to2) {
+    if (!m_virtuosoPlayback) return;
+    m_virtuosoPlayback->setAgentEnergyMultiplier(agent, mult01to2);
+    // Refresh lookahead immediately so UIs update even if transport is stopped.
+    m_virtuosoPlayback->emitLookaheadPlanOnce();
 }
 
 void NoteMonitorWidget::stopAllPlayback() {

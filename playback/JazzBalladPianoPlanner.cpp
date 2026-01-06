@@ -400,64 +400,85 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
         out.push_back(hit);
     };
 
+    // Sustain shaping: session players vary holds (stabs vs pads) depending on space/energy.
+    // Deterministic per bar, so lookahead + audition always match.
+    const int holdRoll = int((h / 29u) % 100u); // 0..99
+    auto shortDur = [&]() -> virtuoso::groove::Rational { return userBusy ? virtuoso::groove::Rational(1, 16) : virtuoso::groove::Rational(1, 8); };
+    auto medDur = [&]() -> virtuoso::groove::Rational { return virtuoso::groove::Rational(1, 4); };  // 1 beat
+    auto longDur = [&]() -> virtuoso::groove::Rational { return virtuoso::groove::Rational(3, 8); }; // dotted quarter (~1.5 beats)
+    auto padDur = [&]() -> virtuoso::groove::Rational { return virtuoso::groove::Rational(1, 2); };  // 2 beats
+
+    auto chooseHold = [&](const QString& tag, bool canPad, bool canLong) -> virtuoso::groove::Rational {
+        Q_UNUSED(tag);
+        // Base: short stabs when user is busy; otherwise medium.
+        virtuoso::groove::Rational d = userBusy ? shortDur() : medDur();
+        if (canLong && !userBusy && c.userSilence && (holdRoll < 28)) d = longDur();
+        if (canPad && !userBusy && c.userSilence && (holdRoll < 14)) d = padDur();
+        // In higher energy, shorten slightly (more motion); in very low energy, lengthen slightly.
+        if (!userBusy && e >= 0.65 && d == medDur() && (holdRoll < 35)) d = shortDur();
+        if (!userBusy && e <= 0.30 && d == medDur() && (holdRoll < 35)) d = longDur();
+        return d;
+    };
+
     // --- Base feel: jazz ballad comping is sparse but syncopated. ---
     // Patterns are bar-coherent and deterministic via hash.
     const int variant = int(h % 7u); // 0..6
 
     if (climax) {
         // Denser, but still musical: quarters + occasional upbeat pushes.
-        add(0, 0, 1, {1, 4}, +4, "full", "climax_q1");
-        add(1, ((h / 3u) % 2u) ? 1 : 0, 2, {1, 8}, 0, "guide", "climax_push2");
-        add(2, 0, 1, {1, 4}, +2, "full", "climax_q3");
-        add(3, 1, 2, {1, 8}, -6, "guide", phraseEnd ? "climax_push4_end" : "climax_push4");
+        add(0, 0, 1, chooseHold("climax_q1", /*canPad*/false, /*canLong*/false), +4, "full", "climax_q1");
+        add(1, ((h / 3u) % 2u) ? 1 : 0, 2, shortDur(), 0, "guide", "climax_push2");
+        add(2, 0, 1, chooseHold("climax_q3", /*canPad*/false, /*canLong*/false), +2, "full", "climax_q3");
+        add(3, 1, 2, shortDur(), -6, "guide", phraseEnd ? "climax_push4_end" : "climax_push4");
         return out;
     }
 
     // Non-climax: choose a session-player-ish bar rhythm.
     switch (variant) {
         case 0: // Classic 2&4, but light and short (breathing)
-            add(1, 0, 1, {1, 8}, -2, "guide", "backbeat2_short");
-            add(3, 0, 1, {1, 8}, 0, "full", "backbeat4_short");
+            add(1, 0, 1, shortDur(), -2, "guide", "backbeat2_short");
+            add(3, 0, 1, chooseHold("backbeat4_short", /*canPad*/true, /*canLong*/true), 0, "full", "backbeat4_short");
             break;
         case 1: // Delayed 2 (laid-back) + 4
-            add(1, 1, 2, {1, 8}, -4, "guide", "delay2");
-            add(3, 0, 1, {1, 8}, 0, "full", "backbeat4_short");
+            add(1, 1, 2, shortDur(), -4, "guide", "delay2");
+            add(3, 0, 1, chooseHold("backbeat4_short", /*canPad*/true, /*canLong*/true), 0, "full", "backbeat4_short");
             break;
         case 2: // Charleston-ish: beat 1 + and-of-2
             if (!c.userSilence && !c.chordIsNew && (int((h / 11u) % 100u) < int(llround(c.skipBeat2ProbStable * 100.0)))) {
                 // leave space; only the push
-                add(1, 1, 2, {1, 8}, -4, "guide", "charleston_push_only");
+                add(1, 1, 2, shortDur(), -4, "guide", "charleston_push_only");
             } else {
-                add(0, 0, 1, {1, 8}, -6, "guide", "charleston_1");
-                add(1, 1, 2, {1, 8}, 0, "full", "charleston_and2");
+                add(0, 0, 1, chooseHold("charleston_1", /*canPad*/false, /*canLong*/true), -6, "guide", "charleston_1");
+                add(1, 1, 2, chooseHold("charleston_and2", /*canPad*/true, /*canLong*/true), 0, "full", "charleston_and2");
             }
             break;
         case 3: // Anticipate 4 (and-of-4) + maybe 2
-            if (complexity > 0.35) add(1, 0, 1, {1, 8}, -2, "guide", "light2");
-            add(3, 1, 2, {1, 8}, -6, "full", phraseEnd ? "push4_end" : "push4");
+            if (complexity > 0.35) add(1, 0, 1, shortDur(), -2, "guide", "light2");
+            // Push on and-of-4 often wants to ring into the barline a bit.
+            add(3, 1, 2, chooseHold("push4", /*canPad*/true, /*canLong*/true), -6, "full", phraseEnd ? "push4_end" : "push4");
             break;
         case 4: // 2 only (super sparse, vocalist)
-            add(1, 0, 1, {1, 8}, -4, "guide", "only2");
+            add(1, 0, 1, chooseHold("only2", /*canPad*/false, /*canLong*/true), -4, "guide", "only2");
             break;
         case 5: // 4 only + tiny answer on and-of-3 if user silence
-            add(3, 0, 1, {1, 8}, -4, "full", "only4");
-            if (c.userSilence && complexity > 0.30) add(2, 1, 2, {1, 16}, -10, "guide", "answer_and3");
+            add(3, 0, 1, chooseHold("only4", /*canPad*/true, /*canLong*/true), -4, "full", "only4");
+            if (c.userSilence && complexity > 0.30) add(2, 1, 2, virtuoso::groove::Rational(1, 16), -10, "guide", "answer_and3");
             break;
         default: // syncopated 2 (and-of-2) + 4 (and-of-4)
-            add(1, 1, 2, {1, 8}, -6, "guide", "and2");
-            add(3, 1, 2, {1, 8}, -8, "full", phraseEnd ? "and4_end" : "and4");
+            add(1, 1, 2, shortDur(), -6, "guide", "and2");
+            add(3, 1, 2, chooseHold("and4", /*canPad*/true, /*canLong*/true), -8, "full", phraseEnd ? "and4_end" : "and4");
             break;
     }
 
     // Occasional extra jab (and-of-1 or and-of-3) when there is space and energy.
     if (!userBusy && complexity > 0.55 && (int((h / 17u) % 100u) < 22)) {
         const bool on1 = ((h / 19u) % 2u) == 0u;
-        add(on1 ? 0 : 2, 1, 2, {1, 16}, -10, "guide", on1 ? "jab_and1" : "jab_and3");
+        add(on1 ? 0 : 2, 1, 2, virtuoso::groove::Rational(1, 16), -10, "guide", on1 ? "jab_and1" : "jab_and3");
     }
 
     // Phrase end: slightly more likely to add a light push into next bar.
     if (phraseEnd && !userBusy && (int((h / 23u) % 100u) < 28)) {
-        add(3, 1, 2, {1, 8}, -8, "guide", "phrase_end_push");
+        add(3, 1, 2, chooseHold("phrase_end_push", /*canPad*/true, /*canLong*/true), -8, "guide", "phrase_end_push");
     }
 
     // If user is very active, bias to single backbeat (beat 4) to stay out of the way.

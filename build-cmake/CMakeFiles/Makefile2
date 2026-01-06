@@ -1051,9 +1051,9 @@ CMakeFiles/VirtuosoCore.dir/clean:
 # Target rules for target CMakeFiles/VirtuosoCoreTests.dir
 
 # All Build rule for target.
+CMakeFiles/VirtuosoCoreTests.dir/all: CMakeFiles/VirtuosoCore.dir/all
 CMakeFiles/VirtuosoCoreTests.dir/all: CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir/all
 CMakeFiles/VirtuosoCoreTests.dir/all: CMakeFiles/VirtuosoCoreTests_autogen.dir/all
-CMakeFiles/VirtuosoCoreTests.dir/all: CMakeFiles/VirtuosoCore.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests.dir/build.make CMakeFiles/VirtuosoCoreTests.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests.dir/build.make CMakeFiles/VirtuosoCoreTests.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=57,58,59,60 "Built target VirtuosoCoreTests"
@@ -1085,9 +1085,9 @@ CMakeFiles/VirtuosoCoreTests.dir/clean:
 # Target rules for target CMakeFiles/CppMidiProcessor.dir
 
 # All Build rule for target.
+CMakeFiles/CppMidiProcessor.dir/all: CMakeFiles/VirtuosoCore.dir/all
 CMakeFiles/CppMidiProcessor.dir/all: CMakeFiles/CppMidiProcessor_autogen_timestamp_deps.dir/all
 CMakeFiles/CppMidiProcessor.dir/all: CMakeFiles/CppMidiProcessor_autogen.dir/all
-CMakeFiles/CppMidiProcessor.dir/all: CMakeFiles/VirtuosoCore.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40 "Built target CppMidiProcessor"

@@ -22,6 +22,12 @@ public:
         music::ChordSymbol nextChord; // may be empty/unset if unknown
         bool hasNextChord = false;
         QString chordText; // for explainability
+
+        // Deterministic stylistic shaping (tuned per reference).
+        quint32 determinismSeed = 1;
+        double approachProbBeat3 = 0.55;      // probability of chromatic approach into next bar when it changes
+        double skipBeat3ProbStable = 0.25;    // when harmony is stable, sometimes omit beat 3 (more space)
+        bool allowApproachFromAbove = true;   // allow +1 approach as well as -1
     };
 
     JazzBalladBassPlanner();

@@ -156,6 +156,41 @@ static bool sameChordKey(const music::ChordSymbol& a, const music::ChordSymbol& 
     return (a.rootPc == b.rootPc && a.bassPc == b.bassPc && a.quality == b.quality && a.seventh == b.seventh && a.extension == b.extension && a.alt == b.alt);
 }
 
+struct BalladRefTuning {
+    double bassApproachProbBeat3 = 0.55;
+    double bassSkipBeat3ProbStable = 0.25;
+    bool bassAllowApproachFromAbove = true;
+
+    double pianoSkipBeat2ProbStable = 0.45;
+    double pianoAddSecondColorProb = 0.25;
+    double pianoSparkleProbBeat4 = 0.18;
+    bool pianoPreferShells = true;
+
+    int pianoLhLo = 50, pianoLhHi = 66;
+    int pianoRhLo = 67, pianoRhHi = 84;
+    int pianoSparkleLo = 84, pianoSparkleHi = 96;
+};
+
+static BalladRefTuning tuningForReferenceTrack(const QString& presetKey) {
+    // Reference track: Chet Baker – "My Funny Valentine" (brushes ballad, airy/sparse).
+    // If using the Evans preset, keep it a bit denser and more rootless.
+    BalladRefTuning t;
+    if (presetKey.contains("evans", Qt::CaseInsensitive)) {
+        t.bassApproachProbBeat3 = 0.62;
+        t.bassSkipBeat3ProbStable = 0.18;
+        t.pianoSkipBeat2ProbStable = 0.30;
+        t.pianoAddSecondColorProb = 0.40;
+        t.pianoSparkleProbBeat4 = 0.22;
+        t.pianoPreferShells = false;
+        t.pianoLhLo = 48; t.pianoLhHi = 67;
+        t.pianoRhLo = 65; t.pianoRhHi = 86;
+        t.pianoSparkleLo = 82; t.pianoSparkleHi = 98;
+    } else if (presetKey.contains("chet", Qt::CaseInsensitive) || presetKey.contains("brush", Qt::CaseInsensitive) || presetKey.contains("ballad", Qt::CaseInsensitive)) {
+        // Keep defaults (Chet).
+    }
+    return t;
+}
+
 static virtuoso::groove::Rational durationWholeFromHoldMs(int holdMs, int bpm) {
     // GrooveGrid::wholeNotesToMs: wholeMs = 240000 / bpm
     // => whole = holdMs / wholeMs = holdMs * bpm / 240000
@@ -421,6 +456,8 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
 
     // Bass + piano planners (Ballad Brain v1).
     const QString chordText = chord.originalText.trimmed().isEmpty() ? QString("pc=%1").arg(chord.rootPc) : chord.originalText.trimmed();
+    const BalladRefTuning tune = tuningForReferenceTrack(m_stylePresetKey);
+    const quint32 detSeed = quint32(qHash(QString("ballad|") + m_stylePresetKey));
 
     JazzBalladBassPlanner::Context bc;
     bc.bpm = m_bpm;
@@ -431,6 +468,10 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     bc.hasNextChord = haveNext && !nextChord.noChord;
     bc.nextChord = nextChord;
     bc.chordText = chordText;
+    bc.determinismSeed = detSeed;
+    bc.approachProbBeat3 = tune.bassApproachProbBeat3;
+    bc.skipBeat3ProbStable = tune.bassSkipBeat3ProbStable;
+    bc.allowApproachFromAbove = tune.bassAllowApproachFromAbove;
     auto bassIntents = m_bassPlanner.planBeat(bc, m_chBass, ts);
     for (auto& n : bassIntents) {
         n.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
@@ -444,7 +485,14 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     pc.chordIsNew = chordIsNew;
     pc.chord = chord;
     pc.chordText = chordText;
-    pc.determinismSeed = 1337u;
+    pc.determinismSeed = detSeed ^ 0xBADC0FFEu;
+    pc.lhLo = tune.pianoLhLo; pc.lhHi = tune.pianoLhHi;
+    pc.rhLo = tune.pianoRhLo; pc.rhHi = tune.pianoRhHi;
+    pc.sparkleLo = tune.pianoSparkleLo; pc.sparkleHi = tune.pianoSparkleHi;
+    pc.skipBeat2ProbStable = tune.pianoSkipBeat2ProbStable;
+    pc.addSecondColorProb = tune.pianoAddSecondColorProb;
+    pc.sparkleProbBeat4 = tune.pianoSparkleProbBeat4;
+    pc.preferShells = tune.pianoPreferShells;
     auto pianoIntents = m_pianoPlanner.planBeat(pc, m_chPiano, ts);
     for (auto& n : pianoIntents) {
         n.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);

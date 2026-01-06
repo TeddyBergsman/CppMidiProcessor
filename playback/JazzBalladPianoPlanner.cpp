@@ -176,27 +176,62 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
     // Deterministic sparse variation: sometimes skip beat 2 if chord is stable.
     const quint32 h = quint32(qHash(QString("%1|%2|%3").arg(c.chordText).arg(c.playbackBarIndex).arg(c.determinismSeed)));
-    const bool skip = (!c.chordIsNew && (c.beatInBar == 1) && ((h % 5u) == 0u));
+    const bool stable = !c.chordIsNew;
+    const int pSkip = qBound(0, int(llround(c.skipBeat2ProbStable * 100.0)), 100);
+    const bool skip = (stable && (c.beatInBar == 1) && (pSkip > 0) && (int(h % 100u) < pSkip));
     if (skip) return out;
 
-    // Choose voicing family.
-    const bool useRootless = (c.chord.extension >= 7 || c.chord.seventh != music::SeventhQuality::None);
+    // Choose voicing family (Chet ballad: mostly shells, occasional rootless).
+    const bool chordHas7 = (c.chord.extension >= 7 || c.chord.seventh != music::SeventhQuality::None);
+    const bool dominant = (c.chord.quality == music::ChordQuality::Dominant);
+    const bool alt = c.chord.alt || !c.chord.alterations.isEmpty();
     const bool pickA = ((h % 2u) == 0u);
+    const bool useRootless = chordHas7 && (!c.preferShells || c.chordIsNew || (c.beatInBar == 3 && ((h % 4u) == 0u)));
 
-    QVector<int> pcs = useRootless ? (pickA ? makeRootlessA(c.chord) : makeRootlessB(c.chord)) : makeShell(c.chord);
-    // Ensure uniqueness
+    // Build a ballad-appropriate set: always guide tones, then 1–2 colors.
+    QVector<int> pcs;
+    pcs.reserve(5);
+    const int pc3 = pcForDegree(c.chord, 3);
+    const int pc7 = pcForDegree(c.chord, 7);
+    pcs.push_back(pc3);
+    pcs.push_back(pc7);
+
+    // Primary color:
+    int primaryDeg = 9;
+    if (dominant && alt) primaryDeg = 9;                 // altered colors handled via alterations/defaults
+    else if (c.chord.quality == music::ChordQuality::Major) primaryDeg = ((h % 3u) == 0u) ? 11 : 9; // sometimes #11-ish (if present)
+    else if (c.chord.quality == music::ChordQuality::Minor) primaryDeg = ((h % 3u) == 0u) ? 11 : 9;
+    pcs.push_back(pcForDegree(c.chord, primaryDeg));
+
+    // Secondary color (occasional):
+    const int p2 = qBound(0, int(llround(c.addSecondColorProb * 100.0)), 100);
+    const bool add2 = (p2 > 0) && (int((h / 7u) % 100u) < p2);
+    if (add2) {
+        int deg2 = 13;
+        if (dominant && alt) deg2 = 13;
+        else if (c.chord.quality == music::ChordQuality::Major) deg2 = 13;
+        else if (c.chord.quality == music::ChordQuality::Minor) deg2 = 11;
+        pcs.push_back(pcForDegree(c.chord, deg2));
+    }
+
+    // If we chose rootless, we can swap in Type A/B flavor by optionally including 5th vs extra color.
+    if (useRootless) {
+        // Type A/B: slight re-bias; keep the set mostly the same, just ensure we have a 5 sometimes.
+        if (pickA && ((h % 5u) == 0u)) pcs.push_back(pcForDegree(c.chord, 5));
+        if (!pickA && ((h % 6u) == 0u)) pcs.push_back(pcForDegree(c.chord, 5));
+    }
+
     sortUnique(pcs);
 
     // Map to midi with simple LH/RH ranges and voice-leading to last voicing.
     QVector<int> midi;
     midi.reserve(pcs.size());
 
-    // LH anchor tones (3rd + 7th) in ~E3..C5 (52..72)
-    // RH color tones in ~C5..G6 (72..91)
+    // LH anchor tones (3rd + 7th), RH colors with ballad spacing.
     for (int pc : pcs) {
-        const bool isGuide = (pc == pcForDegree(c.chord, 3) || pc == pcForDegree(c.chord, 7));
-        const int lo = isGuide ? 52 : 72;
-        const int hi = isGuide ? 72 : 91;
+        const bool isGuide = (pc == pc3 || pc == pc7);
+        const int lo = isGuide ? c.lhLo : c.rhLo;
+        const int hi = isGuide ? c.lhHi : c.rhHi;
         const int chosen = bestNearestToPrev(pc, m_lastVoicing, lo, hi);
         midi.push_back(chosen);
     }
@@ -208,8 +243,18 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     // Save for voice-leading.
     m_lastVoicing = midi;
 
-    const QString voicingType = useRootless ? (pickA ? "Rootless Type A" : "Rootless Type B") : "Shell";
-    const int baseVel = c.chordIsNew ? 52 : 46;
+    const QString voicingType = useRootless ? (pickA ? "Ballad Rootless (A-ish)" : "Ballad Rootless (B-ish)") : "Ballad Shell";
+    const int baseVel = c.chordIsNew ? 50 : 44;
+
+    // Optional high sparkle on beat 4 (very occasional).
+    const int pSp = qBound(0, int(llround(c.sparkleProbBeat4 * 100.0)), 100);
+    const bool sparkle = (c.beatInBar == 3) && (pSp > 0) && (int((h / 13u) % 100u) < pSp);
+    int sparkleMidi = -1;
+    if (sparkle) {
+        // Choose a tasteful color (9 or 11) and place it high.
+        const int spPc = pcForDegree(c.chord, ((h % 2u) == 0u) ? 9 : 11);
+        sparkleMidi = nearestMidiForPc(spPc, /*around*/(c.sparkleLo + c.sparkleHi) / 2, c.sparkleLo, c.sparkleHi);
+    }
 
     for (int m : midi) {
         virtuoso::engine::AgentIntentNote n;
@@ -223,6 +268,21 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         n.voicing_type = voicingType;
         n.logic_tag = "ballad_comp";
         n.target_note = "Guide tones + color";
+        out.push_back(n);
+    }
+
+    if (sparkleMidi >= 0) {
+        virtuoso::engine::AgentIntentNote n;
+        n.agent = "Piano";
+        n.channel = midiChannel;
+        n.note = clampMidi(sparkleMidi);
+        n.baseVelocity = baseVel - 6;
+        n.durationWhole = virtuoso::groove::Rational(1, ts.den * 2); // short sparkle
+        n.structural = false;
+        n.chord_context = c.chordText;
+        n.voicing_type = voicingType + " + Sparkle";
+        n.logic_tag = "ballad_sparkle";
+        n.target_note = "High sparkle";
         out.push_back(n);
     }
     return out;

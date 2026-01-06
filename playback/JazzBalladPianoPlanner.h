@@ -23,6 +23,17 @@ public:
         music::ChordSymbol chord;
         QString chordText;
         quint32 determinismSeed = 1;
+
+        // Reference tuning knobs (Chet Baker – My Funny Valentine: sparse, airy, gentle).
+        // Ranges are MIDI note numbers.
+        int lhLo = 50, lhHi = 66;      // guide tones
+        int rhLo = 67, rhHi = 84;      // main color tones
+        int sparkleLo = 84, sparkleHi = 96; // optional top sparkle
+
+        double skipBeat2ProbStable = 0.45;   // if chord is stable, often skip beat 2
+        double addSecondColorProb = 0.25;    // add a second color tone sometimes
+        double sparkleProbBeat4 = 0.18;      // occasional high sparkle on beat 4
+        bool preferShells = true;            // favor shells over thicker rootless
     };
 
     JazzBalladPianoPlanner();

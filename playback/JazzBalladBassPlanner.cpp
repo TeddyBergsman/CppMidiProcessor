@@ -113,27 +113,49 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         logic = "Bass: two-feel root";
     } else {
         const bool nextChanges = (nextRootPc >= 0 && nextRootPc != rootPc);
-        if (nextChanges) {
-            // Approach tone into the next bar's chord.
-            const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-            int approachMidi = chooseApproachMidi(nextRootMidi, m_lastMidi);
-            // Fold approach toward our bass range.
-            while (approachMidi < 40) approachMidi += 12;
-            while (approachMidi > 57) approachMidi -= 12;
-            int repaired = approachMidi;
-            if (feasibleOrRepair(repaired)) {
-                virtuoso::engine::AgentIntentNote n;
-                n.agent = "Bass";
-                n.channel = midiChannel;
-                n.note = repaired;
-                n.baseVelocity = 54;
-                n.durationWhole = virtuoso::groove::Rational(2, ts.den); // half a bar? (approx) => sustain
-                n.structural = c.chordIsNew;
-                n.chord_context = c.chordText;
-                n.logic_tag = "two_feel_approach";
-                n.target_note = QString("Approach -> next root pc=%1").arg(nextRootPc);
-                out.push_back(n);
+
+        // Chet-style space: on stable harmony, sometimes omit beat 3 entirely.
+        const bool stableHarmony = !nextChanges && !c.chordIsNew;
+        if (stableHarmony) {
+            const quint32 hStable = quint32(qHash(QString("%1|%2|%3|b3")
+                                                 .arg(c.chordText)
+                                                 .arg(c.playbackBarIndex)
+                                                 .arg(c.determinismSeed)));
+            const int p = qBound(0, int(llround(c.skipBeat3ProbStable * 100.0)), 100);
+            if (p > 0 && int(hStable % 100u) < p) {
                 return out;
+            }
+        }
+
+        if (nextChanges) {
+            // Approach tone into the next bar's chord (probabilistic but deterministic).
+            const quint32 hApp = quint32(qHash(QString("%1|%2|%3|app")
+                                               .arg(c.chordText)
+                                               .arg(c.playbackBarIndex)
+                                               .arg(c.determinismSeed)));
+            const int p = qBound(0, int(llround(c.approachProbBeat3 * 100.0)), 100);
+            const bool doApproach = (p > 0) && (int(hApp % 100u) < p);
+            if (doApproach) {
+                const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
+                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
+                // Fold approach toward our bass range.
+                while (approachMidi < 40) approachMidi += 12;
+                while (approachMidi > 57) approachMidi -= 12;
+                int repaired = approachMidi;
+                if (feasibleOrRepair(repaired)) {
+                    virtuoso::engine::AgentIntentNote n;
+                    n.agent = "Bass";
+                    n.channel = midiChannel;
+                    n.note = repaired;
+                    n.baseVelocity = 50;
+                    n.durationWhole = virtuoso::groove::Rational(1, ts.den); // 1 beat pickup into next bar
+                    n.structural = false;
+                    n.chord_context = c.chordText;
+                    n.logic_tag = "two_feel_approach";
+                    n.target_note = QString("Approach -> next root pc=%1").arg(nextRootPc);
+                    out.push_back(n);
+                    return out;
+                }
             }
         }
 
@@ -151,8 +173,19 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     n.agent = "Bass";
     n.channel = midiChannel;
     n.note = repaired;
-    n.baseVelocity = (c.beatInBar == 0) ? 58 : 52;
-    n.durationWhole = virtuoso::groove::Rational(2, ts.den); // sustain into space (ballad)
+    n.baseVelocity = (c.beatInBar == 0) ? 56 : 50;
+    if (c.beatInBar == 0) {
+        // On stable harmony, occasionally hold the root for the whole bar (Chet ballad vibe).
+        const bool stable = (!c.hasNextChord) || ((c.nextChord.rootPc == c.chord.rootPc) && !c.chordIsNew);
+        const quint32 hLen = quint32(qHash(QString("%1|%2|%3|len")
+                                           .arg(c.chordText)
+                                           .arg(c.playbackBarIndex)
+                                           .arg(c.determinismSeed)));
+        const bool longHold = stable && ((hLen % 4u) == 0u);
+        n.durationWhole = longHold ? virtuoso::groove::Rational(ts.num, ts.den) : virtuoso::groove::Rational(2, ts.den);
+    } else {
+        n.durationWhole = virtuoso::groove::Rational(2, ts.den);
+    }
     n.structural = c.chordIsNew || (c.beatInBar == 0);
     n.chord_context = c.chordText;
     n.logic_tag = (c.beatInBar == 0) ? "two_feel_root" : "two_feel_fifth";

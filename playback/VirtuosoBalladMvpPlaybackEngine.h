@@ -10,6 +10,9 @@
 #include "virtuoso/groove/GrooveRegistry.h"
 #include "virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h"
 
+#include "playback/JazzBalladBassPlanner.h"
+#include "playback/JazzBalladPianoPlanner.h"
+
 class MidiProcessor;
 
 namespace playback {
@@ -88,6 +91,9 @@ private:
     // Harmony tracking
     music::ChordSymbol m_lastChord;
     bool m_hasLastChord = false;
+
+    JazzBalladBassPlanner m_bassPlanner;
+    JazzBalladPianoPlanner m_pianoPlanner;
 
     // Channels (1..16)
     int m_chDrums = 6;

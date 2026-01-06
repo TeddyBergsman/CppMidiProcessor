@@ -1399,6 +1399,54 @@ playback/BandPlaybackEngine.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BandPlaybackEngine.cpp.s
 .PHONY : playback/BandPlaybackEngine.cpp.s
 
+playback/JazzBalladBassPlanner.o: playback/JazzBalladBassPlanner.cpp.o
+.PHONY : playback/JazzBalladBassPlanner.o
+
+# target to build an object file
+playback/JazzBalladBassPlanner.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o
+.PHONY : playback/JazzBalladBassPlanner.cpp.o
+
+playback/JazzBalladBassPlanner.i: playback/JazzBalladBassPlanner.cpp.i
+.PHONY : playback/JazzBalladBassPlanner.i
+
+# target to preprocess a source file
+playback/JazzBalladBassPlanner.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.i
+.PHONY : playback/JazzBalladBassPlanner.cpp.i
+
+playback/JazzBalladBassPlanner.s: playback/JazzBalladBassPlanner.cpp.s
+.PHONY : playback/JazzBalladBassPlanner.s
+
+# target to generate assembly for a file
+playback/JazzBalladBassPlanner.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.s
+.PHONY : playback/JazzBalladBassPlanner.cpp.s
+
+playback/JazzBalladPianoPlanner.o: playback/JazzBalladPianoPlanner.cpp.o
+.PHONY : playback/JazzBalladPianoPlanner.o
+
+# target to build an object file
+playback/JazzBalladPianoPlanner.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o
+.PHONY : playback/JazzBalladPianoPlanner.cpp.o
+
+playback/JazzBalladPianoPlanner.i: playback/JazzBalladPianoPlanner.cpp.i
+.PHONY : playback/JazzBalladPianoPlanner.i
+
+# target to preprocess a source file
+playback/JazzBalladPianoPlanner.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.i
+.PHONY : playback/JazzBalladPianoPlanner.cpp.i
+
+playback/JazzBalladPianoPlanner.s: playback/JazzBalladPianoPlanner.cpp.s
+.PHONY : playback/JazzBalladPianoPlanner.s
+
+# target to generate assembly for a file
+playback/JazzBalladPianoPlanner.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.s
+.PHONY : playback/JazzBalladPianoPlanner.cpp.s
+
 playback/VirtuosoBalladMvpPlaybackEngine.o: playback/VirtuosoBalladMvpPlaybackEngine.cpp.o
 .PHONY : playback/VirtuosoBalladMvpPlaybackEngine.o
 
@@ -1952,6 +2000,12 @@ help:
 	@echo "... playback/BandPlaybackEngine.o"
 	@echo "... playback/BandPlaybackEngine.i"
 	@echo "... playback/BandPlaybackEngine.s"
+	@echo "... playback/JazzBalladBassPlanner.o"
+	@echo "... playback/JazzBalladBassPlanner.i"
+	@echo "... playback/JazzBalladBassPlanner.s"
+	@echo "... playback/JazzBalladPianoPlanner.o"
+	@echo "... playback/JazzBalladPianoPlanner.i"
+	@echo "... playback/JazzBalladPianoPlanner.s"
 	@echo "... playback/VirtuosoBalladMvpPlaybackEngine.o"
 	@echo "... playback/VirtuosoBalladMvpPlaybackEngine.i"
 	@echo "... playback/VirtuosoBalladMvpPlaybackEngine.s"

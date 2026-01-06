@@ -1,2 +1,2 @@
-VirtuosoCoreTests 10 0.0245387
+VirtuosoCoreTests 11 0.0204943
 ---

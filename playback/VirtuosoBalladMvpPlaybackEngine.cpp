@@ -230,6 +230,8 @@ void VirtuosoBalladMvpPlaybackEngine::play() {
     m_nextScheduledStep = 0;
     m_hasLastChord = false;
     m_lastChord = music::ChordSymbol{};
+    m_bassPlanner.reset();
+    m_pianoPlanner.reset();
 
     m_tickTimer.start();
 }
@@ -379,6 +381,36 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     const int cellIndex = m_sequence[stepIndex % seqLen];
     const bool haveChord = chordForCellIndex(cellIndex, chord, chordIsNew);
 
+    // Lookahead: next bar's beat-1 chord (for bass approaches / piano anticipation later).
+    // IMPORTANT: do NOT call chordForCellIndex() here, because it mutates last-chord state.
+    auto parseCellChordNoState = [&](int anyCellIndex, const music::ChordSymbol& fallback, bool* outIsExplicit = nullptr) -> music::ChordSymbol {
+        if (outIsExplicit) *outIsExplicit = false;
+        const chart::Cell* c = cellForFlattenedIndex(anyCellIndex);
+        if (!c) return fallback;
+        const QString t = c->chord.trimmed();
+        if (t.isEmpty()) return fallback;
+        music::ChordSymbol parsed;
+        if (!music::parseChordSymbol(t, parsed)) return fallback;
+        if (parsed.placeholder) return fallback;
+        if (outIsExplicit) *outIsExplicit = true;
+        return parsed;
+    };
+
+    music::ChordSymbol nextChord;
+    bool haveNext = false;
+    if (seqLen > 0 && haveChord) {
+        const int beatsPerBar = (ts.num > 0) ? ts.num : 4;
+        const int stepNextBar = stepIndex + (beatsPerBar - beatInBar);
+        const int total = seqLen * qMax(1, m_repeats);
+        if (stepNextBar < total) {
+            const int cellNext = m_sequence[stepNextBar % seqLen];
+            bool explicitNext = false;
+            nextChord = parseCellChordNoState(cellNext, /*fallback*/chord, &explicitNext);
+            haveNext = explicitNext || (nextChord.rootPc >= 0);
+            if (nextChord.noChord) haveNext = false;
+        }
+    }
+
     const bool strongBeat = (beatInBar == 0 || beatInBar == 2);
     const bool structural = strongBeat || chordIsNew;
 
@@ -387,8 +419,37 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
 
     if (!haveChord || chord.noChord) return; // leave space on N.C.
 
-    scheduleBassTwoFeel(playbackBarIndex, beatInBar, chord, chordIsNew);
-    schedulePianoComp(playbackBarIndex, beatInBar, chord, chordIsNew);
+    // Bass + piano planners (Ballad Brain v1).
+    const QString chordText = chord.originalText.trimmed().isEmpty() ? QString("pc=%1").arg(chord.rootPc) : chord.originalText.trimmed();
+
+    JazzBalladBassPlanner::Context bc;
+    bc.bpm = m_bpm;
+    bc.playbackBarIndex = playbackBarIndex;
+    bc.beatInBar = beatInBar;
+    bc.chordIsNew = chordIsNew;
+    bc.chord = chord;
+    bc.hasNextChord = haveNext && !nextChord.noChord;
+    bc.nextChord = nextChord;
+    bc.chordText = chordText;
+    auto bassIntents = m_bassPlanner.planBeat(bc, m_chBass, ts);
+    for (auto& n : bassIntents) {
+        n.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
+        m_engine.scheduleNote(n);
+    }
+
+    JazzBalladPianoPlanner::Context pc;
+    pc.bpm = m_bpm;
+    pc.playbackBarIndex = playbackBarIndex;
+    pc.beatInBar = beatInBar;
+    pc.chordIsNew = chordIsNew;
+    pc.chord = chord;
+    pc.chordText = chordText;
+    pc.determinismSeed = 1337u;
+    auto pianoIntents = m_pianoPlanner.planBeat(pc, m_chPiano, ts);
+    for (auto& n : pianoIntents) {
+        n.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
+        m_engine.scheduleNote(n);
+    }
 }
 
 void VirtuosoBalladMvpPlaybackEngine::scheduleDrumsBrushes(int playbackBarIndex, int beatInBar, bool structural) {
@@ -479,69 +540,7 @@ int VirtuosoBalladMvpPlaybackEngine::choosePianoMidi(int pc, int targetLow, int 
     return midi;
 }
 
-void VirtuosoBalladMvpPlaybackEngine::scheduleBassTwoFeel(int playbackBarIndex, int beatInBar, const music::ChordSymbol& chord, bool chordIsNew) {
-    // Two-feel: half notes on beats 1 and 3.
-    if (!(beatInBar == 0 || beatInBar == 2)) return;
-
-    virtuoso::groove::TimeSignature ts{4, 4};
-    ts.num = (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4;
-    ts.den = (m_model.timeSigDen > 0) ? m_model.timeSigDen : 4;
-
-    const int pc = (chord.bassPc >= 0) ? chord.bassPc : chord.rootPc;
-    const int midi = chooseBassMidi(pc);
-
-    virtuoso::engine::AgentIntentNote n;
-    n.agent = "Bass";
-    n.channel = m_chBass;
-    n.note = midi;
-    n.baseVelocity = 58;
-    n.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
-    n.durationWhole = virtuoso::groove::Rational(2, 4); // half note
-    n.structural = chordIsNew || (beatInBar == 0);
-    m_engine.scheduleNote(n);
-}
-
-void VirtuosoBalladMvpPlaybackEngine::schedulePianoComp(int playbackBarIndex, int beatInBar, const music::ChordSymbol& chord, bool chordIsNew) {
-    // Sparse ballad comp: 2 & 4, guide tones (3rd + 7th), optionally add a 9th.
-    if (!((beatInBar % 2) == 1)) return;
-
-    virtuoso::groove::TimeSignature ts{4, 4};
-    ts.num = (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4;
-    ts.den = (m_model.timeSigDen > 0) ? m_model.timeSigDen : 4;
-
-    const int root = chord.rootPc >= 0 ? chord.rootPc : 0;
-    const int thirdPc = (thirdIntervalForQuality(chord.quality) > 0) ? ((root + thirdIntervalForQuality(chord.quality)) % 12) : root;
-    const int sevIv = seventhIntervalFor(chord);
-    const int seventhPc = (sevIv > 0) ? ((root + sevIv) % 12) : ((root + 10) % 12);
-    const int ninthPc = (root + 2) % 12;
-
-    const int v3 = choosePianoMidi(thirdPc, 52, 68);
-    const int v7 = choosePianoMidi(seventhPc, 55, 72);
-    const int v9 = choosePianoMidi(ninthPc, 60, 78);
-
-    const auto start = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
-    const auto dur = virtuoso::groove::Rational(1, 4); // quarter-ish sustain
-    const bool structural = chordIsNew;
-
-    auto emitNote = [&](int midi, int vel) {
-        virtuoso::engine::AgentIntentNote n;
-        n.agent = "Piano";
-        n.channel = m_chPiano;
-        n.note = midi;
-        n.baseVelocity = vel;
-        n.startPos = start;
-        n.durationWhole = dur;
-        n.structural = structural;
-        m_engine.scheduleNote(n);
-    };
-
-    emitNote(v7, 46);
-    emitNote(v3, 48);
-    // Gentle color most of the time.
-    if (!chord.alt && chord.quality != music::ChordQuality::Diminished && chord.quality != music::ChordQuality::Power5) {
-        emitNote(v9, 40);
-    }
-}
+// NOTE: legacy MVP bass/piano scheduling functions removed in favor of planners.
 
 } // namespace playback
 

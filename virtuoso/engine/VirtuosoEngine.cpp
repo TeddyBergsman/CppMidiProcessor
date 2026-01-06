@@ -107,6 +107,11 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
     virtuoso::theory::TheoryEvent te;
     te.agent = note.agent;
     te.timestamp = he.grid_pos; // Stage 1: use grid position as the timestamp string.
+    te.chord_context = note.chord_context;
+    te.scale_used = note.scale_used;
+    te.voicing_type = note.voicing_type;
+    te.logic_tag = note.logic_tag;
+    te.target_note = note.target_note;
     te.dynamic_marking = QString::number(he.velocity); // placeholder; later becomes "mf"/etc.
     te.groove_template = he.groove_template;
     te.grid_pos = he.grid_pos;

@@ -107,6 +107,10 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/BandPlaybackEngine.cpp
   playback/VirtuosoBalladMvpPlaybackEngine.h
   playback/VirtuosoBalladMvpPlaybackEngine.cpp
+  playback/JazzBalladBassPlanner.h
+  playback/JazzBalladBassPlanner.cpp
+  playback/JazzBalladPianoPlanner.h
+  playback/JazzBalladPianoPlanner.cpp
   music/Pitch.h
   music/Pitch.cpp
   music/ChordSymbol.h

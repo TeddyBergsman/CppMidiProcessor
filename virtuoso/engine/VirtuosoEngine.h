@@ -22,6 +22,13 @@ struct AgentIntentNote {
     groove::Rational durationWhole{1, 4}; // default: quarter note
 
     bool structural = false; // chord arrival / strong beat etc.
+
+    // Optional glass-box fields (propagate to TheoryEvent).
+    QString chord_context;
+    QString scale_used;
+    QString voicing_type;
+    QString logic_tag;
+    QString target_note;
 };
 
 // Stage 1 engine: schedules intents through groove humanization and emits MIDI + TheoryEvent JSON.

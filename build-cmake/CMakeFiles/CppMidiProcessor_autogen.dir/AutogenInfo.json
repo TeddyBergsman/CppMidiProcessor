@@ -697,6 +697,18 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h",
+			"MU",
+			"QDVNTGK2R4/moc_JazzBalladBassPlanner.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h",
+			"MU",
+			"QDVNTGK2R4/moc_JazzBalladPianoPlanner.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VirtuosoBalladMvpPlaybackEngine.h",
 			"MU",
 			"QDVNTGK2R4/moc_VirtuosoBalladMvpPlaybackEngine.cpp",
@@ -943,6 +955,16 @@
 		],
 		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BandPlaybackEngine.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.cpp",
 			"MU",
 			null
 		],

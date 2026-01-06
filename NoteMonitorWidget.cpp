@@ -1093,6 +1093,17 @@ NoteMonitorWidget::~NoteMonitorWidget() {
     m_playlist = nullptr;
 }
 
+void NoteMonitorWidget::stopAllPlayback() {
+    if (m_playback && m_playback->isPlaying()) {
+        m_playback->stop();
+        if (m_playButton) m_playButton->setText("Play");
+    }
+    if (m_virtuosoPlayback && m_virtuosoPlayback->isPlaying()) {
+        m_virtuosoPlayback->stop();
+        if (m_virtuosoPlayButton) m_virtuosoPlayButton->setText("Virtuoso");
+    }
+}
+
 void NoteMonitorWidget::setGuitarNote(int midiNote, double cents) {
     updateNoteUISection(m_guitarTitle, m_guitarLetter, m_guitarAccidental, m_guitarOctave, m_guitarCents, midiNote, cents);
     m_lastGuitarNote = midiNote;

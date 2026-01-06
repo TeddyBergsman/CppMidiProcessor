@@ -57,9 +57,9 @@ void VirtuosoEngine::start() {
 }
 
 void VirtuosoEngine::stop() {
-    if (!m_clock.isRunning()) return;
-    m_clock.stop();
-    m_sched.clear();
+    // Always panic-silence first (explicit NOTE_OFF), even if clock is already stopped.
+    m_sched.panicSilence();
+    if (m_clock.isRunning()) m_clock.stop();
 }
 
 groove::TimingHumanizer& VirtuosoEngine::humanizerFor(const QString& agent) {

@@ -516,6 +516,13 @@ void MainWindow::createConnections() {
         connect(m_midiProcessor, &MidiProcessor::guitarVelocityUpdated,
                 noteMonitorWidget, &NoteMonitorWidget::setGuitarVelocity);
     }
+
+    // --- Shutdown safety: stop playback engines before MIDI teardown ---
+    if (QCoreApplication::instance()) {
+        connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [this]() {
+            if (noteMonitorWidget) noteMonitorWidget->stopAllPlayback();
+        });
+    }
 }
 
 void MainWindow::updateProgramUI(int newProgramIndex) {

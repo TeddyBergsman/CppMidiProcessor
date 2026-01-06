@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QTimer>
 #include <QVector>
+#include <array>
 
 #include "virtuoso/engine/VirtuosoClock.h"
 
@@ -45,6 +46,11 @@ public:
 
     void schedule(const ScheduledEvent& ev);
 
+    // Hard stop: immediately emits NoteOff for any notes that are currently on (tracked internally),
+    // then emits AllNotesOff per channel as a safety net, and clears the queue.
+    // This does NOT depend on the clock running.
+    void panicSilence();
+
 signals:
     void noteOn(int channel, int note, int velocity);
     void noteOff(int channel, int note);
@@ -59,6 +65,10 @@ private:
     VirtuosoClock* m_clock = nullptr; // not owned
     QVector<ScheduledEvent> m_heap;   // min-heap by dueMs
     QTimer m_dispatchTimer;
+
+    // Track active notes that have actually been emitted as NOTE_ON and not yet NOTE_OFF.
+    // [channel-1][note] => on/off
+    std::array<std::array<bool, 128>, 16> m_active{};
 };
 
 } // namespace virtuoso::engine

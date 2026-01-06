@@ -41,6 +41,11 @@ MidiProcessor::~MidiProcessor() {
     if (m_workerThread.joinable()) {
         m_workerThread.join();
     }
+
+    // Guarantee silence on teardown. Many samplers require explicit NOTE_OFF to stop loops.
+    // Do this AFTER the worker thread is stopped (no concurrent midiOut access),
+    // and BEFORE midiOut is destroyed.
+    panicAllChannels();
     
     delete midiInGuitar;
     delete midiOut;
@@ -48,6 +53,20 @@ MidiProcessor::~MidiProcessor() {
     delete midiInVoicePitch;
     delete m_player;
     delete m_audioOutput;
+}
+
+void MidiProcessor::panicAllChannels() {
+    if (!midiOut) return;
+    for (int ch = 0; ch < 16; ++ch) {
+        for (int n = 0; n < 128; ++n) {
+            std::vector<unsigned char> offMsg = { (unsigned char)(0x80 | (unsigned char)ch), (unsigned char)n, 0 };
+            midiOut->sendMessage(&offMsg);
+            // Some hosts prefer NoteOn velocity=0 as note-off
+            std::vector<unsigned char> on0Msg = { (unsigned char)(0x90 | (unsigned char)ch), (unsigned char)n, 0 };
+            midiOut->sendMessage(&on0Msg);
+        }
+        sendChannelAllNotesOff(ch);
+    }
 }
 
 bool MidiProcessor::initialize() {

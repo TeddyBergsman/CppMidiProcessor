@@ -34,6 +34,8 @@ public:
     void openPianoStyleEditor();
 
 public slots:
+    // Used by MainWindow on app quit to guarantee we stop generating/scheduling notes.
+    void stopAllPlayback();
     void setGuitarNote(int midiNote, double cents);
     void setVoiceNote(int midiNote, double cents);
     void setGuitarHz(double hz);

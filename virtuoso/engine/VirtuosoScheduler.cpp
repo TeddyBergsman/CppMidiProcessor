@@ -17,11 +17,34 @@ VirtuosoScheduler::VirtuosoScheduler(VirtuosoClock* clock, QObject* parent)
     // Critical for microtiming: Qt defaults can be coarse; request precise timer behavior.
     m_dispatchTimer.setTimerType(Qt::PreciseTimer);
     connect(&m_dispatchTimer, &QTimer::timeout, this, &VirtuosoScheduler::onDispatch);
+    for (auto& row : m_active) row.fill(false);
 }
 
 void VirtuosoScheduler::clear() {
     m_heap.clear();
     m_dispatchTimer.stop();
+}
+
+void VirtuosoScheduler::panicSilence() {
+    // Stop any pending dispatches first.
+    m_dispatchTimer.stop();
+
+    // Emit explicit NOTE_OFF for any active notes (critical for looped articulations in samplers).
+    for (int ch = 1; ch <= 16; ++ch) {
+        bool any = false;
+        for (int n = 0; n < 128; ++n) {
+            if (!m_active[ch - 1][n]) continue;
+            any = true;
+            m_active[ch - 1][n] = false;
+            emit noteOff(ch, n);
+        }
+        if (any) {
+            // Safety net: also emit AllNotesOff (CC123/CC120 downstream).
+            emit allNotesOff(ch);
+        }
+    }
+
+    m_heap.clear();
 }
 
 void VirtuosoScheduler::schedule(const ScheduledEvent& ev) {
@@ -53,9 +76,24 @@ void VirtuosoScheduler::onDispatch() {
         m_heap.pop_back();
 
         switch (ev.kind) {
-        case Kind::NoteOn: emit noteOn(ev.channel, ev.note, ev.velocity); break;
-        case Kind::NoteOff: emit noteOff(ev.channel, ev.note); break;
-        case Kind::AllNotesOff: emit allNotesOff(ev.channel); break;
+        case Kind::NoteOn:
+            if (ev.channel >= 1 && ev.channel <= 16 && ev.note >= 0 && ev.note <= 127) {
+                m_active[ev.channel - 1][ev.note] = true;
+            }
+            emit noteOn(ev.channel, ev.note, ev.velocity);
+            break;
+        case Kind::NoteOff:
+            if (ev.channel >= 1 && ev.channel <= 16 && ev.note >= 0 && ev.note <= 127) {
+                m_active[ev.channel - 1][ev.note] = false;
+            }
+            emit noteOff(ev.channel, ev.note);
+            break;
+        case Kind::AllNotesOff:
+            if (ev.channel >= 1 && ev.channel <= 16) {
+                m_active[ev.channel - 1].fill(false);
+            }
+            emit allNotesOff(ev.channel);
+            break;
         case Kind::CC: emit cc(ev.channel, ev.cc, ev.ccValue); break;
         case Kind::TheoryEventJson:
             if (!ev.theoryJson.isEmpty()) emit theoryEventJson(ev.theoryJson);

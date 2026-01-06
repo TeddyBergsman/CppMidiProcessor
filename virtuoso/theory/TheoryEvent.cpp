@@ -22,6 +22,16 @@ QJsonObject TheoryEvent::toJsonObject() const {
     if (velocity_adjustment != 0) o.insert("velocity_adjustment", velocity_adjustment);
     if (humanize_seed != 0u) o.insert("humanize_seed", int(humanize_seed));
 
+    // Optional event detail fields
+    if (channel > 0) o.insert("channel", channel);
+    if (note >= 0) o.insert("note", note);
+    if (on_ms > 0) o.insert("on_ms", on_ms);
+    if (off_ms > 0) o.insert("off_ms", off_ms);
+    if (tempo_bpm > 0) o.insert("tempo_bpm", tempo_bpm);
+    if (ts_num > 0) o.insert("ts_num", ts_num);
+    if (ts_den > 0) o.insert("ts_den", ts_den);
+    if (engine_now_ms > 0) o.insert("engine_now_ms", engine_now_ms);
+
     // Optional interaction fields
     if (!vibe_state.trimmed().isEmpty()) o.insert("vibe_state", vibe_state);
     if (!user_intents.trimmed().isEmpty()) o.insert("user_intents", user_intents);

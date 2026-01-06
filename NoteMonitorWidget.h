@@ -30,8 +30,12 @@ public:
     void setKeyCenter(const QString& keyCenter);
     void setIRealPlaylist(const ireal::Playlist& playlist);
     void setMidiProcessor(MidiProcessor* processor);
-    void openBassStyleEditor();
-    void openPianoStyleEditor();
+
+signals:
+    // Forwarded from `playback::VirtuosoBalladMvpPlaybackEngine` so external windows can live-follow.
+    void virtuosoTheoryEventJson(const QString& json);
+    void virtuosoPlannedTheoryEventJson(const QString& json);
+    void virtuosoLookaheadPlanJson(const QString& json);
 
 public slots:
     // Used by MainWindow on app quit to guarantee we stop generating/scheduling notes.

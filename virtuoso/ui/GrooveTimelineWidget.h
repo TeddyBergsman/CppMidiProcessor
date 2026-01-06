@@ -56,6 +56,10 @@ private:
     double xForMs(qint64 ms) const;
     int laneIndexForY(int y) const;
     int hitTestEventIndex(const QPoint& p) const;
+
+    int subRowCountForLane(const QString& lane) const;
+    int subRowIndexForEvent(const QString& lane, int note) const;
+    QRectF eventRect(int laneIndex, const LaneEvent& ev) const;
 };
 
 } // namespace virtuoso::ui

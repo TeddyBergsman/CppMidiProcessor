@@ -7,6 +7,9 @@
 
 #include <QHash>
 #include <QDateTime>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QtGlobal>
 #include <algorithm>
 #include <limits>
@@ -201,6 +204,8 @@ VirtuosoBalladMvpPlaybackEngine::VirtuosoBalladMvpPlaybackEngine(QObject* parent
 
     connect(&m_engine, &virtuoso::engine::VirtuosoEngine::theoryEventJson,
             this, &VirtuosoBalladMvpPlaybackEngine::theoryEventJson);
+    connect(&m_engine, &virtuoso::engine::VirtuosoEngine::plannedTheoryEventJson,
+            this, &VirtuosoBalladMvpPlaybackEngine::plannedTheoryEventJson);
 
     // Cool-jazz vocabulary pack (data-driven): used by bass/piano planners and drum add-ons.
     {
@@ -422,6 +427,192 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
         }
     }
 
+    // --- Lookahead plan (4 bars) for UI: emit a full fixed window as JSON array. ---
+    // This is *not* scheduling: it has no side-effects on engine timing or planner state.
+    {
+        const int beatsPerBar = qMax(1, ts.num);
+        const int horizonBeats = beatsPerBar * 4; // 4 bars
+        const int total = seqLen * qMax(1, m_repeats);
+        // Anchor to the current BAR start so notes do not disappear immediately after being played.
+        const int startStep = qMax(0, stepNow - (stepNow % beatsPerBar));
+        const int endStep = qMin(total, startStep + horizonBeats);
+
+        // Local chord simulation (no mutation of m_lastChord state).
+        music::ChordSymbol simLast = m_hasLastChord ? m_lastChord : music::ChordSymbol{};
+        bool simHasLast = m_hasLastChord;
+
+        auto parseCellChordNoStateLocal = [&](int anyCellIndex, const music::ChordSymbol& fallback, bool* outIsExplicit = nullptr) -> music::ChordSymbol {
+            if (outIsExplicit) *outIsExplicit = false;
+            const chart::Cell* c = cellForFlattenedIndex(anyCellIndex);
+            if (!c) return fallback;
+            const QString t = c->chord.trimmed();
+            if (t.isEmpty()) return fallback;
+            music::ChordSymbol parsed;
+            if (!music::parseChordSymbol(t, parsed)) return fallback;
+            if (parsed.placeholder) return fallback;
+            if (outIsExplicit) *outIsExplicit = true;
+            return parsed;
+        };
+
+        // Snapshot interaction state once for this lookahead block (stable).
+        const qint64 nowMsWall = QDateTime::currentMSecsSinceEpoch();
+        const auto intent = m_listener.compute(nowMsWall);
+        auto vibeEff = m_vibe.update(intent, nowMsWall);
+        if (m_debugVibeOverride != 0) {
+            VibeStateMachine::Vibe v = VibeStateMachine::Vibe::Simmer;
+            if (m_debugVibeOverride == 2) v = VibeStateMachine::Vibe::Build;
+            if (m_debugVibeOverride == 3) v = VibeStateMachine::Vibe::Climax;
+            if (m_debugVibeOverride == 4) v = VibeStateMachine::Vibe::CoolDown;
+            vibeEff.vibe = v;
+            vibeEff.energy = energyForOverride(m_debugVibeOverride);
+        }
+        const QString vibeStr = VibeStateMachine::vibeName(vibeEff.vibe);
+        const QString intentStr = intentsToString(intent);
+
+        // Clone planners so the lookahead does not mutate live state.
+        JazzBalladBassPlanner bassSim = m_bassPlanner;
+        JazzBalladPianoPlanner pianoSim = m_pianoPlanner;
+
+        QJsonArray arr;
+
+        auto emitIntentAsJson = [&](const virtuoso::engine::AgentIntentNote& n, int bpm, const virtuoso::groove::TimeSignature& ts) {
+            virtuoso::theory::TheoryEvent te;
+            te.agent = n.agent;
+            te.timestamp = ""; // leave empty; UI uses on_ms/grid_pos
+            te.chord_context = n.chord_context;
+            te.scale_used = n.scale_used;
+            te.voicing_type = n.voicing_type;
+            te.logic_tag = n.logic_tag;
+            te.target_note = n.target_note;
+            te.dynamic_marking = QString::number(n.baseVelocity);
+            te.grid_pos = virtuoso::groove::GrooveGrid::toString(n.startPos, ts);
+            te.channel = n.channel;
+            te.note = n.note;
+            te.tempo_bpm = bpm;
+            te.ts_num = ts.num;
+            te.ts_den = ts.den;
+            te.engine_now_ms = m_engine.elapsedMs();
+            // Use clean grid timing for plan (no micro jitter).
+            const qint64 on = virtuoso::groove::GrooveGrid::posToMs(n.startPos, ts, bpm);
+            const qint64 off = on + qMax<qint64>(1, virtuoso::groove::GrooveGrid::wholeNotesToMs(n.durationWhole, bpm));
+            te.on_ms = on;
+            te.off_ms = off;
+            te.vibe_state = vibeStr;
+            te.user_intents = intentStr;
+            te.user_outside_ratio = n.user_outside_ratio;
+            arr.push_back(te.toJsonObject());
+        };
+
+        for (int step = startStep; step < endStep; ++step) {
+            const int playbackBarIndex = (beatsPerBar > 0) ? (step / beatsPerBar) : (step / 4);
+            const int beatInBar = (beatsPerBar > 0) ? (step % beatsPerBar) : (step % 4);
+            const int cellIndex = m_sequence[step % seqLen];
+
+            // Determine chord and chordIsNew in this simulated stream.
+            music::ChordSymbol chord = simHasLast ? simLast : music::ChordSymbol{};
+            bool chordIsNew = false;
+            {
+                bool explicitChord = false;
+                const music::ChordSymbol parsed = parseCellChordNoStateLocal(cellIndex, chord, &explicitChord);
+                if (explicitChord) chord = parsed;
+                if (!simHasLast) chordIsNew = explicitChord;
+                else chordIsNew = explicitChord && !sameChordKey(chord, simLast);
+                if (explicitChord) { simLast = chord; simHasLast = true; }
+            }
+            if (!simHasLast) continue;
+
+            // Next chord (for bass approach logic)
+            music::ChordSymbol nextChord = chord;
+            bool haveNext = false;
+            {
+                const int stepNextBar = step + (beatsPerBar - beatInBar);
+                if (stepNextBar < total) {
+                    const int cellNext = m_sequence[stepNextBar % seqLen];
+                    bool explicitNext = false;
+                    nextChord = parseCellChordNoStateLocal(cellNext, /*fallback*/chord, &explicitNext);
+                    haveNext = explicitNext || (nextChord.rootPc >= 0);
+                    if (nextChord.noChord) haveNext = false;
+                }
+            }
+
+            const QString chordText = chord.originalText.trimmed().isEmpty() ? QString("pc=%1").arg(chord.rootPc) : chord.originalText.trimmed();
+            const bool structural = (beatInBar == 0 || beatInBar == 2) || chordIsNew;
+
+            // Drums (base drummer)
+            {
+                BrushesBalladDrummer::Context dc;
+                dc.bpm = m_bpm;
+                dc.ts = ts;
+                dc.playbackBarIndex = playbackBarIndex;
+                dc.beatInBar = beatInBar;
+                dc.structural = structural;
+                const quint32 detSeed = quint32(qHash(QString("ballad|") + m_stylePresetKey));
+                dc.determinismSeed = detSeed ^ 0xD00D'BEEFu;
+                dc.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+                dc.intensityPeak = intent.intensityPeak;
+                const auto dnotes = m_drummer.planBeat(dc);
+                for (auto n : dnotes) {
+                    n.vibe_state = vibeStr;
+                    n.user_intents = intentStr;
+                    n.user_outside_ratio = intent.outsideRatio;
+                    emitIntentAsJson(n, m_bpm, ts);
+                }
+            }
+
+            // Bass + piano (planner choices)
+            if (!chord.noChord) {
+                JazzBalladBassPlanner::Context bc;
+                bc.bpm = m_bpm;
+                bc.playbackBarIndex = playbackBarIndex;
+                bc.beatInBar = beatInBar;
+                bc.chordIsNew = chordIsNew;
+                bc.chord = chord;
+                bc.hasNextChord = haveNext && !nextChord.noChord;
+                bc.nextChord = nextChord;
+                bc.chordText = chordText;
+                const quint32 detSeed = quint32(qHash(QString("ballad|") + m_stylePresetKey));
+                bc.determinismSeed = detSeed;
+                bc.userDensityHigh = intent.densityHigh;
+                bc.userIntensityPeak = intent.intensityPeak;
+                bc.userSilence = intent.silence;
+                bc.forceClimax = (m_debugVibeOverride == 3) || (vibeEff.vibe == VibeStateMachine::Vibe::Climax);
+                bc.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+                auto bnotes = bassSim.planBeat(bc, m_chBass, ts);
+                for (auto& n : bnotes) {
+                    n.vibe_state = vibeStr;
+                    n.user_intents = intentStr;
+                    n.user_outside_ratio = intent.outsideRatio;
+                    emitIntentAsJson(n, m_bpm, ts);
+                }
+
+                JazzBalladPianoPlanner::Context pc;
+                pc.bpm = m_bpm;
+                pc.playbackBarIndex = playbackBarIndex;
+                pc.beatInBar = beatInBar;
+                pc.chordIsNew = chordIsNew;
+                pc.chord = chord;
+                pc.chordText = chordText;
+                pc.determinismSeed = detSeed ^ 0xBADC0FFEu;
+                pc.userDensityHigh = intent.densityHigh;
+                pc.userIntensityPeak = intent.intensityPeak;
+                pc.userRegisterHigh = intent.registerHigh;
+                pc.userSilence = intent.silence;
+                pc.forceClimax = (m_debugVibeOverride == 3) || (vibeEff.vibe == VibeStateMachine::Vibe::Climax);
+                pc.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
+                auto pnotes = pianoSim.planBeat(pc, m_chPiano, ts);
+                for (auto& n : pnotes) {
+                    n.vibe_state = vibeStr;
+                    n.user_intents = intentStr;
+                    n.user_outside_ratio = intent.outsideRatio;
+                    emitIntentAsJson(n, m_bpm, ts);
+                }
+            }
+        }
+
+        const QJsonDocument doc(arr);
+        emit lookaheadPlanJson(QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
+    }
+
     // Lookahead scheduling window (tight timing).
     constexpr int kLookaheadMs = 220;
     const int scheduleUntil = int(double(elapsedMs + kLookaheadMs) / beatMs);
@@ -565,55 +756,8 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
             m_engine.scheduleNote(n);
         }
 
-        // --- Cool-jazz drum add-ons (vocabulary): occasional ride dings / bell stabs ---
-        if (m_vocab.isLoaded()) {
-            virtuoso::vocab::VocabularyRegistry::DrumsBeatQuery q;
-            q.ts = ts;
-            q.playbackBarIndex = playbackBarIndex;
-            q.beatInBar = beatInBar;
-            q.energy = qBound(0.0, vibeEff.energy * qMax(0.0, m_debugInteractionBoost), 1.0);
-            q.intensityPeak = intent.intensityPeak;
-            q.determinismSeed = detSeed ^ 0xC001'D00Du;
-            const auto add = m_vocab.chooseDrumsBeat(q);
-            if (!add.hits.isEmpty()) {
-                const auto prof = m_drummer.profile();
-                for (const auto& hit : add.hits) {
-                    virtuoso::engine::AgentIntentNote n;
-                    n.agent = "Drums";
-                    n.channel = prof.channel;
-                    switch (hit.articulation) {
-                        case virtuoso::vocab::VocabularyRegistry::DrumArticulation::RideBell:
-                            n.note = virtuoso::drums::fluffy_brushes::kRideHitBell_F2;
-                            break;
-                        case virtuoso::vocab::VocabularyRegistry::DrumArticulation::SnareSwish:
-                            n.note = prof.noteSnareSwish;
-                            break;
-                        case virtuoso::vocab::VocabularyRegistry::DrumArticulation::BrushShort:
-                            n.note = prof.noteBrushShort;
-                            break;
-                        case virtuoso::vocab::VocabularyRegistry::DrumArticulation::RideHit:
-                        default:
-                            n.note = prof.noteRideHit;
-                            break;
-                    }
-                    n.baseVelocity = qBound(1, 24 + hit.vel_delta + int(llround(10.0 * q.energy)), 127);
-                    n.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar,
-                                                                                 hit.sub, hit.count, ts);
-                    n.durationWhole = virtuoso::groove::Rational(qMax(1, hit.dur_num), qMax(1, hit.dur_den));
-                    n.structural = true;
-                    n.logic_tag = QString("Vocab:Drums:%1").arg(add.id);
-                    n.target_note = add.notes;
-                    n.vibe_state = vibeStr;
-                    n.user_intents = intentStr;
-                    n.user_outside_ratio = intent.outsideRatio;
-
-                    // Apply same macro drum scaling as other drum intents.
-                    const double e = qBound(0.0, vibeEff.energy, 1.0);
-                    n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.85 + 0.35 * e))), 127);
-                    m_engine.scheduleNote(n);
-                }
-            }
-        }
+        // IMPORTANT: single source of truth for drums is `BrushesBalladDrummer`.
+        // We intentionally do not add any extra JSON-driven drum vocabulary here.
     }
 
     if (!haveChord || chord.noChord) return; // leave space on N.C.

@@ -25,6 +25,16 @@ struct TheoryEvent {
     int velocity_adjustment = 0;
     quint32 humanize_seed = 0;
 
+    // Event detail (optional): allows UI to build live timelines
+    int channel = 0;     // 1..16
+    int note = -1;       // 0..127
+    qint64 on_ms = 0;    // engine clock domain
+    qint64 off_ms = 0;   // engine clock domain
+    int tempo_bpm = 0;
+    int ts_num = 0;
+    int ts_den = 0;
+    qint64 engine_now_ms = 0; // when this TheoryEvent was emitted (engine clock domain), for live lookahead UIs
+
     // Interaction / macro-dynamics (optional)
     QString vibe_state;      // e.g. "Simmer", "Build", "Climax", "CoolDown"
     QString user_intents;    // comma-separated flags (MVP): "DENSITY_HIGH,REGISTER_HIGH,..."

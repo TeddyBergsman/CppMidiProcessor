@@ -11,8 +11,6 @@
 #include "music/BassProfile.h"
 #include "music/PianoProfile.h"
 #include "virtuoso/groove/GrooveRegistry.h"
-#include "BassStyleEditorDialog.h"
-#include "PianoStyleEditorDialog.h"
 #include <QtWidgets>
 #include <cmath>
 #include <QGraphicsOpacityEffect>
@@ -545,6 +543,19 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
                 const QJsonDocument d = QJsonDocument::fromJson(json.toUtf8());
                 if (!d.isNull()) line = QString::fromUtf8(d.toJson(QJsonDocument::Compact));
                 m_virtuosoTheoryLog->append(line);
+                emit virtuosoTheoryEventJson(json);
+            });
+
+    // Planned stream (immediate upon scheduling): used for 4-bar lookahead UIs.
+    connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::plannedTheoryEventJson,
+            this, [this](const QString& json) {
+                emit virtuosoPlannedTheoryEventJson(json);
+            });
+
+    // Lookahead plan stream (JSON array of next 4 bars).
+    connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::lookaheadPlanJson,
+            this, [this](const QString& json) {
+                emit virtuosoLookaheadPlanJson(json);
             });
 
     connect(m_virtuosoVibeOverride, &QComboBox::currentIndexChanged, this, [this](int idx) {
@@ -793,58 +804,6 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
             m_virtuosoPlayButton->setText("Stop V");
         }
     });
-}
-
-void NoteMonitorWidget::openBassStyleEditor() {
-    if (!m_playback || m_currentSongId.isEmpty()) return;
-    const music::BassProfile snapshot = m_bassProfile;
-    auto* dlg = new BassStyleEditorDialog(m_bassProfile, m_playback, this);
-    dlg->setAttribute(Qt::WA_DeleteOnClose, true);
-
-    connect(dlg, &BassStyleEditorDialog::profilePreview, this, [this](const music::BassProfile& p) {
-        m_bassProfile = p;
-        if (m_playback) m_playback->setBassProfile(m_bassProfile);
-    });
-    connect(dlg, &BassStyleEditorDialog::profileCommitted, this, [this](const music::BassProfile& p) {
-        m_bassProfile = p;
-        if (m_playback) m_playback->setBassProfile(m_bassProfile);
-        QSettings s;
-        const QString prefix = overrideGroupForSongId(m_currentSongId) + "/bassProfile";
-        music::saveBassProfile(s, prefix, m_bassProfile);
-    });
-    connect(dlg, &QDialog::finished, this, [this, snapshot](int rc) {
-        if (rc == QDialog::Accepted) return;
-        m_bassProfile = snapshot;
-        if (m_playback) m_playback->setBassProfile(m_bassProfile);
-    });
-
-    dlg->show();
-}
-
-void NoteMonitorWidget::openPianoStyleEditor() {
-    if (!m_playback || m_currentSongId.isEmpty()) return;
-    const music::PianoProfile snapshot = m_pianoProfile;
-    auto* dlg = new PianoStyleEditorDialog(m_pianoProfile, m_playback, this);
-    dlg->setAttribute(Qt::WA_DeleteOnClose, true);
-
-    connect(dlg, &PianoStyleEditorDialog::profilePreview, this, [this](const music::PianoProfile& p) {
-        m_pianoProfile = p;
-        if (m_playback) m_playback->setPianoProfile(m_pianoProfile);
-    });
-    connect(dlg, &PianoStyleEditorDialog::profileCommitted, this, [this](const music::PianoProfile& p) {
-        m_pianoProfile = p;
-        if (m_playback) m_playback->setPianoProfile(m_pianoProfile);
-        QSettings s;
-        const QString prefix = overrideGroupForSongId(m_currentSongId) + "/pianoProfile";
-        music::savePianoProfile(s, prefix, m_pianoProfile);
-    });
-    connect(dlg, &QDialog::finished, this, [this, snapshot](int rc) {
-        if (rc == QDialog::Accepted) return;
-        m_pianoProfile = snapshot;
-        if (m_playback) m_playback->setPianoProfile(m_pianoProfile);
-    });
-
-    dlg->show();
 }
 
 void NoteMonitorWidget::setMidiProcessor(MidiProcessor* processor) {

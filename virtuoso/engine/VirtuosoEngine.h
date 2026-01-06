@@ -86,6 +86,10 @@ signals:
     // Explainability output (JSON string of virtuoso::theory::TheoryEvent).
     void theoryEventJson(const QString& json);
 
+    // Planned explainability output: emitted immediately when notes are scheduled (not when they sound).
+    // This is used by UIs that want to render "next 4 bars" lookahead.
+    void plannedTheoryEventJson(const QString& json);
+
 private:
     groove::TimingHumanizer& humanizerFor(const QString& agent);
 

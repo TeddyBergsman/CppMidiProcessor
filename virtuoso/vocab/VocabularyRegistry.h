@@ -43,6 +43,46 @@ public:
         QString notes; // description for debugging / future TheoryEvent fields
     };
 
+    // --- Phrase-level rhythmic vocabulary (multi-bar) ---
+    struct PianoPhraseHit {
+        int barOffset = 0; // 0..phraseBars-1
+        int beatInBar = 0; // 0-based
+        PianoHit hit;
+    };
+
+    struct PianoPhraseQuery {
+        virtuoso::groove::TimeSignature ts{4, 4};
+        int playbackBarIndex = 0;
+        int beatInBar = 0;
+        QString chordText;
+        bool chordIsNew = false;
+        bool userSilence = false;
+        double energy = 0.25;
+        quint32 determinismSeed = 1;
+        int phraseBars = 4;
+    };
+
+    struct PianoPhraseChoice {
+        QString id;
+        int phraseBars = 4;
+        QVector<PianoPhraseHit> hits;
+        QString notes;
+    };
+
+    // UI browsing helpers (copy out loaded definitions)
+    struct PianoPatternDef {
+        QString id;
+        QVector<int> beats;
+        double minEnergy = 0.0;
+        double maxEnergy = 1.0;
+        double weight = 1.0;
+        bool chordIsNewOnly = false;
+        bool stableOnly = false;
+        bool allowWhenUserSilence = true;
+        QVector<PianoHit> hits;
+        QString notes;
+    };
+
     enum class BassAction {
         None,
         Rest,
@@ -70,6 +110,58 @@ public:
         QString id;
         BassAction action = BassAction::None;
         // Placement within the beat (only relevant for PickupToNext)
+        int sub = 0;
+        int count = 1;
+        int dur_num = 1;
+        int dur_den = 4;
+        int vel_delta = 0;
+        QString notes;
+    };
+
+    struct BassPhraseHit {
+        int barOffset = 0;
+        int beatInBar = 0;
+        BassAction action = BassAction::None;
+        int sub = 0;
+        int count = 1;
+        int dur_num = 1;
+        int dur_den = 4;
+        int vel_delta = 0;
+        QString notes;
+    };
+
+    struct BassPhraseQuery {
+        virtuoso::groove::TimeSignature ts{4, 4};
+        int playbackBarIndex = 0;
+        int beatInBar = 0;
+        QString chordText;
+        bool chordIsNew = false;
+        bool hasNextChord = false;
+        bool nextChanges = false;
+        bool userDenseOrPeak = false;
+        double energy = 0.25;
+        quint32 determinismSeed = 1;
+        int phraseBars = 4;
+    };
+
+    struct BassPhraseChoice {
+        QString id;
+        int phraseBars = 4;
+        QVector<BassPhraseHit> hits;
+        QString notes;
+    };
+
+    struct BassPatternDef {
+        QString id;
+        QVector<int> beats;
+        double minEnergy = 0.0;
+        double maxEnergy = 1.0;
+        double weight = 1.0;
+        bool chordIsNewOnly = false;
+        bool stableOnly = false;
+        bool nextChangesOnly = false;
+        bool forbidWhenUserDenseOrPeak = false;
+        BassAction action = BassAction::None;
         int sub = 0;
         int count = 1;
         int dur_num = 1;
@@ -109,6 +201,40 @@ public:
         QString notes;
     };
 
+    struct DrumsPhraseHit {
+        int barOffset = 0;
+        int beatInBar = 0;
+        DrumHit hit;
+    };
+
+    struct DrumsPhraseQuery {
+        virtuoso::groove::TimeSignature ts{4, 4};
+        int playbackBarIndex = 0;
+        int beatInBar = 0;
+        double energy = 0.25;
+        bool intensityPeak = false;
+        quint32 determinismSeed = 1;
+        int phraseBars = 4;
+    };
+
+    struct DrumsPhraseChoice {
+        QString id;
+        int phraseBars = 4;
+        QVector<DrumsPhraseHit> hits;
+        QString notes;
+    };
+
+    struct DrumsPatternDef {
+        QString id;
+        QVector<int> beats;
+        double minEnergy = 0.0;
+        double maxEnergy = 1.0;
+        double weight = 1.0;
+        bool intensityPeakOnly = false;
+        QVector<DrumHit> hits;
+        QString notes;
+    };
+
     bool loadFromJsonBytes(const QByteArray& json, QString* outError = nullptr);
     bool loadFromResourcePath(const QString& resourcePath, QString* outError = nullptr);
 
@@ -118,6 +244,22 @@ public:
     PianoBeatChoice choosePianoBeat(const PianoBeatQuery& q) const;
     BassBeatChoice chooseBassBeat(const BassBeatQuery& q) const;
     DrumsBeatChoice chooseDrumsBeat(const DrumsBeatQuery& q) const;
+
+    PianoPhraseChoice choosePianoPhrase(const PianoPhraseQuery& q) const;
+    BassPhraseChoice chooseBassPhrase(const BassPhraseQuery& q) const;
+    DrumsPhraseChoice chooseDrumsPhrase(const DrumsPhraseQuery& q) const;
+
+    QVector<PianoHit> pianoPhraseHitsForBeat(const PianoPhraseQuery& q, QString* outPhraseId = nullptr, QString* outPhraseNotes = nullptr) const;
+    QVector<BassPhraseHit> bassPhraseHitsForBeat(const BassPhraseQuery& q, QString* outPhraseId = nullptr, QString* outPhraseNotes = nullptr) const;
+    QVector<DrumHit> drumsPhraseHitsForBeat(const DrumsPhraseQuery& q, QString* outPhraseId = nullptr, QString* outPhraseNotes = nullptr) const;
+
+    QVector<PianoPatternDef> pianoPatterns() const;
+    QVector<BassPatternDef> bassPatterns() const;
+    QVector<DrumsPatternDef> drumsPatterns() const;
+
+    QVector<PianoPhraseChoice> pianoPhrasePatterns() const;
+    QVector<BassPhraseChoice> bassPhrasePatterns() const;
+    QVector<DrumsPhraseChoice> drumsPhrasePatterns() const;
 
 private:
     struct PianoBeatPattern {
@@ -163,6 +305,39 @@ private:
         QString notes;
     };
 
+    struct PianoPhrasePattern {
+        QString id;
+        int phraseBars = 4;
+        double minEnergy = 0.0;
+        double maxEnergy = 1.0;
+        double weight = 1.0;
+        bool allowWhenUserSilence = true;
+        QVector<PianoPhraseHit> hits;
+        QString notes;
+    };
+
+    struct BassPhrasePattern {
+        QString id;
+        int phraseBars = 4;
+        double minEnergy = 0.0;
+        double maxEnergy = 1.0;
+        double weight = 1.0;
+        bool forbidWhenUserDenseOrPeak = false;
+        QVector<BassPhraseHit> hits;
+        QString notes;
+    };
+
+    struct DrumsPhrasePattern {
+        QString id;
+        int phraseBars = 4;
+        double minEnergy = 0.0;
+        double maxEnergy = 1.0;
+        double weight = 1.0;
+        bool intensityPeakOnly = false;
+        QVector<DrumsPhraseHit> hits;
+        QString notes;
+    };
+
     static quint32 fnv1a32(const QByteArray& bytes);
     static bool energyMatches(double e, double minE, double maxE);
     static int clampBeat(int beatInBar);
@@ -178,6 +353,10 @@ private:
     QVector<PianoBeatPattern> m_piano;
     QVector<BassBeatPattern> m_bass;
     QVector<DrumsBeatPattern> m_drums;
+
+    QVector<PianoPhrasePattern> m_pianoPhrases;
+    QVector<BassPhrasePattern> m_bassPhrases;
+    QVector<DrumsPhrasePattern> m_drumsPhrases;
 };
 
 } // namespace virtuoso::vocab

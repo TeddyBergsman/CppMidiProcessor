@@ -176,6 +176,24 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
     const bool climaxDense = c.forceClimax && (c.energy >= 0.75);
 
+    // Phrase-level rhythm vocab (primary "when to play" driver in non-climax).
+    QVector<virtuoso::vocab::VocabularyRegistry::PianoHit> phraseHits;
+    QString phraseId, phraseNotes;
+    const bool canUsePhrase = (!climaxDense && m_vocab && m_vocab->isLoaded() && (ts.num == 4) && (ts.den == 4));
+    if (canUsePhrase) {
+        virtuoso::vocab::VocabularyRegistry::PianoPhraseQuery pq;
+        pq.ts = ts;
+        pq.playbackBarIndex = c.playbackBarIndex;
+        pq.beatInBar = c.beatInBar;
+        pq.chordText = c.chordText;
+        pq.chordIsNew = c.chordIsNew;
+        pq.userSilence = c.userSilence;
+        pq.energy = c.energy;
+        pq.determinismSeed = c.determinismSeed;
+        pq.phraseBars = 4;
+        phraseHits = m_vocab->pianoPhraseHitsForBeat(pq, &phraseId, &phraseNotes);
+    }
+
     // Vocab (optional): beat-scoped rhythm patterns.
     virtuoso::vocab::VocabularyRegistry::PianoBeatChoice vocabChoice;
     const bool useVocab = (m_vocab && m_vocab->isLoaded() && (ts.num == 4) && (ts.den == 4));
@@ -192,10 +210,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         vocabChoice = m_vocab->choosePianoBeat(q);
     }
     const bool haveVocabHits = !vocabChoice.hits.isEmpty();
+    const bool havePhraseHits = !phraseHits.isEmpty() && !phraseId.isEmpty();
 
     // Ballad comp default: beats 2 and 4 (1 and 3 in 0-based), with occasional anticipations.
     // In Climax: comp every beat so the difference is audible.
-    if (!haveVocabHits) {
+    if (!havePhraseHits && !haveVocabHits) {
         if (climaxDense) {
             if (!(c.beatInBar >= 0 && c.beatInBar <= 3)) return out;
         } else {
@@ -207,7 +226,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     // Deterministic sparse variation: sometimes skip beat 2 if chord is stable (fallback mode).
     const quint32 h = quint32(qHash(QString("%1|%2|%3").arg(c.chordText).arg(c.playbackBarIndex).arg(c.determinismSeed)));
     const bool stable = !c.chordIsNew;
-    if (!haveVocabHits) {
+    if (!havePhraseHits && !haveVocabHits) {
         const int pSkip = qBound(0, int(llround(c.skipBeat2ProbStable * 100.0)), 100);
         const bool skip = (stable && (c.beatInBar == 1) && (pSkip > 0) && (int(h % 100u) < pSkip));
         if (skip) return out;
@@ -305,7 +324,26 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         return g;
     };
 
-    if (haveVocabHits) {
+    if (havePhraseHits) {
+        for (const auto& hit : phraseHits) {
+            const QVector<int> notes = (hit.density.trimmed().toLower() == "guide") ? guideSubset(midi) : midi;
+            for (int m : notes) {
+                virtuoso::engine::AgentIntentNote n;
+                n.agent = "Piano";
+                n.channel = midiChannel;
+                n.note = clampMidi(m);
+                n.baseVelocity = qBound(1, baseVel + hit.vel_delta, 127);
+                n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, hit.sub, hit.count, ts);
+                n.durationWhole = Rational(qMax(1, hit.dur_num), qMax(1, hit.dur_den));
+                n.structural = c.chordIsNew;
+                n.chord_context = c.chordText;
+                n.voicing_type = voicingType;
+                n.logic_tag = QString("VocabPhrase:Piano:%1").arg(phraseId);
+                n.target_note = phraseNotes.isEmpty() ? QString("Phrase comp") : phraseNotes;
+                out.push_back(n);
+            }
+        }
+    } else if (haveVocabHits) {
         for (const auto& hit : vocabChoice.hits) {
             const QVector<int> notes = (hit.density.trimmed().toLower() == "guide") ? guideSubset(midi) : midi;
             for (int m : notes) {

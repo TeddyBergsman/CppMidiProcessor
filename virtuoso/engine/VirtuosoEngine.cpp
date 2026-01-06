@@ -118,9 +118,19 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
     te.timing_offset_ms = he.timing_offset_ms;
     te.velocity_adjustment = he.velocity_adjustment;
     te.humanize_seed = he.humanize_seed;
+    te.channel = note.channel;
+    te.note = note.note;
+    te.on_ms = he.onMs;
+    te.off_ms = he.offMs;
+    te.tempo_bpm = m_bpm;
+    te.ts_num = m_ts.num;
+    te.ts_den = m_ts.den;
+    te.engine_now_ms = m_clock.elapsedMs();
     te.vibe_state = note.vibe_state;
     te.user_intents = note.user_intents;
     te.user_outside_ratio = note.user_outside_ratio;
+
+    emit plannedTheoryEventJson(te.toJsonString(true));
 
     VirtuosoScheduler::ScheduledEvent tj;
     tj.dueMs = he.onMs;
@@ -179,9 +189,19 @@ void VirtuosoEngine::scheduleHumanizedIntentNote(const AgentIntentNote& note,
     te.timing_offset_ms = he.timing_offset_ms;
     te.velocity_adjustment = he.velocity_adjustment;
     te.humanize_seed = he.humanize_seed;
+    te.channel = note.channel;
+    te.note = note.note;
+    te.on_ms = he.onMs;
+    te.off_ms = he.offMs;
+    te.tempo_bpm = m_bpm;
+    te.ts_num = m_ts.num;
+    te.ts_den = m_ts.den;
+    te.engine_now_ms = m_clock.elapsedMs();
     te.vibe_state = note.vibe_state;
     te.user_intents = note.user_intents;
     te.user_outside_ratio = note.user_outside_ratio;
+
+    emit plannedTheoryEventJson(te.toJsonString(true));
 
     VirtuosoScheduler::ScheduledEvent tj;
     tj.dueMs = he.onMs;
@@ -226,6 +246,16 @@ void VirtuosoEngine::scheduleHumanizedNote(const QString& agent,
     te.timing_offset_ms = he.timing_offset_ms;
     te.velocity_adjustment = he.velocity_adjustment;
     te.humanize_seed = he.humanize_seed;
+    te.channel = channel;
+    te.note = note;
+    te.on_ms = he.onMs;
+    te.off_ms = he.offMs;
+    te.tempo_bpm = m_bpm;
+    te.ts_num = m_ts.num;
+    te.ts_den = m_ts.den;
+    te.engine_now_ms = m_clock.elapsedMs();
+
+    emit plannedTheoryEventJson(te.toJsonString(true));
 
     VirtuosoScheduler::ScheduledEvent tj;
     tj.dueMs = he.onMs;

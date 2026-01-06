@@ -75,6 +75,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   GrooveLabWindow.cpp
   VirtuosoPresetInspectorWindow.h
   VirtuosoPresetInspectorWindow.cpp
+  VirtuosoVocabularyWindow.h
+  VirtuosoVocabularyWindow.cpp
   midiprocessor.h
   midiprocessor.cpp
   voicecontroller.h
@@ -86,10 +88,6 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   RtMidi.cpp
   NoteMonitorWidget.h
   NoteMonitorWidget.cpp
-  BassStyleEditorDialog.h
-  BassStyleEditorDialog.cpp
-  PianoStyleEditorDialog.h
-  PianoStyleEditorDialog.cpp
   PitchMonitorWidget.h
   PitchMonitorWidget.cpp
   PitchColor.h

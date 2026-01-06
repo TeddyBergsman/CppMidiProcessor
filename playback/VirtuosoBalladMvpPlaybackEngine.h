@@ -52,6 +52,8 @@ public slots:
 signals:
     void currentCellChanged(int cellIndex);
     void theoryEventJson(const QString& json);
+    void plannedTheoryEventJson(const QString& json);
+    void lookaheadPlanJson(const QString& json);
     void debugStatus(const QString& text);
 
 private slots:

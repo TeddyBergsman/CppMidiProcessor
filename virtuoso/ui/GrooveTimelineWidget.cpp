@@ -89,21 +89,66 @@ int GrooveTimelineWidget::laneIndexForY(int y) const {
     return idx;
 }
 
+int GrooveTimelineWidget::subRowCountForLane(const QString& lane) const {
+    const QString l = lane.trimmed().toLower();
+    if (l == "rhythm") return 1;
+    if (l == "bass") return 4;
+    if (l == "drums") return 6;
+    if (l == "piano") return 8;
+    return 6;
+}
+
+int GrooveTimelineWidget::subRowIndexForEvent(const QString& lane, int note) const {
+    const int rows = qMax(1, subRowCountForLane(lane));
+    const QString l = lane.trimmed().toLower();
+    if (l == "rhythm") return 0;
+    // Pitch mapping: spread notes across subrows so overlapping notes remain visible.
+    if (l == "piano") {
+        // map ~C3..C6
+        const int lo = 48, hi = 96;
+        const int n = clampi(note, lo, hi);
+        const double t = double(n - lo) / double(qMax(1, hi - lo));
+        return clampi(int((1.0 - t) * double(rows - 1)), 0, rows - 1);
+    }
+    if (l == "bass") {
+        // map ~E1..E3
+        const int lo = 28, hi = 52;
+        const int n = clampi(note, lo, hi);
+        const double t = double(n - lo) / double(qMax(1, hi - lo));
+        return clampi(int((1.0 - t) * double(rows - 1)), 0, rows - 1);
+    }
+    if (l == "drums") {
+        // Stable-ish spread by midi note.
+        return clampi((note < 0 ? 0 : note) % rows, 0, rows - 1);
+    }
+    return clampi((note < 0 ? 0 : note) % rows, 0, rows - 1);
+}
+
+QRectF GrooveTimelineWidget::eventRect(int laneIndex, const LaneEvent& ev) const {
+    const QRect lr = laneRect(laneIndex);
+    const double x1 = xForMs(ev.onMs);
+    const double x2 = xForMs(ev.offMs);
+    const double w = qMax(6.0, x2 - x1);
+
+    const int rows = qMax(1, subRowCountForLane(ev.lane));
+    const int row = subRowIndexForEvent(ev.lane, ev.note);
+    const double rowH = double(lr.height() - 12) / double(rows);
+    const double y = double(lr.y() + 6) + rowH * double(row);
+    const double h = qMax(6.0, rowH - 2.0);
+    return QRectF(x1, y, w, h);
+}
+
 int GrooveTimelineWidget::hitTestEventIndex(const QPoint& p) const {
     const int li = laneIndexForY(p.y());
     if (li < 0) return -1;
     const QString lane = m_lanes.value(li);
-    const qint64 tot = totalMs();
     const double x = p.x();
     for (int i = 0; i < m_events.size(); ++i) {
         const auto& ev = m_events[i];
         if (ev.lane != lane) continue;
-        const double ex = xForMs(ev.onMs);
-        const double w = qMax(6.0, xForMs(ev.offMs) - xForMs(ev.onMs));
-        const QRect r(int(ex - 2), laneRect(li).y() + 6, int(w + 4), laneRect(li).height() - 12);
-        if (r.contains(p)) return i;
+        const QRectF r = eventRect(li, ev).adjusted(-2, -2, +2, +2);
+        if (r.contains(QPointF(p))) return i;
     }
-    Q_UNUSED(tot);
     Q_UNUSED(x);
     return -1;
 }
@@ -178,18 +223,14 @@ void GrooveTimelineWidget::paintEvent(QPaintEvent*) {
     for (const auto& ev : m_events) {
         const int li = m_lanes.indexOf(ev.lane);
         if (li < 0) continue;
-        const QRect lr = laneRect(li);
-        const double x1 = xForMs(ev.onMs);
-        const double x2 = xForMs(ev.offMs);
-        const double w = qMax(6.0, x2 - x1);
+        QRectF r = eventRect(li, ev);
 
         // Color by lane
         QColor fill(70, 120, 220, 180);
         if (ev.lane.compare("Drums", Qt::CaseInsensitive) == 0) fill = QColor(200, 140, 70, 190);
         if (ev.lane.compare("Bass", Qt::CaseInsensitive) == 0) fill = QColor(80, 200, 130, 190);
         if (ev.lane.compare("Piano", Qt::CaseInsensitive) == 0) fill = QColor(120, 160, 240, 190);
-
-        QRectF r(x1, lr.y() + 6, w, lr.height() - 12);
+        if (ev.lane.compare("Rhythm", Qt::CaseInsensitive) == 0) fill = QColor(180, 180, 180, 120);
         p.setPen(Qt::NoPen);
         p.setBrush(fill);
         p.drawRoundedRect(r, 3, 3);

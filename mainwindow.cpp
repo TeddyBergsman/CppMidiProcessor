@@ -16,6 +16,7 @@
 #include "LibraryWindow.h"
 #include "GrooveLabWindow.h"
 #include "VirtuosoPresetInspectorWindow.h"
+#include "VirtuosoVocabularyWindow.h"
 
 namespace {
 static const char* kIRealLastHtmlPathKey = "ireal/lastHtmlPath";
@@ -129,19 +130,62 @@ void MainWindow::createWidgets(const Preset& preset) {
             windowMenu = menuBar()->addMenu("Window");
         }
 
-        QAction* bassAction = new QAction("Bass", this);
-        bassAction->setMenuRole(QAction::NoRole);
-        connect(bassAction, &QAction::triggered, this, [this]() {
-            if (noteMonitorWidget) noteMonitorWidget->openBassStyleEditor();
-        });
-        windowMenu->addAction(bassAction);
+        QMenu* vocabMenu = windowMenu->addMenu("Virtuoso Vocabulary");
+        vocabMenu->setToolTipsVisible(true);
 
-        QAction* pianoAction = new QAction("Piano", this);
-        pianoAction->setMenuRole(QAction::NoRole);
-        connect(pianoAction, &QAction::triggered, this, [this]() {
-            if (noteMonitorWidget) noteMonitorWidget->openPianoStyleEditor();
+        QAction* vocabPiano = new QAction("Piano", this);
+        vocabPiano->setMenuRole(QAction::NoRole);
+        connect(vocabPiano, &QAction::triggered, this, [this]() {
+            if (!m_vocabPianoWindow) {
+                m_vocabPianoWindow = new VirtuosoVocabularyWindow(m_midiProcessor, VirtuosoVocabularyWindow::Instrument::Piano, this);
+                m_vocabPianoWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+                if (noteMonitorWidget) {
+                    connect(noteMonitorWidget, &NoteMonitorWidget::virtuosoLookaheadPlanJson,
+                            m_vocabPianoWindow, &VirtuosoVocabularyWindow::ingestTheoryEventJson,
+                            Qt::UniqueConnection);
+                }
+            }
+            m_vocabPianoWindow->show();
+            m_vocabPianoWindow->raise();
+            m_vocabPianoWindow->activateWindow();
         });
-        windowMenu->addAction(pianoAction);
+        vocabMenu->addAction(vocabPiano);
+
+        QAction* vocabBass = new QAction("Bass", this);
+        vocabBass->setMenuRole(QAction::NoRole);
+        connect(vocabBass, &QAction::triggered, this, [this]() {
+            if (!m_vocabBassWindow) {
+                m_vocabBassWindow = new VirtuosoVocabularyWindow(m_midiProcessor, VirtuosoVocabularyWindow::Instrument::Bass, this);
+                m_vocabBassWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+                if (noteMonitorWidget) {
+                    connect(noteMonitorWidget, &NoteMonitorWidget::virtuosoLookaheadPlanJson,
+                            m_vocabBassWindow, &VirtuosoVocabularyWindow::ingestTheoryEventJson,
+                            Qt::UniqueConnection);
+                }
+            }
+            m_vocabBassWindow->show();
+            m_vocabBassWindow->raise();
+            m_vocabBassWindow->activateWindow();
+        });
+        vocabMenu->addAction(vocabBass);
+
+        QAction* vocabDrums = new QAction("Drums", this);
+        vocabDrums->setMenuRole(QAction::NoRole);
+        connect(vocabDrums, &QAction::triggered, this, [this]() {
+            if (!m_vocabDrumsWindow) {
+                m_vocabDrumsWindow = new VirtuosoVocabularyWindow(m_midiProcessor, VirtuosoVocabularyWindow::Instrument::Drums, this);
+                m_vocabDrumsWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+                if (noteMonitorWidget) {
+                    connect(noteMonitorWidget, &NoteMonitorWidget::virtuosoLookaheadPlanJson,
+                            m_vocabDrumsWindow, &VirtuosoVocabularyWindow::ingestTheoryEventJson,
+                            Qt::UniqueConnection);
+                }
+            }
+            m_vocabDrumsWindow->show();
+            m_vocabDrumsWindow->raise();
+            m_vocabDrumsWindow->activateWindow();
+        });
+        vocabMenu->addAction(vocabDrums);
 
         QAction* libraryAction = new QAction("Library", this);
         libraryAction->setMenuRole(QAction::NoRole);

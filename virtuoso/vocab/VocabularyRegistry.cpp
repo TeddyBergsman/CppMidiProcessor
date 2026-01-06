@@ -118,6 +118,9 @@ bool VocabularyRegistry::loadFromJsonBytes(const QByteArray& json, QString* outE
     m_piano.clear();
     m_bass.clear();
     m_drums.clear();
+    m_pianoPhrases.clear();
+    m_bassPhrases.clear();
+    m_drumsPhrases.clear();
 
     QJsonParseError pe;
     const auto doc = QJsonDocument::fromJson(json, &pe);
@@ -168,6 +171,48 @@ bool VocabularyRegistry::loadFromJsonBytes(const QByteArray& json, QString* outE
         }
     };
 
+    auto parsePianoPhrases = [&]() {
+        const auto arrV = root.value("piano_phrases");
+        if (!arrV.isArray()) return;
+        const auto arr = arrV.toArray();
+        for (const auto& v : arr) {
+            if (!v.isObject()) continue;
+            const auto o = v.toObject();
+            PianoPhrasePattern p;
+            p.id = jsonGetString(o, "id");
+            if (p.id.trimmed().isEmpty()) continue;
+            p.phraseBars = qMax(1, jsonGetInt(o, "phraseBars", 4));
+            p.minEnergy = jsonGetDouble(o, "minEnergy", 0.0);
+            p.maxEnergy = jsonGetDouble(o, "maxEnergy", 1.0);
+            p.weight = jsonGetDouble(o, "weight", 1.0);
+            p.allowWhenUserSilence = jsonGetBool(o, "allowWhenUserSilence", true);
+            p.notes = jsonGetString(o, "notes");
+
+            const auto hitsV = o.value("hits");
+            if (hitsV.isArray()) {
+                const auto hitsA = hitsV.toArray();
+                for (const auto& hv : hitsA) {
+                    if (!hv.isObject()) continue;
+                    const auto ho = hv.toObject();
+                    PianoPhraseHit ph;
+                    ph.barOffset = jsonGetInt(ho, "bar", 0);
+                    ph.beatInBar = jsonGetInt(ho, "beat", 0);
+                    PianoHit h;
+                    h.sub = jsonGetInt(ho, "sub", 0);
+                    h.count = jsonGetInt(ho, "count", 1);
+                    h.dur_num = jsonGetInt(ho, "dur_num", 1);
+                    h.dur_den = jsonGetInt(ho, "dur_den", 4);
+                    h.vel_delta = jsonGetInt(ho, "vel_delta", 0);
+                    h.density = jsonGetString(ho, "density", "full");
+                    ph.hit = h;
+                    p.hits.push_back(ph);
+                }
+            }
+            if (p.hits.isEmpty()) continue;
+            m_pianoPhrases.push_back(p);
+        }
+    };
+
     auto parseBass = [&]() {
         const auto arrV = root.value("bass");
         if (!arrV.isArray()) return;
@@ -204,6 +249,57 @@ bool VocabularyRegistry::loadFromJsonBytes(const QByteArray& json, QString* outE
 
             if (p.action == BassAction::None) continue;
             m_bass.push_back(p);
+        }
+    };
+
+    auto parseBassPhrases = [&]() {
+        const auto arrV = root.value("bass_phrases");
+        if (!arrV.isArray()) return;
+        const auto arr = arrV.toArray();
+        for (const auto& v : arr) {
+            if (!v.isObject()) continue;
+            const auto o = v.toObject();
+            BassPhrasePattern p;
+            p.id = jsonGetString(o, "id");
+            if (p.id.trimmed().isEmpty()) continue;
+            p.phraseBars = qMax(1, jsonGetInt(o, "phraseBars", 4));
+            p.minEnergy = jsonGetDouble(o, "minEnergy", 0.0);
+            p.maxEnergy = jsonGetDouble(o, "maxEnergy", 1.0);
+            p.weight = jsonGetDouble(o, "weight", 1.0);
+            p.forbidWhenUserDenseOrPeak = jsonGetBool(o, "forbidWhenUserDenseOrPeak", false);
+            p.notes = jsonGetString(o, "notes");
+
+            const auto hitsV = o.value("hits");
+            if (hitsV.isArray()) {
+                const auto hitsA = hitsV.toArray();
+                for (const auto& hv : hitsA) {
+                    if (!hv.isObject()) continue;
+                    const auto ho = hv.toObject();
+                    BassPhraseHit bh;
+                    bh.barOffset = jsonGetInt(ho, "bar", 0);
+                    bh.beatInBar = jsonGetInt(ho, "beat", 0);
+                    bh.sub = jsonGetInt(ho, "sub", 0);
+                    bh.count = jsonGetInt(ho, "count", 1);
+                    bh.dur_num = jsonGetInt(ho, "dur_num", 1);
+                    bh.dur_den = jsonGetInt(ho, "dur_den", 4);
+                    bh.vel_delta = jsonGetInt(ho, "vel_delta", 0);
+                    bh.notes = jsonGetString(ho, "notes");
+
+                    const QString action = jsonGetString(ho, "action", "none").trimmed().toLower();
+                    if (action == "rest") bh.action = BassAction::Rest;
+                    else if (action == "root") bh.action = BassAction::Root;
+                    else if (action == "fifth") bh.action = BassAction::Fifth;
+                    else if (action == "third") bh.action = BassAction::Third;
+                    else if (action == "approach_to_next") bh.action = BassAction::ApproachToNext;
+                    else if (action == "pickup_to_next") bh.action = BassAction::PickupToNext;
+                    else bh.action = BassAction::None;
+
+                    if (bh.action == BassAction::None) continue;
+                    p.hits.push_back(bh);
+                }
+            }
+            if (p.hits.isEmpty()) continue;
+            m_bassPhrases.push_back(p);
         }
     };
 
@@ -245,11 +341,57 @@ bool VocabularyRegistry::loadFromJsonBytes(const QByteArray& json, QString* outE
         }
     };
 
-    parsePiano();
-    parseBass();
-    parseDrums();
+    auto parseDrumsPhrases = [&]() {
+        const auto arrV = root.value("drums_phrases");
+        if (!arrV.isArray()) return;
+        const auto arr = arrV.toArray();
+        for (const auto& v : arr) {
+            if (!v.isObject()) continue;
+            const auto o = v.toObject();
+            DrumsPhrasePattern p;
+            p.id = jsonGetString(o, "id");
+            if (p.id.trimmed().isEmpty()) continue;
+            p.phraseBars = qMax(1, jsonGetInt(o, "phraseBars", 4));
+            p.minEnergy = jsonGetDouble(o, "minEnergy", 0.0);
+            p.maxEnergy = jsonGetDouble(o, "maxEnergy", 1.0);
+            p.weight = jsonGetDouble(o, "weight", 1.0);
+            p.intensityPeakOnly = jsonGetBool(o, "intensityPeakOnly", false);
+            p.notes = jsonGetString(o, "notes");
 
-    if (m_piano.isEmpty() && m_bass.isEmpty() && m_drums.isEmpty()) {
+            const auto hitsV = o.value("hits");
+            if (hitsV.isArray()) {
+                const auto hitsA = hitsV.toArray();
+                for (const auto& hv : hitsA) {
+                    if (!hv.isObject()) continue;
+                    const auto ho = hv.toObject();
+                    DrumsPhraseHit dh;
+                    dh.barOffset = jsonGetInt(ho, "bar", 0);
+                    dh.beatInBar = jsonGetInt(ho, "beat", 0);
+                    DrumHit h;
+                    h.articulation = parseDrumArticulation(jsonGetString(ho, "articulation", "ride_hit"));
+                    h.sub = jsonGetInt(ho, "sub", 0);
+                    h.count = jsonGetInt(ho, "count", 1);
+                    h.dur_num = jsonGetInt(ho, "dur_num", 1);
+                    h.dur_den = jsonGetInt(ho, "dur_den", 16);
+                    h.vel_delta = jsonGetInt(ho, "vel_delta", 0);
+                    dh.hit = h;
+                    p.hits.push_back(dh);
+                }
+            }
+            if (p.hits.isEmpty()) continue;
+            m_drumsPhrases.push_back(p);
+        }
+    };
+
+    parsePiano();
+    parsePianoPhrases();
+    parseBass();
+    parseBassPhrases();
+    parseDrums();
+    parseDrumsPhrases();
+
+    if (m_piano.isEmpty() && m_bass.isEmpty() && m_drums.isEmpty() &&
+        m_pianoPhrases.isEmpty() && m_bassPhrases.isEmpty() && m_drumsPhrases.isEmpty()) {
         m_lastError = "Vocab JSON parsed but contained no usable patterns (piano/bass/drums were empty).";
         if (outError) *outError = m_lastError;
         return false;
@@ -363,6 +505,256 @@ VocabularyRegistry::DrumsBeatChoice VocabularyRegistry::chooseDrumsBeat(const Dr
         c.notes = p.notes;
         return c;
     });
+}
+
+VocabularyRegistry::PianoPhraseChoice VocabularyRegistry::choosePianoPhrase(const PianoPhraseQuery& q) const {
+    PianoPhraseChoice out;
+    if (!m_loaded) return out;
+    if (!(q.ts.num == 4 && q.ts.den == 4)) return out;
+    const double e = qBound(0.0, q.energy, 1.0);
+    const int pb = qMax(1, q.phraseBars);
+
+    QVector<PianoPhrasePattern> cands;
+    cands.reserve(16);
+    for (const auto& p : m_pianoPhrases) {
+        if (p.phraseBars != pb) continue;
+        if (!energyMatches(e, p.minEnergy, p.maxEnergy)) continue;
+        if (!p.allowWhenUserSilence && q.userSilence) continue;
+        cands.push_back(p);
+    }
+    const int phraseIndex = (q.playbackBarIndex >= 0) ? (q.playbackBarIndex / pb) : 0;
+    const quint32 h = fnv1a32(QString("%1|piano_phrase|%2|%3|%4")
+                                  .arg(q.chordText)
+                                  .arg(phraseIndex)
+                                  .arg(int(q.chordIsNew))
+                                  .arg(q.determinismSeed)
+                                  .toUtf8());
+    return chooseWeighted<PianoPhrasePattern, PianoPhraseChoice>(cands, h, [](const PianoPhrasePattern& p) {
+        PianoPhraseChoice c;
+        c.id = p.id;
+        c.phraseBars = p.phraseBars;
+        c.hits = p.hits;
+        c.notes = p.notes;
+        return c;
+    });
+}
+
+VocabularyRegistry::BassPhraseChoice VocabularyRegistry::chooseBassPhrase(const BassPhraseQuery& q) const {
+    BassPhraseChoice out;
+    if (!m_loaded) return out;
+    if (!(q.ts.num == 4 && q.ts.den == 4)) return out;
+    const double e = qBound(0.0, q.energy, 1.0);
+    const int pb = qMax(1, q.phraseBars);
+
+    QVector<BassPhrasePattern> cands;
+    cands.reserve(16);
+    for (const auto& p : m_bassPhrases) {
+        if (p.phraseBars != pb) continue;
+        if (!energyMatches(e, p.minEnergy, p.maxEnergy)) continue;
+        if (p.forbidWhenUserDenseOrPeak && q.userDenseOrPeak) continue;
+        cands.push_back(p);
+    }
+    const int phraseIndex = (q.playbackBarIndex >= 0) ? (q.playbackBarIndex / pb) : 0;
+    const quint32 h = fnv1a32(QString("%1|bass_phrase|%2|%3|%4|%5")
+                                  .arg(q.chordText)
+                                  .arg(phraseIndex)
+                                  .arg(int(q.chordIsNew))
+                                  .arg(int(q.nextChanges))
+                                  .arg(q.determinismSeed)
+                                  .toUtf8());
+    return chooseWeighted<BassPhrasePattern, BassPhraseChoice>(cands, h, [](const BassPhrasePattern& p) {
+        BassPhraseChoice c;
+        c.id = p.id;
+        c.phraseBars = p.phraseBars;
+        c.hits = p.hits;
+        c.notes = p.notes;
+        return c;
+    });
+}
+
+VocabularyRegistry::DrumsPhraseChoice VocabularyRegistry::chooseDrumsPhrase(const DrumsPhraseQuery& q) const {
+    DrumsPhraseChoice out;
+    if (!m_loaded) return out;
+    if (!(q.ts.num == 4 && q.ts.den == 4)) return out;
+    const double e = qBound(0.0, q.energy, 1.0);
+    const int pb = qMax(1, q.phraseBars);
+
+    QVector<DrumsPhrasePattern> cands;
+    cands.reserve(16);
+    for (const auto& p : m_drumsPhrases) {
+        if (p.phraseBars != pb) continue;
+        if (!energyMatches(e, p.minEnergy, p.maxEnergy)) continue;
+        if (p.intensityPeakOnly && !q.intensityPeak) continue;
+        cands.push_back(p);
+    }
+    const int phraseIndex = (q.playbackBarIndex >= 0) ? (q.playbackBarIndex / pb) : 0;
+    const quint32 h = fnv1a32(QString("drums_phrase|%1|%2|%3")
+                                  .arg(phraseIndex)
+                                  .arg(int(q.intensityPeak))
+                                  .arg(q.determinismSeed)
+                                  .toUtf8());
+    return chooseWeighted<DrumsPhrasePattern, DrumsPhraseChoice>(cands, h, [](const DrumsPhrasePattern& p) {
+        DrumsPhraseChoice c;
+        c.id = p.id;
+        c.phraseBars = p.phraseBars;
+        c.hits = p.hits;
+        c.notes = p.notes;
+        return c;
+    });
+}
+
+QVector<VocabularyRegistry::PianoHit> VocabularyRegistry::pianoPhraseHitsForBeat(const PianoPhraseQuery& q,
+                                                                                 QString* outPhraseId,
+                                                                                 QString* outPhraseNotes) const {
+    QVector<PianoHit> out;
+    const auto ch = choosePianoPhrase(q);
+    if (outPhraseId) *outPhraseId = ch.id;
+    if (outPhraseNotes) *outPhraseNotes = ch.notes;
+    if (ch.id.isEmpty()) return out;
+    const int pb = qMax(1, ch.phraseBars);
+    const int barInPhrase = (q.playbackBarIndex >= 0) ? (q.playbackBarIndex % pb) : 0;
+    for (const auto& h : ch.hits) {
+        if (h.barOffset == barInPhrase && h.beatInBar == q.beatInBar) out.push_back(h.hit);
+    }
+    return out;
+}
+
+QVector<VocabularyRegistry::BassPhraseHit> VocabularyRegistry::bassPhraseHitsForBeat(const BassPhraseQuery& q,
+                                                                                     QString* outPhraseId,
+                                                                                     QString* outPhraseNotes) const {
+    QVector<BassPhraseHit> out;
+    const auto ch = chooseBassPhrase(q);
+    if (outPhraseId) *outPhraseId = ch.id;
+    if (outPhraseNotes) *outPhraseNotes = ch.notes;
+    if (ch.id.isEmpty()) return out;
+    const int pb = qMax(1, ch.phraseBars);
+    const int barInPhrase = (q.playbackBarIndex >= 0) ? (q.playbackBarIndex % pb) : 0;
+    for (const auto& h : ch.hits) {
+        if (h.barOffset == barInPhrase && h.beatInBar == q.beatInBar) out.push_back(h);
+    }
+    return out;
+}
+
+QVector<VocabularyRegistry::DrumHit> VocabularyRegistry::drumsPhraseHitsForBeat(const DrumsPhraseQuery& q,
+                                                                                QString* outPhraseId,
+                                                                                QString* outPhraseNotes) const {
+    QVector<DrumHit> out;
+    const auto ch = chooseDrumsPhrase(q);
+    if (outPhraseId) *outPhraseId = ch.id;
+    if (outPhraseNotes) *outPhraseNotes = ch.notes;
+    if (ch.id.isEmpty()) return out;
+    const int pb = qMax(1, ch.phraseBars);
+    const int barInPhrase = (q.playbackBarIndex >= 0) ? (q.playbackBarIndex % pb) : 0;
+    for (const auto& h : ch.hits) {
+        if (h.barOffset == barInPhrase && h.beatInBar == q.beatInBar) out.push_back(h.hit);
+    }
+    return out;
+}
+
+QVector<VocabularyRegistry::PianoPatternDef> VocabularyRegistry::pianoPatterns() const {
+    QVector<PianoPatternDef> out;
+    out.reserve(m_piano.size());
+    for (const auto& p : m_piano) {
+        PianoPatternDef d;
+        d.id = p.id;
+        d.beats = p.beats;
+        d.minEnergy = p.minEnergy;
+        d.maxEnergy = p.maxEnergy;
+        d.weight = p.weight;
+        d.chordIsNewOnly = p.chordIsNewOnly;
+        d.stableOnly = p.stableOnly;
+        d.allowWhenUserSilence = p.allowWhenUserSilence;
+        d.hits = p.hits;
+        d.notes = p.notes;
+        out.push_back(d);
+    }
+    return out;
+}
+
+QVector<VocabularyRegistry::BassPatternDef> VocabularyRegistry::bassPatterns() const {
+    QVector<BassPatternDef> out;
+    out.reserve(m_bass.size());
+    for (const auto& p : m_bass) {
+        BassPatternDef d;
+        d.id = p.id;
+        d.beats = p.beats;
+        d.minEnergy = p.minEnergy;
+        d.maxEnergy = p.maxEnergy;
+        d.weight = p.weight;
+        d.chordIsNewOnly = p.chordIsNewOnly;
+        d.stableOnly = p.stableOnly;
+        d.nextChangesOnly = p.nextChangesOnly;
+        d.forbidWhenUserDenseOrPeak = p.forbidWhenUserDenseOrPeak;
+        d.action = p.action;
+        d.sub = p.sub;
+        d.count = p.count;
+        d.dur_num = p.dur_num;
+        d.dur_den = p.dur_den;
+        d.vel_delta = p.vel_delta;
+        d.notes = p.notes;
+        out.push_back(d);
+    }
+    return out;
+}
+
+QVector<VocabularyRegistry::DrumsPatternDef> VocabularyRegistry::drumsPatterns() const {
+    QVector<DrumsPatternDef> out;
+    out.reserve(m_drums.size());
+    for (const auto& p : m_drums) {
+        DrumsPatternDef d;
+        d.id = p.id;
+        d.beats = p.beats;
+        d.minEnergy = p.minEnergy;
+        d.maxEnergy = p.maxEnergy;
+        d.weight = p.weight;
+        d.intensityPeakOnly = p.intensityPeakOnly;
+        d.hits = p.hits;
+        d.notes = p.notes;
+        out.push_back(d);
+    }
+    return out;
+}
+
+QVector<VocabularyRegistry::PianoPhraseChoice> VocabularyRegistry::pianoPhrasePatterns() const {
+    QVector<PianoPhraseChoice> out;
+    out.reserve(m_pianoPhrases.size());
+    for (const auto& p : m_pianoPhrases) {
+        PianoPhraseChoice c;
+        c.id = p.id;
+        c.phraseBars = p.phraseBars;
+        c.hits = p.hits;
+        c.notes = p.notes;
+        out.push_back(c);
+    }
+    return out;
+}
+
+QVector<VocabularyRegistry::BassPhraseChoice> VocabularyRegistry::bassPhrasePatterns() const {
+    QVector<BassPhraseChoice> out;
+    out.reserve(m_bassPhrases.size());
+    for (const auto& p : m_bassPhrases) {
+        BassPhraseChoice c;
+        c.id = p.id;
+        c.phraseBars = p.phraseBars;
+        c.hits = p.hits;
+        c.notes = p.notes;
+        out.push_back(c);
+    }
+    return out;
+}
+
+QVector<VocabularyRegistry::DrumsPhraseChoice> VocabularyRegistry::drumsPhrasePatterns() const {
+    QVector<DrumsPhraseChoice> out;
+    out.reserve(m_drumsPhrases.size());
+    for (const auto& p : m_drumsPhrases) {
+        DrumsPhraseChoice c;
+        c.id = p.id;
+        c.phraseBars = p.phraseBars;
+        c.hits = p.hits;
+        c.notes = p.notes;
+        out.push_back(c);
+    }
+    return out;
 }
 
 } // namespace virtuoso::vocab

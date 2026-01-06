@@ -919,6 +919,30 @@ VirtuosoCore_autogen/mocs_compilation.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.s
 .PHONY : VirtuosoCore_autogen/mocs_compilation.cpp.s
 
+VirtuosoPresetInspectorWindow.o: VirtuosoPresetInspectorWindow.cpp.o
+.PHONY : VirtuosoPresetInspectorWindow.o
+
+# target to build an object file
+VirtuosoPresetInspectorWindow.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/VirtuosoPresetInspectorWindow.cpp.o
+.PHONY : VirtuosoPresetInspectorWindow.cpp.o
+
+VirtuosoPresetInspectorWindow.i: VirtuosoPresetInspectorWindow.cpp.i
+.PHONY : VirtuosoPresetInspectorWindow.i
+
+# target to preprocess a source file
+VirtuosoPresetInspectorWindow.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/VirtuosoPresetInspectorWindow.cpp.i
+.PHONY : VirtuosoPresetInspectorWindow.cpp.i
+
+VirtuosoPresetInspectorWindow.s: VirtuosoPresetInspectorWindow.cpp.s
+.PHONY : VirtuosoPresetInspectorWindow.s
+
+# target to generate assembly for a file
+VirtuosoPresetInspectorWindow.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/VirtuosoPresetInspectorWindow.cpp.s
+.PHONY : VirtuosoPresetInspectorWindow.cpp.s
+
 WaveVisualizer.o: WaveVisualizer.cpp.o
 .PHONY : WaveVisualizer.o
 
@@ -1375,6 +1399,30 @@ music/WalkingBassGenerator.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/WalkingBassGenerator.cpp.s
 .PHONY : music/WalkingBassGenerator.cpp.s
 
+playback/BalladReferenceTuning.o: playback/BalladReferenceTuning.cpp.o
+.PHONY : playback/BalladReferenceTuning.o
+
+# target to build an object file
+playback/BalladReferenceTuning.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.o
+.PHONY : playback/BalladReferenceTuning.cpp.o
+
+playback/BalladReferenceTuning.i: playback/BalladReferenceTuning.cpp.i
+.PHONY : playback/BalladReferenceTuning.i
+
+# target to preprocess a source file
+playback/BalladReferenceTuning.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.i
+.PHONY : playback/BalladReferenceTuning.cpp.i
+
+playback/BalladReferenceTuning.s: playback/BalladReferenceTuning.cpp.s
+.PHONY : playback/BalladReferenceTuning.s
+
+# target to generate assembly for a file
+playback/BalladReferenceTuning.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.s
+.PHONY : playback/BalladReferenceTuning.cpp.s
+
 playback/BandPlaybackEngine.o: playback/BandPlaybackEngine.cpp.o
 .PHONY : playback/BandPlaybackEngine.o
 
@@ -1783,6 +1831,30 @@ virtuoso/theory/TheoryEvent.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.s
 .PHONY : virtuoso/theory/TheoryEvent.cpp.s
 
+virtuoso/ui/GrooveTimelineWidget.o: virtuoso/ui/GrooveTimelineWidget.cpp.o
+.PHONY : virtuoso/ui/GrooveTimelineWidget.o
+
+# target to build an object file
+virtuoso/ui/GrooveTimelineWidget.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.o
+.PHONY : virtuoso/ui/GrooveTimelineWidget.cpp.o
+
+virtuoso/ui/GrooveTimelineWidget.i: virtuoso/ui/GrooveTimelineWidget.cpp.i
+.PHONY : virtuoso/ui/GrooveTimelineWidget.i
+
+# target to preprocess a source file
+virtuoso/ui/GrooveTimelineWidget.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.i
+.PHONY : virtuoso/ui/GrooveTimelineWidget.cpp.i
+
+virtuoso/ui/GrooveTimelineWidget.s: virtuoso/ui/GrooveTimelineWidget.cpp.s
+.PHONY : virtuoso/ui/GrooveTimelineWidget.s
+
+# target to generate assembly for a file
+virtuoso/ui/GrooveTimelineWidget.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.s
+.PHONY : virtuoso/ui/GrooveTimelineWidget.cpp.s
+
 virtuoso/ui/GuitarFretboardWidget.o: virtuoso/ui/GuitarFretboardWidget.cpp.o
 .PHONY : virtuoso/ui/GuitarFretboardWidget.o
 
@@ -1940,6 +2012,9 @@ help:
 	@echo "... VirtuosoCore_autogen/mocs_compilation.o"
 	@echo "... VirtuosoCore_autogen/mocs_compilation.i"
 	@echo "... VirtuosoCore_autogen/mocs_compilation.s"
+	@echo "... VirtuosoPresetInspectorWindow.o"
+	@echo "... VirtuosoPresetInspectorWindow.i"
+	@echo "... VirtuosoPresetInspectorWindow.s"
 	@echo "... WaveVisualizer.o"
 	@echo "... WaveVisualizer.i"
 	@echo "... WaveVisualizer.s"
@@ -1997,6 +2072,9 @@ help:
 	@echo "... music/WalkingBassGenerator.o"
 	@echo "... music/WalkingBassGenerator.i"
 	@echo "... music/WalkingBassGenerator.s"
+	@echo "... playback/BalladReferenceTuning.o"
+	@echo "... playback/BalladReferenceTuning.i"
+	@echo "... playback/BalladReferenceTuning.s"
 	@echo "... playback/BandPlaybackEngine.o"
 	@echo "... playback/BandPlaybackEngine.i"
 	@echo "... playback/BandPlaybackEngine.s"
@@ -2048,6 +2126,9 @@ help:
 	@echo "... virtuoso/theory/TheoryEvent.o"
 	@echo "... virtuoso/theory/TheoryEvent.i"
 	@echo "... virtuoso/theory/TheoryEvent.s"
+	@echo "... virtuoso/ui/GrooveTimelineWidget.o"
+	@echo "... virtuoso/ui/GrooveTimelineWidget.i"
+	@echo "... virtuoso/ui/GrooveTimelineWidget.s"
 	@echo "... virtuoso/ui/GuitarFretboardWidget.o"
 	@echo "... virtuoso/ui/GuitarFretboardWidget.i"
 	@echo "... virtuoso/ui/GuitarFretboardWidget.s"

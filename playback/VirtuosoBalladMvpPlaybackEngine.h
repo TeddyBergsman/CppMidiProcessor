@@ -103,7 +103,7 @@ private:
     // Drum note mapping defaults (GM-ish; may be customized later per VST).
     int m_noteKick = virtuoso::drums::fluffy_brushes::kKickLooseNormal_G0;
     int m_noteSnareHit = virtuoso::drums::fluffy_brushes::kSnareRightHand_D1;
-    int m_noteBrushLoop = virtuoso::drums::fluffy_brushes::kSnareBrushing_E3;
+    int m_noteBrushLoop = virtuoso::drums::fluffy_brushes::kBrushCircleTwoHands_Fs3;
 };
 
 } // namespace playback

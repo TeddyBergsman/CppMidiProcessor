@@ -571,6 +571,12 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoPresetInspectorWindow.h",
+			"MU",
+			"EWIEGA46WW/moc_VirtuosoPresetInspectorWindow.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/WaveVisualizer.h",
 			"MU",
 			"EWIEGA46WW/moc_WaveVisualizer.cpp",
@@ -691,6 +697,12 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BalladReferenceTuning.h",
+			"MU",
+			"QDVNTGK2R4/moc_BalladReferenceTuning.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BandPlaybackEngine.h",
 			"MU",
 			"QDVNTGK2R4/moc_BandPlaybackEngine.cpp",
@@ -712,6 +724,12 @@
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VirtuosoBalladMvpPlaybackEngine.h",
 			"MU",
 			"QDVNTGK2R4/moc_VirtuosoBalladMvpPlaybackEngine.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/GrooveTimelineWidget.h",
+			"MU",
+			"2AYID5HISM/moc_GrooveTimelineWidget.cpp",
 			null
 		],
 		[
@@ -859,6 +877,11 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoPresetInspectorWindow.cpp",
+			"MU",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/WaveVisualizer.cpp",
 			"MU",
 			null
@@ -954,6 +977,11 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BalladReferenceTuning.cpp",
+			"MU",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BandPlaybackEngine.cpp",
 			"MU",
 			null
@@ -970,6 +998,11 @@
 		],
 		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VirtuosoBalladMvpPlaybackEngine.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/GrooveTimelineWidget.cpp",
 			"MU",
 			null
 		],

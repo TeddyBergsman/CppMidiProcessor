@@ -1,6 +1,7 @@
 #include "playback/VirtuosoBalladMvpPlaybackEngine.h"
 
 #include "midiprocessor.h"
+#include "playback/BalladReferenceTuning.h"
 
 #include <QHash>
 #include <QtGlobal>
@@ -154,41 +155,6 @@ static QVector<int> buildPlaybackSequenceFrom(const chart::ChartModel& model) {
 
 static bool sameChordKey(const music::ChordSymbol& a, const music::ChordSymbol& b) {
     return (a.rootPc == b.rootPc && a.bassPc == b.bassPc && a.quality == b.quality && a.seventh == b.seventh && a.extension == b.extension && a.alt == b.alt);
-}
-
-struct BalladRefTuning {
-    double bassApproachProbBeat3 = 0.55;
-    double bassSkipBeat3ProbStable = 0.25;
-    bool bassAllowApproachFromAbove = true;
-
-    double pianoSkipBeat2ProbStable = 0.45;
-    double pianoAddSecondColorProb = 0.25;
-    double pianoSparkleProbBeat4 = 0.18;
-    bool pianoPreferShells = true;
-
-    int pianoLhLo = 50, pianoLhHi = 66;
-    int pianoRhLo = 67, pianoRhHi = 84;
-    int pianoSparkleLo = 84, pianoSparkleHi = 96;
-};
-
-static BalladRefTuning tuningForReferenceTrack(const QString& presetKey) {
-    // Reference track: Chet Baker – "My Funny Valentine" (brushes ballad, airy/sparse).
-    // If using the Evans preset, keep it a bit denser and more rootless.
-    BalladRefTuning t;
-    if (presetKey.contains("evans", Qt::CaseInsensitive)) {
-        t.bassApproachProbBeat3 = 0.62;
-        t.bassSkipBeat3ProbStable = 0.18;
-        t.pianoSkipBeat2ProbStable = 0.30;
-        t.pianoAddSecondColorProb = 0.40;
-        t.pianoSparkleProbBeat4 = 0.22;
-        t.pianoPreferShells = false;
-        t.pianoLhLo = 48; t.pianoLhHi = 67;
-        t.pianoRhLo = 65; t.pianoRhHi = 86;
-        t.pianoSparkleLo = 82; t.pianoSparkleHi = 98;
-    } else if (presetKey.contains("chet", Qt::CaseInsensitive) || presetKey.contains("brush", Qt::CaseInsensitive) || presetKey.contains("ballad", Qt::CaseInsensitive)) {
-        // Keep defaults (Chet).
-    }
-    return t;
 }
 
 static virtuoso::groove::Rational durationWholeFromHoldMs(int holdMs, int bpm) {
@@ -502,7 +468,7 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
 
 void VirtuosoBalladMvpPlaybackEngine::scheduleDrumsBrushes(int playbackBarIndex, int beatInBar, bool structural) {
     // Brushes MVP:
-    // - sustained brushing texture per bar (E3: hold ~4s for full sample)
+    // - sustained brushing texture (looping articulation; hold long enough to actually loop)
     // - light swish/accents on 2 & 4 (short hits)
     // - feather kick occasionally on 1
     using virtuoso::groove::GrooveGrid;
@@ -512,15 +478,20 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleDrumsBrushes(int playbackBarIndex,
     ts.num = (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4;
     ts.den = (m_model.timeSigDen > 0) ? m_model.timeSigDen : 4;
 
-    // Sustained brushing texture once per bar (at beat 1).
-    if (beatInBar == 0) {
+    // Sustained brushing texture: schedule once per 4 bars to avoid re-triggering every bar.
+    // Hold for at least 6000ms (per FluffyAudio loop sample) and at least 4 bars at this tempo.
+    if (beatInBar == 0 && (playbackBarIndex % 4) == 0) {
+        const double quarterMs = 60000.0 / double(qMax(1, m_bpm));
+        const double beatMs = quarterMs * (4.0 / double(qMax(1, ts.den)));
+        const int holdMs = int(llround(qMax(6000.0, beatMs * double(qMax(1, ts.num)) * 4.0)));
+
         virtuoso::engine::AgentIntentNote n;
         n.agent = "Drums";
         n.channel = m_chDrums; // requested: channel 6
-        n.note = m_noteBrushLoop; // E3: "Snare/Hits - Brushing"
-        n.baseVelocity = 32;
+        n.note = m_noteBrushLoop; // F#3: "Circle Two Hands - Looping"
+        n.baseVelocity = 30;
         n.startPos = GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
-        n.durationWhole = durationWholeFromHoldMs(/*holdMs*/4000, m_bpm);
+        n.durationWhole = durationWholeFromHoldMs(holdMs, m_bpm);
         n.structural = true;
         m_engine.scheduleNote(n);
     }

@@ -814,6 +814,8 @@
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/RtMidi.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/SilentPlaybackEngine.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/SilentPlaybackEngine.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoPresetInspectorWindow.cpp
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoPresetInspectorWindow.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/WaveVisualizer.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/WaveVisualizer.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/4.0.3/CMakeCCompiler.cmake
@@ -857,6 +859,8 @@
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/SelfTest.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/WalkingBassGenerator.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/WalkingBassGenerator.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BalladReferenceTuning.cpp
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BalladReferenceTuning.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BandPlaybackEngine.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BandPlaybackEngine.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.cpp
@@ -881,6 +885,8 @@
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/GrooveTimelineWidget.cpp
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/GrooveTimelineWidget.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/GuitarFretboardWidget.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/GuitarFretboardWidget.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/PianoKeyboardWidget.cpp

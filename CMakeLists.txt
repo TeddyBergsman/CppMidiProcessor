@@ -71,6 +71,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   LibraryWindow.cpp
   GrooveLabWindow.h
   GrooveLabWindow.cpp
+  VirtuosoPresetInspectorWindow.h
+  VirtuosoPresetInspectorWindow.cpp
   midiprocessor.h
   midiprocessor.cpp
   voicecontroller.h
@@ -107,6 +109,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/BandPlaybackEngine.cpp
   playback/VirtuosoBalladMvpPlaybackEngine.h
   playback/VirtuosoBalladMvpPlaybackEngine.cpp
+  playback/BalladReferenceTuning.h
+  playback/BalladReferenceTuning.cpp
   playback/JazzBalladBassPlanner.h
   playback/JazzBalladBassPlanner.cpp
   playback/JazzBalladPianoPlanner.h
@@ -137,6 +141,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   virtuoso/ui/GuitarFretboardWidget.cpp
   virtuoso/ui/PianoKeyboardWidget.h
   virtuoso/ui/PianoKeyboardWidget.cpp
+  virtuoso/ui/GrooveTimelineWidget.h
+  virtuoso/ui/GrooveTimelineWidget.cpp
   resources.qrc
 )
 

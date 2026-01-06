@@ -15,6 +15,7 @@
 #include "ireal/HtmlPlaylistParser.h"
 #include "LibraryWindow.h"
 #include "GrooveLabWindow.h"
+#include "VirtuosoPresetInspectorWindow.h"
 
 namespace {
 static const char* kIRealLastHtmlPathKey = "ireal/lastHtmlPath";
@@ -167,6 +168,18 @@ void MainWindow::createWidgets(const Preset& preset) {
             m_grooveLabWindow->activateWindow();
         });
         windowMenu->addAction(grooveLabAction);
+
+        QAction* presetInspectorAction = new QAction("Virtuoso Preset Inspector", this);
+        presetInspectorAction->setMenuRole(QAction::NoRole);
+        connect(presetInspectorAction, &QAction::triggered, this, [this]() {
+            // Make this independent of NoteMonitorWidget; it’s a global library inspector.
+            auto* w = new VirtuosoPresetInspectorWindow(m_midiProcessor, this);
+            w->setAttribute(Qt::WA_DeleteOnClose, true);
+            w->show();
+            w->raise();
+            w->activateWindow();
+        });
+        windowMenu->addAction(presetInspectorAction);
     }
 
     // Dynamically create program buttons from preset data

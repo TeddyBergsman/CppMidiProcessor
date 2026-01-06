@@ -1,19 +1,19 @@
-Start testing: Jan 06 11:08 CET
+Start testing: Jan 06 11:37 CET
 ----------------------------------------------------------
 1/1 Testing: VirtuosoCoreTests
 1/1 Test: VirtuosoCoreTests
 Command: "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/VirtuosoCoreTests"
 Directory: /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake
-"VirtuosoCoreTests" start time: Jan 06 11:08 CET
+"VirtuosoCoreTests" start time: Jan 06 11:37 CET
 Output:
 ----------------------------------------------------------
 VirtuosoCoreTests: PASS
 <end of output>
-Test time =   0.22 sec
+Test time =   0.26 sec
 ----------------------------------------------------------
 Test Passed.
-"VirtuosoCoreTests" end time: Jan 06 11:08 CET
+"VirtuosoCoreTests" end time: Jan 06 11:37 CET
 "VirtuosoCoreTests" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-End testing: Jan 06 11:08 CET
+End testing: Jan 06 11:37 CET

@@ -339,6 +339,7 @@ static void testFluffyAudioBrushesMappingBasics() {
     expect(hasMidi(virtuoso::drums::fluffy_brushes::kKickLooseNormal_G0), "Mapping includes Kick/Loose Normal (G0)");
     expect(hasMidi(virtuoso::drums::fluffy_brushes::kSnareRightHand_D1), "Mapping includes Snare Right Hand (D1)");
     expect(hasMidi(virtuoso::drums::fluffy_brushes::kSnareBrushing_E3), "Mapping includes Snare Brushing (E3)");
+    expect(hasMidi(virtuoso::drums::fluffy_brushes::kBrushCircleTwoHands_Fs3), "Mapping includes Brush Circle Two Hands Loop (F#3)");
 }
 
 static void testNegativeHarmony() {

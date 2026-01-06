@@ -78,6 +78,8 @@ private:
     virtuoso::constraints::BassDriver m_driver;
     virtuoso::constraints::PerformanceState m_state;
     int m_lastMidi = -1;
+    int m_walkPosBlockStartBar = -1; // 2-bar block anchor for register/position
+    int m_walkPosMidi = -1;
     const virtuoso::vocab::VocabularyRegistry* m_vocab = nullptr; // not owned
 };
 

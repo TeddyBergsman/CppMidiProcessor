@@ -21,6 +21,9 @@ void JazzBalladPianoPlanner::reset() {
     m_motifBlockStartBar = -1;
     m_motifA.clear();
     m_motifB.clear();
+    m_motifC.clear();
+    m_motifD.clear();
+    m_phraseMotifStartBar = -1;
     m_anchorBlockStartBar = -1;
     m_anchorChordText.clear();
     m_anchorPcs.clear();
@@ -354,27 +357,50 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
     pcs = m_anchorPcs;
 
-    // Map to midi with LH/RH ranges and voice-leading to last voicing.
-    // v2: keep a stable “voice index” mapping to reduce random re-voicing each beat.
+    // Map to MIDI with LH/RH ranges and voice-leading to last voicing.
+    // v2: assign stable voice indices (inner voices move like fingers, not re-sorted blocks).
     QVector<int> midi;
     midi.reserve(pcs.size());
 
-    // LH anchor tones (3rd + 7th), RH colors with ballad spacing.
-    for (int idx = 0; idx < pcs.size(); ++idx) {
-        const int pc = pcs[idx];
+    QVector<int> guides;
+    QVector<int> colors;
+    guides.reserve(pcs.size());
+    colors.reserve(pcs.size());
+    for (int pc : pcs) {
         if (pc < 0) continue;
         const bool isGuide = (pc == pc3 || (pc7 >= 0 && pc == pc7) || (pc7 < 0 && pc == pc5));
+        (isGuide ? guides : colors).push_back(pc);
+    }
+    sortUnique(guides);
+    sortUnique(colors);
+
+    QVector<int> desired;
+    desired.reserve(guides.size() + colors.size());
+    for (int pc : guides) desired.push_back(pc);
+    for (int pc : colors) desired.push_back(pc);
+
+    QVector<int> prev = m_lastVoicing;
+    std::sort(prev.begin(), prev.end());
+
+    int lastChosen = -999;
+    for (int i = 0; i < desired.size(); ++i) {
+        const int pc = desired[i];
+        const bool isGuide = guides.contains(pc);
         const int lo = isGuide ? c.lhLo : c.rhLo;
         const int hi = isGuide ? c.lhHi : c.rhHi;
         int around = (lo + hi) / 2;
-        if (!m_lastVoicing.isEmpty()) {
-            const int j = qBound(0, idx, m_lastVoicing.size() - 1);
-            around = m_lastVoicing[j];
+        if (!prev.isEmpty()) {
+            const int j = qBound(0, i, prev.size() - 1);
+            around = prev[j];
         }
-        const int chosen = nearestMidiForPc(pc, around, lo, hi);
+        int chosen = nearestMidiForPc(pc, around, lo, hi);
+        if (chosen < 0) continue;
+        // Keep voices ordered low->high; if collision, prefer octave shifts (deterministic).
+        while (chosen <= (lastChosen + 2) && (chosen + 12) <= hi) chosen += 12;
+        while (chosen <= (lastChosen + 2) && (chosen - 12) >= lo) chosen -= 12;
+        lastChosen = chosen;
         midi.push_back(chosen);
     }
-    sortUnique(midi);
 
     midi = repairToFeasible(midi);
     if (midi.isEmpty()) return out;
@@ -643,6 +669,52 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
             // Keep dyad consonant-ish: if low is too close, skip it.
             if (mLow >= 0 && qAbs(mTop - mLow) >= 3) push(mLow, "Cadence anticipation (low)");
             push(mTop, "Cadence anticipation (top)");
+        }
+    }
+
+    // Cadence vocabulary (tiny licklet): a soft preparatory dyad on the and-of-3 before the barline.
+    // This increases the "session player" sense of setup -> arrival without being a full lick library.
+    if (c.phraseEndBar && c.beatInBar == 2 && c.cadence01 >= 0.70 && c.hasNextChord && c.nextChanges &&
+        !c.userDensityHigh && !c.userIntensityPeak) {
+        const quint32 hl = quint32(qHash(QString("pno_cad_lick|%1|%2|%3")
+                                             .arg(c.chordText)
+                                             .arg(c.playbackBarIndex)
+                                             .arg(c.determinismSeed)));
+        const int p = qBound(0, int(llround(16.0 + 34.0 * c.cadence01 + (c.userSilence ? 15.0 : 0.0))), 70);
+        if (int(hl % 100u) < p) {
+            // Target: next chord guide tones (3/7) or 9 if available; keep consonant dyad.
+            const int n3 = pcForDegree(c.nextChord, 3);
+            const int n7 = pcForDegree(c.nextChord, 7);
+            const int n9 = pcForDegree(c.nextChord, 9);
+            int topPc = (n9 >= 0 && int((hl / 3u) % 100u) < 55) ? n9 : (n7 >= 0 ? n7 : n3);
+            int lowPc = (n3 >= 0 && n3 != topPc) ? n3 : (n7 >= 0 && n7 != topPc ? n7 : -1);
+            const int lo = c.rhLo;
+            const int hi = c.rhHi;
+            const int around = (lo + hi) / 2 + 4;
+            const int mTop = nearestMidiForPc(topPc, around, lo, hi);
+            const int mLow = (lowPc >= 0) ? nearestMidiForPc(lowPc, mTop - 4, lo, hi) : -1;
+            const auto pos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, 2, /*sub*/1, /*count*/2, ts); // and-of-3
+            const auto dur = virtuoso::groove::Rational(1, 16);
+            const int vel = qBound(1, baseVel - 18, 127);
+
+            auto push = [&](int m, const QString& tgt) {
+                if (m < 0) return;
+                virtuoso::engine::AgentIntentNote n;
+                n.agent = "Piano";
+                n.channel = midiChannel;
+                n.note = clampMidi(m);
+                n.baseVelocity = vel;
+                n.startPos = pos;
+                n.durationWhole = dur;
+                n.structural = false;
+                n.chord_context = c.chordText;
+                n.voicing_type = voicingType + " + CadenceLicklet";
+                n.logic_tag = "ballad_cadence_licklet";
+                n.target_note = tgt;
+                out.push_back(n);
+            };
+            if (mLow >= 0 && qAbs(mTop - mLow) >= 3) push(mLow, "Cadence licklet (low)");
+            push(mTop, "Cadence licklet (top)");
         }
     }
 
@@ -1073,21 +1145,27 @@ void JazzBalladPianoPlanner::ensureBarRhythmPlanned(const Context& c) {
 
 void JazzBalladPianoPlanner::ensureMotifBlockPlanned(const Context& c) {
     const int bar = qMax(0, c.playbackBarIndex);
-    const int blockStart = (bar / 2) * 2;
-    if (blockStart == m_motifBlockStartBar) return;
-    m_motifBlockStartBar = blockStart;
+    const int phraseStart = (bar / qMax(1, c.phraseBars)) * qMax(1, c.phraseBars);
+    // We still keep the legacy 2-bar field around, but now we plan a full phrase (default 4 bars)
+    // so RH lines can repeat/sequence coherently.
+    if (phraseStart == m_phraseMotifStartBar) return;
+    m_phraseMotifStartBar = phraseStart;
+    m_motifBlockStartBar = phraseStart;
     buildMotifBlockTemplates(c);
 }
 
 void JazzBalladPianoPlanner::buildMotifBlockTemplates(const Context& c) {
     m_motifA.clear();
     m_motifB.clear();
+    m_motifC.clear();
+    m_motifD.clear();
 
     const int bar = qMax(0, c.playbackBarIndex);
-    const int block = bar / 2;
-    const quint32 h = quint32(qHash(QString("pno_motif2|%1|%2|%3")
-                                        .arg(c.chordText)
-                                        .arg(block)
+    const int phraseBars = qMax(1, c.phraseBars);
+    const int phraseStart = (bar / phraseBars) * phraseBars;
+    const int phraseIndex = phraseStart / phraseBars;
+    const quint32 h = quint32(qHash(QString("pno_motif4|%1|%2")
+                                        .arg(phraseIndex)
                                         .arg(c.determinismSeed)));
     const double e = qBound(0.0, c.energy, 1.0);
     const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
@@ -1116,11 +1194,11 @@ void JazzBalladPianoPlanner::buildMotifBlockTemplates(const Context& c) {
         v.push_back(t);
     };
 
-    // Choose a degree center for this 2-bar motif.
-    int deg = 9;
-    if (c.chord.quality == music::ChordQuality::Major) deg = ((h % 3u) == 0u) ? 13 : 9;
-    else if (c.chord.quality == music::ChordQuality::Minor) deg = ((h % 3u) == 0u) ? 11 : 9;
-    else if (c.chord.quality == music::ChordQuality::Dominant) deg = ((h % 3u) == 0u) ? 13 : 9;
+    // Choose a degree center for this phrase. (Degree resolution happens per-chord in realizeTopTemplate.)
+    // We deliberately make this independent of the current chord quality so it can "carry" across changes.
+    const int degPool[4] = {9, 13, 7, 3};
+    const int deg = degPool[int(h % 4u)];
+    const int degSeq = degPool[int((h / 5u) % 4u)];
 
     const int variant = int(h % 4u);
     const int dir = (((h / 7u) % 2u) == 0u) ? -1 : +1;
@@ -1162,6 +1240,27 @@ void JazzBalladPianoPlanner::buildMotifBlockTemplates(const Context& c) {
                 else u.degree = (u.degree == 9) ? 13 : 9;
                 u.tag += "_seq";
             }
+        }
+    }
+
+    // Bars C/D: repeat/sequence for 4-bar storytelling.
+    // C is a "repeat" with a different degree center; D is an answer with slightly stronger resolve.
+    if (!m_motifA.isEmpty()) {
+        for (const auto& t : m_motifA) {
+            TopTemplateHit u = t;
+            u.degree = (int((h / 9u) % 2u) == 0u) ? degSeq : deg;
+            u.velDelta = qBound(-24, u.velDelta - 1, 6);
+            u.tag = "repeat_" + u.tag;
+            m_motifC.push_back(u);
+        }
+    }
+    if (!m_motifB.isEmpty()) {
+        for (const auto& t : m_motifB) {
+            TopTemplateHit u = t;
+            u.degree = (int((h / 11u) % 2u) == 0u) ? degSeq : deg;
+            if (u.resolve) u.velDelta = qBound(-24, u.velDelta + 2, 10);
+            u.tag = "answer_" + u.tag;
+            m_motifD.push_back(u);
         }
     }
 }
@@ -1309,9 +1408,16 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
     const double progress01 = qBound(0.0, double(qMax(0, c.playbackBarIndex)) / 24.0, 1.0);
     if (!c.userSilence && !c.chordIsNew && (e < (0.40 - 0.10 * progress01))) return {};
     const int bar = qMax(0, c.playbackBarIndex);
-    const bool odd = (bar % 2) == 1;
-    const auto& tmpl = odd ? m_motifB : m_motifA;
-    return realizeTopTemplate(c, tmpl);
+    const int phraseBars = qMax(1, c.phraseBars);
+    const int barInPhrase = (phraseBars > 0) ? (bar % phraseBars) : (bar % 4);
+    // Default 4-bar storytelling, but works for any phraseBars >= 1 by mapping into our 4 templates.
+    const int idx = qBound(0, (phraseBars >= 4) ? barInPhrase : (barInPhrase % 4), 3);
+    const QVector<TopTemplateHit>* tmpl = nullptr;
+    if (idx == 0) tmpl = &m_motifA;
+    else if (idx == 1) tmpl = &m_motifB;
+    else if (idx == 2) tmpl = &m_motifC;
+    else tmpl = &m_motifD;
+    return (tmpl && !tmpl->isEmpty()) ? realizeTopTemplate(c, *tmpl) : QVector<TopHit>{};
 }
 
 QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRhythm(const Context& c) const {

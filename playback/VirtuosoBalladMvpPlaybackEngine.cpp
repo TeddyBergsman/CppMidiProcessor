@@ -529,6 +529,7 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
     const QString vibeStr = m_debugEnergyAuto ? VibeStateMachine::vibeName(vibeEff.vibe)
                                               : (VibeStateMachine::vibeName(vibeEff.vibe) + " (manual)");
     const QString intentStr = intentsToString(intent);
+    const bool userBusy = (intent.densityHigh || intent.intensityPeak || intent.registerHigh);
 
     // Clone planners so the lookahead does not mutate live state.
     JazzBalladBassPlanner bassSim = m_bassPlanner;
@@ -622,6 +623,8 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
             ? chooseScaleUsedForChord(m_ontology, keyPc, lk.mode, chord, *chordDef, &roman, &func)
             : QString();
 
+        const bool userBusy = (intent.densityHigh || intent.intensityPeak || intent.registerHigh);
+
         // Drums (base drummer)
         {
             BrushesBalladDrummer::Context dc;
@@ -638,6 +641,7 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
             dc.cadence01 = cadence01;
             const double mult = m_agentEnergyMult.value("Drums", 1.0);
             dc.energy = qBound(0.0, baseEnergy * mult, 1.0);
+            if (userBusy) dc.energy = qMin(dc.energy, 0.55);
             dc.intensityPeak = intent.intensityPeak;
             const auto dnotes = m_drummer.planBeat(dc);
             for (auto n : dnotes) {
@@ -1134,6 +1138,8 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
                 }
             }
 
+            const bool userBusy = (intent.densityHigh || intent.intensityPeak || intent.registerHigh);
+
             // Bass + piano (planner choices)
             if (!chord.noChord) {
                 JazzBalladBassPlanner::Context bc;
@@ -1166,6 +1172,13 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
                     bc.interaction = m_virtInteraction;
                     bc.toneDark = m_virtToneDark;
                 }
+            if (userBusy) {
+                bc.approachProbBeat3 *= 0.35;
+                bc.skipBeat3ProbStable = qMin(0.90, bc.skipBeat3ProbStable + 0.20);
+                bc.rhythmicComplexity *= 0.35;
+                bc.harmonicRisk *= 0.45;
+                bc.cadence01 *= 0.55;
+            }
                 auto bnotes = bassSim.planBeat(bc, m_chBass, ts);
                 for (auto& n : bnotes) {
                     n.vibe_state = vibeStr;
@@ -1201,6 +1214,15 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
                     pc.rhythmicComplexity = m_virtRhythmicComplexity;
                     pc.interaction = m_virtInteraction;
                     pc.toneDark = m_virtToneDark;
+                }
+                if (userBusy) {
+                    pc.preferShells = true;
+                    pc.skipBeat2ProbStable = qMin(0.98, pc.skipBeat2ProbStable + 0.18);
+                    pc.sparkleProbBeat4 *= 0.05;
+                    pc.rhHi = qMax(pc.rhLo + 4, pc.rhHi - 8);
+                    pc.rhythmicComplexity *= 0.35;
+                    pc.harmonicRisk *= 0.45;
+                    pc.cadence01 *= 0.55;
                 }
                 auto pnotes = pianoSim.planBeat(pc, m_chPiano, ts);
                 for (auto& n : pnotes) {
@@ -1298,6 +1320,7 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
                                               : (VibeStateMachine::vibeName(vibeEff.vibe) + " (manual)");
 
     const QString intentStr = intentsToString(intent);
+    const bool userBusy = (intent.densityHigh || intent.intensityPeak || intent.registerHigh);
 
     // Debug UI status (emitted once per beat step).
     const QString virtStr = m_virtAuto
@@ -1344,6 +1367,8 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
             const double mult = m_agentEnergyMult.value("Drums", 1.0);
             dc.energy = qBound(0.0, baseEnergy * mult, 1.0);
         }
+        // Interaction ducking: when user is busy, keep drummer in timekeeper mode (avoid extra ride patterns).
+        if (userBusy) dc.energy = qMin(dc.energy, 0.55);
         dc.intensityPeak = intent.intensityPeak;
 
         auto drumIntents = m_drummer.planBeat(dc);
@@ -1448,6 +1473,14 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     if (bc.cadence01 >= 0.55) {
         bc.approachProbBeat3 = qMin(1.0, bc.approachProbBeat3 + 0.25 * bc.cadence01);
         bc.skipBeat3ProbStable = qMax(0.0, bc.skipBeat3ProbStable - 0.15 * bc.cadence01);
+    }
+    // Interaction ducking: if user is busy, bass simplifies (less chromaticism/walk) and ducks motion.
+    if (userBusy) {
+        bc.approachProbBeat3 *= 0.35;
+        bc.skipBeat3ProbStable = qMin(0.90, bc.skipBeat3ProbStable + 0.20);
+        bc.rhythmicComplexity *= 0.35;
+        bc.harmonicRisk *= 0.45;
+        bc.cadence01 *= 0.55;
     }
     if (baseEnergy >= 0.85) {
         bc.approachProbBeat3 *= 0.60; // slightly more motion, but still ballad-safe
@@ -1563,6 +1596,16 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     if (vibeEff.vibe == VibeStateMachine::Vibe::CoolDown) {
         pc.skipBeat2ProbStable = qMin(0.98, pc.skipBeat2ProbStable + 0.10);
         pc.sparkleProbBeat4 *= 0.20;
+    }
+    // Interaction ducking: if user is busy, pianist stays supportive (lower register + fewer RH ornaments).
+    if (userBusy) {
+        pc.preferShells = true;
+        pc.skipBeat2ProbStable = qMin(0.98, pc.skipBeat2ProbStable + 0.18);
+        pc.sparkleProbBeat4 *= 0.05;
+        pc.rhHi = qMax(pc.rhLo + 4, pc.rhHi - 8);
+        pc.rhythmicComplexity *= 0.35;
+        pc.harmonicRisk *= 0.45;
+        pc.cadence01 *= 0.55;
     }
     auto pianoIntents = m_pianoPlanner.planBeat(pc, m_chPiano, ts);
     for (auto& n : pianoIntents) {

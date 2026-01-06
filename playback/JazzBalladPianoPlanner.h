@@ -143,6 +143,9 @@ private:
     int m_motifBlockStartBar = -1; // even bar index of current 2-bar block
     QVector<TopTemplateHit> m_motifA;
     QVector<TopTemplateHit> m_motifB;
+    QVector<TopTemplateHit> m_motifC;
+    QVector<TopTemplateHit> m_motifD;
+    int m_phraseMotifStartBar = -1; // multiple of 4 (phrase start)
 
     // Coherence: keep a stable "hand position" pitch-class set across a 2-bar block.
     int m_anchorBlockStartBar = -1;

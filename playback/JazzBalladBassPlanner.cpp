@@ -11,6 +11,8 @@ JazzBalladBassPlanner::JazzBalladBassPlanner() {
 void JazzBalladBassPlanner::reset() {
     m_state.ints.insert("lastFret", -1);
     m_lastMidi = -1;
+    m_walkPosBlockStartBar = -1;
+    m_walkPosMidi = -1;
 }
 
 int JazzBalladBassPlanner::pcToBassMidiInRange(int pc, int lo, int hi) {
@@ -180,15 +182,29 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         const int pc5 = (rootPc + 7) % 12;
         const int pc6 = (rootPc + 9) % 12;
 
-        auto pickMidiNearLast = [&](int pc, int lo, int hi) -> int {
+        const int lo = 40, hi = 57;
+        // 2-bar position lock: keep the bassist in a consistent register area.
+        const int posBlock = (qMax(0, c.playbackBarIndex) / 2) * 2;
+        if (posBlock != m_walkPosBlockStartBar) {
+            m_walkPosBlockStartBar = posBlock;
+            const int rootMidi = pcToBassMidiInRange(rootPc, lo, hi);
+            // Anchor near last if possible, else near mid range.
+            int anchor = (m_lastMidi >= 0) ? qBound(lo, m_lastMidi, hi) : qBound(lo, 47, hi);
+            // Pull anchor toward root (but not too jumpy).
+            if (qAbs(rootMidi - anchor) > 7) anchor = (rootMidi < anchor) ? (anchor - 5) : (anchor + 5);
+            m_walkPosMidi = qBound(lo, anchor, hi);
+        }
+
+        auto pickMidiNearLast = [&](int pc, int lo2, int hi2) -> int {
             int m = pcToBassMidiInRange(pc, lo, hi);
-            if (m_lastMidi < 0) return m;
+            const int anchor = (m_walkPosMidi >= 0) ? m_walkPosMidi : ((lo + hi) / 2);
+            const int ref = (m_lastMidi >= 0) ? m_lastMidi : anchor;
             int best = m;
-            int bestD = qAbs(m - m_lastMidi);
+            int bestD = qAbs(m - ref);
             for (int k = -2; k <= 2; ++k) {
                 const int cand = m + 12 * k;
                 if (cand < lo || cand > hi) continue;
-                const int d = qAbs(cand - m_lastMidi);
+                const int d = qAbs(cand - ref) + (qAbs(cand - anchor) / 3);
                 if (d < bestD) { best = cand; bestD = d; }
             }
             return best;
@@ -229,7 +245,6 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                 cands.push_back({"pass_up", (rootPc + 1) % 12, true});
                 cands.push_back({"pass_dn", (rootPc + 11) % 12, true});
             }
-            const int lo = 40, hi = 57;
             const int last = m_lastMidi;
             auto score = [&](const Cand& k) -> double {
                 const int m = pickMidiNearLast(k.pc, lo, hi);
@@ -263,7 +278,6 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             cands.push_back({"third", pc3});
             if (c.harmonicRisk >= 0.60) cands.push_back({"sixth", pc6});
             if (wantMove && nextRootPc >= 0) cands.push_back({"nextRoot", nextRootPc});
-            const int lo = 40, hi = 57;
             const int last = m_lastMidi;
             auto score = [&](const Cand& k) -> double {
                 const int m = pickMidiNearLast(k.pc, lo, hi);
@@ -286,8 +300,52 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         } else { // beat 3 (0-based) => beat 4
             // Cadence / chord-change: approach into next bar.
             if (nextChanges) {
-                const int lo = 40, hi = 57;
                 const int nextRootMidi = pickMidiNearLast(nextRootPc, lo, hi);
+                // Enclosure option (dominants/cadence): two 8ths on beat 4 -> and-of-4.
+                const bool wantEnclosure = !userBusy && c.allowApproachFromAbove &&
+                                           (c.chordFunction == "Dominant" || c.cadence01 >= 0.75) &&
+                                           (c.rhythmicComplexity >= 0.70);
+                const quint32 he = quint32(qHash(QString("bwalk_enc|%1|%2|%3")
+                                                     .arg(c.chordText)
+                                                     .arg(c.playbackBarIndex)
+                                                     .arg(c.determinismSeed)));
+                if (wantEnclosure && int(he % 100u) < int(llround(25.0 + 55.0 * qBound(0.0, c.cadence01, 1.0)))) {
+                    int a = nextRootMidi + 1;
+                    int b = nextRootMidi - 1;
+                    while (a > hi) a -= 12;
+                    while (a < lo) a += 12;
+                    while (b > hi) b -= 12;
+                    while (b < lo) b += 12;
+                    const bool upFirst = (int((he / 7u) % 2u) == 0u);
+                    int first = upFirst ? a : b;
+                    int second = upFirst ? b : a;
+                    int r1 = first;
+                    int r2 = second;
+                    if (feasibleOrRepair(r1) && feasibleOrRepair(r2)) {
+                        virtuoso::engine::AgentIntentNote n1;
+                        n1.agent = "Bass";
+                        n1.channel = midiChannel;
+                        n1.note = r1;
+                        n1.baseVelocity = 56;
+                        n1.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
+                        n1.durationWhole = Rational(1, 8);
+                        n1.structural = false;
+                        n1.chord_context = c.chordText;
+                        n1.logic_tag = "walk_v1_enclosure";
+                        n1.target_note = "Walk enclosure (beat4)";
+                        out.push_back(n1);
+
+                        virtuoso::engine::AgentIntentNote n2 = n1;
+                        n2.note = r2;
+                        n2.baseVelocity = 50;
+                        n2.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, /*sub*/1, /*count*/2, ts);
+                        n2.durationWhole = Rational(1, 8);
+                        n2.target_note = "Walk enclosure (and4)";
+                        out.push_back(n2);
+                        return out;
+                    }
+                }
+
                 int approachMidi = c.allowApproachFromAbove ? chooseApproachTo(nextRootMidi) : (nextRootMidi - 1);
                 while (approachMidi < lo) approachMidi += 12;
                 while (approachMidi > hi) approachMidi -= 12;
@@ -630,7 +688,13 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                                                .arg(c.playbackBarIndex)
                                                .arg(c.determinismSeed)));
             const bool longHold = stable && ((hLen % 4u) == 0u);
-            n.durationWhole = doWalk ? Rational(1, ts.den) : (longHold ? Rational(ts.num, ts.den) : Rational(2, ts.den));
+            // Walk articulation: slightly legato when stepwise, otherwise normal quarter.
+            if (doWalk) {
+                const bool stepwise = (m_lastMidi >= 0) && (qAbs(n.note - m_lastMidi) <= 2);
+                n.durationWhole = Rational(1, ts.den) + (stepwise && !userBusy ? Rational(1, 32) : Rational(0, 1));
+            } else {
+                n.durationWhole = longHold ? Rational(ts.num, ts.den) : Rational(2, ts.den);
+            }
         }
     } else {
         n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
@@ -644,7 +708,12 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                           vocabChoice.action == virtuoso::vocab::VocabularyRegistry::BassAction::Root)) {
             n.durationWhole = Rational(qMax(1, vocabChoice.dur_num), qMax(1, vocabChoice.dur_den));
         } else {
-            n.durationWhole = doWalk ? Rational(1, ts.den) : Rational(2, ts.den);
+            if (doWalk) {
+                const bool stepwise = (m_lastMidi >= 0) && (qAbs(n.note - m_lastMidi) <= 2);
+                n.durationWhole = Rational(1, ts.den) + (stepwise && !userBusy ? Rational(1, 32) : Rational(0, 1));
+            } else {
+                n.durationWhole = Rational(2, ts.den);
+            }
         }
     }
     n.structural = c.chordIsNew || (c.beatInBar == 0);

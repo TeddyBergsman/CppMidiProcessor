@@ -6,8 +6,12 @@
 #include "playback/VirtuosoBalladMvpPlaybackEngine.h"
 #include "virtuoso/solver/BeatCostModel.h"
 #include "virtuoso/util/StableHash.h"
+#include "virtuoso/theory/ScaleSuggester.h"
 
 #include <QDateTime>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QtGlobal>
 #include <limits>
 
@@ -29,6 +33,27 @@ static int adaptivePhraseBars(int bpm) {
 
 static int clampBassCenterMidi(int m) { return qBound(28, m, 67); }  // ~E1..G4 (upright-ish practical)
 static int clampPianoCenterMidi(int m) { return qBound(48, m, 96); } // ~C3..C7
+
+static QString parseOntVoicingKeyFromLogicTag(const QString& logicTag) {
+    // Our piano planner embeds ontology keys like "|ont=piano_ust_bVI" for explainability.
+    const int idx = logicTag.indexOf("|ont=");
+    if (idx < 0) return {};
+    const int start = idx + 5;
+    int end = logicTag.indexOf('|', start);
+    if (end < 0) end = logicTag.size();
+    return logicTag.mid(start, end - start).trimmed();
+}
+
+static QString representativeVoicingType(const QVector<virtuoso::engine::AgentIntentNote>& notes) {
+    // Most notes in the plan share the same voicing_type; pick the longest string among non-empty as a decent proxy.
+    QString best;
+    for (const auto& n : notes) {
+        const QString v = n.voicing_type.trimmed();
+        if (v.isEmpty()) continue;
+        if (v.size() > best.size()) best = v;
+    }
+    return best;
+}
 
 struct RegisterTargets {
     int bassCenterMidi = 45;
@@ -116,6 +141,15 @@ static NoteStats statsForNotes(const QVector<virtuoso::engine::AgentIntentNote>&
     }
     s.meanMidi = double(sum) / double(qMax(1, s.count));
     return s;
+}
+
+static QJsonObject noteStatsJson(const NoteStats& st) {
+    QJsonObject o;
+    o.insert("count", st.count);
+    o.insert("min_midi", st.minMidi);
+    o.insert("max_midi", st.maxMidi);
+    o.insert("mean_midi", st.meanMidi);
+    return o;
 }
 
 } // namespace
@@ -563,6 +597,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     virtuoso::solver::CostWeights jointWeights{};
     virtuoso::solver::CostBreakdown jointBd{};
     bool haveJointBd = false;
+    bool emittedCandidatePool = false;
     const bool usePlannedBeat = (plannedStep != nullptr && plannedStep->stepIndex == stepIndex);
 
     // Drums candidates (stateless planner): build contexts once, reuse in optimizer.
@@ -796,6 +831,160 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                     }
                 }
             }
+        }
+
+        // Emit exact candidate pool + evaluated combinations for visualization.
+        {
+            QJsonObject root;
+            root.insert("event_kind", "candidate_pool");
+            root.insert("tempo_bpm", in.bpm);
+            root.insert("ts_num", ts.num);
+            root.insert("ts_den", ts.den);
+            root.insert("style_preset_key", in.stylePresetKey);
+            root.insert("chord_is_new", chordIsNew);
+            root.insert("grid_pos", virtuoso::groove::GrooveGrid::toString(
+                                    virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts), ts));
+            root.insert("chord_context", chordText);
+            root.insert("scale_used", scaleUsed);
+            root.insert("roman", roman);
+            root.insert("chord_function", func);
+            root.insert("chord_root_pc", chord.rootPc);
+            root.insert("key_tonic_pc", lk.tonicPc);
+            root.insert("key_mode", int(lk.mode));
+            if (chordDef) root.insert("chord_def_key", chordDef->key);
+            if (in.engine) root.insert("groove_template", in.engine->currentGrooveTemplateKey());
+
+            // Candidate sets (exact IDs considered by the joint optimizer).
+            QJsonArray bassCandsJson;
+            for (const auto& c : bCands) {
+                QJsonObject o;
+                o.insert("id", c.id);
+                o.insert("stats", noteStatsJson(c.st));
+                o.insert("energy", c.ctx.energy);
+                o.insert("harmonicRisk", c.ctx.harmonicRisk);
+                o.insert("rhythmicComplexity", c.ctx.rhythmicComplexity);
+                o.insert("interaction", c.ctx.interaction);
+                o.insert("toneDark", c.ctx.toneDark);
+                bassCandsJson.push_back(o);
+            }
+            QJsonArray pianoCandsJson;
+            for (const auto& c : pCands) {
+                QJsonObject o;
+                o.insert("id", c.id);
+                o.insert("stats", noteStatsJson(c.st));
+                o.insert("energy", c.ctx.energy);
+                o.insert("harmonicRisk", c.ctx.harmonicRisk);
+                o.insert("rhythmicComplexity", c.ctx.rhythmicComplexity);
+                o.insert("interaction", c.ctx.interaction);
+                o.insert("toneDark", c.ctx.toneDark);
+                const QString vt = representativeVoicingType(c.plan.notes);
+                if (!vt.isEmpty()) o.insert("voicing_type", vt);
+                QString vk;
+                for (const auto& n : c.plan.notes) {
+                    vk = parseOntVoicingKeyFromLogicTag(n.logic_tag);
+                    if (!vk.isEmpty()) break;
+                }
+                if (!vk.isEmpty()) o.insert("voicing_key", vk);
+                pianoCandsJson.push_back(o);
+            }
+            QJsonArray drumsCandsJson;
+            for (const auto& c : dCands) {
+                QJsonObject o;
+                o.insert("id", c.id);
+                o.insert("stats", noteStatsJson(c.st));
+                o.insert("energy", c.ctx.energy);
+                o.insert("gestureBias", c.ctx.gestureBias);
+                o.insert("allowRide", c.ctx.allowRide);
+                o.insert("allowPhraseGestures", c.ctx.allowPhraseGestures);
+                o.insert("hasKick", c.hasKick);
+                drumsCandsJson.push_back(o);
+            }
+
+            // Scale candidate pool (exact scale keys available from ontology for this chord).
+            QJsonArray scaleCandsJson;
+            if (in.ontology && chordDef && chord.rootPc >= 0) {
+                QSet<int> pcs;
+                pcs.reserve(16);
+                const int r = HarmonyContext::normalizePc(chord.rootPc);
+                pcs.insert(r);
+                for (int iv : chordDef->intervals) pcs.insert(HarmonyContext::normalizePc(r + iv));
+                const auto sug = virtuoso::theory::suggestScalesForPitchClasses(*in.ontology, pcs, 12);
+                for (const auto& s : sug) {
+                    QJsonObject so;
+                    so.insert("key", s.key);
+                    so.insert("name", s.name);
+                    so.insert("score", s.score);
+                    so.insert("coverage", s.coverage);
+                    so.insert("best_transpose", s.bestTranspose);
+                    scaleCandsJson.push_back(so);
+                }
+            }
+
+            QJsonObject cands;
+            cands.insert("bass", bassCandsJson);
+            cands.insert("piano", pianoCandsJson);
+            cands.insert("drums", drumsCandsJson);
+            cands.insert("scales", scaleCandsJson);
+            root.insert("candidates", cands);
+
+            // Evaluated cartesian product (exactly what the optimizer compared).
+            QJsonArray combos;
+            for (int bi = 0; bi < bCands.size(); ++bi) {
+                for (int pi = 0; pi < pCands.size(); ++pi) {
+                    for (int di = 0; di < dCands.size(); ++di) {
+                        virtuoso::solver::CostBreakdown bd;
+                        const double c = comboCost(bCands[bi].plan.notes, pCands[pi].plan.notes, dCands[di].plan, dCands[di].id, &bd);
+                        QJsonObject cj;
+                        cj.insert("bass", bCands[bi].id);
+                        cj.insert("piano", pCands[pi].id);
+                        cj.insert("drums", dCands[di].id);
+                        cj.insert("total_cost", c);
+                        cj.insert("cost_tag", bd.shortTag(w));
+                        QJsonObject bdj;
+                        bdj.insert("harmonicStability", bd.harmonicStability);
+                        bdj.insert("voiceLeadingDistance", bd.voiceLeadingDistance);
+                        bdj.insert("rhythmicInterest", bd.rhythmicInterest);
+                        bdj.insert("interactionFactor", bd.interactionFactor);
+                        cj.insert("breakdown", bdj);
+                        const bool isChosen = (bi == bestBi && pi == bestPi && di == bestDi);
+                        if (isChosen) cj.insert("chosen", true);
+                        if (havePlanned) cj.insert("planned_choice", isChosen);
+                        combos.push_back(cj);
+                    }
+                }
+            }
+            root.insert("combinations", combos);
+
+            QJsonObject chosen;
+            chosen.insert("bass", bCands[bestBi].id);
+            chosen.insert("piano", pCands[bestPi].id);
+            chosen.insert("drums", dCands[bestDi].id);
+            chosen.insert("scale_used", scaleUsed);
+            // Chosen voicing key/type (for exact Library selection).
+            {
+                QString vk;
+                for (const auto& n : pCands[bestPi].plan.notes) {
+                    vk = parseOntVoicingKeyFromLogicTag(n.logic_tag);
+                    if (!vk.isEmpty()) break;
+                }
+                if (!vk.isEmpty()) chosen.insert("voicing_key", vk);
+                const QString vt = representativeVoicingType(pCands[bestPi].plan.notes);
+                if (!vt.isEmpty()) chosen.insert("voicing_type", vt);
+            }
+            root.insert("chosen", chosen);
+
+            QJsonObject weights;
+            weights.insert("harmony", w.harmony);
+            weights.insert("voiceLeading", w.voiceLeading);
+            weights.insert("rhythm", w.rhythm);
+            weights.insert("interaction", w.interaction);
+            root.insert("weights", weights);
+
+            if (in.engine) {
+                const auto pos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
+                in.engine->scheduleTheoryJsonAtGridPos(QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)), pos);
+            }
+            emittedCandidatePool = true;
         }
 
         bcChosen = bCands[bestBi].ctx;
@@ -1054,6 +1243,92 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     }
     if (usePlannedBeat) {
         in.pianoPlanner->restoreState(plannedStep->pianoStateAfter);
+    }
+
+    // If we didn't emit a full candidate pool (e.g. planned beat, bass resting, etc.),
+    // emit a minimal "exactly considered" pool (single choice per lane).
+    if (!emittedCandidatePool && in.engine) {
+        QJsonObject root;
+        root.insert("event_kind", "candidate_pool");
+        root.insert("tempo_bpm", in.bpm);
+        root.insert("ts_num", ts.num);
+        root.insert("ts_den", ts.den);
+        root.insert("style_preset_key", in.stylePresetKey);
+        root.insert("chord_is_new", chordIsNew);
+        root.insert("grid_pos", virtuoso::groove::GrooveGrid::toString(
+                                virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts), ts));
+        root.insert("chord_context", chordText);
+        root.insert("scale_used", scaleUsed);
+        root.insert("roman", roman);
+        root.insert("chord_function", func);
+        root.insert("chord_root_pc", chord.rootPc);
+        root.insert("key_tonic_pc", lk.tonicPc);
+        root.insert("key_mode", int(lk.mode));
+        if (chordDef) root.insert("chord_def_key", chordDef->key);
+        root.insert("groove_template", in.engine->currentGrooveTemplateKey());
+
+        // Minimal candidates: what we actually considered in this branch is a single plan per lane.
+        QJsonObject cands;
+        QJsonArray bassArr;
+        {
+            QJsonObject o;
+            o.insert("id", allowBass ? bassChoiceId : QString("none"));
+            bassArr.push_back(o);
+        }
+        QJsonArray pianoArr;
+        {
+            QJsonObject o;
+            o.insert("id", pianoChoiceId);
+            // voicing key/type from the *actual* chosen piano plan.
+            QString vk;
+            for (const auto& n : pianoPlan.notes) {
+                vk = parseOntVoicingKeyFromLogicTag(n.logic_tag);
+                if (!vk.isEmpty()) break;
+            }
+            if (!vk.isEmpty()) o.insert("voicing_key", vk);
+            const QString vt = representativeVoicingType(pianoPlan.notes);
+            if (!vt.isEmpty()) o.insert("voicing_type", vt);
+            pianoArr.push_back(o);
+        }
+        QJsonArray drumsArr;
+        {
+            QJsonObject o;
+            o.insert("id", drumChoiceId);
+            drumsArr.push_back(o);
+        }
+
+        // Scale candidates still come from ontology for this chord (these are the true available options).
+        QJsonArray scaleArr;
+        if (in.ontology && chordDef && chord.rootPc >= 0) {
+            QSet<int> pcs;
+            pcs.reserve(16);
+            const int r = HarmonyContext::normalizePc(chord.rootPc);
+            pcs.insert(r);
+            for (int iv : chordDef->intervals) pcs.insert(HarmonyContext::normalizePc(r + iv));
+            const auto sug = virtuoso::theory::suggestScalesForPitchClasses(*in.ontology, pcs, 12);
+            for (const auto& s : sug) {
+                QJsonObject so;
+                so.insert("key", s.key);
+                so.insert("name", s.name);
+                scaleArr.push_back(so);
+            }
+        }
+
+        cands.insert("bass", bassArr);
+        cands.insert("piano", pianoArr);
+        cands.insert("drums", drumsArr);
+        cands.insert("scales", scaleArr);
+        root.insert("candidates", cands);
+
+        QJsonObject chosen;
+        chosen.insert("bass", bassChoiceId);
+        chosen.insert("piano", pianoChoiceId);
+        chosen.insert("drums", drumChoiceId);
+        chosen.insert("scale_used", scaleUsed);
+        root.insert("chosen", chosen);
+
+        const auto pos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
+        in.engine->scheduleTheoryJsonAtGridPos(QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)), pos);
     }
 }
 

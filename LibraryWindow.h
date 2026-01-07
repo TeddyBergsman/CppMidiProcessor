@@ -5,9 +5,11 @@
 #include <QtGlobal>
 #include <QHash>
 #include <QCloseEvent>
+#include <QJsonObject>
 
 #include "virtuoso/ontology/OntologyRegistry.h"
 #include "virtuoso/groove/GrooveRegistry.h"
+#include "playback/HarmonyContext.h"
 
 class QListWidget;
 class QTabWidget;
@@ -25,11 +27,16 @@ class LibraryWindow final : public QMainWindow {
 public:
     explicit LibraryWindow(MidiProcessor* midi, QWidget* parent = nullptr);
 
+public slots:
+    // Live-follow hook (connected from NoteMonitorWidget).
+    void ingestTheoryEventJson(const QString& json);
+
 private slots:
     void onSelectionChanged();
     void onPlayPressed();
     void onUserClickedMidi(int midi);
     void onGrooveAuditionTick();
+    void onLiveFollowTimeout();
 
 private:
     void closeEvent(QCloseEvent* e) override;
@@ -76,8 +83,13 @@ private:
     int grooveBpm() const;
     QString selectedGrooveKey() const;
     const virtuoso::groove::GrooveTemplate* selectedGrooveTemplate() const;
+    void applyLiveChoiceToUi(const QJsonObject& obj);
+    void applyEnabledStatesForLiveContext();
+    static QString jsonString(const QJsonObject& o, const char* key);
+    static int jsonInt(const QJsonObject& o, const char* key, int fallback = 0);
 
     virtuoso::ontology::OntologyRegistry m_registry;
+    playback::HarmonyContext m_harmonyHelper;
     MidiProcessor* m_midi = nullptr; // not owned
     virtuoso::groove::GrooveRegistry m_grooveRegistry;
 
@@ -133,5 +145,29 @@ private:
 
     // Track which notes we turned on per channel, so we can force-release them on rapid retriggers.
     QHash<int, QSet<int>> m_heldNotesByChannel;
+
+    // --- Live follow state (driven by Virtuoso TheoryEvent JSON) ---
+    QTimer* m_liveFollowTimer = nullptr;
+    bool m_liveFollowActive = false;
+    bool m_liveUpdatingUi = false;
+    int m_liveBpm = 120;
+    QString m_lastLiveGridPos;
+    QString m_liveChordText;
+    QString m_liveScaleUsed;
+    QString m_liveVoicingType;
+    QString m_liveGrooveTemplateKey;
+
+    // Exact candidate pools (from event_kind="candidate_pool").
+    QSet<QString> m_liveCandChordKeys;
+    QSet<QString> m_liveCandScaleKeys;
+    QSet<QString> m_liveCandVoicingKeys;
+    QSet<QString> m_liveCandGrooveKeys;
+
+    // De-dupe/triggering: only audition when the *choice* changes (not every beat).
+    QString m_lastChosenChordDefKey;
+    int m_lastChosenChordRootPc = -1;
+    QString m_lastChosenScaleUsed;
+    QString m_lastChosenVoicingKey;
+    QString m_lastChosenGrooveKey;
 };
 

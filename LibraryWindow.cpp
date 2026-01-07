@@ -13,6 +13,10 @@
 #include <QStatusBar>
 #include <QSignalBlocker>
 #include <QCloseEvent>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <functional>
 
 #include "virtuoso/ui/GuitarFretboardWidget.h"
@@ -105,6 +109,7 @@ LibraryWindow::LibraryWindow(MidiProcessor* midi, QWidget* parent)
       m_midi(midi) {
     setWindowTitle("Library");
     resize(1100, 520);
+    m_harmonyHelper.setOntology(&m_registry);
     buildUi();
     populateLists();
     updateHighlights();
@@ -239,6 +244,8 @@ void LibraryWindow::buildUi() {
         m_grooveTempoCombo = new QComboBox(this);
         m_grooveTempoCombo->addItems({"60", "80", "100", "120", "140", "160"});
         m_grooveTempoCombo->setCurrentText("120");
+        // Allow live-follow to set arbitrary song BPM values.
+        m_grooveTempoCombo->setEditable(true);
         gctl->addWidget(m_grooveTempoCombo);
         gctl->addStretch(1);
         gl->addLayout(gctl);
@@ -298,6 +305,11 @@ void LibraryWindow::buildUi() {
     m_autoPlayTimer = new QTimer(this);
     m_autoPlayTimer->setSingleShot(true);
     connect(m_autoPlayTimer, &QTimer::timeout, this, &LibraryWindow::onPlayPressed);
+
+    // Live-follow timeout: if no theory events arrive recently, exit live-follow mode.
+    m_liveFollowTimer = new QTimer(this);
+    m_liveFollowTimer->setSingleShot(true);
+    connect(m_liveFollowTimer, &QTimer::timeout, this, &LibraryWindow::onLiveFollowTimeout);
 
     // Groove audition timer
     m_grooveAuditionTimer = new QTimer(this);
@@ -600,6 +612,12 @@ void LibraryWindow::onGrooveAuditionTick() {
 }
 
 void LibraryWindow::onSelectionChanged() {
+    if (m_liveUpdatingUi) {
+        // Avoid feedback loops while live-follow is updating selection.
+        updateHighlights();
+        updateGrooveInfo();
+        return;
+    }
     updateHighlights();
     updateGrooveInfo();
     scheduleAutoPlay();
@@ -611,6 +629,273 @@ void LibraryWindow::onSelectionChanged() {
     } else {
         stopGrooveAuditionNow();
     }
+}
+
+QString LibraryWindow::jsonString(const QJsonObject& o, const char* key) {
+    const auto v = o.value(QString::fromUtf8(key));
+    return v.isString() ? v.toString() : QString{};
+}
+
+int LibraryWindow::jsonInt(const QJsonObject& o, const char* key, int fallback) {
+    const auto v = o.value(QString::fromUtf8(key));
+    if (v.isDouble()) return v.toInt();
+    if (v.isString()) {
+        bool ok = false;
+        const int n = v.toString().toInt(&ok);
+        if (ok) return n;
+    }
+    return fallback;
+}
+
+void LibraryWindow::ingestTheoryEventJson(const QString& json) {
+    // Drive live-follow ONLY from candidate_pool (authoritative + complete).
+    QJsonParseError pe;
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &pe);
+    if (pe.error != QJsonParseError::NoError || !doc.isObject()) return;
+    const QJsonObject obj = doc.object();
+
+    const QString eventKind = jsonString(obj, "event_kind");
+    if (eventKind != "candidate_pool") return;
+
+    // Exact candidate pools for filtering.
+    m_liveCandChordKeys.clear();
+    m_liveCandScaleKeys.clear();
+    m_liveCandVoicingKeys.clear();
+    m_liveCandGrooveKeys.clear();
+
+    const QJsonObject cands = obj.value("candidates").toObject();
+    for (const auto& v : cands.value("scales").toArray()) {
+        const QJsonObject so = v.toObject();
+        const QString k = so.value("key").toString();
+        if (!k.isEmpty()) m_liveCandScaleKeys.insert(k);
+    }
+    for (const auto& v : cands.value("piano").toArray()) {
+        const QJsonObject po = v.toObject();
+        const QString vk = po.value("voicing_key").toString();
+        if (!vk.isEmpty()) m_liveCandVoicingKeys.insert(vk);
+    }
+    const QString chordDefKey = obj.value("chord_def_key").toString();
+    if (!chordDefKey.isEmpty()) m_liveCandChordKeys.insert(chordDefKey);
+    const QString grooveKey = obj.value("groove_template").toString();
+    if (!grooveKey.isEmpty()) m_liveCandGrooveKeys.insert(grooveKey);
+
+    const int bpm = jsonInt(obj, "tempo_bpm", 0);
+    if (bpm > 0) m_liveBpm = bpm;
+    m_liveFollowActive = true;
+    if (m_liveFollowTimer) m_liveFollowTimer->start(1500);
+
+    applyEnabledStatesForLiveContext();
+    applyLiveChoiceToUi(obj);
+}
+
+void LibraryWindow::onLiveFollowTimeout() {
+    m_liveFollowActive = false;
+    applyEnabledStatesForLiveContext();
+}
+
+void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
+    if (!m_tabs) return;
+
+    const QString eventKind = jsonString(obj, "event_kind");
+    if (eventKind != "candidate_pool") return;
+
+    // Chosen fields (prefer candidate_pool because it is complete even when Piano is silent).
+    QString chordDefKey;
+    int chordRootPc = -1;
+    QString scaleUsed;
+    QString voicingKey;
+    QString voicingType;
+    QString grooveTpl;
+    int keyTonicPc = -1;
+
+    chordDefKey = obj.value("chord_def_key").toString();
+    chordRootPc = obj.value("chord_root_pc").toInt(-1);
+    keyTonicPc = obj.value("key_tonic_pc").toInt(-1);
+    grooveTpl = obj.value("groove_template").toString();
+    const bool chordIsNew = obj.value("chord_is_new").toBool(false);
+    const QJsonObject chosen = obj.value("chosen").toObject();
+    scaleUsed = chosen.value("scale_used").toString();
+    voicingKey = chosen.value("voicing_key").toString();
+    voicingType = chosen.value("voicing_type").toString();
+
+    m_liveUpdatingUi = true;
+    const QSignalBlocker b0(m_rootCombo);
+    const QSignalBlocker b0b(m_keyCombo);
+    const QSignalBlocker b1(m_chordsList);
+    const QSignalBlocker b2(m_scalesList);
+    const QSignalBlocker b3(m_voicingsList);
+    const QSignalBlocker b4(m_groovesList);
+    const QSignalBlocker b5(m_grooveTempoCombo);
+    const QSignalBlocker b6(m_polyTemplateCombo);
+    const QSignalBlocker b7(m_polyUpperRoot);
+    const QSignalBlocker b8(m_polyUpperChord);
+    const QSignalBlocker b9(m_polyLowerRoot);
+    const QSignalBlocker b10(m_polyLowerChord);
+
+    // Always update key + root deterministically.
+    if (m_rootCombo && chordRootPc >= 0) m_rootCombo->setCurrentIndex(qBound(0, chordRootPc, 11));
+    if (m_keyCombo && keyTonicPc >= 0) m_keyCombo->setCurrentIndex(qBound(0, keyTonicPc, 11));
+
+    // --- Chords tab selection (always update) ---
+    if (!chordDefKey.isEmpty() && m_chordsList) {
+        for (int i = 0; i < m_chordsList->count(); ++i) {
+            auto* it = m_chordsList->item(i);
+            if (!it) continue;
+            if (it->data(Qt::UserRole).toString() == chordDefKey) {
+                m_chordsList->setCurrentRow(i);
+                break;
+            }
+        }
+    }
+
+    // --- Scale tab selection (always update) ---
+    if (!scaleUsed.isEmpty() && m_scalesList) {
+        QString name = scaleUsed.trimmed();
+        const int p = name.indexOf('(');
+        if (p > 0) name = name.left(p).trimmed();
+        for (int i = 0; i < m_scalesList->count(); ++i) {
+            auto* it = m_scalesList->item(i);
+            if (!it) continue;
+            if (it->text().compare(name, Qt::CaseInsensitive) == 0) {
+                m_scalesList->setCurrentRow(i);
+                break;
+            }
+        }
+    }
+
+    // --- Voicings tab selection (prefer exact ontology key) ---
+    if (!voicingKey.isEmpty() && m_voicingsList) {
+        for (int i = 0; i < m_voicingsList->count(); ++i) {
+            auto* it = m_voicingsList->item(i);
+            if (!it) continue;
+            if (it->data(Qt::UserRole).toString() == voicingKey) {
+                m_voicingsList->setCurrentRow(i);
+                break;
+            }
+        }
+    } else if (!voicingType.isEmpty() && m_voicingsList) {
+        // Fallback if planner didn't provide a key.
+        const QString v = voicingType;
+        for (int i = 0; i < m_voicingsList->count(); ++i) {
+            auto* it = m_voicingsList->item(i);
+            if (!it) continue;
+            if (v.contains(it->text(), Qt::CaseInsensitive)) { m_voicingsList->setCurrentRow(i); break; }
+        }
+    }
+
+    // --- Grooves selection (always update) ---
+    if (!grooveTpl.isEmpty() && m_groovesList) {
+        for (int i = 0; i < m_groovesList->count(); ++i) {
+            auto* it = m_groovesList->item(i);
+            if (!it) continue;
+            if (it->data(Qt::UserRole).toString() == grooveTpl) {
+                m_groovesList->setCurrentRow(i);
+                break;
+            }
+        }
+    }
+    if (m_grooveTempoCombo && m_liveBpm > 0) m_grooveTempoCombo->setCurrentText(QString::number(m_liveBpm));
+
+    // --- Polychords tab: map UST voicing keys into a triad-over-bass view ---
+    if (m_polyTab && m_tabs && m_polyTemplateCombo && !voicingKey.isEmpty() && voicingKey.startsWith("piano_ust_", Qt::CaseInsensitive)) {
+        // Choose the "triad_over_bass" template if present.
+        const int tplIdx = m_polyTemplateCombo->findData("triad_over_bass");
+        if (tplIdx >= 0) m_polyTemplateCombo->setCurrentIndex(tplIdx);
+
+        // Map common UST degrees.
+        auto ustOffset = [&](const QString& k) -> int {
+            if (k.endsWith("_bII")) return 1;
+            if (k.endsWith("_II")) return 2;
+            if (k.endsWith("_bIII")) return 3;
+            if (k.endsWith("_III")) return 4;
+            if (k.endsWith("_IV")) return 5;
+            if (k.endsWith("_bV")) return 6;
+            if (k.endsWith("_V")) return 7;
+            if (k.endsWith("_bVI")) return 8;
+            if (k.endsWith("_VI")) return 9;
+            if (k.endsWith("_bVII")) return 10;
+            if (k.endsWith("_VII")) return 11;
+            return 0;
+        };
+        const int upPc = (chordRootPc >= 0) ? ((chordRootPc + ustOffset(voicingKey)) % 12) : -1;
+        if (upPc >= 0 && m_polyUpperRoot) m_polyUpperRoot->setCurrentIndex(upPc);
+        if (m_polyUpperChord) {
+            const int majIdx = m_polyUpperChord->findData("maj");
+            if (majIdx >= 0) m_polyUpperChord->setCurrentIndex(majIdx);
+        }
+        if (chordRootPc >= 0 && m_polyLowerRoot) m_polyLowerRoot->setCurrentIndex(chordRootPc);
+        if (!chordDefKey.isEmpty() && m_polyLowerChord) {
+            const int idx = m_polyLowerChord->findData(chordDefKey);
+            if (idx >= 0) m_polyLowerChord->setCurrentIndex(idx);
+        }
+    }
+
+    m_liveUpdatingUi = false;
+
+    updateHighlights();
+    updateGrooveInfo();
+
+    // --- Audition triggering ---
+    // Only audition on *actual chord changes*, per your requirement.
+    const bool shouldAuditionNow = chordIsNew;
+
+    m_lastChosenChordDefKey = chordDefKey;
+    m_lastChosenChordRootPc = chordRootPc;
+    if (!scaleUsed.isEmpty()) m_lastChosenScaleUsed = scaleUsed;
+    if (!voicingKey.isEmpty()) m_lastChosenVoicingKey = voicingKey;
+    if (!grooveTpl.isEmpty()) m_lastChosenGrooveKey = grooveTpl;
+
+    // Only play when the visible tab's thing changed (so we don't spam every beat).
+    const int tab = m_tabs ? m_tabs->currentIndex() : 0;
+    const bool isChordTab = (tab == 0);
+    const bool isScaleTab = (tab == 1);
+    const bool isVoicingTab = (tab == 2);
+    const bool isPolyTab = (m_polyTab && m_tabs && tab == m_tabs->indexOf(m_polyTab));
+    const bool isGrooveTab = (m_grooveTab && m_tabs && tab == m_tabs->indexOf(m_grooveTab));
+
+    if (isGrooveTab) {
+        // Keep groove loop in sync when updated programmatically (signals are blocked above).
+        startOrUpdateGrooveLoop(/*preservePhase=*/true);
+    } else if (shouldAuditionNow && (isChordTab || isScaleTab || isVoicingTab || isPolyTab)) {
+        onPlayPressed();
+    }
+}
+
+void LibraryWindow::applyEnabledStatesForLiveContext() {
+    auto setAllVisible = [](QListWidget* w) {
+        if (!w) return;
+        for (int i = 0; i < w->count(); ++i) {
+            auto* it = w->item(i);
+            if (!it) continue;
+            it->setHidden(false);
+        }
+    };
+
+    if (!m_liveFollowActive) {
+        // Restore normal browsing when not live-following.
+        setAllVisible(m_chordsList);
+        setAllVisible(m_scalesList);
+        setAllVisible(m_voicingsList);
+        setAllVisible(m_groovesList);
+        return;
+    }
+
+    // Exact "available choices" as emitted by the planner (candidate_pool): filter out non-candidates.
+    auto applyAllowedSet = [](QListWidget* w, const QSet<QString>& allowedKeys) {
+        if (!w) return;
+        for (int i = 0; i < w->count(); ++i) {
+            auto* it = w->item(i);
+            if (!it) continue;
+            const QString key = it->data(Qt::UserRole).toString();
+            const bool show = allowedKeys.isEmpty() ? true : allowedKeys.contains(key);
+            it->setHidden(!show);
+        }
+    };
+
+    applyAllowedSet(m_chordsList, m_liveCandChordKeys);
+    applyAllowedSet(m_scalesList, m_liveCandScaleKeys);
+    applyAllowedSet(m_voicingsList, m_liveCandVoicingKeys);
+    applyAllowedSet(m_groovesList, m_liveCandGrooveKeys);
 }
 
 QSet<int> LibraryWindow::pitchClassesForPolychord() const {
@@ -798,6 +1083,15 @@ int LibraryWindow::baseRootMidiForPosition(int rootPc) const {
 }
 
 int LibraryWindow::perNoteDurationMs() const {
+    // When live-following a playing song, sync audition timing to the song BPM.
+    // (Manual library audition keeps the legacy "Short/Medium/Long" values.)
+    if (m_liveFollowActive && m_liveBpm > 0) {
+        const int quarterMs = qMax(40, int(llround(60000.0 / double(m_liveBpm))));
+        const QString d = m_durationCombo ? m_durationCombo->currentText() : "Medium";
+        if (d == "Short") return qMax(40, int(llround(double(quarterMs) * 0.50)));
+        if (d == "Long") return qMax(60, int(llround(double(quarterMs) * 2.00)));
+        return qMax(50, quarterMs);
+    }
     const QString d = m_durationCombo ? m_durationCombo->currentText() : "Medium";
     // Restore snappier audition timing (closer to the original feel).
     if (d == "Short") return 180;
@@ -977,20 +1271,28 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
         virtuoso::groove::TimingHumanizer hz(prof);
         hz.setGrooveTemplate(*gt);
 
-        // IMPORTANT: don't inherit "Grooves tab BPM". Scales should keep using Duration like before.
-        // We interpret the scale arpeggio as a regular subdivision grid whose tempo is derived from the
-        // legacy step duration.
-        const int stepMsBase = qMax(25, durationMs / 5);
-        int subdivCount = 2; // default: 8ths
-        if (gt->gridKind == virtuoso::groove::GrooveGridKind::Triplet8 ||
-            gt->gridKind == virtuoso::groove::GrooveGridKind::Shuffle12_8) {
-            subdivCount = 3; // triplet grid
+        // IMPORTANT:
+        // - In normal Library audition: Duration controls the absolute speed (legacy behavior).
+        // - In live-follow: BPM must follow the song; Duration controls subdivision (quarter/8th/16th).
+        const bool live = (m_liveFollowActive && m_liveBpm > 0);
+
+        const bool tripletish =
+            (gt->gridKind == virtuoso::groove::GrooveGridKind::Triplet8 ||
+             gt->gridKind == virtuoso::groove::GrooveGridKind::Shuffle12_8);
+
+        const QString d = m_durationCombo ? m_durationCombo->currentText() : "Medium";
+        int subdivCount = tripletish ? 3 : 2; // medium default: 8ths (or 8th-triplets)
+        if (d == "Short") subdivCount *= 2;  // 16ths (or 16th-triplets)
+        if (d == "Long") subdivCount = 1;    // quarters
+
+        int bpmVirtual = 120;
+        if (live) {
+            bpmVirtual = qBound(30, m_liveBpm, 300);
+        } else {
+            const int stepMsBase = qMax(25, durationMs / 5);
+            const int beatMsVirtual = qMax(20, stepMsBase * subdivCount);
+            bpmVirtual = qBound(10, int(llround(60000.0 / double(beatMsVirtual))), 2400);
         }
-        const int beatMsVirtual = qMax(20, stepMsBase * subdivCount);
-        // This is an internal mapping from the legacy "Duration" feel into a tempo so that
-        // groove templates (BeatFraction offsets) work. DO NOT cap to 300 BPM; short/medium
-        // can exceed 300 and would otherwise collapse to the same timing.
-        const int bpmVirtual = qBound(10, int(llround(60000.0 / double(beatMsVirtual))), 2400);
 
         onMs.resize(seq.size());
         offMs.resize(seq.size());

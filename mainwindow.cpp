@@ -211,6 +211,14 @@ void MainWindow::createWidgets(const Preset& preset) {
             if (!m_libraryWindow) {
                 m_libraryWindow = new LibraryWindow(m_midiProcessor, this);
                 m_libraryWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+                if (noteMonitorWidget) {
+                    connect(noteMonitorWidget, &NoteMonitorWidget::virtuosoTheoryEventJson,
+                            m_libraryWindow, &LibraryWindow::ingestTheoryEventJson,
+                            Qt::UniqueConnection);
+                    connect(noteMonitorWidget, &NoteMonitorWidget::virtuosoPlannedTheoryEventJson,
+                            m_libraryWindow, &LibraryWindow::ingestTheoryEventJson,
+                            Qt::UniqueConnection);
+                }
             }
             m_libraryWindow->show();
             m_libraryWindow->raise();

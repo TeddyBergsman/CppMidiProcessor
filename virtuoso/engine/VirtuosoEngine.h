@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QHash>
 #include <QString>
+#include <QJsonObject>
 
 #include "virtuoso/engine/VirtuosoClock.h"
 #include "virtuoso/engine/VirtuosoScheduler.h"
@@ -58,6 +59,7 @@ public:
 
     bool isRunning() const { return m_clock.isRunning(); }
     qint64 elapsedMs() const { return m_clock.elapsedMs(); }
+    QString currentGrooveTemplateKey() const { return m_hasGrooveTemplate ? m_grooveTemplate.key : m_feel.key; }
 
 public slots:
     void start();
@@ -111,6 +113,19 @@ public slots:
                                int note,
                                const virtuoso::groove::HumanizedEvent& he,
                                const QString& logicTag = QString());
+
+    // Schedule an arbitrary TheoryEvent JSON payload at a grid position (engine clock domain).
+    // This lets UIs receive "candidate pool" / introspection payloads in real-time sync with transport.
+    void scheduleTheoryJsonAtGridPos(const QString& json, const groove::GridPos& startPos, int leadMs = 0) {
+        if (!m_clock.isRunning()) return;
+        const qint64 baseOn = virtuoso::groove::GrooveGrid::posToMs(startPos, m_ts, m_bpm);
+        const qint64 on = qMax<qint64>(0, baseOn - qMax(0, leadMs));
+        VirtuosoScheduler::ScheduledEvent tj;
+        tj.dueMs = on;
+        tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+        tj.theoryJson = json;
+        m_sched.schedule(tj);
+    }
 
 signals:
     // MIDI-like outputs (connectable to MidiProcessor::sendVirtual*)

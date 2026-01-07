@@ -4,16 +4,6 @@
 #include <cmath>
 #include <cstdio>
 #include <QStringBuilder>
-#include <QDir>
-#include <QFileInfo>
-#include <QAudioOutput>
-#include <QUrl>
-#include <QFile>
-#include <QXmlStreamReader>
-#include <QRegularExpression>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
 #include <exception>
 #include <deque>
 
@@ -53,8 +43,6 @@ MidiProcessor::~MidiProcessor() {
     delete midiOut;
     delete midiInVoice;
     delete midiInVoicePitch;
-    delete m_player;
-    delete m_audioOutput;
 }
 
 void MidiProcessor::safeSendMessage(const std::vector<unsigned char>& msg) {
@@ -154,9 +142,6 @@ bool MidiProcessor::initialize() {
     midiOut = new RtMidiOut();
     midiInVoice = new RtMidiIn();
     midiInVoicePitch = new RtMidiIn();
-    m_player = new QMediaPlayer(this);
-    m_audioOutput = new QAudioOutput(this);
-    m_player->setAudioOutput(m_audioOutput);
 
     auto find_port = [](RtMidi& midi, const std::string& name) {
         for (unsigned int i = 0; i < midi.getPortCount(); i++) {
@@ -201,17 +186,6 @@ bool MidiProcessor::initialize() {
         midiInVoicePitch->setCallback(&MidiProcessor::voicePitchCallback, this);
     }
     
-    // Connect player state changes to the main window
-    connect(m_player, &QMediaPlayer::playbackStateChanged, this, &MidiProcessor::onPlayerStateChanged);
-    connect(m_player, &QMediaPlayer::positionChanged, this, &MidiProcessor::onPlayerPositionChanged);
-    connect(m_player, &QMediaPlayer::durationChanged, this, &MidiProcessor::onPlayerDurationChanged);
-
-    // *** THE FIX: Connect internal signals to slots using a QueuedConnection ***
-    connect(this, &MidiProcessor::_internal_playTrack, this, &MidiProcessor::onInternalPlay, Qt::QueuedConnection);
-    connect(this, &MidiProcessor::_internal_pauseTrack, this, &MidiProcessor::onInternalPause, Qt::QueuedConnection);
-    connect(this, &MidiProcessor::_internal_resumeTrack, this, &MidiProcessor::onInternalResume, Qt::QueuedConnection);
-
-
     // We don't need SysEx/timing/sensing from live inputs; dropping them avoids
     // edge cases where system messages get accidentally mangled/forwarded.
     midiInGuitar->ignoreTypes(true, true, true);
@@ -222,8 +196,6 @@ bool MidiProcessor::initialize() {
 
     precalculateRatios();
     m_isRunning = true;
-
-    loadBackingTracks();
 
     m_workerThread = std::thread(&MidiProcessor::workerLoop, this);
 
@@ -309,24 +281,6 @@ void MidiProcessor::toggleTrack(const std::string& trackId) {
     tryEnqueueEvent({EventType::TRACK_TOGGLE, std::vector<unsigned char>(), MidiSource::Guitar, -1, trackId});
     m_condition.notify_one();
 }
- 
-void MidiProcessor::playTrack(int index) {
-    std::lock_guard<std::mutex> lock(m_eventMutex);
-    tryEnqueueEvent({EventType::PLAY_TRACK, std::vector<unsigned char>(), MidiSource::Guitar, index, ""});
-    m_condition.notify_one();
-}
-
-void MidiProcessor::pauseTrack() {
-    std::lock_guard<std::mutex> lock(m_eventMutex);
-    tryEnqueueEvent({EventType::PAUSE_TRACK, std::vector<unsigned char>(), MidiSource::Guitar, -1, ""});
-    m_condition.notify_one();
-}
-
-void MidiProcessor::seekToPosition(qint64 positionMs) {
-    if (m_player && m_player->playbackState() != QMediaPlayer::StoppedState) {
-        m_player->setPosition(positionMs);
-    }
-}
 
 void MidiProcessor::setVerbose(bool verbose) {
     m_isVerbose.store(verbose);
@@ -354,33 +308,6 @@ void MidiProcessor::pollLogQueue() {
         m_logQueue.pop();
     }
     emit logMessage(allMessages.trimmed());
-}
-
-void MidiProcessor::onPlayerStateChanged(QMediaPlayer::PlaybackState state) {
-    emit backingTrackStateChanged(m_currentlyPlayingTrackIndex, state);
-}
-
-// These slots are now executed safely on the main thread
-void MidiProcessor::onInternalPlay(const QUrl& url) {
-    m_player->stop();
-    m_player->setSource(url);
-    m_player->play();
-}
-
-void MidiProcessor::onInternalPause() {
-    m_player->pause();
-}
-
-void MidiProcessor::onInternalResume() {
-    m_player->play();
-}
-
-void MidiProcessor::onPlayerPositionChanged(qint64 position) {
-    emit backingTrackPositionChanged(position);
-}
-
-void MidiProcessor::onPlayerDurationChanged(qint64 duration) {
-    emit backingTrackDurationChanged(duration);
 }
 
 void MidiProcessor::guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
@@ -467,7 +394,6 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                             // Adjust command note thresholds based on transpose amount
                             int transposeAmount = m_transposeAmount.load();
                             int adjustedCommandNote = m_preset.settings.commandNote + transposeAmount;
-                            int adjustedBackingTrackNote = m_preset.settings.backingTrackCommandNote + transposeAmount;
                             
                             if (inputNote == adjustedCommandNote) { m_inCommandMode = true; return; }
                             else if (m_inCommandMode) {
@@ -476,12 +402,6 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                                     processProgramChange(m_programRulesMap.at(inputNote));
                                 }
                                 m_inCommandMode = false;
-                                return;
-                            } else if (inputNote == adjustedBackingTrackNote) { 
-                                m_backingTrackSelectionMode = true; return;
-                            } else if (m_backingTrackSelectionMode) {
-                                handleBackingTrackSelection(inputNote);
-                                m_backingTrackSelectionMode = false;
                                 return;
                             }
                         }
@@ -502,7 +422,7 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     }
                     
                     // Apply transpose to note on/off messages
-                    if ((status == 0x90 || status == 0x80) && !m_inCommandMode && !m_backingTrackSelectionMode) {
+                    if ((status == 0x90 || status == 0x80) && !m_inCommandMode) {
                         int transposeAmount = m_transposeAmount.load();
                         if (transposeAmount != 0 && passthroughMsg.size() > 1) {
                             int transposedNote = passthroughMsg[1] + transposeAmount;
@@ -514,7 +434,7 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     }
 
                     // Listening MVP hook: emit transposed performance note events (ignore command/backing selection notes).
-                    if (!m_inCommandMode && !m_backingTrackSelectionMode && (status == 0x90 || status == 0x80) && passthroughMsg.size() >= 3) {
+                    if (!m_inCommandMode && (status == 0x90 || status == 0x80) && passthroughMsg.size() >= 3) {
                         const int note = int(passthroughMsg[1]);
                         const int vel = int(passthroughMsg[2]);
                         if (status == 0x90 && vel > 0) emit guitarNoteOn(note, vel);
@@ -633,487 +553,7 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                 setTrackState(event.trackId, !m_trackStates.at(event.trackId));
             }
             break;
-        case EventType::PLAY_TRACK:
-             if (event.programIndex >= 0 && event.programIndex < m_backingTracks.size()) {
-                if (m_currentlyPlayingTrackIndex == event.programIndex) {
-                    // It's the same track, so just resume if paused
-                    if (m_player->playbackState() == QMediaPlayer::PausedState) {
-                        emit _internal_resumeTrack();
-                    }
-                } else {
-                    // It's a new track, so load metadata and play it
-                    QString trackPath = m_backingTracks.at(event.programIndex);
-                    TrackMetadata metadata = loadTrackMetadata(trackPath);
-                    
-                    // Apply volume from metadata
-                    if (m_audioOutput) {
-                        m_audioOutput->setVolume(metadata.volume);
-                    }
-                    
-                    // Apply program change if specified
-                    if (metadata.program > 0 && metadata.program <= m_preset.programs.size()) {
-                        // Silence first to avoid stuck notes when auto-switching program from metadata
-                        panicSilence();
-                        // Switch to the specified program (1-based in XML, convert to 0-based)
-                        processProgramChange(metadata.program - 1);
-                        {
-                            std::lock_guard<std::mutex> lock(m_logMutex);
-                            m_logQueue.push(QString("Track metadata: Applied program %1").arg(metadata.program).toStdString());
-                        }
-                    }
-                    
-                    m_currentlyPlayingTrackIndex = event.programIndex;
-                    
-                    // Emit timeline data as JSON for the UI
-                    QJsonObject timelineJson;
-                    
-                    // Bar markers
-                    QJsonArray barsArray;
-                    for (const auto& bar : metadata.barMarkers) {
-                        QJsonObject barObj;
-                        barObj["bar"] = bar.bar;
-                        barObj["timeMs"] = (double)bar.timeMs;
-                        barsArray.append(barObj);
-                    }
-                    timelineJson["bars"] = barsArray;
-                    
-                    // Sections
-                    QJsonArray sectionsArray;
-                    for (const auto& section : metadata.sections) {
-                        QJsonObject sectionObj;
-                        sectionObj["label"] = section.label;
-                        sectionObj["timeMs"] = (double)section.timeMs;
-                        sectionObj["bar"] = section.bar;
-                        sectionsArray.append(sectionObj);
-                    }
-                    timelineJson["sections"] = sectionsArray;
-                    
-                    // Chords
-                    QJsonArray chordsArray;
-                    for (const auto& chord : metadata.chordEvents) {
-                        QJsonObject chordObj;
-                        chordObj["bar"] = chord.bar;
-                        chordObj["chord"] = chord.chord;
-                        chordsArray.append(chordObj);
-                    }
-                    timelineJson["chords"] = chordsArray;
-                    
-                    // Program changes
-                    QJsonArray programsArray;
-                    for (const auto& prog : metadata.programChanges) {
-                        QJsonObject progObj;
-                        progObj["bar"] = prog.bar;
-                        progObj["program"] = prog.programName;
-                        programsArray.append(progObj);
-                    }
-                    timelineJson["programs"] = programsArray;
-                    
-                    // Transpose toggles
-                    QJsonArray transposeArray;
-                    for (const auto& trans : metadata.transposeToggles) {
-                        QJsonObject transObj;
-                        transObj["bar"] = trans.bar;
-                        transObj["on"] = trans.on;
-                        transposeArray.append(transObj);
-                    }
-                    timelineJson["transpose"] = transposeArray;
-                    
-                    // Lyrics
-                    QJsonArray lyricsArray;
-                    for (const auto& lyric : metadata.lyricLines) {
-                        QJsonObject lyricObj;
-                        lyricObj["startBar"] = lyric.startBar;
-                        lyricObj["endBar"] = lyric.endBar;
-                        lyricObj["text"] = lyric.text;
-                        
-                        // Add word timing if available
-                        if (!lyric.words.isEmpty()) {
-                            QJsonArray wordsArray;
-                            for (const auto& word : lyric.words) {
-                                QJsonObject wordObj;
-                                wordObj["text"] = word.text;
-                                wordObj["startFraction"] = word.startFraction;
-                                wordObj["endFraction"] = word.endFraction;
-                                wordsArray.append(wordObj);
-                            }
-                            lyricObj["words"] = wordsArray;
-                        }
-                        lyricsArray.append(lyricObj);
-                    }
-                    timelineJson["lyrics"] = lyricsArray;
-                    
-                    // Tempo changes
-                    QJsonArray tempoArray;
-                    for (const auto& tempo : metadata.tempoChanges) {
-                        QJsonObject tempoObj;
-                        tempoObj["bar"] = tempo.bar;
-                        tempoObj["bpm"] = tempo.bpm;
-                        tempoArray.append(tempoObj);
-                    }
-                    timelineJson["tempos"] = tempoArray;
-                    
-                    // Time signature changes
-                    QJsonArray timeSigArray;
-                    for (const auto& ts : metadata.timeSignatureChanges) {
-                        QJsonObject tsObj;
-                        tsObj["bar"] = ts.bar;
-                        tsObj["numerator"] = ts.numerator;
-                        tsObj["denominator"] = ts.denominator;
-                        timeSigArray.append(tsObj);
-                    }
-                    timelineJson["timeSignatures"] = timeSigArray;
-                    
-                    // Window size
-                    timelineJson["barWindowSize"] = metadata.barWindowSize;
-                    
-                    emit backingTrackTimelineUpdated(QJsonDocument(timelineJson).toJson(QJsonDocument::Compact));
-                    emit _internal_playTrack(QUrl::fromLocalFile(trackPath));
-                }
-            }
-            break;
-        case EventType::PAUSE_TRACK:
-            if (m_player->playbackState() == QMediaPlayer::PlayingState) {
-                emit _internal_pauseTrack();
-            }
-            break;
     }
-}
- 
-void MidiProcessor::loadBackingTracks() {
-    QDir backingTracksDir(m_preset.settings.backingTrackDirectory);
-    QStringList absolutePaths;
-    // Get a list of QFileInfo objects
-    QFileInfoList fileInfoList = backingTracksDir.entryInfoList(QStringList() << "*.mp3", QDir::Files);
-
-    // Populate the list of absolute paths
-    for (const QFileInfo &fileInfo : fileInfoList) {
-        absolutePaths.append(fileInfo.absoluteFilePath());
-    }
-    m_backingTracks = absolutePaths;
-    m_backingTracks.sort();
-    emit backingTracksLoaded(m_backingTracks);
-}
-
-void MidiProcessor::loadTrackTimeline(int index) {
-    if (index < 0 || index >= m_backingTracks.size()) {
-        return;
-    }
-    
-    QString trackPath = m_backingTracks.at(index);
-    TrackMetadata metadata = loadTrackMetadata(trackPath);
-    
-    // Build and emit timeline JSON
-    QJsonObject timelineJson;
-    
-    // Bar markers
-    QJsonArray barsArray;
-    for (const auto& bar : metadata.barMarkers) {
-        QJsonObject barObj;
-        barObj["bar"] = bar.bar;
-        barObj["timeMs"] = (double)bar.timeMs;
-        barsArray.append(barObj);
-    }
-    timelineJson["bars"] = barsArray;
-    
-    // Sections
-    QJsonArray sectionsArray;
-    for (const auto& section : metadata.sections) {
-        QJsonObject sectionObj;
-        sectionObj["label"] = section.label;
-        sectionObj["timeMs"] = (double)section.timeMs;
-        sectionObj["bar"] = section.bar;
-        sectionsArray.append(sectionObj);
-    }
-    timelineJson["sections"] = sectionsArray;
-    
-    // Chords
-    QJsonArray chordsArray;
-    for (const auto& chord : metadata.chordEvents) {
-        QJsonObject chordObj;
-        chordObj["bar"] = chord.bar;
-        chordObj["chord"] = chord.chord;
-        chordsArray.append(chordObj);
-    }
-    timelineJson["chords"] = chordsArray;
-    
-    // Program changes
-    QJsonArray programsArray;
-    for (const auto& prog : metadata.programChanges) {
-        QJsonObject progObj;
-        progObj["bar"] = prog.bar;
-        progObj["program"] = prog.programName;
-        programsArray.append(progObj);
-    }
-    timelineJson["programs"] = programsArray;
-    
-    // Transpose toggles
-    QJsonArray transposeArray;
-    for (const auto& trans : metadata.transposeToggles) {
-        QJsonObject transObj;
-        transObj["bar"] = trans.bar;
-        transObj["on"] = trans.on;
-        transposeArray.append(transObj);
-    }
-    timelineJson["transpose"] = transposeArray;
-    
-    // Lyrics
-    QJsonArray lyricsArray;
-    for (const auto& lyric : metadata.lyricLines) {
-        QJsonObject lyricObj;
-        lyricObj["startBar"] = lyric.startBar;
-        lyricObj["endBar"] = lyric.endBar;
-        lyricObj["text"] = lyric.text;
-        
-        // Add word timing if available
-        if (!lyric.words.isEmpty()) {
-            QJsonArray wordsArray;
-            for (const auto& word : lyric.words) {
-                QJsonObject wordObj;
-                wordObj["text"] = word.text;
-                wordObj["startFraction"] = word.startFraction;
-                wordObj["endFraction"] = word.endFraction;
-                wordsArray.append(wordObj);
-            }
-            lyricObj["words"] = wordsArray;
-        }
-        lyricsArray.append(lyricObj);
-    }
-    timelineJson["lyrics"] = lyricsArray;
-    
-    // Tempo changes
-    QJsonArray tempoArray;
-    for (const auto& tempo : metadata.tempoChanges) {
-        QJsonObject tempoObj;
-        tempoObj["bar"] = tempo.bar;
-        tempoObj["bpm"] = tempo.bpm;
-        tempoArray.append(tempoObj);
-    }
-    timelineJson["tempos"] = tempoArray;
-    
-    // Time signature changes
-    QJsonArray timeSigArray;
-    for (const auto& ts : metadata.timeSignatureChanges) {
-        QJsonObject tsObj;
-        tsObj["bar"] = ts.bar;
-        tsObj["numerator"] = ts.numerator;
-        tsObj["denominator"] = ts.denominator;
-        timeSigArray.append(tsObj);
-    }
-    timelineJson["timeSignatures"] = timeSigArray;
-    
-    // Window size
-    timelineJson["barWindowSize"] = metadata.barWindowSize;
-    
-    emit backingTrackTimelineUpdated(QJsonDocument(timelineJson).toJson(QJsonDocument::Compact));
-}
-
-TrackMetadata MidiProcessor::loadTrackMetadata(const QString& trackPath) {
-    TrackMetadata metadata;
-    
-    // Generate XML filename by replacing .mp3 extension with .xml
-    QString xmlPath = trackPath;
-    xmlPath.replace(QRegularExpression("\\.mp3$", QRegularExpression::CaseInsensitiveOption), ".xml");
-    
-    QFile xmlFile(xmlPath);
-    if (!xmlFile.exists()) {
-        qDebug() << "No metadata file found for track:" << trackPath;
-        return metadata; // Return default values
-    }
-    
-    if (!xmlFile.open(QIODevice::ReadOnly)) {
-        qDebug() << "Failed to open metadata file:" << xmlPath;
-        return metadata;
-    }
-    
-    QXmlStreamReader xml(&xmlFile);
-    
-    // Helper to parse time strings like "0:04.11" or "1:23.45"
-    auto readTimeMs = [](const QString& timeStr) -> qint64 {
-        QStringList parts = timeStr.split(":");
-        if (parts.size() == 2) {
-            int minutes = parts[0].toInt();
-            double seconds = parts[1].toDouble();
-            return (qint64)(minutes * 60000 + seconds * 1000);
-        }
-        return 0;
-    };
-    
-    while (!xml.atEnd() && !xml.hasError()) {
-        QXmlStreamReader::TokenType token = xml.readNext();
-        
-        if (token == QXmlStreamReader::StartElement && xml.name() == "TrackMetadata") {
-            while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "TrackMetadata")) {
-                xml.readNext();
-                
-                if (xml.tokenType() == QXmlStreamReader::StartElement) {
-                    QString elementName = xml.name().toString();
-                    
-                    if (elementName == "Volume") {
-                        metadata.volume = xml.readElementText().toDouble();
-                    } else if (elementName == "Tempo") {
-                        metadata.tempo = xml.readElementText().toInt();
-                    } else if (elementName == "Key") {
-                        metadata.key = xml.readElementText();
-                    } else if (elementName == "Program") {
-                        metadata.program = xml.readElementText().toInt();
-                    } else if (elementName == "BarWindowSize") {
-                        metadata.barWindowSize = xml.readElementText().toInt();
-                    } else if (elementName == "Timeline") {
-                        // Parse timeline data
-                        while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Timeline")) {
-                            xml.readNext();
-                            
-                            if (xml.tokenType() == QXmlStreamReader::StartElement) {
-                                QString sectionName = xml.name().toString();
-                                
-                                if (sectionName == "Bars") {
-                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Bars")) {
-                                        xml.readNext();
-                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "Bar") {
-                                            BarMarker bar;
-                                            bar.bar = xml.attributes().value("number").toDouble();
-                                            bar.timeMs = readTimeMs(xml.attributes().value("time").toString());
-                                            metadata.barMarkers.append(bar);
-                                            xml.skipCurrentElement();
-                                        }
-                                    }
-                                } else if (sectionName == "Sections") {
-                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Sections")) {
-                                        xml.readNext();
-                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "Section") {
-                                            SectionMarker section;
-                                            section.label = xml.attributes().value("label").toString();
-                                            section.timeMs = readTimeMs(xml.attributes().value("time").toString());
-                                            if (xml.attributes().hasAttribute("bar")) {
-                                                section.bar = xml.attributes().value("bar").toDouble();
-                                            }
-                                            metadata.sections.append(section);
-                                            xml.skipCurrentElement();
-                                        }
-                                    }
-                                } else if (sectionName == "Chords") {
-                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Chords")) {
-                                        xml.readNext();
-                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "Chord") {
-                                            ChordEvent chord;
-                                            chord.bar = xml.attributes().value("bar").toDouble();
-                                            chord.chord = xml.attributes().value("name").toString();
-                                            metadata.chordEvents.append(chord);
-                                            xml.skipCurrentElement();
-                                        }
-                                    }
-                                } else if (sectionName == "Programs") {
-                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Programs")) {
-                                        xml.readNext();
-                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "ProgramChange") {
-                                            ProgramChangeEvent prog;
-                                            prog.bar = xml.attributes().value("bar").toDouble();
-                                            prog.programName = xml.attributes().value("name").toString();
-                                            metadata.programChanges.append(prog);
-                                            xml.skipCurrentElement();
-                                        }
-                                    }
-                                } else if (sectionName == "Transpose") {
-                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Transpose")) {
-                                        xml.readNext();
-                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "Toggle") {
-                                            TransposeToggleEvent trans;
-                                            trans.bar = xml.attributes().value("bar").toDouble();
-                                            trans.on = xml.attributes().value("state").toString().toLower() != "off";
-                                            metadata.transposeToggles.append(trans);
-                                            xml.skipCurrentElement();
-                                        }
-                                    }
-                                } else if (sectionName == "Lyrics") {
-                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Lyrics")) {
-                                        xml.readNext();
-                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "Line") {
-                                            LyricLine lyric;
-                                            lyric.startBar = xml.attributes().value("startBar").toDouble();
-                                            lyric.endBar = xml.attributes().value("endBar").toDouble();
-                                            
-                                            // Read line content
-                                            while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Line")) {
-                                                xml.readNext();
-                                                if (xml.tokenType() == QXmlStreamReader::StartElement) {
-                                                    if (xml.name() == "Text") {
-                                                        lyric.text = xml.readElementText();
-                                                    } else if (xml.name() == "Words") {
-                                                        while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Words")) {
-                                                            xml.readNext();
-                                                            if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "Word") {
-                                                                LyricLine::Word word;
-                                                                word.text = xml.attributes().value("text").toString();
-                                                                word.startFraction = xml.attributes().value("startFraction").toDouble();
-                                                                word.endFraction = xml.attributes().value("endFraction").toDouble();
-                                                                lyric.words.append(word);
-                                                                xml.skipCurrentElement();
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            metadata.lyricLines.append(lyric);
-                                        }
-                                    }
-                                } else if (sectionName == "Keys") {
-                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Keys")) {
-                                        xml.readNext();
-                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "KeyChange") {
-                                            KeyChangeEvent key;
-                                            key.bar = xml.attributes().value("bar").toDouble();
-                                            key.key = xml.attributes().value("name").toString();
-                                            metadata.keyChanges.append(key);
-                                            xml.skipCurrentElement();
-                                        }
-                                    }
-                                } else if (sectionName == "Tempos") {
-                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "Tempos")) {
-                                        xml.readNext();
-                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "TempoChange") {
-                                            TempoChangeEvent tempo;
-                                            tempo.bar = xml.attributes().value("bar").toDouble();
-                                            tempo.bpm = xml.attributes().value("bpm").toInt();
-                                            metadata.tempoChanges.append(tempo);
-                                            xml.skipCurrentElement();
-                                        }
-                                    }
-                                } else if (sectionName == "TimeSignatures") {
-                                    while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name() == "TimeSignatures")) {
-                                        xml.readNext();
-                                        if (xml.tokenType() == QXmlStreamReader::StartElement && xml.name() == "TimeSignatureChange") {
-                                            TimeSignatureChangeEvent ts;
-                                            ts.bar = xml.attributes().value("bar").toDouble();
-                                            QString sig = xml.attributes().value("signature").toString();
-                                            QStringList parts = sig.split("/");
-                                            if (parts.size() == 2) {
-                                                ts.numerator = parts[0].toInt();
-                                                ts.denominator = parts[1].toInt();
-                                            }
-                                            metadata.timeSignatureChanges.append(ts);
-                                            xml.skipCurrentElement();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    if (xml.hasError()) {
-        qDebug() << "XML parsing error:" << xml.errorString();
-    }
-    
-    xmlFile.close();
-    qDebug() << "Loaded metadata for" << QFileInfo(trackPath).fileName() 
-             << "- Volume:" << metadata.volume 
-             << "Timeline bars:" << metadata.barMarkers.size()
-             << "Sections:" << metadata.sections.size();
-    
-    return metadata;
 }
 
 void MidiProcessor::processProgramChange(int programIndex) {
@@ -1156,31 +596,6 @@ void MidiProcessor::setTrackState(const std::string& trackId, bool newState) {
                 return;
             }
         }
-    }
-}
-
-void MidiProcessor::handleBackingTrackSelection(int note) {
-    if (note > 86) return;
-
-    int trackIndex = 86 - note;
-
-    if (trackIndex < 0 || trackIndex >= m_backingTracks.size()) {
-        {
-            std::lock_guard<std::mutex> lock(m_logMutex);
-            m_logQueue.push("Backing track index " + std::to_string(trackIndex) + " is out of range.");
-        }
-        return;
-    }
-
-    if (m_currentlyPlayingTrackIndex == trackIndex) { // Same track selected
-        if (m_player->playbackState() == QMediaPlayer::PlayingState) {
-            emit _internal_pauseTrack();
-        } else {
-            emit _internal_resumeTrack();
-        }
-    } else { // New track selected
-        m_currentlyPlayingTrackIndex = trackIndex;
-        emit _internal_playTrack(QUrl::fromLocalFile(m_backingTracks.at(trackIndex)));
     }
 }
 

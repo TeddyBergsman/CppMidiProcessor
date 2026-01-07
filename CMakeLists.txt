@@ -11,7 +11,7 @@ set(CMAKE_AUTOUIC ON)
 
 # Find Qt6. This requires CMAKE_PREFIX_PATH on Apple Silicon Macs.
 set(CMAKE_PREFIX_PATH "/opt/homebrew") # Use /usr/local for Intel Macs.
-find_package(Qt6 REQUIRED COMPONENTS Widgets Xml Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Xml)
 
 # --- Testing ---
 include(CTest)
@@ -146,7 +146,6 @@ target_link_libraries(CppMidiProcessor
   PRIVATE
   Qt6::Widgets
   Qt6::Xml
-  Qt6::Multimedia
   VirtuosoCore
   "-framework CoreMIDI"
   "-framework CoreAudio"

@@ -50,10 +50,6 @@ void PresetLoader::parseSettings(QXmlStreamReader& xml, Preset& preset) {
             preset.settings.ports[portId] = portName;
         } else if (elementName == "CommandNote") {
             preset.settings.commandNote = xml.readElementText().toInt();
-        } else if (elementName == "BackingTrackCommandNote") {
-            preset.settings.backingTrackCommandNote = xml.readElementText().toInt();
-        } else if (elementName == "BackingTrackDirectory") {
-            preset.settings.backingTrackDirectory = xml.readElementText();
         } else if (elementName == "DefaultTrackStates") {
             parseDefaultTrackStates(xml, preset);
         } else if (elementName == "PitchBendDeadZoneCents") { // NEW

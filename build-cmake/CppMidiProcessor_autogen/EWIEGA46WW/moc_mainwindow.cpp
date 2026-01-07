@@ -50,21 +50,6 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         "message",
         "onVerboseLogToggled",
         "checked",
-        "onBackingTracksLoaded",
-        "tracks",
-        "onBackingTrackStateChanged",
-        "trackIndex",
-        "QMediaPlayer::PlaybackState",
-        "state",
-        "onTransportClicked",
-        "onTrackPositionChanged",
-        "positionMs",
-        "onTrackDurationChanged",
-        "durationMs",
-        "onTimelineDataReceived",
-        "timelineJson",
-        "onSectionClicked",
-        "timeMs",
         "onVoiceControlToggled",
         "onTranscriptionReceived",
         "text",
@@ -97,56 +82,30 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         QtMocHelpers::SlotData<void(bool)>(10, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::Bool, 11 },
         }}),
-        // Slot 'onBackingTracksLoaded'
-        QtMocHelpers::SlotData<void(const QStringList &)>(12, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::QStringList, 13 },
-        }}),
-        // Slot 'onBackingTrackStateChanged'
-        QtMocHelpers::SlotData<void(int, QMediaPlayer::PlaybackState)>(14, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Int, 15 }, { 0x80000000 | 16, 17 },
-        }}),
-        // Slot 'onTransportClicked'
-        QtMocHelpers::SlotData<void()>(18, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onTrackPositionChanged'
-        QtMocHelpers::SlotData<void(qint64)>(19, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::LongLong, 20 },
-        }}),
-        // Slot 'onTrackDurationChanged'
-        QtMocHelpers::SlotData<void(qint64)>(21, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::LongLong, 22 },
-        }}),
-        // Slot 'onTimelineDataReceived'
-        QtMocHelpers::SlotData<void(const QString &)>(23, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::QString, 24 },
-        }}),
-        // Slot 'onSectionClicked'
-        QtMocHelpers::SlotData<void(qint64)>(25, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::LongLong, 26 },
-        }}),
         // Slot 'onVoiceControlToggled'
-        QtMocHelpers::SlotData<void(bool)>(27, 2, QMC::AccessPrivate, QMetaType::Void, {{
+        QtMocHelpers::SlotData<void(bool)>(12, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::Bool, 11 },
         }}),
         // Slot 'onTranscriptionReceived'
-        QtMocHelpers::SlotData<void(const QString &, double, const QStringList &, const QStringList &)>(28, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::QString, 29 }, { QMetaType::Double, 30 }, { QMetaType::QStringList, 31 }, { QMetaType::QStringList, 32 },
+        QtMocHelpers::SlotData<void(const QString &, double, const QStringList &, const QStringList &)>(13, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::QString, 14 }, { QMetaType::Double, 15 }, { QMetaType::QStringList, 16 }, { QMetaType::QStringList, 17 },
         }}),
         // Slot 'onVoiceConnectionStatusChanged'
-        QtMocHelpers::SlotData<void(bool)>(33, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 34 },
+        QtMocHelpers::SlotData<void(bool)>(18, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 19 },
         }}),
         // Slot 'onTransposeToggled'
-        QtMocHelpers::SlotData<void(bool)>(35, 2, QMC::AccessPrivate, QMetaType::Void, {{
+        QtMocHelpers::SlotData<void(bool)>(20, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::Bool, 11 },
         }}),
         // Slot 'openPreferences'
-        QtMocHelpers::SlotData<void()>(36, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(21, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'applyLegacyUiSetting'
-        QtMocHelpers::SlotData<void(bool)>(37, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 38 },
+        QtMocHelpers::SlotData<void(bool)>(22, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 23 },
         }}),
         // Slot 'openIRealHtml'
-        QtMocHelpers::SlotData<void()>(39, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(24, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -174,20 +133,13 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         case 1: _t->updateTrackUI((*reinterpret_cast< std::add_pointer_t<std::string>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<bool>>(_a[2]))); break;
         case 2: _t->logToConsole((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
         case 3: _t->onVerboseLogToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 4: _t->onBackingTracksLoaded((*reinterpret_cast< std::add_pointer_t<QStringList>>(_a[1]))); break;
-        case 5: _t->onBackingTrackStateChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<QMediaPlayer::PlaybackState>>(_a[2]))); break;
-        case 6: _t->onTransportClicked(); break;
-        case 7: _t->onTrackPositionChanged((*reinterpret_cast< std::add_pointer_t<qint64>>(_a[1]))); break;
-        case 8: _t->onTrackDurationChanged((*reinterpret_cast< std::add_pointer_t<qint64>>(_a[1]))); break;
-        case 9: _t->onTimelineDataReceived((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
-        case 10: _t->onSectionClicked((*reinterpret_cast< std::add_pointer_t<qint64>>(_a[1]))); break;
-        case 11: _t->onVoiceControlToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 12: _t->onTranscriptionReceived((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<QStringList>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<QStringList>>(_a[4]))); break;
-        case 13: _t->onVoiceConnectionStatusChanged((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 14: _t->onTransposeToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 15: _t->openPreferences(); break;
-        case 16: _t->applyLegacyUiSetting((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 17: _t->openIRealHtml(); break;
+        case 4: _t->onVoiceControlToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 5: _t->onTranscriptionReceived((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<QStringList>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<QStringList>>(_a[4]))); break;
+        case 6: _t->onVoiceConnectionStatusChanged((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 7: _t->onTransposeToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 8: _t->openPreferences(); break;
+        case 9: _t->applyLegacyUiSetting((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 10: _t->openIRealHtml(); break;
         default: ;
         }
     }
@@ -212,14 +164,14 @@ int MainWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 18)
+        if (_id < 11)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 18;
+        _id -= 11;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 18)
+        if (_id < 11)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 18;
+        _id -= 11;
     }
     return _id;
 }

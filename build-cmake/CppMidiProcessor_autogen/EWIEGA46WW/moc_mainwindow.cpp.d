@@ -941,13 +941,6 @@
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtGui.framework/Versions/A/Headers/qtguiglobal.h \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtGui.framework/Versions/A/Headers/qtransform.h \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtGui.framework/Versions/A/Headers/qwindowdefs.h \
-  /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/QMediaPlayer \
-  /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/qaudio.h \
-  /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/qmediaplayer.h \
-  /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/qtaudio.h \
-  /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/qtmultimedia-config.h \
-  /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/qtmultimediaexports.h \
-  /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/qtmultimediaglobal.h \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/QMainWindow \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qmainwindow.h \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qsizepolicy.h \

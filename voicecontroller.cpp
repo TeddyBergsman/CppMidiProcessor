@@ -32,8 +32,6 @@ VoiceController::VoiceController(const Preset& preset, QObject *parent)
             this, &VoiceController::errorOccurred);
     connect(m_worker, &VoiceControllerWorker::programCommandDetected,
             this, &VoiceController::programCommandDetected);
-    connect(m_worker, &VoiceControllerWorker::trackCommandDetected,
-            this, &VoiceController::trackCommandDetected);
     connect(m_worker, &VoiceControllerWorker::toggleCommandDetected,
             this, &VoiceController::toggleCommandDetected);
     
@@ -77,24 +75,6 @@ void VoiceController::onProgramChanged(int programIndex) {
 VoiceControllerWorker::VoiceControllerWorker(const Preset& preset, QObject *parent)
     : QObject(parent), m_preset(preset) {
     initializeNumberWords();
-    
-    // Load backing tracks list
-    QDir backingTracksDir(m_preset.settings.backingTrackDirectory);
-    qDebug() << "VoiceController: Loading tracks from:" << m_preset.settings.backingTrackDirectory;
-    QFileInfoList fileInfoList = backingTracksDir.entryInfoList(QStringList() << "*.mp3", QDir::Files);
-    for (const QFileInfo& fileInfo : fileInfoList) {
-        m_backingTracks.append(fileInfo.absoluteFilePath());
-    }
-    m_backingTracks.sort();
-    qDebug() << "VoiceController: Loaded" << m_backingTracks.size() << "tracks";
-    if (m_backingTracks.size() > 0) {
-        for (const QString& track : m_backingTracks) {
-            QFileInfo fi(track);
-            QString fullName = fi.fileName();
-            QString displayName = fullName.left(fullName.lastIndexOf('.'));
-            qDebug() << "  Track:" << displayName;
-        }
-    }
 }
 
 VoiceControllerWorker::~VoiceControllerWorker() {
@@ -336,11 +316,6 @@ void VoiceControllerWorker::parseVoiceCommand(const QString& text, double confid
         return;
     }
     
-    if (parseTrackCommand(lowerText)) {
-        qDebug() << "VoiceController: Matched as track command";
-        return;
-    }
-    
     if (parseToggleCommand(lowerText)) {
         qDebug() << "VoiceController: Matched as toggle command";
         return;
@@ -393,15 +368,6 @@ void VoiceControllerWorker::detectTriggerWords(const QString& text, QStringList&
         }
     }
     
-    // Track control triggers (yellow)
-    if (lowerText.contains("play")) {
-        triggers << "play";
-    }
-    if (lowerText.contains("stop") || lowerText.contains("pause")) {
-        if (lowerText.contains("stop")) triggers << "stop";
-        if (lowerText.contains("pause")) triggers << "pause";
-    }
-    
     // Toggle triggers (yellow)
     if (lowerText.contains("toggle") || lowerText.contains("turn on") || lowerText.contains("turn off")) {
         if (lowerText.contains("toggle")) triggers << "toggle";
@@ -435,41 +401,11 @@ void VoiceControllerWorker::detectTriggerWords(const QString& text, QStringList&
     }
     QString numberPattern = numberWords.join("|");
     
-    QRegularExpression numRe("\\b(program\\s*\\d+|track\\s*\\d+|\\d+|" + numberPattern + ")\\b");
+    QRegularExpression numRe("\\b(program\\s*\\d+|\\d+|" + numberPattern + ")\\b");
     QRegularExpressionMatchIterator matchIt = numRe.globalMatch(lowerText);
     while (matchIt.hasNext()) {
         QRegularExpressionMatch match = matchIt.next();
         targets << match.captured(0);
-    }
-    
-    // Track names if "play" was mentioned (green targets)
-    if (lowerText.contains("play")) {
-        // Find what track would be matched by fuzzy search
-        QRegularExpression playRe("play(?:\\s+play)*\\s*(?:the|a)?\\s*(.+)");
-        QRegularExpressionMatch match = playRe.match(lowerText);
-        
-        if (match.hasMatch()) {
-            QString trackQuery = match.captured(1).trimmed();
-            QString matchedTrack = fuzzyMatchTrackName(trackQuery);
-            
-            if (!matchedTrack.isEmpty()) {
-                QFileInfo fi(matchedTrack);
-                QString fullName = fi.fileName();
-                QString trackName = fullName.left(fullName.lastIndexOf('.')).toLower();
-                
-                // Remove leading numbers and punctuation
-                QRegularExpression leadingNum("^\\d+\\.\\s*");
-                trackName.remove(leadingNum);
-                
-                // Add individual words from the matched track name
-                QStringList trackWords = trackName.split(QRegularExpression("[\\s_.-]+"), Qt::SkipEmptyParts);
-                for (const QString& word : trackWords) {
-                    if (lowerText.contains(word) && word.length() > 2) {
-                        targets << word;
-                    }
-                }
-            }
-        }
     }
     
     // Remove duplicates
@@ -515,64 +451,6 @@ bool VoiceControllerWorker::parseProgramCommand(const QString& text) {
         if (programIndex >= 0) {
             emit programCommandDetected(programIndex);
             return true;
-        }
-    }
-    
-    return false;
-}
-
-bool VoiceControllerWorker::parseTrackCommand(const QString& text) {
-    // Check for stop command first
-    if (text.contains("stop") || (text.contains("pause") && !text.contains("play"))) {
-        emit trackCommandDetected(-1, false); // -1 means stop current
-        return true;
-    }
-    
-    // More flexible play pattern that handles multiple "play" words and optional connecting words
-    QRegularExpression playRe("play(?:\\s+play)*\\s*(?:the|a)?\\s*(.+)");
-    QRegularExpressionMatch match = playRe.match(text);
-    
-    if (match.hasMatch()) {
-        QString target = match.captured(1).trimmed();
-        qDebug() << "VoiceController: parseTrackCommand - target:" << target;
-        qDebug() << "VoiceController: Available tracks:" << m_backingTracks;
-        
-        // Convert number words to digits
-        QString convertedTarget = convertNumberWordsToDigits(target);
-        
-        // Check if it's a track number
-        QRegularExpression trackNumRe("track\\s*(\\d+)");
-        QRegularExpressionMatch numMatch = trackNumRe.match(convertedTarget);
-        
-        if (numMatch.hasMatch()) {
-            int trackNum = numMatch.captured(1).toInt();
-            // Convert 1-based to 0-based index
-            if (trackNum > 0 && trackNum <= m_backingTracks.size()) {
-                qDebug() << "VoiceController: Detected track number:" << trackNum;
-                emit trackCommandDetected(trackNum - 1, true);
-                return true;
-            }
-        }
-        
-        // Check if it's just a number
-        bool isNumber;
-        int num = convertedTarget.toInt(&isNumber);
-        if (isNumber && num > 0 && num <= m_backingTracks.size()) {
-            qDebug() << "VoiceController: Detected number:" << num;
-            emit trackCommandDetected(num - 1, true);
-            return true;
-        }
-        
-        // Try fuzzy matching on track name
-        QString matchedTrack = fuzzyMatchTrackName(target);
-        qDebug() << "VoiceController: Fuzzy match result:" << matchedTrack;
-        if (!matchedTrack.isEmpty()) {
-            int index = m_backingTracks.indexOf(matchedTrack);
-            if (index >= 0) {
-                qDebug() << "VoiceController: Playing track at index:" << index << "path:" << matchedTrack;
-                emit trackCommandDetected(index, true);
-                return true;
-            }
         }
     }
     
@@ -743,77 +621,6 @@ QString VoiceControllerWorker::convertNumberWordsToDigits(const QString& text) {
 
 int VoiceControllerWorker::wordToNumber(const QString& word) {
     return m_numberWords.value(word.toLower(), -1);
-}
-
-QString VoiceControllerWorker::fuzzyMatchTrackName(const QString& input) {
-    QString bestMatch;
-    int bestScore = 0;
-    
-    qDebug() << "VoiceController: fuzzyMatchTrackName - input:" << input;
-    
-    for (const QString& track : m_backingTracks) {
-        QFileInfo fi(track);
-        QString fullName = fi.fileName(); // Get full filename including extension
-        QString trackName = fullName.left(fullName.lastIndexOf('.')).toLower(); // Remove extension
-        
-        // Remove leading numbers and punctuation (e.g., "1. " from "1. My Funny Valentine")
-        QString cleanTrackName = trackName;
-        QRegularExpression leadingNum("^\\d+\\.\\s*");
-        cleanTrackName.remove(leadingNum);
-        
-        // Split both input and track name into words
-        QStringList inputWords = input.toLower().split(QRegularExpression("[\\s_.-]+"), Qt::SkipEmptyParts);
-        QStringList trackWords = cleanTrackName.split(QRegularExpression("[\\s_.-]+"), Qt::SkipEmptyParts);
-        
-        qDebug() << "  Comparing with track:" << trackName << "clean:" << cleanTrackName;
-        qDebug() << "  Input words:" << inputWords;
-        qDebug() << "  Track words:" << trackWords;
-        
-        int score = 0;
-        
-        // Check if all input words appear in the track name
-        bool allWordsFound = true;
-        for (const QString& inputWord : inputWords) {
-            bool wordFound = false;
-            for (const QString& trackWord : trackWords) {
-                if (trackWord.startsWith(inputWord) || trackWord == inputWord) {
-                    wordFound = true;
-                    score += inputWord.length() * 2; // Bonus for exact/prefix match
-                    break;
-                } else if (trackWord.contains(inputWord) && inputWord.length() > 2) {
-                    wordFound = true;
-                    score += inputWord.length(); // Lower score for partial match
-                }
-            }
-            if (!wordFound) {
-                allWordsFound = false;
-            }
-        }
-        
-        // Bonus if all words were found
-        if (allWordsFound && inputWords.size() > 0) {
-            score += 10;
-        }
-        
-        // Bonus for matching word order
-        QString inputJoined = inputWords.join(" ");
-        QString trackJoined = trackWords.join(" ");
-        if (trackJoined.contains(inputJoined)) {
-            score += 20;
-        }
-        
-        qDebug() << "  Score:" << score << "allWordsFound:" << allWordsFound;
-        
-        if (score > bestScore) {
-            bestScore = score;
-            bestMatch = track;
-        }
-    }
-    
-    qDebug() << "VoiceController: Best match score:" << bestScore << "track:" << bestMatch;
-    
-    // Only return a match if we have a reasonable score
-    return (bestScore > 5) ? bestMatch : QString();
 }
 
 int VoiceControllerWorker::findProgramByNameOrTag(const QString& search) {

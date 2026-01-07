@@ -48,22 +48,6 @@ template <> constexpr inline auto MidiProcessor::qt_create_metaobjectdata<qt_met
         "newState",
         "logMessage",
         "message",
-        "backingTracksLoaded",
-        "trackList",
-        "backingTrackStateChanged",
-        "trackIndex",
-        "QMediaPlayer::PlaybackState",
-        "state",
-        "_internal_playTrack",
-        "url",
-        "_internal_pauseTrack",
-        "_internal_resumeTrack",
-        "backingTrackPositionChanged",
-        "position",
-        "backingTrackDurationChanged",
-        "duration",
-        "backingTrackTimelineUpdated",
-        "timelineJson",
         "guitarPitchUpdated",
         "midiNote",
         "cents",
@@ -86,17 +70,11 @@ template <> constexpr inline auto MidiProcessor::qt_create_metaobjectdata<qt_met
         "toggleTrack",
         "setVerbose",
         "verbose",
-        "playTrack",
-        "index",
-        "pauseTrack",
-        "seekToPosition",
-        "positionMs",
         "setVoiceControlEnabled",
         "enabled",
         "setTranspose",
         "semitones",
         "applyTranspose",
-        "loadTrackTimeline",
         "sendVirtualNoteOn",
         "channel",
         "note",
@@ -105,13 +83,7 @@ template <> constexpr inline auto MidiProcessor::qt_create_metaobjectdata<qt_met
         "sendVirtualCC",
         "cc",
         "panicAllChannels",
-        "pollLogQueue",
-        "onPlayerStateChanged",
-        "onInternalPlay",
-        "onInternalPause",
-        "onInternalResume",
-        "onPlayerPositionChanged",
-        "onPlayerDurationChanged"
+        "pollLogQueue"
     };
 
     QtMocHelpers::UintData qt_methods {
@@ -127,160 +99,98 @@ template <> constexpr inline auto MidiProcessor::qt_create_metaobjectdata<qt_met
         QtMocHelpers::SignalData<void(const QString &)>(8, 2, QMC::AccessPublic, QMetaType::Void, {{
             { QMetaType::QString, 9 },
         }}),
-        // Signal 'backingTracksLoaded'
-        QtMocHelpers::SignalData<void(const QStringList &)>(10, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::QStringList, 11 },
-        }}),
-        // Signal 'backingTrackStateChanged'
-        QtMocHelpers::SignalData<void(int, QMediaPlayer::PlaybackState)>(12, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 13 }, { 0x80000000 | 14, 15 },
-        }}),
-        // Signal '_internal_playTrack'
-        QtMocHelpers::SignalData<void(const QUrl &)>(16, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::QUrl, 17 },
-        }}),
-        // Signal '_internal_pauseTrack'
-        QtMocHelpers::SignalData<void()>(18, 2, QMC::AccessPublic, QMetaType::Void),
-        // Signal '_internal_resumeTrack'
-        QtMocHelpers::SignalData<void()>(19, 2, QMC::AccessPublic, QMetaType::Void),
-        // Signal 'backingTrackPositionChanged'
-        QtMocHelpers::SignalData<void(qint64)>(20, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::LongLong, 21 },
-        }}),
-        // Signal 'backingTrackDurationChanged'
-        QtMocHelpers::SignalData<void(qint64)>(22, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::LongLong, 23 },
-        }}),
-        // Signal 'backingTrackTimelineUpdated'
-        QtMocHelpers::SignalData<void(const QString &)>(24, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::QString, 25 },
-        }}),
         // Signal 'guitarPitchUpdated'
-        QtMocHelpers::SignalData<void(int, double)>(26, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 27 }, { QMetaType::Double, 28 },
+        QtMocHelpers::SignalData<void(int, double)>(10, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 11 }, { QMetaType::Double, 12 },
         }}),
         // Signal 'voicePitchUpdated'
-        QtMocHelpers::SignalData<void(int, double)>(29, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 27 }, { QMetaType::Double, 28 },
+        QtMocHelpers::SignalData<void(int, double)>(13, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 11 }, { QMetaType::Double, 12 },
         }}),
         // Signal 'guitarHzUpdated'
-        QtMocHelpers::SignalData<void(double)>(30, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Double, 31 },
+        QtMocHelpers::SignalData<void(double)>(14, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Double, 15 },
         }}),
         // Signal 'voiceHzUpdated'
-        QtMocHelpers::SignalData<void(double)>(32, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Double, 31 },
+        QtMocHelpers::SignalData<void(double)>(16, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Double, 15 },
         }}),
         // Signal 'guitarAftertouchUpdated'
-        QtMocHelpers::SignalData<void(int)>(33, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 34 },
+        QtMocHelpers::SignalData<void(int)>(17, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 18 },
         }}),
         // Signal 'voiceCc2Updated'
-        QtMocHelpers::SignalData<void(int)>(35, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 34 },
+        QtMocHelpers::SignalData<void(int)>(19, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 18 },
         }}),
         // Signal 'voiceCc2Stream'
-        QtMocHelpers::SignalData<void(int)>(36, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 34 },
+        QtMocHelpers::SignalData<void(int)>(20, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 18 },
         }}),
         // Signal 'guitarVelocityUpdated'
-        QtMocHelpers::SignalData<void(int)>(37, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 34 },
+        QtMocHelpers::SignalData<void(int)>(21, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 18 },
         }}),
         // Signal 'guitarNoteOn'
-        QtMocHelpers::SignalData<void(int, int)>(38, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 27 }, { QMetaType::Int, 39 },
+        QtMocHelpers::SignalData<void(int, int)>(22, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 11 }, { QMetaType::Int, 23 },
         }}),
         // Signal 'guitarNoteOff'
-        QtMocHelpers::SignalData<void(int)>(40, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 27 },
+        QtMocHelpers::SignalData<void(int)>(24, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 11 },
         }}),
         // Signal 'voiceNoteOn'
-        QtMocHelpers::SignalData<void(int, int)>(41, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 27 }, { QMetaType::Int, 39 },
+        QtMocHelpers::SignalData<void(int, int)>(25, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 11 }, { QMetaType::Int, 23 },
         }}),
         // Signal 'voiceNoteOff'
-        QtMocHelpers::SignalData<void(int)>(42, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 27 },
+        QtMocHelpers::SignalData<void(int)>(26, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 11 },
         }}),
         // Slot 'applyProgram'
-        QtMocHelpers::SlotData<void(int)>(43, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 44 },
+        QtMocHelpers::SlotData<void(int)>(27, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 28 },
         }}),
         // Slot 'toggleTrack'
-        QtMocHelpers::SlotData<void(const std::string &)>(45, 2, QMC::AccessPublic, QMetaType::Void, {{
+        QtMocHelpers::SlotData<void(const std::string &)>(29, 2, QMC::AccessPublic, QMetaType::Void, {{
             { 0x80000000 | 5, 6 },
         }}),
         // Slot 'setVerbose'
-        QtMocHelpers::SlotData<void(bool)>(46, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Bool, 47 },
-        }}),
-        // Slot 'playTrack'
-        QtMocHelpers::SlotData<void(int)>(48, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 49 },
-        }}),
-        // Slot 'pauseTrack'
-        QtMocHelpers::SlotData<void()>(50, 2, QMC::AccessPublic, QMetaType::Void),
-        // Slot 'seekToPosition'
-        QtMocHelpers::SlotData<void(qint64)>(51, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::LongLong, 52 },
+        QtMocHelpers::SlotData<void(bool)>(30, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Bool, 31 },
         }}),
         // Slot 'setVoiceControlEnabled'
-        QtMocHelpers::SlotData<void(bool)>(53, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Bool, 54 },
+        QtMocHelpers::SlotData<void(bool)>(32, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Bool, 33 },
         }}),
         // Slot 'setTranspose'
-        QtMocHelpers::SlotData<void(int)>(55, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 56 },
+        QtMocHelpers::SlotData<void(int)>(34, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 35 },
         }}),
         // Slot 'applyTranspose'
-        QtMocHelpers::SlotData<void(int)>(57, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 56 },
-        }}),
-        // Slot 'loadTrackTimeline'
-        QtMocHelpers::SlotData<void(int)>(58, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 49 },
+        QtMocHelpers::SlotData<void(int)>(36, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 35 },
         }}),
         // Slot 'sendVirtualNoteOn'
-        QtMocHelpers::SlotData<void(int, int, int)>(59, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 60 }, { QMetaType::Int, 61 }, { QMetaType::Int, 39 },
+        QtMocHelpers::SlotData<void(int, int, int)>(37, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 38 }, { QMetaType::Int, 39 }, { QMetaType::Int, 23 },
         }}),
         // Slot 'sendVirtualNoteOff'
-        QtMocHelpers::SlotData<void(int, int)>(62, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 60 }, { QMetaType::Int, 61 },
+        QtMocHelpers::SlotData<void(int, int)>(40, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 38 }, { QMetaType::Int, 39 },
         }}),
         // Slot 'sendVirtualAllNotesOff'
-        QtMocHelpers::SlotData<void(int)>(63, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 60 },
+        QtMocHelpers::SlotData<void(int)>(41, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 38 },
         }}),
         // Slot 'sendVirtualCC'
-        QtMocHelpers::SlotData<void(int, int, int)>(64, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 60 }, { QMetaType::Int, 65 }, { QMetaType::Int, 34 },
+        QtMocHelpers::SlotData<void(int, int, int)>(42, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 38 }, { QMetaType::Int, 43 }, { QMetaType::Int, 18 },
         }}),
         // Slot 'panicAllChannels'
-        QtMocHelpers::SlotData<void()>(66, 2, QMC::AccessPublic, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(44, 2, QMC::AccessPublic, QMetaType::Void),
         // Slot 'pollLogQueue'
-        QtMocHelpers::SlotData<void()>(67, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onPlayerStateChanged'
-        QtMocHelpers::SlotData<void(QMediaPlayer::PlaybackState)>(68, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { 0x80000000 | 14, 15 },
-        }}),
-        // Slot 'onInternalPlay'
-        QtMocHelpers::SlotData<void(const QUrl &)>(69, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::QUrl, 17 },
-        }}),
-        // Slot 'onInternalPause'
-        QtMocHelpers::SlotData<void()>(70, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onInternalResume'
-        QtMocHelpers::SlotData<void()>(71, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onPlayerPositionChanged'
-        QtMocHelpers::SlotData<void(qint64)>(72, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::LongLong, 21 },
-        }}),
-        // Slot 'onPlayerDurationChanged'
-        QtMocHelpers::SlotData<void(qint64)>(73, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::LongLong, 23 },
-        }}),
+        QtMocHelpers::SlotData<void()>(45, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -307,48 +217,30 @@ void MidiProcessor::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _i
         case 0: _t->programChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
         case 1: _t->trackStateUpdated((*reinterpret_cast< std::add_pointer_t<std::string>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<bool>>(_a[2]))); break;
         case 2: _t->logMessage((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
-        case 3: _t->backingTracksLoaded((*reinterpret_cast< std::add_pointer_t<QStringList>>(_a[1]))); break;
-        case 4: _t->backingTrackStateChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<QMediaPlayer::PlaybackState>>(_a[2]))); break;
-        case 5: _t->_internal_playTrack((*reinterpret_cast< std::add_pointer_t<QUrl>>(_a[1]))); break;
-        case 6: _t->_internal_pauseTrack(); break;
-        case 7: _t->_internal_resumeTrack(); break;
-        case 8: _t->backingTrackPositionChanged((*reinterpret_cast< std::add_pointer_t<qint64>>(_a[1]))); break;
-        case 9: _t->backingTrackDurationChanged((*reinterpret_cast< std::add_pointer_t<qint64>>(_a[1]))); break;
-        case 10: _t->backingTrackTimelineUpdated((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
-        case 11: _t->guitarPitchUpdated((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
-        case 12: _t->voicePitchUpdated((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
-        case 13: _t->guitarHzUpdated((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
-        case 14: _t->voiceHzUpdated((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
-        case 15: _t->guitarAftertouchUpdated((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 16: _t->voiceCc2Updated((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 17: _t->voiceCc2Stream((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 18: _t->guitarVelocityUpdated((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 19: _t->guitarNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
-        case 20: _t->guitarNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 21: _t->voiceNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
-        case 22: _t->voiceNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 23: _t->applyProgram((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 24: _t->toggleTrack((*reinterpret_cast< std::add_pointer_t<std::string>>(_a[1]))); break;
-        case 25: _t->setVerbose((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 26: _t->playTrack((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 27: _t->pauseTrack(); break;
-        case 28: _t->seekToPosition((*reinterpret_cast< std::add_pointer_t<qint64>>(_a[1]))); break;
-        case 29: _t->setVoiceControlEnabled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 30: _t->setTranspose((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 31: _t->applyTranspose((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 32: _t->loadTrackTimeline((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 33: _t->sendVirtualNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3]))); break;
-        case 34: _t->sendVirtualNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
-        case 35: _t->sendVirtualAllNotesOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 36: _t->sendVirtualCC((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3]))); break;
-        case 37: _t->panicAllChannels(); break;
-        case 38: _t->pollLogQueue(); break;
-        case 39: _t->onPlayerStateChanged((*reinterpret_cast< std::add_pointer_t<QMediaPlayer::PlaybackState>>(_a[1]))); break;
-        case 40: _t->onInternalPlay((*reinterpret_cast< std::add_pointer_t<QUrl>>(_a[1]))); break;
-        case 41: _t->onInternalPause(); break;
-        case 42: _t->onInternalResume(); break;
-        case 43: _t->onPlayerPositionChanged((*reinterpret_cast< std::add_pointer_t<qint64>>(_a[1]))); break;
-        case 44: _t->onPlayerDurationChanged((*reinterpret_cast< std::add_pointer_t<qint64>>(_a[1]))); break;
+        case 3: _t->guitarPitchUpdated((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
+        case 4: _t->voicePitchUpdated((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
+        case 5: _t->guitarHzUpdated((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
+        case 6: _t->voiceHzUpdated((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
+        case 7: _t->guitarAftertouchUpdated((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 8: _t->voiceCc2Updated((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 9: _t->voiceCc2Stream((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 10: _t->guitarVelocityUpdated((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 11: _t->guitarNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
+        case 12: _t->guitarNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 13: _t->voiceNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
+        case 14: _t->voiceNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 15: _t->applyProgram((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 16: _t->toggleTrack((*reinterpret_cast< std::add_pointer_t<std::string>>(_a[1]))); break;
+        case 17: _t->setVerbose((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 18: _t->setVoiceControlEnabled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 19: _t->setTranspose((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 20: _t->applyTranspose((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 21: _t->sendVirtualNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3]))); break;
+        case 22: _t->sendVirtualNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
+        case 23: _t->sendVirtualAllNotesOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 24: _t->sendVirtualCC((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3]))); break;
+        case 25: _t->panicAllChannels(); break;
+        case 26: _t->pollLogQueue(); break;
         default: ;
         }
     }
@@ -359,45 +251,29 @@ void MidiProcessor::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _i
             return;
         if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(const QString & )>(_a, &MidiProcessor::logMessage, 2))
             return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(const QStringList & )>(_a, &MidiProcessor::backingTracksLoaded, 3))
+        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int , double )>(_a, &MidiProcessor::guitarPitchUpdated, 3))
             return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int , QMediaPlayer::PlaybackState )>(_a, &MidiProcessor::backingTrackStateChanged, 4))
+        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int , double )>(_a, &MidiProcessor::voicePitchUpdated, 4))
             return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(const QUrl & )>(_a, &MidiProcessor::_internal_playTrack, 5))
+        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(double )>(_a, &MidiProcessor::guitarHzUpdated, 5))
             return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)()>(_a, &MidiProcessor::_internal_pauseTrack, 6))
+        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(double )>(_a, &MidiProcessor::voiceHzUpdated, 6))
             return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)()>(_a, &MidiProcessor::_internal_resumeTrack, 7))
+        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int )>(_a, &MidiProcessor::guitarAftertouchUpdated, 7))
             return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(qint64 )>(_a, &MidiProcessor::backingTrackPositionChanged, 8))
+        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int )>(_a, &MidiProcessor::voiceCc2Updated, 8))
             return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(qint64 )>(_a, &MidiProcessor::backingTrackDurationChanged, 9))
+        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int )>(_a, &MidiProcessor::voiceCc2Stream, 9))
             return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(const QString & )>(_a, &MidiProcessor::backingTrackTimelineUpdated, 10))
+        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int )>(_a, &MidiProcessor::guitarVelocityUpdated, 10))
             return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int , double )>(_a, &MidiProcessor::guitarPitchUpdated, 11))
+        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int , int )>(_a, &MidiProcessor::guitarNoteOn, 11))
             return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int , double )>(_a, &MidiProcessor::voicePitchUpdated, 12))
+        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int )>(_a, &MidiProcessor::guitarNoteOff, 12))
             return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(double )>(_a, &MidiProcessor::guitarHzUpdated, 13))
+        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int , int )>(_a, &MidiProcessor::voiceNoteOn, 13))
             return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(double )>(_a, &MidiProcessor::voiceHzUpdated, 14))
-            return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int )>(_a, &MidiProcessor::guitarAftertouchUpdated, 15))
-            return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int )>(_a, &MidiProcessor::voiceCc2Updated, 16))
-            return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int )>(_a, &MidiProcessor::voiceCc2Stream, 17))
-            return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int )>(_a, &MidiProcessor::guitarVelocityUpdated, 18))
-            return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int , int )>(_a, &MidiProcessor::guitarNoteOn, 19))
-            return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int )>(_a, &MidiProcessor::guitarNoteOff, 20))
-            return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int , int )>(_a, &MidiProcessor::voiceNoteOn, 21))
-            return;
-        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int )>(_a, &MidiProcessor::voiceNoteOff, 22))
+        if (QtMocHelpers::indexOfMethod<void (MidiProcessor::*)(int )>(_a, &MidiProcessor::voiceNoteOff, 14))
             return;
     }
 }
@@ -421,14 +297,14 @@ int MidiProcessor::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 45)
+        if (_id < 27)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 45;
+        _id -= 27;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 45)
+        if (_id < 27)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 45;
+        _id -= 27;
     }
     return _id;
 }
@@ -452,122 +328,74 @@ void MidiProcessor::logMessage(const QString & _t1)
 }
 
 // SIGNAL 3
-void MidiProcessor::backingTracksLoaded(const QStringList & _t1)
+void MidiProcessor::guitarPitchUpdated(int _t1, double _t2)
 {
-    QMetaObject::activate<void>(this, &staticMetaObject, 3, nullptr, _t1);
+    QMetaObject::activate<void>(this, &staticMetaObject, 3, nullptr, _t1, _t2);
 }
 
 // SIGNAL 4
-void MidiProcessor::backingTrackStateChanged(int _t1, QMediaPlayer::PlaybackState _t2)
+void MidiProcessor::voicePitchUpdated(int _t1, double _t2)
 {
     QMetaObject::activate<void>(this, &staticMetaObject, 4, nullptr, _t1, _t2);
 }
 
 // SIGNAL 5
-void MidiProcessor::_internal_playTrack(const QUrl & _t1)
+void MidiProcessor::guitarHzUpdated(double _t1)
 {
     QMetaObject::activate<void>(this, &staticMetaObject, 5, nullptr, _t1);
 }
 
 // SIGNAL 6
-void MidiProcessor::_internal_pauseTrack()
+void MidiProcessor::voiceHzUpdated(double _t1)
 {
-    QMetaObject::activate(this, &staticMetaObject, 6, nullptr);
+    QMetaObject::activate<void>(this, &staticMetaObject, 6, nullptr, _t1);
 }
 
 // SIGNAL 7
-void MidiProcessor::_internal_resumeTrack()
+void MidiProcessor::guitarAftertouchUpdated(int _t1)
 {
-    QMetaObject::activate(this, &staticMetaObject, 7, nullptr);
+    QMetaObject::activate<void>(this, &staticMetaObject, 7, nullptr, _t1);
 }
 
 // SIGNAL 8
-void MidiProcessor::backingTrackPositionChanged(qint64 _t1)
+void MidiProcessor::voiceCc2Updated(int _t1)
 {
     QMetaObject::activate<void>(this, &staticMetaObject, 8, nullptr, _t1);
 }
 
 // SIGNAL 9
-void MidiProcessor::backingTrackDurationChanged(qint64 _t1)
+void MidiProcessor::voiceCc2Stream(int _t1)
 {
     QMetaObject::activate<void>(this, &staticMetaObject, 9, nullptr, _t1);
 }
 
 // SIGNAL 10
-void MidiProcessor::backingTrackTimelineUpdated(const QString & _t1)
+void MidiProcessor::guitarVelocityUpdated(int _t1)
 {
     QMetaObject::activate<void>(this, &staticMetaObject, 10, nullptr, _t1);
 }
 
 // SIGNAL 11
-void MidiProcessor::guitarPitchUpdated(int _t1, double _t2)
+void MidiProcessor::guitarNoteOn(int _t1, int _t2)
 {
     QMetaObject::activate<void>(this, &staticMetaObject, 11, nullptr, _t1, _t2);
 }
 
 // SIGNAL 12
-void MidiProcessor::voicePitchUpdated(int _t1, double _t2)
+void MidiProcessor::guitarNoteOff(int _t1)
 {
-    QMetaObject::activate<void>(this, &staticMetaObject, 12, nullptr, _t1, _t2);
+    QMetaObject::activate<void>(this, &staticMetaObject, 12, nullptr, _t1);
 }
 
 // SIGNAL 13
-void MidiProcessor::guitarHzUpdated(double _t1)
+void MidiProcessor::voiceNoteOn(int _t1, int _t2)
 {
-    QMetaObject::activate<void>(this, &staticMetaObject, 13, nullptr, _t1);
+    QMetaObject::activate<void>(this, &staticMetaObject, 13, nullptr, _t1, _t2);
 }
 
 // SIGNAL 14
-void MidiProcessor::voiceHzUpdated(double _t1)
-{
-    QMetaObject::activate<void>(this, &staticMetaObject, 14, nullptr, _t1);
-}
-
-// SIGNAL 15
-void MidiProcessor::guitarAftertouchUpdated(int _t1)
-{
-    QMetaObject::activate<void>(this, &staticMetaObject, 15, nullptr, _t1);
-}
-
-// SIGNAL 16
-void MidiProcessor::voiceCc2Updated(int _t1)
-{
-    QMetaObject::activate<void>(this, &staticMetaObject, 16, nullptr, _t1);
-}
-
-// SIGNAL 17
-void MidiProcessor::voiceCc2Stream(int _t1)
-{
-    QMetaObject::activate<void>(this, &staticMetaObject, 17, nullptr, _t1);
-}
-
-// SIGNAL 18
-void MidiProcessor::guitarVelocityUpdated(int _t1)
-{
-    QMetaObject::activate<void>(this, &staticMetaObject, 18, nullptr, _t1);
-}
-
-// SIGNAL 19
-void MidiProcessor::guitarNoteOn(int _t1, int _t2)
-{
-    QMetaObject::activate<void>(this, &staticMetaObject, 19, nullptr, _t1, _t2);
-}
-
-// SIGNAL 20
-void MidiProcessor::guitarNoteOff(int _t1)
-{
-    QMetaObject::activate<void>(this, &staticMetaObject, 20, nullptr, _t1);
-}
-
-// SIGNAL 21
-void MidiProcessor::voiceNoteOn(int _t1, int _t2)
-{
-    QMetaObject::activate<void>(this, &staticMetaObject, 21, nullptr, _t1, _t2);
-}
-
-// SIGNAL 22
 void MidiProcessor::voiceNoteOff(int _t1)
 {
-    QMetaObject::activate<void>(this, &staticMetaObject, 22, nullptr, _t1);
+    QMetaObject::activate<void>(this, &staticMetaObject, 14, nullptr, _t1);
 }
 QT_WARNING_POP

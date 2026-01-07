@@ -12,12 +12,8 @@
 #include <condition_variable>
 #include <queue>
 #include <deque>
-#include <QMediaPlayer>
-#include <QStringList>
 #include "RtMidi.h"
 #include "PresetData.h"
-
-class QAudioOutput;
 
 class MidiProcessor : public QObject {
     Q_OBJECT
@@ -32,13 +28,9 @@ public slots:
     void applyProgram(int programIndex);
     void toggleTrack(const std::string& trackId);
     void setVerbose(bool verbose);
-    void playTrack(int index);
-    void pauseTrack();
-    void seekToPosition(qint64 positionMs);
     void setVoiceControlEnabled(bool enabled);
     void setTranspose(int semitones);
     void applyTranspose(int semitones);
-    void loadTrackTimeline(int index);
     // Virtual musician MIDI (thread-safe; enqueued to worker thread)
     void sendVirtualNoteOn(int channel, int note, int velocity);
     void sendVirtualNoteOff(int channel, int note);
@@ -51,28 +43,11 @@ public slots:
 
 private slots:
     void pollLogQueue();
-    void onPlayerStateChanged(QMediaPlayer::PlaybackState state);
-    // NEW: Thread-safe slots to control the player
-    void onInternalPlay(const QUrl& url);
-    void onInternalPause();
-    void onInternalResume();
-    void onPlayerPositionChanged(qint64 position);
-    void onPlayerDurationChanged(qint64 duration);
-
 
 signals:
     void programChanged(int newProgramIndex);
     void trackStateUpdated(const std::string& trackId, bool newState);
     void logMessage(const QString& message);
-    void backingTracksLoaded(const QStringList& trackList);
-    void backingTrackStateChanged(int trackIndex, QMediaPlayer::PlaybackState state);
-    // NEW: Internal signals for cross-thread communication
-    void _internal_playTrack(const QUrl& url);
-    void _internal_pauseTrack();
-    void _internal_resumeTrack();
-    void backingTrackPositionChanged(qint64 position);
-    void backingTrackDurationChanged(qint64 duration);
-    void backingTrackTimelineUpdated(const QString& timelineJson);
     // Low-latency pitch updates for UI
     void guitarPitchUpdated(int midiNote, double cents);
     void voicePitchUpdated(int midiNote, double cents);
@@ -95,7 +70,7 @@ signals:
     void voiceNoteOff(int midiNote);
 
 private:
-    enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, PLAY_TRACK, PAUSE_TRACK, TRANSPOSE_CHANGE };
+    enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, TRANSPOSE_CHANGE };
     enum class MidiSource { Guitar, VoiceAmp, VoicePitch, VirtualBand };
     struct MidiEvent {
         EventType type;
@@ -104,7 +79,6 @@ private:
         int programIndex; // For PROGRAM_CHANGE/PLAY_TRACK this is index; for TRANSPOSE_CHANGE this is semitone amount
         std::string trackId;
     };
-    void handleBackingTrackSelection(int note);
     bool tryEnqueueEvent(MidiEvent&& ev);
     static bool isCriticalMidiEvent(const MidiEvent& ev);
 
@@ -135,8 +109,6 @@ private:
     void processPitchBend();
     double noteToFrequency(int note) const;
     void precalculateRatios();
-    void loadBackingTracks();
-    TrackMetadata loadTrackMetadata(const QString& trackPath);
     void emitPitchIfChanged(bool isGuitar);
     void hzToNoteAndCents(double hz, int& noteOut, double& centsOut) const;
     // Defensive MIDI output: never crash due to RtMidi exceptions or null output.
@@ -148,13 +120,6 @@ private:
     RtMidiIn* midiInVoice = nullptr;       // Voice amplitude (aftertouch) source
     RtMidiIn* midiInVoicePitch = nullptr;  // Voice accurate pitch/note source
     bool m_voicePitchAvailable = false;
-
-    // --- Audio Player ---
-    QMediaPlayer* m_player = nullptr;
-    QAudioOutput* m_audioOutput = nullptr;
-    QStringList m_backingTracks;
-    int m_currentlyPlayingTrackIndex = -1;
-    bool m_backingTrackSelectionMode = false;
 
 
     // --- State (Confined to Worker Thread) ---

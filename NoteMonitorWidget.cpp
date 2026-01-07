@@ -16,6 +16,7 @@
 #include <QSettings>
 #include <QJsonDocument>
 #include <QEasingCurve>
+#include <QImage>
 
 namespace {
 static QString normalizeKeyCenter(const QString& s) {
@@ -92,6 +93,50 @@ static QStringList orderedMinorKeyCenters() {
 
 static QStringList keyCentersForMode(bool isMinor) {
     return isMinor ? orderedMinorKeyCenters() : orderedMajorKeyCenters();
+}
+
+static QIcon makeWhiteIcon(const QIcon& src, const QSize& logicalSize, qreal dpr) {
+    auto tint = [&](const QPixmap& pm) -> QPixmap {
+        if (pm.isNull()) return pm;
+        QImage img = pm.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        const int w = img.width();
+        const int h = img.height();
+        for (int y = 0; y < h; ++y) {
+            QRgb* row = reinterpret_cast<QRgb*>(img.scanLine(y));
+            for (int x = 0; x < w; ++x) {
+                const int a = qAlpha(row[x]);
+                row[x] = qRgba(255, 255, 255, a);
+            }
+        }
+        QPixmap out = QPixmap::fromImage(img);
+        out.setDevicePixelRatio(pm.devicePixelRatio());
+        return out;
+    };
+
+    const QSize pxSize = QSize(int(std::round(logicalSize.width() * dpr)),
+                               int(std::round(logicalSize.height() * dpr)));
+
+    QIcon out;
+    const QPixmap normal = src.pixmap(pxSize, QIcon::Normal, QIcon::Off);
+    const QPixmap disabled = src.pixmap(pxSize, QIcon::Disabled, QIcon::Off);
+    out.addPixmap(tint(normal), QIcon::Normal, QIcon::Off);
+    out.addPixmap(tint(disabled), QIcon::Disabled, QIcon::Off);
+    return out;
+}
+
+static void setVirtuosoTransportButtonUi(QPushButton* b, QStyle* style, bool isPlaying) {
+    if (!b) return;
+    if (!style) return;
+    // Slightly smaller stop icon looks better in a compact square button.
+    const QSize playSz(18, 18);
+    const QSize stopSz(14, 14);
+    b->setIconSize(isPlaying ? stopSz : playSz);
+    const QStyle::StandardPixmap sp = isPlaying ? QStyle::SP_MediaStop : QStyle::SP_MediaPlay;
+    const QIcon base = style->standardIcon(sp, /*opt=*/nullptr, /*widget=*/b);
+    b->setIcon(makeWhiteIcon(base, b->iconSize(), b->devicePixelRatioF()));
+    b->setToolTip(isPlaying ? "Stop" : "Play");
+    // Keep it screen-reader friendly (macOS VoiceOver, etc.)
+    b->setAccessibleName(isPlaying ? "Stop" : "Play");
 }
 
 static void updateComboPopupToShowAllItems(QComboBox* combo) {
@@ -422,9 +467,12 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_virtuosoPresetCombo->setFixedWidth(260);
     m_virtuosoPresetCombo->setStyleSheet("QComboBox { background-color: #111; color: #eee; padding: 4px; }");
 
-    m_virtuosoPlayButton = new QPushButton("Virtuoso", chartHeader);
+    m_virtuosoPlayButton = new QPushButton(chartHeader);
     m_virtuosoPlayButton->setEnabled(false);
-    m_virtuosoPlayButton->setFixedWidth(92);
+    m_virtuosoPlayButton->setFixedSize(30, 30);
+    m_virtuosoPlayButton->setIconSize(QSize(18, 18));
+    m_virtuosoPlayButton->setFocusPolicy(Qt::StrongFocus);
+    setVirtuosoTransportButtonUi(m_virtuosoPlayButton, style(), /*isPlaying=*/false);
 
     // Virtuoso debug toggle (shows theory stream + live intent/vibe HUD)
     m_virtuosoDebugToggle = new QCheckBox("Debug", chartHeader);
@@ -861,10 +909,10 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
         if (!m_virtuosoPlayback) return;
         if (m_virtuosoPlayback->isPlaying()) {
             m_virtuosoPlayback->stop();
-            m_virtuosoPlayButton->setText("Virtuoso");
+            setVirtuosoTransportButtonUi(m_virtuosoPlayButton, style(), /*isPlaying=*/false);
         } else {
             m_virtuosoPlayback->play();
-            m_virtuosoPlayButton->setText("Stop V");
+            setVirtuosoTransportButtonUi(m_virtuosoPlayButton, style(), /*isPlaying=*/true);
         }
     });
 }
@@ -883,7 +931,7 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
 
     // Stop playback when switching songs.
     if (m_virtuosoPlayback) m_virtuosoPlayback->stop();
-    if (m_virtuosoPlayButton) m_virtuosoPlayButton->setText("Virtuoso");
+    setVirtuosoTransportButtonUi(m_virtuosoPlayButton, style(), /*isPlaying=*/false);
 
     const auto& song = m_playlist->songs[idx];
     m_currentSongId = songStableId(song);
@@ -1015,7 +1063,7 @@ void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
     if (!hasSongs) {
         if (m_chartWidget) m_chartWidget->clear();
         if (m_virtuosoPlayback) m_virtuosoPlayback->stop();
-        if (m_virtuosoPlayButton) m_virtuosoPlayButton->setText("Virtuoso");
+        setVirtuosoTransportButtonUi(m_virtuosoPlayButton, style(), /*isPlaying=*/false);
         return;
     }
 
@@ -1059,7 +1107,7 @@ void NoteMonitorWidget::setVirtuosoAgentEnergyMultiplier(const QString& agent, d
 void NoteMonitorWidget::stopAllPlayback() {
     if (m_virtuosoPlayback && m_virtuosoPlayback->isPlaying()) {
         m_virtuosoPlayback->stop();
-        if (m_virtuosoPlayButton) m_virtuosoPlayButton->setText("Virtuoso");
+        setVirtuosoTransportButtonUi(m_virtuosoPlayButton, style(), /*isPlaying=*/false);
     }
 }
 

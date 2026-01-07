@@ -641,10 +641,8 @@ CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcesso
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/build.make
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: /opt/homebrew/lib/QtWidgets.framework/Versions/A/QtWidgets
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: /opt/homebrew/lib/QtXml.framework/Versions/A/QtXml
-CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: /opt/homebrew/lib/QtMultimedia.framework/Versions/A/QtMultimedia
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: libVirtuosoCore.a
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: /opt/homebrew/lib/QtGui.framework/Versions/A/QtGui
-CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: /opt/homebrew/lib/QtNetwork.framework/Versions/A/QtNetwork
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: /opt/homebrew/lib/QtCore.framework/Versions/A/QtCore
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_37) "Linking CXX executable CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor"

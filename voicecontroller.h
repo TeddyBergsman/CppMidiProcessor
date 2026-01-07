@@ -35,7 +35,6 @@ signals:
     void connectionStatusChanged(bool connected);
     void errorOccurred(const QString& error);
     void programCommandDetected(int programIndex);
-    void trackCommandDetected(int trackIndex, bool play); // play=true for play, false for stop
     void toggleCommandDetected(const QString& toggleId);
 
 private:
@@ -65,7 +64,6 @@ signals:
     void connectionStatusChanged(bool connected);
     void errorOccurred(const QString& error);
     void programCommandDetected(int programIndex);
-    void trackCommandDetected(int trackIndex, bool play);
     void toggleCommandDetected(const QString& toggleId);
 
 private slots:
@@ -91,13 +89,11 @@ private:
     void detectTriggerWords(const QString& text, QStringList& triggers, QStringList& targets);
     bool parseQuickSwitchCommand(const QString& text);
     bool parseProgramCommand(const QString& text);
-    bool parseTrackCommand(const QString& text);
     bool parseToggleCommand(const QString& text);
     
     // Number word conversion
     QString convertNumberWordsToDigits(const QString& text);
     int wordToNumber(const QString& word);
-    QString fuzzyMatchTrackName(const QString& input);
     int findProgramByNameOrTag(const QString& search);
 
     const Preset& m_preset;
@@ -106,7 +102,6 @@ private:
     std::atomic<bool> m_enabled{true};
     std::atomic<int> m_currentProgramIndex{-1};
     std::atomic<int> m_previousProgramIndex{-1};
-    QStringList m_backingTracks; // Will be populated from directory
     QString m_buffer; // Buffer for incomplete JSON lines
     
     // Number word mappings

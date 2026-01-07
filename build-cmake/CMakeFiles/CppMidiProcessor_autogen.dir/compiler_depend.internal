@@ -793,8 +793,6 @@
  /Library/Developer/CommandLineTools/usr/lib/clang/17/include/__stdarg_va_list.h
  /Library/Developer/CommandLineTools/usr/lib/clang/17/include/limits.h
  /Library/Developer/CommandLineTools/usr/lib/clang/17/include/stdarg.h
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/BassStyleEditorDialog.cpp
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/BassStyleEditorDialog.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/CMakeLists.txt
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/GrooveLabWindow.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/GrooveLabWindow.h
@@ -802,8 +800,6 @@
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/LibraryWindow.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/NoteMonitorWidget.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/NoteMonitorWidget.h
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PianoStyleEditorDialog.cpp
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PianoStyleEditorDialog.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PitchColor.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PitchMonitorWidget.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PitchMonitorWidget.h
@@ -812,10 +808,10 @@
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PresetLoader.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/RtMidi.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/RtMidi.h
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/SilentPlaybackEngine.cpp
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/SilentPlaybackEngine.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoPresetInspectorWindow.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoPresetInspectorWindow.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoVocabularyWindow.cpp
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoVocabularyWindow.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/WaveVisualizer.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/WaveVisualizer.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/4.0.3/CMakeCCompiler.cmake
@@ -837,36 +833,28 @@
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/mainwindow.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/midiprocessor.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/midiprocessor.h
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/BassPresets.cpp
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/BassPresets.h
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/BassProfile.cpp
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/BassProfile.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordDictionary.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordDictionary.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordSymbol.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordSymbol.h
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/JazzPianoGenerator.cpp
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/JazzPianoGenerator.h
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/PianoPresets.cpp
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/PianoPresets.h
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/PianoProfile.cpp
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/PianoProfile.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/Pitch.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/Pitch.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ScaleLibrary.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ScaleLibrary.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/SelfTest.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/SelfTest.h
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/WalkingBassGenerator.cpp
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/WalkingBassGenerator.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BalladReferenceTuning.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BalladReferenceTuning.h
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BandPlaybackEngine.cpp
- /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BandPlaybackEngine.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BrushesBalladDrummer.cpp
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.cpp
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VibeStateMachine.cpp
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VibeStateMachine.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VirtuosoBalladMvpPlaybackEngine.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VirtuosoBalladMvpPlaybackEngine.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/resources.qrc
@@ -884,6 +872,7 @@
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/GrooveTimelineWidget.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/GrooveTimelineWidget.h
@@ -891,6 +880,7 @@
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/GuitarFretboardWidget.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/PianoKeyboardWidget.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/PianoKeyboardWidget.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/voicecontroller.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/voicecontroller.h
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QDateTime
@@ -899,7 +889,6 @@
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QJsonObject
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QList
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QMap
- /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QMetaObject
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QObject
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QProcess
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QRandomGenerator
@@ -1084,19 +1073,10 @@
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtGui.framework/Versions/A/Headers/qtguiglobal.h
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtGui.framework/Versions/A/Headers/qtransform.h
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtGui.framework/Versions/A/Headers/qwindowdefs.h
- /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/QMediaPlayer
- /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/qaudio.h
- /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/qmediaplayer.h
- /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/qtaudio.h
- /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/qtmultimedia-config.h
- /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/qtmultimediaexports.h
- /opt/homebrew/Cellar/qt/6.9.1/lib/QtMultimedia.framework/Versions/A/Headers/qtmultimediaglobal.h
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/QAbstractScrollArea
- /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/QDialog
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/QMainWindow
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/QWidget
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qabstractscrollarea.h
- /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qdialog.h
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qframe.h
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qmainwindow.h
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtWidgets.framework/Versions/A/Headers/qsizepolicy.h
@@ -1329,63 +1309,6 @@
  /opt/homebrew/lib/cmake/Qt6GuiTools/Qt6GuiToolsTargets-release.cmake
  /opt/homebrew/lib/cmake/Qt6GuiTools/Qt6GuiToolsTargets.cmake
  /opt/homebrew/lib/cmake/Qt6GuiTools/Qt6GuiToolsVersionlessTargets.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6MultimediaAdditionalTargetInfo.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6MultimediaConfig.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6MultimediaConfigVersion.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6MultimediaConfigVersionImpl.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6MultimediaDependencies.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6MultimediaMacros.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6MultimediaPlugins.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6MultimediaTargets-release.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6MultimediaTargets.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6MultimediaVersionlessAliasTargets.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6QDarwinMediaPluginAdditionalTargetInfo.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6QDarwinMediaPluginConfig.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6QDarwinMediaPluginTargets-release.cmake
- /opt/homebrew/lib/cmake/Qt6Multimedia/Qt6QDarwinMediaPluginTargets.cmake
- /opt/homebrew/lib/cmake/Qt6MultimediaPrivate/Qt6MultimediaPrivateAdditionalTargetInfo.cmake
- /opt/homebrew/lib/cmake/Qt6MultimediaPrivate/Qt6MultimediaPrivateConfig.cmake
- /opt/homebrew/lib/cmake/Qt6MultimediaPrivate/Qt6MultimediaPrivateConfigVersion.cmake
- /opt/homebrew/lib/cmake/Qt6MultimediaPrivate/Qt6MultimediaPrivateConfigVersionImpl.cmake
- /opt/homebrew/lib/cmake/Qt6MultimediaPrivate/Qt6MultimediaPrivateDependencies.cmake
- /opt/homebrew/lib/cmake/Qt6MultimediaPrivate/Qt6MultimediaPrivateTargets.cmake
- /opt/homebrew/lib/cmake/Qt6MultimediaPrivate/Qt6MultimediaPrivateVersionlessAliasTargets.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6NetworkAdditionalTargetInfo.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6NetworkConfig.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6NetworkConfigVersion.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6NetworkConfigVersionImpl.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6NetworkDependencies.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6NetworkPlugins.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6NetworkTargets-release.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6NetworkTargets.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6NetworkVersionlessAliasTargets.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QGlibNetworkInformationPluginAdditionalTargetInfo.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QGlibNetworkInformationPluginConfig.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QGlibNetworkInformationPluginTargets-release.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QGlibNetworkInformationPluginTargets.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QSCNetworkReachabilityNetworkInformationPluginAdditionalTargetInfo.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QSCNetworkReachabilityNetworkInformationPluginConfig.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QSCNetworkReachabilityNetworkInformationPluginTargets-release.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QSCNetworkReachabilityNetworkInformationPluginTargets.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QSecureTransportBackendPluginAdditionalTargetInfo.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QSecureTransportBackendPluginConfig.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QSecureTransportBackendPluginTargets-release.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QSecureTransportBackendPluginTargets.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QTlsBackendCertOnlyPluginAdditionalTargetInfo.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QTlsBackendCertOnlyPluginConfig.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QTlsBackendCertOnlyPluginTargets-release.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QTlsBackendCertOnlyPluginTargets.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QTlsBackendOpenSSLPluginAdditionalTargetInfo.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QTlsBackendOpenSSLPluginConfig.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QTlsBackendOpenSSLPluginTargets-release.cmake
- /opt/homebrew/lib/cmake/Qt6Network/Qt6QTlsBackendOpenSSLPluginTargets.cmake
- /opt/homebrew/lib/cmake/Qt6NetworkPrivate/Qt6NetworkPrivateAdditionalTargetInfo.cmake
- /opt/homebrew/lib/cmake/Qt6NetworkPrivate/Qt6NetworkPrivateConfig.cmake
- /opt/homebrew/lib/cmake/Qt6NetworkPrivate/Qt6NetworkPrivateConfigVersion.cmake
- /opt/homebrew/lib/cmake/Qt6NetworkPrivate/Qt6NetworkPrivateConfigVersionImpl.cmake
- /opt/homebrew/lib/cmake/Qt6NetworkPrivate/Qt6NetworkPrivateDependencies.cmake
- /opt/homebrew/lib/cmake/Qt6NetworkPrivate/Qt6NetworkPrivateTargets.cmake
- /opt/homebrew/lib/cmake/Qt6NetworkPrivate/Qt6NetworkPrivateVersionlessAliasTargets.cmake
  /opt/homebrew/lib/cmake/Qt6Widgets/Qt6QMacStylePluginAdditionalTargetInfo.cmake
  /opt/homebrew/lib/cmake/Qt6Widgets/Qt6QMacStylePluginConfig.cmake
  /opt/homebrew/lib/cmake/Qt6Widgets/Qt6QMacStylePluginTargets-release.cmake

@@ -51,9 +51,6 @@ template <> constexpr inline auto VoiceController::qt_create_metaobjectdata<qt_m
         "error",
         "programCommandDetected",
         "programIndex",
-        "trackCommandDetected",
-        "trackIndex",
-        "play",
         "toggleCommandDetected",
         "toggleId",
         "onProgramChanged"
@@ -76,16 +73,12 @@ template <> constexpr inline auto VoiceController::qt_create_metaobjectdata<qt_m
         QtMocHelpers::SignalData<void(int)>(11, 2, QMC::AccessPublic, QMetaType::Void, {{
             { QMetaType::Int, 12 },
         }}),
-        // Signal 'trackCommandDetected'
-        QtMocHelpers::SignalData<void(int, bool)>(13, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 14 }, { QMetaType::Bool, 15 },
-        }}),
         // Signal 'toggleCommandDetected'
-        QtMocHelpers::SignalData<void(const QString &)>(16, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::QString, 17 },
+        QtMocHelpers::SignalData<void(const QString &)>(13, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 14 },
         }}),
         // Slot 'onProgramChanged'
-        QtMocHelpers::SlotData<void(int)>(18, 2, QMC::AccessPublic, QMetaType::Void, {{
+        QtMocHelpers::SlotData<void(int)>(15, 2, QMC::AccessPublic, QMetaType::Void, {{
             { QMetaType::Int, 12 },
         }}),
     };
@@ -115,9 +108,8 @@ void VoiceController::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int 
         case 1: _t->connectionStatusChanged((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
         case 2: _t->errorOccurred((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
         case 3: _t->programCommandDetected((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 4: _t->trackCommandDetected((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<bool>>(_a[2]))); break;
-        case 5: _t->toggleCommandDetected((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
-        case 6: _t->onProgramChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 4: _t->toggleCommandDetected((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
+        case 5: _t->onProgramChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
         default: ;
         }
     }
@@ -130,9 +122,7 @@ void VoiceController::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int 
             return;
         if (QtMocHelpers::indexOfMethod<void (VoiceController::*)(int )>(_a, &VoiceController::programCommandDetected, 3))
             return;
-        if (QtMocHelpers::indexOfMethod<void (VoiceController::*)(int , bool )>(_a, &VoiceController::trackCommandDetected, 4))
-            return;
-        if (QtMocHelpers::indexOfMethod<void (VoiceController::*)(const QString & )>(_a, &VoiceController::toggleCommandDetected, 5))
+        if (QtMocHelpers::indexOfMethod<void (VoiceController::*)(const QString & )>(_a, &VoiceController::toggleCommandDetected, 4))
             return;
     }
 }
@@ -156,14 +146,14 @@ int VoiceController::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 7)
+        if (_id < 6)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 7;
+        _id -= 6;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 7)
+        if (_id < 6)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 7;
+        _id -= 6;
     }
     return _id;
 }
@@ -193,15 +183,9 @@ void VoiceController::programCommandDetected(int _t1)
 }
 
 // SIGNAL 4
-void VoiceController::trackCommandDetected(int _t1, bool _t2)
-{
-    QMetaObject::activate<void>(this, &staticMetaObject, 4, nullptr, _t1, _t2);
-}
-
-// SIGNAL 5
 void VoiceController::toggleCommandDetected(const QString & _t1)
 {
-    QMetaObject::activate<void>(this, &staticMetaObject, 5, nullptr, _t1);
+    QMetaObject::activate<void>(this, &staticMetaObject, 4, nullptr, _t1);
 }
 namespace {
 struct qt_meta_tag_ZN21VoiceControllerWorkerE_t {};
@@ -224,9 +208,6 @@ template <> constexpr inline auto VoiceControllerWorker::qt_create_metaobjectdat
         "error",
         "programCommandDetected",
         "programIndex",
-        "trackCommandDetected",
-        "trackIndex",
-        "play",
         "toggleCommandDetected",
         "toggleId",
         "start",
@@ -260,35 +241,31 @@ template <> constexpr inline auto VoiceControllerWorker::qt_create_metaobjectdat
         QtMocHelpers::SignalData<void(int)>(11, 2, QMC::AccessPublic, QMetaType::Void, {{
             { QMetaType::Int, 12 },
         }}),
-        // Signal 'trackCommandDetected'
-        QtMocHelpers::SignalData<void(int, bool)>(13, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 14 }, { QMetaType::Bool, 15 },
-        }}),
         // Signal 'toggleCommandDetected'
-        QtMocHelpers::SignalData<void(const QString &)>(16, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::QString, 17 },
+        QtMocHelpers::SignalData<void(const QString &)>(13, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 14 },
         }}),
         // Slot 'start'
-        QtMocHelpers::SlotData<void()>(18, 2, QMC::AccessPublic, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(15, 2, QMC::AccessPublic, QMetaType::Void),
         // Slot 'stop'
-        QtMocHelpers::SlotData<void()>(19, 2, QMC::AccessPublic, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(16, 2, QMC::AccessPublic, QMetaType::Void),
         // Slot 'setEnabled'
-        QtMocHelpers::SlotData<void(bool)>(20, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Bool, 21 },
+        QtMocHelpers::SlotData<void(bool)>(17, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Bool, 18 },
         }}),
         // Slot 'onProgramChanged'
-        QtMocHelpers::SlotData<void(int)>(22, 2, QMC::AccessPublic, QMetaType::Void, {{
+        QtMocHelpers::SlotData<void(int)>(19, 2, QMC::AccessPublic, QMetaType::Void, {{
             { QMetaType::Int, 12 },
         }}),
         // Slot 'onProcessReadyRead'
-        QtMocHelpers::SlotData<void()>(23, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(20, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onProcessError'
-        QtMocHelpers::SlotData<void(QProcess::ProcessError)>(24, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { 0x80000000 | 25, 10 },
+        QtMocHelpers::SlotData<void(QProcess::ProcessError)>(21, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { 0x80000000 | 22, 10 },
         }}),
         // Slot 'onProcessFinished'
-        QtMocHelpers::SlotData<void(int, QProcess::ExitStatus)>(26, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Int, 27 }, { 0x80000000 | 28, 29 },
+        QtMocHelpers::SlotData<void(int, QProcess::ExitStatus)>(23, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 24 }, { 0x80000000 | 25, 26 },
         }}),
     };
     QtMocHelpers::UintData qt_properties {
@@ -317,15 +294,14 @@ void VoiceControllerWorker::qt_static_metacall(QObject *_o, QMetaObject::Call _c
         case 1: _t->connectionStatusChanged((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
         case 2: _t->errorOccurred((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
         case 3: _t->programCommandDetected((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 4: _t->trackCommandDetected((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<bool>>(_a[2]))); break;
-        case 5: _t->toggleCommandDetected((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
-        case 6: _t->start(); break;
-        case 7: _t->stop(); break;
-        case 8: _t->setEnabled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 9: _t->onProgramChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 10: _t->onProcessReadyRead(); break;
-        case 11: _t->onProcessError((*reinterpret_cast< std::add_pointer_t<QProcess::ProcessError>>(_a[1]))); break;
-        case 12: _t->onProcessFinished((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<QProcess::ExitStatus>>(_a[2]))); break;
+        case 4: _t->toggleCommandDetected((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
+        case 5: _t->start(); break;
+        case 6: _t->stop(); break;
+        case 7: _t->setEnabled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 8: _t->onProgramChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 9: _t->onProcessReadyRead(); break;
+        case 10: _t->onProcessError((*reinterpret_cast< std::add_pointer_t<QProcess::ProcessError>>(_a[1]))); break;
+        case 11: _t->onProcessFinished((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<QProcess::ExitStatus>>(_a[2]))); break;
         default: ;
         }
     }
@@ -338,9 +314,7 @@ void VoiceControllerWorker::qt_static_metacall(QObject *_o, QMetaObject::Call _c
             return;
         if (QtMocHelpers::indexOfMethod<void (VoiceControllerWorker::*)(int )>(_a, &VoiceControllerWorker::programCommandDetected, 3))
             return;
-        if (QtMocHelpers::indexOfMethod<void (VoiceControllerWorker::*)(int , bool )>(_a, &VoiceControllerWorker::trackCommandDetected, 4))
-            return;
-        if (QtMocHelpers::indexOfMethod<void (VoiceControllerWorker::*)(const QString & )>(_a, &VoiceControllerWorker::toggleCommandDetected, 5))
+        if (QtMocHelpers::indexOfMethod<void (VoiceControllerWorker::*)(const QString & )>(_a, &VoiceControllerWorker::toggleCommandDetected, 4))
             return;
     }
 }
@@ -364,14 +338,14 @@ int VoiceControllerWorker::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 13)
+        if (_id < 12)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 13;
+        _id -= 12;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 13)
+        if (_id < 12)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 13;
+        _id -= 12;
     }
     return _id;
 }
@@ -401,14 +375,8 @@ void VoiceControllerWorker::programCommandDetected(int _t1)
 }
 
 // SIGNAL 4
-void VoiceControllerWorker::trackCommandDetected(int _t1, bool _t2)
-{
-    QMetaObject::activate<void>(this, &staticMetaObject, 4, nullptr, _t1, _t2);
-}
-
-// SIGNAL 5
 void VoiceControllerWorker::toggleCommandDetected(const QString & _t1)
 {
-    QMetaObject::activate<void>(this, &staticMetaObject, 5, nullptr, _t1);
+    QMetaObject::activate<void>(this, &staticMetaObject, 4, nullptr, _t1);
 }
 QT_WARNING_POP

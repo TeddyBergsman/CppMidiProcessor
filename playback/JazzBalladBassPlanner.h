@@ -45,6 +45,10 @@ public:
         bool phraseEndBar = false;
         double cadence01 = 0.0;  // 0..1
 
+        // Long-horizon register arc target (center MIDI note). This is NOT a hard lane:
+        // the planner may deviate for voice-leading, but it biases the phrase-level motion.
+        int registerCenterMidi = 45;
+
         // Stage 3 solver weights (Virtuosity Matrix-style, 0..1).
         double harmonicRisk = 0.20;
         double rhythmicComplexity = 0.25;

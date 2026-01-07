@@ -137,6 +137,12 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     const int rootPc = (c.chord.bassPc >= 0) ? c.chord.bassPc : c.chord.rootPc;
     if (rootPc < 0) return out;
 
+    // Register arc target for the whole beat. This biases octave-folding and approach selection,
+    // but it is not a strict range limit (the constraint driver still repairs when needed).
+    const int regCenter = qBound(28, c.registerCenterMidi, 67);
+    const int regLo = qBound(28, regCenter - 9, 67);
+    const int regHi = qBound(regLo + 8, regCenter + 8, 67);
+
     // Determine next-chord root (for approach into bar starts).
     int nextRootPc = -1;
     if (c.hasNextChord) {
@@ -160,7 +166,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         pq.userDenseOrPeak = (c.userDensityHigh || c.userIntensityPeak);
         pq.energy = c.energy;
         pq.determinismSeed = c.determinismSeed;
-        pq.phraseBars = 4;
+        pq.phraseBars = qBound(4, c.phraseBars, 8);
         phraseHits = m_vocab->bassPhraseHitsForBeat(pq, &phraseId, &phraseNotes);
     }
     const bool havePhraseHits = !phraseHits.isEmpty() && !phraseId.isEmpty();
@@ -205,14 +211,15 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         const int pc5 = (rootPc + 7) % 12;
         const int pc6 = (rootPc + 9) % 12;
 
-        const int lo = 40, hi = 57;
+        const int lo = regLo;
+        const int hi = regHi;
         // 2-bar position lock: keep the bassist in a consistent register area.
         const int posBlock = (qMax(0, c.playbackBarIndex) / 2) * 2;
         if (posBlock != m_walkPosBlockStartBar) {
             m_walkPosBlockStartBar = posBlock;
             const int rootMidi = pcToBassMidiInRange(rootPc, lo, hi);
             // Anchor near last if possible, else near mid range.
-            int anchor = (m_lastMidi >= 0) ? qBound(lo, m_lastMidi, hi) : qBound(lo, 47, hi);
+            int anchor = (m_lastMidi >= 0) ? qBound(lo, m_lastMidi, hi) : qBound(lo, regCenter, hi);
             // Pull anchor toward root (but not too jumpy).
             if (qAbs(rootMidi - anchor) > 7) anchor = (rootMidi < anchor) ? (anchor - 5) : (anchor + 5);
             m_walkPosMidi = qBound(lo, anchor, hi);
@@ -416,11 +423,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             using BA = virtuoso::vocab::VocabularyRegistry::BassAction;
             if (ph.action == BA::Rest) return out;
             if (ph.action == BA::ApproachToNext && nextChanges) {
-                const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
+                const int nextRootMidi = pcToBassMidiInRange(nextRootPc, regLo, regHi);
                 QString appChoice;
                 int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi, &appChoice) : (nextRootMidi - 1);
-                while (approachMidi < 40) approachMidi += 12;
-                while (approachMidi > 57) approachMidi -= 12;
+                while (approachMidi < regLo) approachMidi += 12;
+                while (approachMidi > regHi) approachMidi -= 12;
                 int repaired = approachMidi;
                 if (feasibleOrRepair(repaired)) {
                     virtuoso::engine::AgentIntentNote n;
@@ -458,11 +465,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             using BA = virtuoso::vocab::VocabularyRegistry::BassAction;
             if (vocabChoice.action == BA::Rest) return out;
             if (vocabChoice.action == BA::ApproachToNext && nextChanges) {
-                const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
+                const int nextRootMidi = pcToBassMidiInRange(nextRootPc, regLo, regHi);
                 QString appChoice;
                 int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi, &appChoice) : (nextRootMidi - 1);
-                while (approachMidi < 40) approachMidi += 12;
-                while (approachMidi > 57) approachMidi -= 12;
+                while (approachMidi < regLo) approachMidi += 12;
+                while (approachMidi > regHi) approachMidi -= 12;
                 int repaired = approachMidi;
                 if (feasibleOrRepair(repaired)) {
                     virtuoso::engine::AgentIntentNote n;
@@ -559,7 +566,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                 if (k.id == "root") s += 0.12;
                 if (c.chordFunction == "Dominant" && k.id == "third") s -= 0.18;
                 // Voice-leading cost (smaller leaps).
-                const int m = pcToBassMidiInRange(k.pc, 40, 57);
+                const int m = pcToBassMidiInRange(k.pc, regLo, regHi);
                 if (m_lastMidi >= 0) s += 0.012 * double(qAbs(m - m_lastMidi));
                 // Avoid color when user is busy.
                 if (userBusy && k.id == "sixth") s += 0.9;
@@ -575,11 +582,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             }
             if (best && best->rest) return out;
             if (best && best->approach && nextChanges) {
-                const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
+                const int nextRootMidi = pcToBassMidiInRange(nextRootPc, regLo, regHi);
                 QString appChoice;
                 int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi, &appChoice) : (nextRootMidi - 1);
-                while (approachMidi < 40) approachMidi += 12;
-                while (approachMidi > 57) approachMidi -= 12;
+                while (approachMidi < regLo) approachMidi += 12;
+                while (approachMidi > regHi) approachMidi -= 12;
                 int repaired = approachMidi;
                 if (feasibleOrRepair(repaired)) {
                     virtuoso::engine::AgentIntentNote n;
@@ -609,11 +616,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         if (havePhraseHits) {
             const auto& ph = phraseHits.first();
             if (ph.action == virtuoso::vocab::VocabularyRegistry::BassAction::PickupToNext) {
-                const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
+                const int nextRootMidi = pcToBassMidiInRange(nextRootPc, regLo, regHi);
                 QString appChoice;
                 int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi, &appChoice) : (nextRootMidi - 1);
-                while (approachMidi < 40) approachMidi += 12;
-                while (approachMidi > 57) approachMidi -= 12;
+                while (approachMidi < regLo) approachMidi += 12;
+                while (approachMidi > regHi) approachMidi -= 12;
                 int repaired = approachMidi;
                 if (!feasibleOrRepair(repaired)) return out;
 
@@ -635,11 +642,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         }
 
         if (haveVocab && vocabChoice.action == virtuoso::vocab::VocabularyRegistry::BassAction::PickupToNext) {
-            const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
+            const int nextRootMidi = pcToBassMidiInRange(nextRootPc, regLo, regHi);
             QString appChoice;
             int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi, &appChoice) : (nextRootMidi - 1);
-            while (approachMidi < 40) approachMidi += 12;
-            while (approachMidi > 57) approachMidi -= 12;
+            while (approachMidi < regLo) approachMidi += 12;
+            while (approachMidi > regHi) approachMidi -= 12;
             int repaired = approachMidi;
             if (!feasibleOrRepair(repaired)) return out;
 
@@ -662,8 +669,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             return out;
         }
 
-        // Deterministic probability, slightly higher at phrase ends (4-bar phrasing).
-        const bool phraseEnd = ((c.playbackBarIndex % 4) == 3);
+        // Deterministic probability, slightly higher at phrase ends (adaptive 4–8 bar phrasing).
+        const bool phraseEnd = c.phraseEndBar;
         const quint32 hApp = virtuoso::util::StableHash::fnv1a32(QString("%1|%2|%3|app4")
                                                                      .arg(c.chordText)
                                                                      .arg(c.playbackBarIndex)
@@ -675,11 +682,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         const double p = phraseEnd ? qMin(1.0, baseP + 0.18) : baseP;
         if (int(hApp % 100u) >= int(llround(p * 100.0))) return out;
 
-        const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
+        const int nextRootMidi = pcToBassMidiInRange(nextRootPc, regLo, regHi);
         QString appChoice;
         int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi, &appChoice) : (nextRootMidi - 1);
-        while (approachMidi < 40) approachMidi += 12;
-        while (approachMidi > 57) approachMidi -= 12;
+        while (approachMidi < regLo) approachMidi += 12;
+        while (approachMidi > regHi) approachMidi -= 12;
         int repaired = approachMidi;
         if (!feasibleOrRepair(repaired)) return out;
 
@@ -699,7 +706,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         return out;
     }
 
-    int midi = pcToBassMidiInRange(chosenPc, /*lo*/40, /*hi*/57);
+    int midi = pcToBassMidiInRange(chosenPc, regLo, regHi);
     int repaired = midi;
     if (!feasibleOrRepair(repaired)) return out;
 

@@ -250,6 +250,7 @@ void VirtuosoBalladMvpPlaybackEngine::play() {
     m_pianoPlanner.reset();
     m_interaction.reset();
     m_motivicMemory.clear();
+    m_story.reset();
     // Keep drummer profile wired to channel/mapping choices.
     {
         auto p = m_drummer.profile();
@@ -471,6 +472,7 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     ai.pianoPlanner = &m_pianoPlanner;
     ai.drummer = &m_drummer;
     ai.motivicMemory = &m_motivicMemory;
+    ai.story = &m_story;
 
     AgentCoordinator::scheduleStep(ai, stepIndex);
 }

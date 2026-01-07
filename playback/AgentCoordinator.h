@@ -9,6 +9,7 @@
 #include "playback/JazzBalladBassPlanner.h"
 #include "playback/JazzBalladPianoPlanner.h"
 #include "playback/BrushesBalladDrummer.h"
+#include "playback/StoryState.h"
 #include "virtuoso/engine/VirtuosoEngine.h"
 #include "virtuoso/groove/GrooveGrid.h"
 #include "virtuoso/ontology/OntologyRegistry.h"
@@ -64,6 +65,9 @@ public:
         JazzBalladPianoPlanner* pianoPlanner = nullptr;
         BrushesBalladDrummer* drummer = nullptr;
         virtuoso::memory::MotivicMemory* motivicMemory = nullptr;
+
+        // Persistent 4–8 bar story continuity (not owned).
+        StoryState* story = nullptr;
     };
 
     // Schedules a single beat-step worth of musical events.

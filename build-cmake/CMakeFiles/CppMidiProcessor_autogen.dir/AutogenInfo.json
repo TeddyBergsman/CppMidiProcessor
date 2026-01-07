@@ -648,6 +648,12 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/StoryState.h",
+			"MU",
+			"QDVNTGK2R4/moc_StoryState.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/TransportTimeline.h",
 			"MU",
 			"QDVNTGK2R4/moc_TransportTimeline.cpp",

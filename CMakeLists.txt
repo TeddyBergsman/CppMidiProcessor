@@ -135,6 +135,7 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/HarmonyContext.cpp
   playback/InteractionContext.h
   playback/InteractionContext.cpp
+  playback/StoryState.h
   playback/AgentCoordinator.h
   playback/AgentCoordinator.cpp
   playback/LookaheadWindow.h

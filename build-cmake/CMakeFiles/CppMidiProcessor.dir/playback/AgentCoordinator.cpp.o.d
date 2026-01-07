@@ -992,6 +992,7 @@ CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.o: \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/memory/MotivicMemory.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/StoryState.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BalladReferenceTuning.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadWindow.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VirtuosoBalladMvpPlaybackEngine.h \

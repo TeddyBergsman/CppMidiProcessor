@@ -864,6 +864,7 @@
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/LookaheadWindow.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/StoryState.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/TransportTimeline.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/TransportTimeline.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VibeStateMachine.cpp

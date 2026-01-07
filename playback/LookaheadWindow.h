@@ -49,6 +49,7 @@ LookaheadWindow buildLookaheadWindow(const chart::ChartModel& model,
                                      int repeats,
                                      int stepNow,
                                      int horizonBars,
+                                     int phraseBars,
                                      int keyWindowBars,
                                      HarmonyContext& harmony);
 

@@ -19,6 +19,75 @@ static virtuoso::groove::TimeSignature timeSigFromModel(const chart::ChartModel&
     return ts;
 }
 
+static int adaptivePhraseBars(int bpm) {
+    // Adaptive 4–8 bar horizon: slower tempos get 8-bar phrasing, faster tempos get 4-bar phrasing.
+    // Keep this intentionally simple + deterministic (no hidden state).
+    return (bpm <= 84) ? 8 : 4;
+}
+
+static int clampBassCenterMidi(int m) { return qBound(28, m, 67); }  // ~E1..G4 (upright-ish practical)
+static int clampPianoCenterMidi(int m) { return qBound(48, m, 96); } // ~C3..C7
+
+struct RegisterTargets {
+    int bassCenterMidi = 45;
+    int pianoCenterMidi = 72;
+};
+
+static RegisterTargets chooseJointRegisterTargets(int desiredBassCenter,
+                                                  int desiredPianoCenter,
+                                                  double energy01,
+                                                  bool userRegisterHigh) {
+    // Candidate octave shifts. Bass is allowed to climb intentionally (tenor), but still must avoid collisions.
+    const int bassShifts[] = {-12, 0, 12};
+    const int pianoShifts[] = {-12, 0, 12};
+
+    RegisterTargets best;
+    double bestCost = 1e18;
+
+    const int spacingMin = 9; // semitones between Bass high region and Piano low region
+    for (int bs : bassShifts) {
+        const int b = clampBassCenterMidi(desiredBassCenter + bs);
+        // Predicted "high point" of bass activity near the center.
+        const int bassHi = b + 7;
+
+        for (int ps : pianoShifts) {
+            int p = clampPianoCenterMidi(desiredPianoCenter + ps);
+            if (userRegisterHigh) p = clampPianoCenterMidi(p + 5);
+
+            // Predicted "low point" of the pianist's LH activity near the center.
+            const int pianoLo = p - 12;
+
+            // Collision avoidance cost (hard-ish).
+            double cost = 0.0;
+            if (pianoLo < bassHi + spacingMin) {
+                const int overlap = (bassHi + spacingMin) - pianoLo;
+                cost += 8.0 + 0.65 * double(overlap);
+            }
+
+            // Stay near the desired arcs, but allow intentional motion (energy makes bigger arcs cheaper).
+            const double arcW = 0.55 - 0.25 * qBound(0.0, energy01, 1.0);
+            cost += arcW * (double(qAbs(b - desiredBassCenter)) / 12.0);
+            cost += arcW * (double(qAbs(p - desiredPianoCenter)) / 12.0);
+
+            if (cost < bestCost) {
+                bestCost = cost;
+                best.bassCenterMidi = b;
+                best.pianoCenterMidi = p;
+            }
+        }
+    }
+
+    // Final guard: enforce spacing by nudging piano upward if needed.
+    {
+        const int bassHi = best.bassCenterMidi + 7;
+        const int pianoLo = best.pianoCenterMidi - 12;
+        if (pianoLo < bassHi + spacingMin) {
+            best.pianoCenterMidi = clampPianoCenterMidi(best.pianoCenterMidi + ((bassHi + spacingMin) - pianoLo));
+        }
+    }
+    return best;
+}
+
 } // namespace
 
 void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
@@ -30,7 +99,9 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     const virtuoso::groove::TimeSignature ts = timeSigFromModel(*in.model);
 
     // Canonical lookahead window (replaces ad-hoc next-chord + per-bar key windows).
-    auto look = buildLookaheadWindow(*in.model, seq, in.repeats, stepIndex, /*horizonBars=*/8, /*keyWindowBars=*/8, *in.harmony);
+    // Phrase bars are adaptive (4–8) to support longer-horizon musical storytelling.
+    const int phraseBars = adaptivePhraseBars(in.bpm);
+    auto look = buildLookaheadWindow(*in.model, seq, in.repeats, stepIndex, /*horizonBars=*/8, phraseBars, /*keyWindowBars=*/8, *in.harmony);
 
     const int beatsPerBar = qMax(1, ts.num);
     const int playbackBarIndex = stepIndex / beatsPerBar;
@@ -91,6 +162,53 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
 
     // Determinism seed.
     const quint32 detSeed = virtuoso::util::StableHash::fnv1a32((QString("ballad|") + in.stylePresetKey).toUtf8());
+
+    // --- Persistent 4–8 bar story state (motif + register arcs) ---
+    // This drives intentional register motion over the phrase horizon, while the joint selector
+    // avoids collisions and preserves spacing.
+    int desiredBassCenterMidi = 45;
+    int desiredPianoCenterMidi = 72;
+    if (in.story) {
+        const int phraseStartBar = playbackBarIndex - look.barInPhrase;
+        const bool newPhrase = (in.story->phraseStartBar != phraseStartBar) || (in.story->phraseBars != look.phraseBars);
+        if (beatInBar == 0 && (in.story->phraseStartBar < 0 || newPhrase)) {
+            in.story->phraseStartBar = phraseStartBar;
+            in.story->phraseBars = look.phraseBars;
+
+            const quint32 sh = virtuoso::util::StableHash::fnv1a32(QString("story|%1|%2|%3")
+                                                                       .arg(in.stylePresetKey)
+                                                                       .arg(in.story->phraseStartBar)
+                                                                       .arg(detSeed)
+                                                                       .toUtf8());
+            int dir = ((sh & 1u) != 0u) ? 1 : -1;
+            if (vibeEff.vibe == VibeStateMachine::Vibe::Build) dir = 1;
+            if (vibeEff.vibe == VibeStateMachine::Vibe::Climax) dir = 1;
+            if (vibeEff.vibe == VibeStateMachine::Vibe::CoolDown) dir = -1;
+
+            const int bassDelta = qBound(5, int(llround(6.0 + 6.0 * eBand)), 12);
+            const int pianoDelta = qBound(4, int(llround(5.0 + 7.0 * eBand)), 12);
+
+            in.story->bassArc.startCenterMidi = clampBassCenterMidi(in.story->lastBassCenterMidi);
+            in.story->bassArc.endCenterMidi = clampBassCenterMidi(in.story->bassArc.startCenterMidi + dir * bassDelta);
+
+            in.story->pianoArc.startCenterMidi = clampPianoCenterMidi(in.story->lastPianoCenterMidi);
+            in.story->pianoArc.endCenterMidi = clampPianoCenterMidi(in.story->pianoArc.startCenterMidi + dir * pianoDelta);
+            if (intent.registerHigh) in.story->pianoArc.endCenterMidi = clampPianoCenterMidi(in.story->pianoArc.endCenterMidi + 5);
+
+            // Ensure an end-of-phrase vertical spacing target (avoid "lane locking", but prevent mud).
+            if (in.story->pianoArc.endCenterMidi < in.story->bassArc.endCenterMidi + 18) {
+                in.story->pianoArc.endCenterMidi = clampPianoCenterMidi(in.story->bassArc.endCenterMidi + 18);
+            }
+        }
+
+        desiredBassCenterMidi = clampBassCenterMidi(in.story->bassArc.centerAtBar(look.barInPhrase, in.story->phraseBars));
+        desiredPianoCenterMidi = clampPianoCenterMidi(in.story->pianoArc.centerAtBar(look.barInPhrase, in.story->phraseBars));
+    }
+
+    const RegisterTargets regs = chooseJointRegisterTargets(desiredBassCenterMidi,
+                                                           desiredPianoCenterMidi,
+                                                           eBand,
+                                                           intent.registerHigh);
 
     // Drums first (for kick-lock).
     virtuoso::engine::AgentIntentNote kickIntent;
@@ -174,6 +292,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     bc.barInPhrase = look.barInPhrase;
     bc.phraseEndBar = look.phraseEndBar;
     bc.cadence01 = cadence01;
+    bc.registerCenterMidi = regs.bassCenterMidi;
     bc.determinismSeed = detSeed;
     bc.approachProbBeat3 = tune.bassApproachProbBeat3;
     bc.skipBeat3ProbStable = tune.bassSkipBeat3ProbStable;
@@ -231,7 +350,13 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     }
 
     if (allowBass) {
+        // If bass is intentionally climbing this phrase, avoid thinning the groove too much.
+        if (bc.registerCenterMidi >= 55) {
+            bc.skipBeat3ProbStable = qMax(0.0, bc.skipBeat3ProbStable - 0.08);
+        }
         auto bassIntents = in.bassPlanner->planBeat(bc, in.chBass, ts);
+        int bassSum = 0;
+        int bassN = 0;
         for (auto& n : bassIntents) {
             if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
             n.key_center = keyCenterStr;
@@ -263,6 +388,11 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             }
             in.engine->scheduleNote(n);
             if (in.motivicMemory) in.motivicMemory->push(n);
+            bassSum += n.note;
+            bassN++;
+        }
+        if (in.story && bassN > 0) {
+            in.story->lastBassCenterMidi = clampBassCenterMidi(int(llround(double(bassSum) / double(bassN))));
         }
     }
 
@@ -327,6 +457,26 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         pc.rhHi = qMax(pc.rhLo + 4, pc.rhHi - 6);
         pc.sparkleProbBeat4 *= 0.25;
     }
+
+    // Joint register targets: shift the piano band toward the story arc,
+    // allowing intentional down/up movement while maintaining spacing with bass.
+    {
+        const int baseLhCenter = (pc.lhLo + pc.lhHi) / 2;
+        const int baseRhCenter = (pc.rhLo + pc.rhHi) / 2;
+        const int baseCenter = (baseLhCenter + baseRhCenter) / 2;
+        const int shift = regs.pianoCenterMidi - baseCenter;
+        auto clampPair = [](int& lo, int& hi, int minSpan) {
+            lo = qBound(0, lo, 127);
+            hi = qBound(0, hi, 127);
+            if (hi < lo + minSpan) hi = qMin(127, lo + minSpan);
+        };
+        pc.lhLo += shift; pc.lhHi += shift;
+        pc.rhLo += shift; pc.rhHi += shift;
+        pc.sparkleLo += shift; pc.sparkleHi += shift;
+        clampPair(pc.lhLo, pc.lhHi, 4);
+        clampPair(pc.rhLo, pc.rhHi, 8);
+        clampPair(pc.sparkleLo, pc.sparkleHi, 8);
+    }
     if (intent.densityHigh || intent.intensityPeak) {
         pc.skipBeat2ProbStable = qMin(0.95, pc.skipBeat2ProbStable + 0.25);
         pc.preferShells = true;
@@ -359,6 +509,8 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         pc.cadence01 *= 0.55;
     }
     auto pianoIntents = in.pianoPlanner->planBeat(pc, in.chPiano, ts);
+    int pianoSum = 0;
+    int pianoN = 0;
     for (auto& n : pianoIntents) {
         if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
         n.key_center = keyCenterStr;
@@ -376,6 +528,11 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.82 + 0.40 * e))), 127);
         in.engine->scheduleNote(n);
         if (in.motivicMemory) in.motivicMemory->push(n);
+        pianoSum += n.note;
+        pianoN++;
+    }
+    if (in.story && pianoN > 0) {
+        in.story->lastPianoCenterMidi = clampPianoCenterMidi(int(llround(double(pianoSum) / double(pianoN))));
     }
 }
 

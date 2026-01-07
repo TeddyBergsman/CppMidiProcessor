@@ -19,6 +19,7 @@
 #include "playback/HarmonyContext.h"
 #include "playback/TransportTimeline.h"
 #include "playback/InteractionContext.h"
+#include "playback/StoryState.h"
 #include "virtuoso/memory/MotivicMemory.h"
 
 class MidiProcessor;
@@ -156,6 +157,9 @@ private:
 
     // Shared memory for motivic/counterpoint logic across agents.
     virtuoso::memory::MotivicMemory m_motivicMemory;
+
+    // Persistent long-horizon story continuity (4–8 bars).
+    StoryState m_story;
 
     // Channels (1..16)
     int m_chDrums = 6;

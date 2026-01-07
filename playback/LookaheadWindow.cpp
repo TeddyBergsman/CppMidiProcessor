@@ -24,6 +24,7 @@ LookaheadWindow buildLookaheadWindow(const chart::ChartModel& model,
                                      int repeats,
                                      int stepNow,
                                      int horizonBars,
+                                     int phraseBars,
                                      int keyWindowBars,
                                      HarmonyContext& harmony) {
     LookaheadWindow w;
@@ -43,8 +44,8 @@ LookaheadWindow buildLookaheadWindow(const chart::ChartModel& model,
     w.startStep = qMin(stepNow, qMax(0, total - 1));
     const int endStep = qMin(total, w.startStep + w.horizonBars * beatsPerBar);
 
-    // Phrase model (consistent with previous MVP): 4-bar phrases.
-    w.phraseBars = 4;
+    // Phrase model: adaptive 4–8 bars (provided by caller).
+    w.phraseBars = qBound(4, phraseBars, 8);
     const int playbackBarIndex = w.startStep / beatsPerBar;
     w.barInPhrase = (w.phraseBars > 0) ? (qMax(0, playbackBarIndex) % w.phraseBars) : 0;
     w.phraseEndBar = (w.phraseBars > 0) ? (w.barInPhrase == (w.phraseBars - 1)) : false;

@@ -550,7 +550,12 @@ void LibraryWindow::startOrUpdateGrooveLoop(bool preservePhase) {
     const qint64 oldLen = m_grooveAuditionLoopLenMs;
 
     double phase01 = 0.0;
-    if (preservePhase && wasActive && oldLen > 0) {
+    if (m_liveFollowActive && m_songStartWallMs >= 0 && oldLen > 0) {
+        // Phase-lock to song transport: align groove loop phase to (now - songStart).
+        const qint64 relSong = now - m_songStartWallMs;
+        const qint64 relLoop = (relSong >= 0) ? (relSong % oldLen) : 0;
+        phase01 = double(relLoop) / double(oldLen);
+    } else if (preservePhase && wasActive && oldLen > 0) {
         const qint64 rel = now - m_grooveAuditionStartWallMs;
         const qint64 relLoop = (rel >= 0) ? (rel % oldLen) : 0;
         phase01 = double(relLoop) / double(oldLen);
@@ -657,6 +662,15 @@ void LibraryWindow::ingestTheoryEventJson(const QString& json) {
     const QString eventKind = jsonString(obj, "event_kind");
     if (eventKind != "candidate_pool") return;
 
+    // Anchor song start wall time from engine-clock ms.
+    {
+        const qint64 onMs = qint64(obj.value("on_ms").toVariant().toLongLong());
+        if (onMs >= 0) {
+            const qint64 now = QDateTime::currentMSecsSinceEpoch();
+            m_songStartWallMs = now - onMs;
+        }
+    }
+
     // Exact candidate pools for filtering.
     m_liveCandChordKeys.clear();
     m_liveCandScaleKeys.clear();
@@ -717,6 +731,7 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
     scaleUsed = chosen.value("scale_used").toString();
     voicingKey = chosen.value("voicing_key").toString();
     voicingType = chosen.value("voicing_type").toString();
+    const bool hasPolyChoice = chosen.value("has_polychord").toBool(false);
 
     m_liveUpdatingUi = true;
     const QSignalBlocker b0(m_rootCombo);
@@ -796,8 +811,15 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
     }
     if (m_grooveTempoCombo && m_liveBpm > 0) m_grooveTempoCombo->setCurrentText(QString::number(m_liveBpm));
 
+    // Polychords: disable controls unless a real polychord choice exists.
+    if (m_polyTemplateCombo) m_polyTemplateCombo->setEnabled(hasPolyChoice);
+    if (m_polyUpperRoot) m_polyUpperRoot->setEnabled(hasPolyChoice);
+    if (m_polyUpperChord) m_polyUpperChord->setEnabled(hasPolyChoice);
+    if (m_polyLowerRoot) m_polyLowerRoot->setEnabled(hasPolyChoice);
+    if (m_polyLowerChord) m_polyLowerChord->setEnabled(hasPolyChoice);
+
     // --- Polychords tab: map UST voicing keys into a triad-over-bass view ---
-    if (m_polyTab && m_tabs && m_polyTemplateCombo && !voicingKey.isEmpty() && voicingKey.startsWith("piano_ust_", Qt::CaseInsensitive)) {
+    if (hasPolyChoice && m_polyTab && m_tabs && m_polyTemplateCombo && !voicingKey.isEmpty() && voicingKey.startsWith("piano_ust_", Qt::CaseInsensitive)) {
         // Choose the "triad_over_bass" template if present.
         const int tplIdx = m_polyTemplateCombo->findData("triad_over_bass");
         if (tplIdx >= 0) m_polyTemplateCombo->setCurrentIndex(tplIdx);
@@ -856,7 +878,7 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
     if (isGrooveTab) {
         // Keep groove loop in sync when updated programmatically (signals are blocked above).
         startOrUpdateGrooveLoop(/*preservePhase=*/true);
-    } else if (shouldAuditionNow && (isChordTab || isScaleTab || isVoicingTab || isPolyTab)) {
+    } else if (shouldAuditionNow && (isChordTab || isScaleTab || isVoicingTab || (isPolyTab && hasPolyChoice))) {
         onPlayPressed();
     }
 }
@@ -1287,7 +1309,8 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
 
         int bpmVirtual = 120;
         if (live) {
-            bpmVirtual = qBound(30, m_liveBpm, 300);
+            // Live-follow: make scale audition feel brisker.
+            bpmVirtual = qBound(30, m_liveBpm * 2, 600);
         } else {
             const int stepMsBase = qMax(25, durationMs / 5);
             const int beatMsVirtual = qMax(20, stepMsBase * subdivCount);

@@ -842,8 +842,10 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             root.insert("ts_den", ts.den);
             root.insert("style_preset_key", in.stylePresetKey);
             root.insert("chord_is_new", chordIsNew);
-            root.insert("grid_pos", virtuoso::groove::GrooveGrid::toString(
-                                    virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts), ts));
+            const auto poolPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
+            root.insert("grid_pos", virtuoso::groove::GrooveGrid::toString(poolPos, ts));
+            // Anchor to engine-clock time so UIs can sync to transport (not to UI click time).
+            root.insert("on_ms", qint64(virtuoso::groove::GrooveGrid::posToMs(poolPos, ts, in.bpm)));
             root.insert("chord_context", chordText);
             root.insert("scale_used", scaleUsed);
             root.insert("roman", roman);
@@ -970,6 +972,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                 if (!vk.isEmpty()) chosen.insert("voicing_key", vk);
                 const QString vt = representativeVoicingType(pCands[bestPi].plan.notes);
                 if (!vt.isEmpty()) chosen.insert("voicing_type", vt);
+                chosen.insert("has_polychord", (!vk.isEmpty() && vk.startsWith("piano_ust_", Qt::CaseInsensitive)));
             }
             root.insert("chosen", chosen);
 
@@ -1255,8 +1258,9 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         root.insert("ts_den", ts.den);
         root.insert("style_preset_key", in.stylePresetKey);
         root.insert("chord_is_new", chordIsNew);
-        root.insert("grid_pos", virtuoso::groove::GrooveGrid::toString(
-                                virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts), ts));
+        const auto poolPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
+        root.insert("grid_pos", virtuoso::groove::GrooveGrid::toString(poolPos, ts));
+        root.insert("on_ms", qint64(virtuoso::groove::GrooveGrid::posToMs(poolPos, ts, in.bpm)));
         root.insert("chord_context", chordText);
         root.insert("scale_used", scaleUsed);
         root.insert("roman", roman);
@@ -1325,6 +1329,17 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         chosen.insert("piano", pianoChoiceId);
         chosen.insert("drums", drumChoiceId);
         chosen.insert("scale_used", scaleUsed);
+        {
+            QString vk;
+            for (const auto& n : pianoPlan.notes) {
+                vk = parseOntVoicingKeyFromLogicTag(n.logic_tag);
+                if (!vk.isEmpty()) break;
+            }
+            if (!vk.isEmpty()) chosen.insert("voicing_key", vk);
+            const QString vt = representativeVoicingType(pianoPlan.notes);
+            if (!vt.isEmpty()) chosen.insert("voicing_type", vt);
+            chosen.insert("has_polychord", (!vk.isEmpty() && vk.startsWith("piano_ust_", Qt::CaseInsensitive)));
+        }
         root.insert("chosen", chosen);
 
         const auto pos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);

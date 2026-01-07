@@ -169,5 +169,8 @@ private:
     QString m_lastChosenScaleUsed;
     QString m_lastChosenVoicingKey;
     QString m_lastChosenGrooveKey;
+
+    // Song transport anchoring (wall clock <-> engine clock).
+    qint64 m_songStartWallMs = -1;
 };
 

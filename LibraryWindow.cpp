@@ -12,6 +12,7 @@
 #include <QTimer>
 #include <QStatusBar>
 #include <QSignalBlocker>
+#include <QCloseEvent>
 #include <functional>
 
 #include "virtuoso/ui/GuitarFretboardWidget.h"
@@ -20,6 +21,8 @@
 #include "midiprocessor.h"
 #include "virtuoso/theory/ScaleSuggester.h"
 #include "virtuoso/theory/FunctionalHarmony.h"
+#include "virtuoso/groove/TimingHumanizer.h"
+#include "virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h"
 using namespace virtuoso::ontology;
 
 namespace {
@@ -105,6 +108,11 @@ LibraryWindow::LibraryWindow(MidiProcessor* midi, QWidget* parent)
     buildUi();
     populateLists();
     updateHighlights();
+}
+
+void LibraryWindow::closeEvent(QCloseEvent* e) {
+    stopGrooveAuditionNow();
+    QMainWindow::closeEvent(e);
 }
 
 void LibraryWindow::buildUi() {
@@ -224,6 +232,17 @@ void LibraryWindow::buildUi() {
     // Grooves tab (GrooveTemplate library)
     m_grooveTab = new QWidget(this);
     QVBoxLayout* gl = new QVBoxLayout(m_grooveTab);
+    {
+        QHBoxLayout* gctl = new QHBoxLayout;
+        gctl->setSpacing(10);
+        gctl->addWidget(new QLabel("BPM:", this));
+        m_grooveTempoCombo = new QComboBox(this);
+        m_grooveTempoCombo->addItems({"60", "80", "100", "120", "140", "160"});
+        m_grooveTempoCombo->setCurrentText("120");
+        gctl->addWidget(m_grooveTempoCombo);
+        gctl->addStretch(1);
+        gl->addLayout(gctl);
+    }
     m_groovesList = new QListWidget(this);
     m_groovesList->setSelectionMode(QAbstractItemView::SingleSelection);
     m_grooveInfo = new QLabel("—", this);
@@ -262,6 +281,7 @@ void LibraryWindow::buildUi() {
     connect(m_scalesList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_voicingsList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_groovesList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
+    if (m_grooveTempoCombo) connect(m_grooveTempoCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
 
     // Polychord signals
     connect(m_polyTemplateCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
@@ -278,6 +298,11 @@ void LibraryWindow::buildUi() {
     m_autoPlayTimer = new QTimer(this);
     m_autoPlayTimer->setSingleShot(true);
     connect(m_autoPlayTimer, &QTimer::timeout, this, &LibraryWindow::onPlayPressed);
+
+    // Groove audition timer
+    m_grooveAuditionTimer = new QTimer(this);
+    m_grooveAuditionTimer->setInterval(5);
+    connect(m_grooveAuditionTimer, &QTimer::timeout, this, &LibraryWindow::onGrooveAuditionTick);
 }
 
 void LibraryWindow::populateLists() {
@@ -401,10 +426,191 @@ void LibraryWindow::updateGrooveInfo() {
     m_grooveInfo->setText(lines.join("\n"));
 }
 
+int LibraryWindow::grooveBpm() const {
+    const int d = m_grooveTempoCombo ? m_grooveTempoCombo->currentText().toInt() : 120;
+    return qBound(30, d > 0 ? d : 120, 300);
+}
+
+QString LibraryWindow::selectedGrooveKey() const {
+    if (!m_groovesList) return {};
+    const auto* it = m_groovesList->currentItem();
+    if (!it) return {};
+    return it->data(Qt::UserRole).toString();
+}
+
+const virtuoso::groove::GrooveTemplate* LibraryWindow::selectedGrooveTemplate() const {
+    const QString key = selectedGrooveKey();
+    if (key.isEmpty()) return nullptr;
+    return m_grooveRegistry.grooveTemplate(key);
+}
+
+void LibraryWindow::stopGrooveAuditionNow() {
+    if (m_grooveAuditionTimer) m_grooveAuditionTimer->stop();
+    ++m_grooveSession; // cancel any pending groove noteOff singleShots
+    m_grooveAuditionEvents.clear();
+    m_grooveAuditionIndex = 0;
+    m_grooveAuditionLoopLenMs = 0;
+    // Stop channel 6 (drums) which is where click+drum loop live.
+    stopPlaybackNow(/*channel=*/6);
+}
+
+void LibraryWindow::rebuildGrooveAuditionEvents(const virtuoso::groove::GrooveTemplate* gt, int bpm) {
+    if (!gt) return;
+    if (bpm <= 0) bpm = 120;
+
+    constexpr int ch = 6;
+    virtuoso::groove::TimeSignature ts{4, 4};
+    const int bars = 4;
+
+    // Humanizer (deterministic) to apply selected GrooveTemplate.
+    virtuoso::groove::InstrumentGrooveProfile prof;
+    prof.instrument = "GrooveAudition";
+    prof.humanizeSeed = 777;
+    prof.microJitterMs = 0;
+    prof.attackVarianceMs = 0;
+    prof.velocityJitter = 0;
+    prof.pushMs = 0;
+    prof.laidBackMs = 0;
+    prof.driftMaxMs = 0;
+    prof.driftRate = 0.0;
+    prof.phraseBars = 4;
+    prof.phraseTimingMaxMs = 0;
+    prof.phraseVelocityMax = 0.0;
+    virtuoso::groove::TimingHumanizer hz(prof);
+    hz.setGrooveTemplate(*gt);
+
+    m_grooveAuditionEvents.clear();
+    m_grooveAuditionEvents.reserve(bars * 64);
+
+    auto add = [&](int note, int vel, const virtuoso::groove::GridPos& pos, virtuoso::groove::Rational dur, bool structural) {
+        const auto he = hz.humanizeNote(pos, ts, bpm, vel, dur, structural);
+        GrooveAuditionEvent e;
+        e.channel = ch;
+        e.note = note;
+        e.vel = he.velocity;
+        e.onMs = qMax<qint64>(0, he.onMs);
+        e.offMs = qMax<qint64>(e.onMs + 10, he.offMs);
+        m_grooveAuditionEvents.push_back(e);
+    };
+
+    // Click pattern: quarter notes (snare stick) + upbeats (mapped ride) so swing/pocket is audible.
+    for (int bar = 0; bar < bars; ++bar) {
+        for (int beat = 0; beat < 4; ++beat) {
+            const auto p0 = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(bar, beat, 0, 1, ts);
+            const auto p1 = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(bar, beat, 1, 2, ts); // upbeat
+            add(virtuoso::drums::fluffy_brushes::kSnareRightHand_D1, 60, p0, {1, 32}, /*structural=*/true);
+            add(virtuoso::drums::fluffy_brushes::kRideHitBorder_Ds2, 26, p1, {1, 64}, /*structural=*/false);
+        }
+    }
+
+    // Always include a simple drum loop: ride every beat + snare swish on 2&4 + feather kick on 1.
+    for (int bar = 0; bar < bars; ++bar) {
+        for (int beat = 0; beat < 4; ++beat) {
+            const auto p = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(bar, beat, 0, 1, ts);
+            add(virtuoso::drums::fluffy_brushes::kRideHitBorder_Ds2, 34, p, {1, 32}, /*structural=*/(beat == 0));
+            if (beat == 1 || beat == 3) {
+                add(virtuoso::drums::fluffy_brushes::kSnareRightHand_D1, 30, p, {1, 32}, /*structural=*/true);
+            }
+            if (beat == 0) {
+                add(virtuoso::drums::fluffy_brushes::kKickLooseNormal_G0, 22, p, {1, 16}, /*structural=*/true);
+            }
+        }
+    }
+
+    std::sort(m_grooveAuditionEvents.begin(), m_grooveAuditionEvents.end(), [](const GrooveAuditionEvent& a, const GrooveAuditionEvent& b) {
+        return a.onMs < b.onMs;
+    });
+
+    // Loop length must be the *musical grid length* (exact 4 bars), not "last note ended".
+    // Otherwise the loop will restart early (because the last event does not land exactly at bar end).
+    const virtuoso::groove::GridPos endPos{bars, virtuoso::groove::Rational(0, 1)};
+    m_grooveAuditionLoopLenMs = virtuoso::groove::GrooveGrid::posToMs(endPos, ts, bpm);
+    if (m_grooveAuditionLoopLenMs <= 0) m_grooveAuditionLoopLenMs = 1;
+}
+
+void LibraryWindow::startOrUpdateGrooveLoop(bool preservePhase) {
+    if (!m_grooveAuditionTimer || !m_midi) return;
+    const auto* gt = selectedGrooveTemplate();
+    if (!gt) { stopGrooveAuditionNow(); return; }
+
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const bool wasActive = m_grooveAuditionTimer->isActive();
+    const qint64 oldLen = m_grooveAuditionLoopLenMs;
+
+    double phase01 = 0.0;
+    if (preservePhase && wasActive && oldLen > 0) {
+        const qint64 rel = now - m_grooveAuditionStartWallMs;
+        const qint64 relLoop = (rel >= 0) ? (rel % oldLen) : 0;
+        phase01 = double(relLoop) / double(oldLen);
+    }
+
+    const int bpm = grooveBpm();
+    rebuildGrooveAuditionEvents(gt, bpm);
+
+    if (m_grooveAuditionLoopLenMs <= 0) {
+        stopGrooveAuditionNow();
+        return;
+    }
+
+    if (!wasActive) {
+        // First start: hard reset the drum channel, then loop.
+        stopPlaybackNow(/*channel=*/6);
+        phase01 = 0.0;
+    }
+
+    // Preserve phase even if loop length changes (tempo changes).
+    const qint64 relNew = qint64(llround(phase01 * double(m_grooveAuditionLoopLenMs)));
+    m_grooveAuditionStartWallMs = now - relNew;
+
+    // Seek index to the first event at/after current position in the loop.
+    const qint64 relLoopNew = relNew % m_grooveAuditionLoopLenMs;
+    int idx = 0;
+    while (idx < m_grooveAuditionEvents.size() && m_grooveAuditionEvents[idx].onMs < relLoopNew) idx++;
+    m_grooveAuditionIndex = idx;
+
+    if (!wasActive) {
+        m_grooveAuditionTimer->start();
+    }
+}
+
+void LibraryWindow::onGrooveAuditionTick() {
+    if (!m_grooveAuditionTimer || !m_grooveAuditionTimer->isActive()) return;
+    if (!m_midi) return;
+    const quint64 session = m_grooveSession;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    qint64 rel = now - m_grooveAuditionStartWallMs;
+
+    // Loop seamlessly while the Grooves tab is visible.
+    if (m_grooveAuditionLoopLenMs > 0 && rel >= m_grooveAuditionLoopLenMs) {
+        const qint64 k = rel / m_grooveAuditionLoopLenMs;
+        m_grooveAuditionStartWallMs += k * m_grooveAuditionLoopLenMs;
+        rel = now - m_grooveAuditionStartWallMs;
+        m_grooveAuditionIndex = 0;
+    }
+    while (m_grooveAuditionIndex < m_grooveAuditionEvents.size()) {
+        const auto& ev = m_grooveAuditionEvents[m_grooveAuditionIndex];
+        if (ev.onMs > rel) break;
+        noteOnTracked(ev.channel, ev.note, ev.vel);
+        QTimer::singleShot(int(qMax<qint64>(1, ev.offMs - ev.onMs)), this, [this, session, ch=ev.channel, note=ev.note]() {
+            if (session != m_grooveSession) return;
+            noteOffTracked(ch, note);
+        });
+        m_grooveAuditionIndex++;
+    }
+}
+
 void LibraryWindow::onSelectionChanged() {
     updateHighlights();
     updateGrooveInfo();
     scheduleAutoPlay();
+
+    // Grooves tab is "always auditioning" while visible.
+    const bool groovesActive = (m_tabs && m_grooveTab && m_tabs->currentWidget() == m_grooveTab);
+    if (groovesActive) {
+        startOrUpdateGrooveLoop(/*preservePhase=*/true); // switch groove/tempo without restarting phase
+    } else {
+        stopGrooveAuditionNow();
+    }
 }
 
 QSet<int> LibraryWindow::pitchClassesForPolychord() const {
@@ -593,10 +799,10 @@ int LibraryWindow::baseRootMidiForPosition(int rootPc) const {
 
 int LibraryWindow::perNoteDurationMs() const {
     const QString d = m_durationCombo ? m_durationCombo->currentText() : "Medium";
-    // Medium is the previous default (650ms)
-    if (d == "Short") return 250;
-    if (d == "Long") return 1100;
-    return 650;
+    // Restore snappier audition timing (closer to the original feel).
+    if (d == "Short") return 180;
+    if (d == "Long") return 900;
+    return 500; // Medium
 }
 
 void LibraryWindow::setActiveMidi(int midi, bool on) {
@@ -747,14 +953,70 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
     for (int n : notes) seq.push_back(n);
     for (int i = notes.size() - 2; i >= 0; --i) seq.push_back(notes[i]);
 
+    // If a groove is selected, use its timing (swing/pocket) for the scale playback.
+    // Otherwise fall back to the legacy fixed-step arpeggio.
+    const auto* gt = selectedGrooveTemplate();
+    virtuoso::groove::TimeSignature ts{4, 4};
+
+    QVector<qint64> onMs;
+    QVector<qint64> offMs;
+    if (gt) {
+        virtuoso::groove::InstrumentGrooveProfile prof;
+        prof.instrument = "ScaleAudition";
+        prof.humanizeSeed = 4242;
+        prof.microJitterMs = 0;
+        prof.attackVarianceMs = 0;
+        prof.velocityJitter = 0;
+        prof.pushMs = 0;
+        prof.laidBackMs = 0;
+        prof.driftMaxMs = 0;
+        prof.driftRate = 0.0;
+        prof.phraseBars = 4;
+        prof.phraseTimingMaxMs = 0;
+        prof.phraseVelocityMax = 0.0;
+        virtuoso::groove::TimingHumanizer hz(prof);
+        hz.setGrooveTemplate(*gt);
+
+        // IMPORTANT: don't inherit "Grooves tab BPM". Scales should keep using Duration like before.
+        // We interpret the scale arpeggio as a regular subdivision grid whose tempo is derived from the
+        // legacy step duration.
+        const int stepMsBase = qMax(25, durationMs / 5);
+        int subdivCount = 2; // default: 8ths
+        if (gt->gridKind == virtuoso::groove::GrooveGridKind::Triplet8 ||
+            gt->gridKind == virtuoso::groove::GrooveGridKind::Shuffle12_8) {
+            subdivCount = 3; // triplet grid
+        }
+        const int beatMsVirtual = qMax(20, stepMsBase * subdivCount);
+        // This is an internal mapping from the legacy "Duration" feel into a tempo so that
+        // groove templates (BeatFraction offsets) work. DO NOT cap to 300 BPM; short/medium
+        // can exceed 300 and would otherwise collapse to the same timing.
+        const int bpmVirtual = qBound(10, int(llround(60000.0 / double(beatMsVirtual))), 2400);
+
+        onMs.resize(seq.size());
+        offMs.resize(seq.size());
+        for (int i = 0; i < seq.size(); ++i) {
+            const int idx = i;
+            const int beatAbs = idx / subdivCount;
+            const int bar = beatAbs / qMax(1, ts.num);
+            const int beatInBar = beatAbs % qMax(1, ts.num);
+            const int subdiv = idx % subdivCount;
+            const auto pos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(bar, beatInBar, subdiv, subdivCount, ts);
+            const virtuoso::groove::Rational dur{1, ts.den * subdivCount};
+            const auto he = hz.humanizeNote(pos, ts, bpmVirtual, vel, dur, /*structural=*/(subdiv == 0));
+            onMs[i] = qMax<qint64>(0, he.onMs);
+            offMs[i] = qMax<qint64>(onMs[i] + 12, he.offMs);
+        }
+    }
+
+    const bool useGroove = (gt && onMs.size() == seq.size());
     // Faster scale feel (still tied to Duration): step is a fraction of chord duration.
-    const int stepMs = qMax(25, durationMs / 5);
-    const int gateMs = qMax(18, int(double(stepMs) * 0.80));
+    const int stepMsFixed = qMax(25, durationMs / 5);
+    const int gateMsFixed = qMax(18, int(double(stepMsFixed) * 0.80));
 
     // Use a chained timer approach (rather than N independent timers) to avoid ordering jitter.
     using StepFn = std::function<void(int idx, int prev)>;
     auto stepFn = std::make_shared<StepFn>();
-    *stepFn = [this, session, ch, vel, gateMs, stepMs, seq, stepFn](int idx, int prev) {
+    *stepFn = [this, session, ch, vel, gateMsFixed, stepMsFixed, seq, stepFn, useGroove, onMs, offMs](int idx, int prev) {
         if (session != m_playSession) return;
         if (!m_midi) return;
         if (idx >= seq.size()) {
@@ -777,6 +1039,22 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
         noteOnTracked(ch, n, vel);
 
         // Gate-off (safe even if next step already killed it).
+        // In groove mode, keep notes sounding until just before the next onset.
+        // This makes swing/triplet feel much more audible in a monophonic scale.
+        int gateMs = gateMsFixed;
+        int nextDelayMs = stepMsFixed;
+        if (useGroove && idx + 1 < onMs.size()) {
+            nextDelayMs = int(qMax<qint64>(1, onMs[idx + 1] - onMs[idx]));
+            gateMs = qMax(18, nextDelayMs - 4);
+        } else if (useGroove && idx < onMs.size()) {
+            // Last note: mirror the prevailing grooved interval so it doesn't "clip" short.
+            int prevDelay = stepMsFixed;
+            if (idx > 0 && idx < onMs.size()) {
+                prevDelay = int(qMax<qint64>(1, onMs[idx] - onMs[idx - 1]));
+            }
+            gateMs = qMax(18, prevDelay - 4);
+        }
+
         QTimer::singleShot(gateMs, this, [this, session, ch, n]() {
             if (session != m_playSession) return;
             if (!m_midi) return;
@@ -784,10 +1062,15 @@ void LibraryWindow::playMidiNotes(const QVector<int>& notes, int durationMs, boo
             setActiveMidi(n, false);
         });
 
-        QTimer::singleShot(stepMs, this, [stepFn, idx, n]() { (*stepFn)(idx + 1, n); });
+        QTimer::singleShot(nextDelayMs, this, [stepFn, idx, n]() { (*stepFn)(idx + 1, n); });
     };
 
-    (*stepFn)(/*idx=*/0, /*prev=*/-1);
+    if (useGroove && !onMs.isEmpty()) {
+        const int firstDelay = int(onMs[0]);
+        QTimer::singleShot(firstDelay, this, [stepFn]() { (*stepFn)(/*idx=*/0, /*prev=*/-1); });
+    } else {
+        (*stepFn)(/*idx=*/0, /*prev=*/-1);
+    }
 }
 
 void LibraryWindow::onPlayPressed() {

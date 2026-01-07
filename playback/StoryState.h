@@ -4,6 +4,9 @@
 #include <QString>
 #include <QtGlobal>
 
+#include "playback/JazzBalladBassPlanner.h"
+#include "playback/JazzBalladPianoPlanner.h"
+
 namespace playback {
 
 // Persistent long-horizon "story" state shared across agents.
@@ -36,6 +39,9 @@ struct StoryState final {
     // Call/response macro: when the user ends a phrase, agents should "answer" for a short window.
     int responseUntilBar = -1; // inclusive playback bar index; <0 means inactive
 
+    // Energy tracking for instant replanning when user changes energy.
+    double lastPlannedEnergy01 = -1.0;
+
     // Phrase-level joint plan (beam-search output). One entry per beat-step.
     struct JointStepChoice {
         int stepIndex = -1; // absolute beat-step index
@@ -43,6 +49,13 @@ struct StoryState final {
         QString pianoId;
         QString drumsId;
         QString costTag; // optional debug string
+
+        // Planned beat content (the "big rock"): actual notes + actions + resulting agent states.
+        QVector<virtuoso::engine::AgentIntentNote> drumsNotes;
+        JazzBalladBassPlanner::BeatPlan bassPlan;
+        JazzBalladPianoPlanner::BeatPlan pianoPlan;
+        JazzBalladBassPlanner::PlannerState bassStateAfter;
+        JazzBalladPianoPlanner::PlannerState pianoStateAfter;
     };
     int planStartStep = -1;
     int planSteps = 0;
@@ -56,6 +69,7 @@ struct StoryState final {
         lastBassCenterMidi = 45;
         lastPianoCenterMidi = 72;
         responseUntilBar = -1;
+        lastPlannedEnergy01 = -1.0;
         planStartStep = -1;
         planSteps = 0;
         plan.clear();

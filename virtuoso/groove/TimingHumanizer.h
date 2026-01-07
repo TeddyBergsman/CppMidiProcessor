@@ -106,7 +106,10 @@ public:
         const qint64 baseOff = baseOn + qMax<qint64>(1, GrooveGrid::wholeNotesToMs(durationWhole, bpm));
 
         // Template offset (swing/pocket).
-        const int feelMs = m_hasGrooveTemplate
+        // IMPORTANT: groove templates can represent *systematic* timing (e.g. swing 8ths),
+        // which can be much larger than "microtiming jitter". Do NOT clamp these down to
+        // 10–30ms or the groove becomes inaudible.
+        const int templateMsRaw = m_hasGrooveTemplate
             ? m_grooveTemplate.offsetMsFor(start, ts, bpm)
             : m_feel.offsetMsFor(start, ts, bpm);
 
@@ -119,7 +122,31 @@ public:
         const double wholeMs = 240000.0 / double(bpm); // ms per whole note
         const double beatMs = wholeMs / double(qMax(1, ts.den));         // ms per beat (ts.den defines beat)
         const double sixteenthMs = beatMs / 4.0;
-        const int maxOffsetMusical = qBound(6, int(llround(0.22 * sixteenthMs)), 48); // ~22% of a 16th
+        const int maxOffsetMusical = qBound(6, int(llround(0.22 * sixteenthMs)), 48); // microtiming clamp
+
+        // Allow larger systematic groove offsets depending on grid kind.
+        int maxTemplateOffset = 120;
+        if (m_hasGrooveTemplate) {
+            const double eighthMs = beatMs / 2.0;
+            switch (m_grooveTemplate.gridKind) {
+                case GrooveGridKind::Swing8:
+                    // Swing moves the upbeat 8th substantially (e.g. +1/6 beat at 2:1 swing).
+                    maxTemplateOffset = qBound(18, int(llround(0.80 * eighthMs)), 420);
+                    break;
+                case GrooveGridKind::Triplet8:
+                    maxTemplateOffset = qBound(14, int(llround(0.90 * (beatMs / 3.0))), 320);
+                    break;
+                case GrooveGridKind::Shuffle12_8:
+                    maxTemplateOffset = qBound(16, int(llround(0.70 * (beatMs / 3.0))), 320);
+                    break;
+                default:
+                    maxTemplateOffset = qBound(10, int(llround(0.30 * sixteenthMs)), 120);
+                    break;
+            }
+        }
+        int templateMs = templateMsRaw;
+        if (templateMs > maxTemplateOffset) templateMs = maxTemplateOffset;
+        if (templateMs < -maxTemplateOffset) templateMs = -maxTemplateOffset;
 
         // Random components: center-weighted (triangular) instead of uniform.
         // This better matches human playing: most hits are near the grid with occasional larger deviations.
@@ -161,13 +188,15 @@ public:
             phraseOffset += int(llround((arc - 0.5) * double(m_profile.phraseTimingMaxMs) * 0.30 * tempoScale));
         }
 
-        int totalOffset = feelMs + laidBack - push + driftLocal + phraseOffset + jitter + attackVar;
+        // Clamp only the *microtiming* components; keep systematic groove offsets intact.
+        int microOffset = laidBack - push + driftLocal + phraseOffset + jitter + attackVar;
         int clampMs = structural ? m_profile.clampMsStructural : m_profile.clampMsLoose;
         clampMs = int(llround(double(clampMs) * tempoScale));
         clampMs = qMin(clampMs, maxOffsetMusical);
         clampMs = qMax(4, clampMs);
-        if (totalOffset > clampMs) totalOffset = clampMs;
-        if (totalOffset < -clampMs) totalOffset = -clampMs;
+        if (microOffset > clampMs) microOffset = clampMs;
+        if (microOffset < -clampMs) microOffset = -clampMs;
+        const int totalOffset = templateMs + microOffset;
 
         // Velocity curve: downbeat/backbeat + jitter.
         int beatInBar = 0;

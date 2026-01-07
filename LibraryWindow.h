@@ -4,6 +4,7 @@
 #include <QSet>
 #include <QtGlobal>
 #include <QHash>
+#include <QCloseEvent>
 
 #include "virtuoso/ontology/OntologyRegistry.h"
 #include "virtuoso/groove/GrooveRegistry.h"
@@ -28,8 +29,11 @@ private slots:
     void onSelectionChanged();
     void onPlayPressed();
     void onUserClickedMidi(int midi);
+    void onGrooveAuditionTick();
 
 private:
+    void closeEvent(QCloseEvent* e) override;
+
     void buildUi();
     void populateLists();
     void updateHighlights();
@@ -66,6 +70,12 @@ private:
     void stopPlaybackNow(int channel);
     void noteOnTracked(int channel, int midi, int vel);
     void noteOffTracked(int channel, int midi);
+    void stopGrooveAuditionNow();
+    void startOrUpdateGrooveLoop(bool preservePhase);
+    void rebuildGrooveAuditionEvents(const virtuoso::groove::GrooveTemplate* gt, int bpm);
+    int grooveBpm() const;
+    QString selectedGrooveKey() const;
+    const virtuoso::groove::GrooveTemplate* selectedGrooveTemplate() const;
 
     virtuoso::ontology::OntologyRegistry m_registry;
     MidiProcessor* m_midi = nullptr; // not owned
@@ -97,6 +107,14 @@ private:
     QListWidget* m_groovesList = nullptr;
     QWidget* m_grooveTab = nullptr;
     QLabel* m_grooveInfo = nullptr;
+    QComboBox* m_grooveTempoCombo = nullptr;
+    QTimer* m_grooveAuditionTimer = nullptr;
+    qint64 m_grooveAuditionStartWallMs = 0;
+    int m_grooveAuditionIndex = 0;
+    qint64 m_grooveAuditionLoopLenMs = 0;
+    quint64 m_grooveSession = 0;
+    struct GrooveAuditionEvent { qint64 onMs=0; qint64 offMs=0; int channel=6; int note=0; int vel=64; };
+    QVector<GrooveAuditionEvent> m_grooveAuditionEvents;
 
     // Visualizers
     GuitarFretboardWidget* m_guitar = nullptr;

@@ -196,6 +196,17 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     const bool allowBass = (eBand >= 0.10);
     const bool allowDrums = (eBand >= 0.22);
 
+    // Instant energy response despite phrase planning:
+    // If energy changed significantly, replan starting immediately (from the current beat).
+    bool forceReplanNow = false;
+    if (in.story) {
+        const double prev = in.story->lastPlannedEnergy01;
+        if (prev >= 0.0 && qAbs(prev - baseEnergy) >= 0.08) {
+            forceReplanNow = true;
+        }
+        in.story->lastPlannedEnergy01 = baseEnergy;
+    }
+
     // Determinism seed.
     const quint32 detSeed = virtuoso::util::StableHash::fnv1a32((QString("ballad|") + in.stylePresetKey).toUtf8());
 
@@ -252,20 +263,25 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     QString plannedPianoId;
     QString plannedDrumsId;
     QString plannedCostTag;
+    const StoryState::JointStepChoice* plannedStep = nullptr;
     if (in.story) {
         const int phraseStartBar = playbackBarIndex - look.barInPhrase;
         const int phraseStartStep = phraseStartBar * beatsPerBar;
         const int phraseSteps = look.phraseBars * beatsPerBar;
         const bool atPhraseStart = (beatInBar == 0) && (look.barInPhrase == 0);
-        if (atPhraseStart && (in.story->planStartStep != phraseStartStep || in.story->planSteps != phraseSteps || in.story->plan.isEmpty())) {
+        const bool needPlan = (in.story->plan.isEmpty() || in.story->planStartStep < 0 || in.story->planSteps <= 0);
+        const bool wrongWindow = (in.story->planStartStep != phraseStartStep || in.story->planSteps != phraseSteps);
+        if ((atPhraseStart && (needPlan || wrongWindow)) || forceReplanNow) {
             JointPhrasePlanner::Inputs pi;
             pi.in = in;
-            pi.startStep = phraseStartStep;
-            pi.steps = phraseSteps;
+            // When energy changes, replan from *this beat* so behavior changes immediately.
+            pi.startStep = forceReplanNow ? stepIndex : phraseStartStep;
+            // Plan at least a phrase horizon ahead.
+            pi.steps = forceReplanNow ? qMax(1, phraseSteps - (stepIndex - phraseStartStep)) : phraseSteps;
             pi.beamWidth = 6;
             in.story->plan = JointPhrasePlanner::plan(pi);
-            in.story->planStartStep = phraseStartStep;
-            in.story->planSteps = phraseSteps;
+            in.story->planStartStep = pi.startStep;
+            in.story->planSteps = pi.steps;
         }
         const int idx = stepIndex - in.story->planStartStep;
         if (idx >= 0 && idx < in.story->plan.size()) {
@@ -275,6 +291,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                 plannedPianoId = ch.pianoId;
                 plannedDrumsId = ch.drumsId;
                 plannedCostTag = ch.costTag;
+                plannedStep = &ch;
             }
         }
     }
@@ -546,6 +563,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     virtuoso::solver::CostWeights jointWeights{};
     virtuoso::solver::CostBreakdown jointBd{};
     bool haveJointBd = false;
+    const bool usePlannedBeat = (plannedStep != nullptr && plannedStep->stepIndex == stepIndex);
 
     // Drums candidates (stateless planner): build contexts once, reuse in optimizer.
     BrushesBalladDrummer::Context dcBase;
@@ -554,7 +572,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     QVector<virtuoso::engine::AgentIntentNote> drumPlanDry;
     QVector<virtuoso::engine::AgentIntentNote> drumPlanWet;
     const bool phraseSetupBar = (look.phraseBars > 1) ? (look.barInPhrase == (look.phraseBars - 2)) : false;
-    if (allowDrums) {
+    if (!usePlannedBeat && allowDrums) {
         dcBase.bpm = in.bpm;
         dcBase.ts = ts;
         dcBase.playbackBarIndex = playbackBarIndex;
@@ -590,7 +608,16 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         drumPlanWet = in.drummer->planBeat(dcWet);
     }
 
-    if (allowBass) {
+    if (usePlannedBeat) {
+        bassChoiceId = plannedBassId.isEmpty() ? plannedStep->bassId : plannedBassId;
+        pianoChoiceId = plannedPianoId.isEmpty() ? plannedStep->pianoId : plannedPianoId;
+        drumChoiceId = plannedDrumsId.isEmpty() ? plannedStep->drumsId : plannedDrumsId;
+        if (allowDrums) {
+            const QString jt = QString("joint=%1+%2+%3|%4")
+                                   .arg(bassChoiceId, pianoChoiceId, drumChoiceId, plannedCostTag.isEmpty() ? QString("planned") : plannedCostTag);
+            scheduleDrums(plannedStep->drumsNotes, jt);
+        }
+    } else if (allowBass) {
         JazzBalladBassPlanner::Context bcSparse = bc;
         JazzBalladBassPlanner::Context bcBase = bc;
         JazzBalladBassPlanner::Context bcRich = bc;
@@ -829,7 +856,9 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             bcChosen.skipBeat3ProbStable = qMax(0.0, bcChosen.skipBeat3ProbStable - 0.08);
         }
 
-        const auto bassPlan = in.bassPlanner->planBeatWithActions(bcChosen, in.chBass, ts);
+        JazzBalladBassPlanner::BeatPlan bassPlan;
+        if (usePlannedBeat) bassPlan = plannedStep->bassPlan;
+        else bassPlan = in.bassPlanner->planBeatWithActions(bcChosen, in.chBass, ts);
         const int desiredArtMidi = bassPlan.desiredArtKeyswitchMidi;
 
         bool haveLegatoKs = false;
@@ -983,10 +1012,15 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         if (in.story && bassN > 0) {
             in.story->lastBassCenterMidi = clampBassCenterMidi(int(llround(double(bassSum) / double(bassN))));
         }
+        if (usePlannedBeat) {
+            in.bassPlanner->restoreState(plannedStep->bassStateAfter);
+        }
     }
 
     // --- Schedule Piano (chosen) ---
-    const auto pianoPlan = in.pianoPlanner->planBeatWithActions(pcChosen, in.chPiano, ts);
+    JazzBalladPianoPlanner::BeatPlan pianoPlan;
+    if (usePlannedBeat) pianoPlan = plannedStep->pianoPlan;
+    else pianoPlan = in.pianoPlanner->planBeatWithActions(pcChosen, in.chPiano, ts);
     for (const auto& ci : pianoPlan.ccs) {
         const QString tag = ci.logic_tag.isEmpty() ? jointTag : (ci.logic_tag + "|" + jointTag);
         in.engine->scheduleCC("Piano", in.chPiano, ci.cc, ci.value, ci.startPos, ci.structural, tag);
@@ -1017,6 +1051,9 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     }
     if (in.story && pianoN > 0) {
         in.story->lastPianoCenterMidi = clampPianoCenterMidi(int(llround(double(pianoSum) / double(pianoN))));
+    }
+    if (usePlannedBeat) {
+        in.pianoPlanner->restoreState(plannedStep->pianoStateAfter);
     }
 }
 

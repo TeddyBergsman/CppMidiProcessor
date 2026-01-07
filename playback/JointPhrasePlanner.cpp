@@ -400,6 +400,11 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
                         choice.pianoId = pcand.id;
                         choice.drumsId = dc.id;
                         choice.costTag = bd.shortTag(weights);
+                        choice.drumsNotes = dc.plan;
+                        choice.bassPlan = bcand.plan;
+                        choice.pianoPlan = pcand.plan;
+                        choice.bassStateAfter = bcand.next;
+                        choice.pianoStateAfter = pcand.next;
                         nn.choices.push_back(choice);
                         nextBeam.push_back(std::move(nn));
                     }
@@ -416,7 +421,11 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
     if (beam.isEmpty()) return {};
     // Best node is beam[0] after sort above at last iteration.
     std::sort(beam.begin(), beam.end(), [](const BeamNode& a, const BeamNode& b) { return a.cost < b.cost; });
-    return beam.front().choices;
+    const auto out = beam.front().choices;
+    // IMPORTANT: planning must not mutate live planner state.
+    in.bassPlanner->restoreState(bassStart);
+    in.pianoPlanner->restoreState(pianoStart);
+    return out;
 }
 
 } // namespace playback

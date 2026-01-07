@@ -55,6 +55,7 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
     const bool phraseStart = (phraseBars > 0) ? (barInPhrase == 0) : (bar == 0);
     const bool phraseEnd = (phraseBars > 0) ? (barInPhrase == (phraseBars - 1)) : false;
     const bool phraseEndBar = ctx.phraseEndBar || phraseEnd;
+    const bool phraseSetupBar = (phraseBars > 1) ? (barInPhrase == (phraseBars - 2)) : false;
     const double cadence01 = qBound(0.0, ctx.cadence01, 1.0);
     const bool shouldRetriggerLoop = (m_p.loopRetriggerBars > 0) ? ((bar % m_p.loopRetriggerBars) == 0) : phraseStart;
 
@@ -229,6 +230,75 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
             rh.structural = true;
             rh.logic_tag = "Drums:CadenceRideHit";
             out.push_back(rh);
+        }
+    }
+
+    // --- 5) Phrase setup swell (bar before phrase end): set up the cadence.
+    // This is a subtle "session drummer" move: a soft ride swish or brush short pickup on the last beat
+    // of the setup bar, to make the phrase end feel prepared rather than random.
+    if (phraseSetupBar && beat == (qMax(1, ts.num) - 1) && cadence01 >= 0.35) {
+        const quint32 s = mixSeed(ctx.determinismSeed, quint32(bar * 41 + 0x5157u));
+        const double p = unitRand01(s);
+        const double want = qBound(0.0, 0.10 + 0.35 * cadence01 + 0.20 * e, 0.65);
+        if (p < want) {
+            const bool doSwish = unitRand01(mixSeed(s, 0x5315u)) < qBound(0.0, 0.35 + 0.45 * e, 0.85);
+            if (doSwish) {
+                AgentIntentNote sw;
+                sw.agent = "Drums";
+                sw.channel = m_p.channel;
+                sw.note = m_p.noteRideSwish;
+                sw.baseVelocity = qBound(1, 18 + int(llround(18.0 * e)) + int(llround(10.0 * cadence01)), 127);
+                sw.startPos = gp;
+                // Hold into the downbeat a bit (reads as swell), but keep it short.
+                const int holdMs = qBound(420, msForBars(bpm, ts, 1) / 3, 1200);
+                sw.durationWhole = durationWholeFromHoldMs(holdMs, bpm);
+                sw.structural = true;
+                sw.logic_tag = "Drums:PhraseSetupSwish";
+                out.push_back(sw);
+            } else {
+                // Brush pickup gesture: two 16ths on the last beat (and-of-4 + a).
+                for (int sub = 1; sub <= 3; sub += 2) {
+                    AgentIntentNote pk;
+                    pk.agent = "Drums";
+                    pk.channel = m_p.channel;
+                    pk.note = m_p.noteBrushShort;
+                    pk.baseVelocity = qBound(1, 16 + int(llround(16.0 * e)) + int(llround(8.0 * cadence01)), 127);
+                    pk.startPos = GrooveGrid::fromBarBeatTuplet(bar, beat, /*sub*/sub, /*count*/4, ts);
+                    pk.durationWhole = Rational(1, 32);
+                    pk.structural = true;
+                    pk.logic_tag = "Drums:PhraseSetupBrushPickup";
+                    out.push_back(pk);
+                }
+            }
+        }
+    }
+
+    // --- 6) Phrase end flourish (strong cadence): a tiny fill, not a "drum fill".
+    // When cadence is very strong and energy allows, add a short three-note gesture on the last beat
+    // (brush short -> snare swish -> ride hit). This is deliberately sparse and deterministic.
+    if (phraseEndBar && cadence01 >= 0.85 && beat == (qMax(1, ts.num) - 1) && e >= 0.35 && !ctx.intensityPeak) {
+        const quint32 s = mixSeed(ctx.determinismSeed, quint32(bar * 43 + 0xF11Eu));
+        const double p = unitRand01(s);
+        const double want = qBound(0.0, 0.12 + 0.35 * cadence01 + 0.15 * e, 0.55);
+        if (p < want) {
+            struct Hit { int sub; int count; int note; int vel; const char* tag; };
+            const Hit hits[] = {
+                {1, 4, m_p.noteBrushShort, qBound(1, 16 + int(llround(14.0 * e)), 127), "Drums:CadenceFlourishBrush"},
+                {2, 4, m_p.noteSnareSwish, qBound(1, 20 + int(llround(20.0 * e)), 127), "Drums:CadenceFlourishSnare"},
+                {3, 4, m_p.noteRideHit,    qBound(1, 18 + int(llround(24.0 * e)), 127), "Drums:CadenceFlourishRide"},
+            };
+            for (const auto& h : hits) {
+                AgentIntentNote n;
+                n.agent = "Drums";
+                n.channel = m_p.channel;
+                n.note = h.note;
+                n.baseVelocity = h.vel;
+                n.startPos = GrooveGrid::fromBarBeatTuplet(bar, beat, h.sub, h.count, ts);
+                n.durationWhole = Rational(1, 32);
+                n.structural = true;
+                n.logic_tag = h.tag;
+                out.push_back(n);
+            }
         }
     }
 

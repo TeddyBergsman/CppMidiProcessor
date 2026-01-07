@@ -1066,10 +1066,17 @@ CMakeFiles/CppMidiProcessor.dir/main.cpp.o: \
   /opt/homebrew/lib/QtCore.framework/Headers/qxmlstream.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QCoreApplication \
   /opt/homebrew/lib/QtCore.framework/Headers/qcoreapplication.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QDebug \
+  /opt/homebrew/lib/QtCore.framework/Headers/qdebug.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/ireal/HtmlPlaylistParser.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/ireal/IRealTypes.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QVector \
   /opt/homebrew/lib/QtCore.framework/Headers/qvector.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/chart/IRealProgressionParser.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/chart/ChartModel.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/SelfTest.h
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/SelfTest.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/execinfo.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/os/base.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/os/availability.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/uuid/uuid.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types/_uuid_t.h

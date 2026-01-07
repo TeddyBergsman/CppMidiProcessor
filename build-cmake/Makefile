@@ -607,30 +607,6 @@ CppMidiProcessor_autogen/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor_autogen.dir/build.make CMakeFiles/CppMidiProcessor_autogen.dir/build
 .PHONY : CppMidiProcessor_autogen/fast
 
-BassStyleEditorDialog.o: BassStyleEditorDialog.cpp.o
-.PHONY : BassStyleEditorDialog.o
-
-# target to build an object file
-BassStyleEditorDialog.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/BassStyleEditorDialog.cpp.o
-.PHONY : BassStyleEditorDialog.cpp.o
-
-BassStyleEditorDialog.i: BassStyleEditorDialog.cpp.i
-.PHONY : BassStyleEditorDialog.i
-
-# target to preprocess a source file
-BassStyleEditorDialog.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/BassStyleEditorDialog.cpp.i
-.PHONY : BassStyleEditorDialog.cpp.i
-
-BassStyleEditorDialog.s: BassStyleEditorDialog.cpp.s
-.PHONY : BassStyleEditorDialog.s
-
-# target to generate assembly for a file
-BassStyleEditorDialog.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/BassStyleEditorDialog.cpp.s
-.PHONY : BassStyleEditorDialog.cpp.s
-
 CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.o: CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp.o
 .PHONY : CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.o
 
@@ -751,30 +727,6 @@ NoteMonitorWidget.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.s
 .PHONY : NoteMonitorWidget.cpp.s
 
-PianoStyleEditorDialog.o: PianoStyleEditorDialog.cpp.o
-.PHONY : PianoStyleEditorDialog.o
-
-# target to build an object file
-PianoStyleEditorDialog.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/PianoStyleEditorDialog.cpp.o
-.PHONY : PianoStyleEditorDialog.cpp.o
-
-PianoStyleEditorDialog.i: PianoStyleEditorDialog.cpp.i
-.PHONY : PianoStyleEditorDialog.i
-
-# target to preprocess a source file
-PianoStyleEditorDialog.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/PianoStyleEditorDialog.cpp.i
-.PHONY : PianoStyleEditorDialog.cpp.i
-
-PianoStyleEditorDialog.s: PianoStyleEditorDialog.cpp.s
-.PHONY : PianoStyleEditorDialog.s
-
-# target to generate assembly for a file
-PianoStyleEditorDialog.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/PianoStyleEditorDialog.cpp.s
-.PHONY : PianoStyleEditorDialog.cpp.s
-
 PitchMonitorWidget.o: PitchMonitorWidget.cpp.o
 .PHONY : PitchMonitorWidget.o
 
@@ -847,30 +799,6 @@ RtMidi.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/RtMidi.cpp.s
 .PHONY : RtMidi.cpp.s
 
-SilentPlaybackEngine.o: SilentPlaybackEngine.cpp.o
-.PHONY : SilentPlaybackEngine.o
-
-# target to build an object file
-SilentPlaybackEngine.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/SilentPlaybackEngine.cpp.o
-.PHONY : SilentPlaybackEngine.cpp.o
-
-SilentPlaybackEngine.i: SilentPlaybackEngine.cpp.i
-.PHONY : SilentPlaybackEngine.i
-
-# target to preprocess a source file
-SilentPlaybackEngine.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/SilentPlaybackEngine.cpp.i
-.PHONY : SilentPlaybackEngine.cpp.i
-
-SilentPlaybackEngine.s: SilentPlaybackEngine.cpp.s
-.PHONY : SilentPlaybackEngine.s
-
-# target to generate assembly for a file
-SilentPlaybackEngine.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/SilentPlaybackEngine.cpp.s
-.PHONY : SilentPlaybackEngine.cpp.s
-
 VirtuosoCoreTests_autogen/mocs_compilation.o: VirtuosoCoreTests_autogen/mocs_compilation.cpp.o
 .PHONY : VirtuosoCoreTests_autogen/mocs_compilation.o
 
@@ -942,6 +870,30 @@ VirtuosoPresetInspectorWindow.s: VirtuosoPresetInspectorWindow.cpp.s
 VirtuosoPresetInspectorWindow.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/VirtuosoPresetInspectorWindow.cpp.s
 .PHONY : VirtuosoPresetInspectorWindow.cpp.s
+
+VirtuosoVocabularyWindow.o: VirtuosoVocabularyWindow.cpp.o
+.PHONY : VirtuosoVocabularyWindow.o
+
+# target to build an object file
+VirtuosoVocabularyWindow.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/VirtuosoVocabularyWindow.cpp.o
+.PHONY : VirtuosoVocabularyWindow.cpp.o
+
+VirtuosoVocabularyWindow.i: VirtuosoVocabularyWindow.cpp.i
+.PHONY : VirtuosoVocabularyWindow.i
+
+# target to preprocess a source file
+VirtuosoVocabularyWindow.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/VirtuosoVocabularyWindow.cpp.i
+.PHONY : VirtuosoVocabularyWindow.cpp.i
+
+VirtuosoVocabularyWindow.s: VirtuosoVocabularyWindow.cpp.s
+.PHONY : VirtuosoVocabularyWindow.s
+
+# target to generate assembly for a file
+VirtuosoVocabularyWindow.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/VirtuosoVocabularyWindow.cpp.s
+.PHONY : VirtuosoVocabularyWindow.cpp.s
 
 WaveVisualizer.o: WaveVisualizer.cpp.o
 .PHONY : WaveVisualizer.o
@@ -1135,54 +1087,6 @@ midiprocessor.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/midiprocessor.cpp.s
 .PHONY : midiprocessor.cpp.s
 
-music/BassPresets.o: music/BassPresets.cpp.o
-.PHONY : music/BassPresets.o
-
-# target to build an object file
-music/BassPresets.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/BassPresets.cpp.o
-.PHONY : music/BassPresets.cpp.o
-
-music/BassPresets.i: music/BassPresets.cpp.i
-.PHONY : music/BassPresets.i
-
-# target to preprocess a source file
-music/BassPresets.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/BassPresets.cpp.i
-.PHONY : music/BassPresets.cpp.i
-
-music/BassPresets.s: music/BassPresets.cpp.s
-.PHONY : music/BassPresets.s
-
-# target to generate assembly for a file
-music/BassPresets.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/BassPresets.cpp.s
-.PHONY : music/BassPresets.cpp.s
-
-music/BassProfile.o: music/BassProfile.cpp.o
-.PHONY : music/BassProfile.o
-
-# target to build an object file
-music/BassProfile.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/BassProfile.cpp.o
-.PHONY : music/BassProfile.cpp.o
-
-music/BassProfile.i: music/BassProfile.cpp.i
-.PHONY : music/BassProfile.i
-
-# target to preprocess a source file
-music/BassProfile.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/BassProfile.cpp.i
-.PHONY : music/BassProfile.cpp.i
-
-music/BassProfile.s: music/BassProfile.cpp.s
-.PHONY : music/BassProfile.s
-
-# target to generate assembly for a file
-music/BassProfile.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/BassProfile.cpp.s
-.PHONY : music/BassProfile.cpp.s
-
 music/ChordDictionary.o: music/ChordDictionary.cpp.o
 .PHONY : music/ChordDictionary.o
 
@@ -1230,78 +1134,6 @@ music/ChordSymbol.s: music/ChordSymbol.cpp.s
 music/ChordSymbol.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.s
 .PHONY : music/ChordSymbol.cpp.s
-
-music/JazzPianoGenerator.o: music/JazzPianoGenerator.cpp.o
-.PHONY : music/JazzPianoGenerator.o
-
-# target to build an object file
-music/JazzPianoGenerator.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/JazzPianoGenerator.cpp.o
-.PHONY : music/JazzPianoGenerator.cpp.o
-
-music/JazzPianoGenerator.i: music/JazzPianoGenerator.cpp.i
-.PHONY : music/JazzPianoGenerator.i
-
-# target to preprocess a source file
-music/JazzPianoGenerator.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/JazzPianoGenerator.cpp.i
-.PHONY : music/JazzPianoGenerator.cpp.i
-
-music/JazzPianoGenerator.s: music/JazzPianoGenerator.cpp.s
-.PHONY : music/JazzPianoGenerator.s
-
-# target to generate assembly for a file
-music/JazzPianoGenerator.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/JazzPianoGenerator.cpp.s
-.PHONY : music/JazzPianoGenerator.cpp.s
-
-music/PianoPresets.o: music/PianoPresets.cpp.o
-.PHONY : music/PianoPresets.o
-
-# target to build an object file
-music/PianoPresets.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/PianoPresets.cpp.o
-.PHONY : music/PianoPresets.cpp.o
-
-music/PianoPresets.i: music/PianoPresets.cpp.i
-.PHONY : music/PianoPresets.i
-
-# target to preprocess a source file
-music/PianoPresets.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/PianoPresets.cpp.i
-.PHONY : music/PianoPresets.cpp.i
-
-music/PianoPresets.s: music/PianoPresets.cpp.s
-.PHONY : music/PianoPresets.s
-
-# target to generate assembly for a file
-music/PianoPresets.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/PianoPresets.cpp.s
-.PHONY : music/PianoPresets.cpp.s
-
-music/PianoProfile.o: music/PianoProfile.cpp.o
-.PHONY : music/PianoProfile.o
-
-# target to build an object file
-music/PianoProfile.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/PianoProfile.cpp.o
-.PHONY : music/PianoProfile.cpp.o
-
-music/PianoProfile.i: music/PianoProfile.cpp.i
-.PHONY : music/PianoProfile.i
-
-# target to preprocess a source file
-music/PianoProfile.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/PianoProfile.cpp.i
-.PHONY : music/PianoProfile.cpp.i
-
-music/PianoProfile.s: music/PianoProfile.cpp.s
-.PHONY : music/PianoProfile.s
-
-# target to generate assembly for a file
-music/PianoProfile.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/PianoProfile.cpp.s
-.PHONY : music/PianoProfile.cpp.s
 
 music/Pitch.o: music/Pitch.cpp.o
 .PHONY : music/Pitch.o
@@ -1375,30 +1207,6 @@ music/SelfTest.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/SelfTest.cpp.s
 .PHONY : music/SelfTest.cpp.s
 
-music/WalkingBassGenerator.o: music/WalkingBassGenerator.cpp.o
-.PHONY : music/WalkingBassGenerator.o
-
-# target to build an object file
-music/WalkingBassGenerator.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/WalkingBassGenerator.cpp.o
-.PHONY : music/WalkingBassGenerator.cpp.o
-
-music/WalkingBassGenerator.i: music/WalkingBassGenerator.cpp.i
-.PHONY : music/WalkingBassGenerator.i
-
-# target to preprocess a source file
-music/WalkingBassGenerator.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/WalkingBassGenerator.cpp.i
-.PHONY : music/WalkingBassGenerator.cpp.i
-
-music/WalkingBassGenerator.s: music/WalkingBassGenerator.cpp.s
-.PHONY : music/WalkingBassGenerator.s
-
-# target to generate assembly for a file
-music/WalkingBassGenerator.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/WalkingBassGenerator.cpp.s
-.PHONY : music/WalkingBassGenerator.cpp.s
-
 playback/BalladReferenceTuning.o: playback/BalladReferenceTuning.cpp.o
 .PHONY : playback/BalladReferenceTuning.o
 
@@ -1423,29 +1231,29 @@ playback/BalladReferenceTuning.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.s
 .PHONY : playback/BalladReferenceTuning.cpp.s
 
-playback/BandPlaybackEngine.o: playback/BandPlaybackEngine.cpp.o
-.PHONY : playback/BandPlaybackEngine.o
+playback/BrushesBalladDrummer.o: playback/BrushesBalladDrummer.cpp.o
+.PHONY : playback/BrushesBalladDrummer.o
 
 # target to build an object file
-playback/BandPlaybackEngine.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BandPlaybackEngine.cpp.o
-.PHONY : playback/BandPlaybackEngine.cpp.o
+playback/BrushesBalladDrummer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.o
+.PHONY : playback/BrushesBalladDrummer.cpp.o
 
-playback/BandPlaybackEngine.i: playback/BandPlaybackEngine.cpp.i
-.PHONY : playback/BandPlaybackEngine.i
+playback/BrushesBalladDrummer.i: playback/BrushesBalladDrummer.cpp.i
+.PHONY : playback/BrushesBalladDrummer.i
 
 # target to preprocess a source file
-playback/BandPlaybackEngine.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BandPlaybackEngine.cpp.i
-.PHONY : playback/BandPlaybackEngine.cpp.i
+playback/BrushesBalladDrummer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.i
+.PHONY : playback/BrushesBalladDrummer.cpp.i
 
-playback/BandPlaybackEngine.s: playback/BandPlaybackEngine.cpp.s
-.PHONY : playback/BandPlaybackEngine.s
+playback/BrushesBalladDrummer.s: playback/BrushesBalladDrummer.cpp.s
+.PHONY : playback/BrushesBalladDrummer.s
 
 # target to generate assembly for a file
-playback/BandPlaybackEngine.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BandPlaybackEngine.cpp.s
-.PHONY : playback/BandPlaybackEngine.cpp.s
+playback/BrushesBalladDrummer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.s
+.PHONY : playback/BrushesBalladDrummer.cpp.s
 
 playback/JazzBalladBassPlanner.o: playback/JazzBalladBassPlanner.cpp.o
 .PHONY : playback/JazzBalladBassPlanner.o
@@ -1494,6 +1302,54 @@ playback/JazzBalladPianoPlanner.s: playback/JazzBalladPianoPlanner.cpp.s
 playback/JazzBalladPianoPlanner.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.s
 .PHONY : playback/JazzBalladPianoPlanner.cpp.s
+
+playback/SemanticMidiAnalyzer.o: playback/SemanticMidiAnalyzer.cpp.o
+.PHONY : playback/SemanticMidiAnalyzer.o
+
+# target to build an object file
+playback/SemanticMidiAnalyzer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.o
+.PHONY : playback/SemanticMidiAnalyzer.cpp.o
+
+playback/SemanticMidiAnalyzer.i: playback/SemanticMidiAnalyzer.cpp.i
+.PHONY : playback/SemanticMidiAnalyzer.i
+
+# target to preprocess a source file
+playback/SemanticMidiAnalyzer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.i
+.PHONY : playback/SemanticMidiAnalyzer.cpp.i
+
+playback/SemanticMidiAnalyzer.s: playback/SemanticMidiAnalyzer.cpp.s
+.PHONY : playback/SemanticMidiAnalyzer.s
+
+# target to generate assembly for a file
+playback/SemanticMidiAnalyzer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.s
+.PHONY : playback/SemanticMidiAnalyzer.cpp.s
+
+playback/VibeStateMachine.o: playback/VibeStateMachine.cpp.o
+.PHONY : playback/VibeStateMachine.o
+
+# target to build an object file
+playback/VibeStateMachine.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.o
+.PHONY : playback/VibeStateMachine.cpp.o
+
+playback/VibeStateMachine.i: playback/VibeStateMachine.cpp.i
+.PHONY : playback/VibeStateMachine.i
+
+# target to preprocess a source file
+playback/VibeStateMachine.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.i
+.PHONY : playback/VibeStateMachine.cpp.i
+
+playback/VibeStateMachine.s: playback/VibeStateMachine.cpp.s
+.PHONY : playback/VibeStateMachine.s
+
+# target to generate assembly for a file
+playback/VibeStateMachine.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.s
+.PHONY : playback/VibeStateMachine.cpp.s
 
 playback/VirtuosoBalladMvpPlaybackEngine.o: playback/VirtuosoBalladMvpPlaybackEngine.cpp.o
 .PHONY : playback/VirtuosoBalladMvpPlaybackEngine.o
@@ -1903,6 +1759,30 @@ virtuoso/ui/PianoKeyboardWidget.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.s
 .PHONY : virtuoso/ui/PianoKeyboardWidget.cpp.s
 
+virtuoso/vocab/VocabularyRegistry.o: virtuoso/vocab/VocabularyRegistry.cpp.o
+.PHONY : virtuoso/vocab/VocabularyRegistry.o
+
+# target to build an object file
+virtuoso/vocab/VocabularyRegistry.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o
+.PHONY : virtuoso/vocab/VocabularyRegistry.cpp.o
+
+virtuoso/vocab/VocabularyRegistry.i: virtuoso/vocab/VocabularyRegistry.cpp.i
+.PHONY : virtuoso/vocab/VocabularyRegistry.i
+
+# target to preprocess a source file
+virtuoso/vocab/VocabularyRegistry.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.i
+.PHONY : virtuoso/vocab/VocabularyRegistry.cpp.i
+
+virtuoso/vocab/VocabularyRegistry.s: virtuoso/vocab/VocabularyRegistry.cpp.s
+.PHONY : virtuoso/vocab/VocabularyRegistry.s
+
+# target to generate assembly for a file
+virtuoso/vocab/VocabularyRegistry.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.s
+.PHONY : virtuoso/vocab/VocabularyRegistry.cpp.s
+
 voicecontroller.o: voicecontroller.cpp.o
 .PHONY : voicecontroller.o
 
@@ -1973,9 +1853,6 @@ help:
 	@echo "... CppMidiProcessor"
 	@echo "... VirtuosoCore"
 	@echo "... VirtuosoCoreTests"
-	@echo "... BassStyleEditorDialog.o"
-	@echo "... BassStyleEditorDialog.i"
-	@echo "... BassStyleEditorDialog.s"
 	@echo "... CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.o"
 	@echo "... CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.i"
 	@echo "... CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.s"
@@ -1991,9 +1868,6 @@ help:
 	@echo "... NoteMonitorWidget.o"
 	@echo "... NoteMonitorWidget.i"
 	@echo "... NoteMonitorWidget.s"
-	@echo "... PianoStyleEditorDialog.o"
-	@echo "... PianoStyleEditorDialog.i"
-	@echo "... PianoStyleEditorDialog.s"
 	@echo "... PitchMonitorWidget.o"
 	@echo "... PitchMonitorWidget.i"
 	@echo "... PitchMonitorWidget.s"
@@ -2003,9 +1877,6 @@ help:
 	@echo "... RtMidi.o"
 	@echo "... RtMidi.i"
 	@echo "... RtMidi.s"
-	@echo "... SilentPlaybackEngine.o"
-	@echo "... SilentPlaybackEngine.i"
-	@echo "... SilentPlaybackEngine.s"
 	@echo "... VirtuosoCoreTests_autogen/mocs_compilation.o"
 	@echo "... VirtuosoCoreTests_autogen/mocs_compilation.i"
 	@echo "... VirtuosoCoreTests_autogen/mocs_compilation.s"
@@ -2015,6 +1886,9 @@ help:
 	@echo "... VirtuosoPresetInspectorWindow.o"
 	@echo "... VirtuosoPresetInspectorWindow.i"
 	@echo "... VirtuosoPresetInspectorWindow.s"
+	@echo "... VirtuosoVocabularyWindow.o"
+	@echo "... VirtuosoVocabularyWindow.i"
+	@echo "... VirtuosoVocabularyWindow.s"
 	@echo "... WaveVisualizer.o"
 	@echo "... WaveVisualizer.i"
 	@echo "... WaveVisualizer.s"
@@ -2039,27 +1913,12 @@ help:
 	@echo "... midiprocessor.o"
 	@echo "... midiprocessor.i"
 	@echo "... midiprocessor.s"
-	@echo "... music/BassPresets.o"
-	@echo "... music/BassPresets.i"
-	@echo "... music/BassPresets.s"
-	@echo "... music/BassProfile.o"
-	@echo "... music/BassProfile.i"
-	@echo "... music/BassProfile.s"
 	@echo "... music/ChordDictionary.o"
 	@echo "... music/ChordDictionary.i"
 	@echo "... music/ChordDictionary.s"
 	@echo "... music/ChordSymbol.o"
 	@echo "... music/ChordSymbol.i"
 	@echo "... music/ChordSymbol.s"
-	@echo "... music/JazzPianoGenerator.o"
-	@echo "... music/JazzPianoGenerator.i"
-	@echo "... music/JazzPianoGenerator.s"
-	@echo "... music/PianoPresets.o"
-	@echo "... music/PianoPresets.i"
-	@echo "... music/PianoPresets.s"
-	@echo "... music/PianoProfile.o"
-	@echo "... music/PianoProfile.i"
-	@echo "... music/PianoProfile.s"
 	@echo "... music/Pitch.o"
 	@echo "... music/Pitch.i"
 	@echo "... music/Pitch.s"
@@ -2069,21 +1928,24 @@ help:
 	@echo "... music/SelfTest.o"
 	@echo "... music/SelfTest.i"
 	@echo "... music/SelfTest.s"
-	@echo "... music/WalkingBassGenerator.o"
-	@echo "... music/WalkingBassGenerator.i"
-	@echo "... music/WalkingBassGenerator.s"
 	@echo "... playback/BalladReferenceTuning.o"
 	@echo "... playback/BalladReferenceTuning.i"
 	@echo "... playback/BalladReferenceTuning.s"
-	@echo "... playback/BandPlaybackEngine.o"
-	@echo "... playback/BandPlaybackEngine.i"
-	@echo "... playback/BandPlaybackEngine.s"
+	@echo "... playback/BrushesBalladDrummer.o"
+	@echo "... playback/BrushesBalladDrummer.i"
+	@echo "... playback/BrushesBalladDrummer.s"
 	@echo "... playback/JazzBalladBassPlanner.o"
 	@echo "... playback/JazzBalladBassPlanner.i"
 	@echo "... playback/JazzBalladBassPlanner.s"
 	@echo "... playback/JazzBalladPianoPlanner.o"
 	@echo "... playback/JazzBalladPianoPlanner.i"
 	@echo "... playback/JazzBalladPianoPlanner.s"
+	@echo "... playback/SemanticMidiAnalyzer.o"
+	@echo "... playback/SemanticMidiAnalyzer.i"
+	@echo "... playback/SemanticMidiAnalyzer.s"
+	@echo "... playback/VibeStateMachine.o"
+	@echo "... playback/VibeStateMachine.i"
+	@echo "... playback/VibeStateMachine.s"
 	@echo "... playback/VirtuosoBalladMvpPlaybackEngine.o"
 	@echo "... playback/VirtuosoBalladMvpPlaybackEngine.i"
 	@echo "... playback/VirtuosoBalladMvpPlaybackEngine.s"
@@ -2135,6 +1997,9 @@ help:
 	@echo "... virtuoso/ui/PianoKeyboardWidget.o"
 	@echo "... virtuoso/ui/PianoKeyboardWidget.i"
 	@echo "... virtuoso/ui/PianoKeyboardWidget.s"
+	@echo "... virtuoso/vocab/VocabularyRegistry.o"
+	@echo "... virtuoso/vocab/VocabularyRegistry.i"
+	@echo "... virtuoso/vocab/VocabularyRegistry.s"
 	@echo "... voicecontroller.o"
 	@echo "... voicecontroller.i"
 	@echo "... voicecontroller.s"

@@ -1547,8 +1547,6 @@ CMakeFiles/CppMidiProcessor.dir/mainwindow.cpp.o: \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/chart/ChartModel.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QVector \
   /opt/homebrew/lib/QtCore.framework/Headers/qvector.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/BassProfile.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/PianoProfile.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/ireal/HtmlPlaylistParser.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/ireal/IRealTypes.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/LibraryWindow.h \
@@ -1573,4 +1571,5 @@ CMakeFiles/CppMidiProcessor.dir/mainwindow.cpp.o: \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoScheduler.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/VirtuosoPresetInspectorWindow.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ui/GrooveTimelineWidget.h
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ui/GrooveTimelineWidget.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/VirtuosoVocabularyWindow.h

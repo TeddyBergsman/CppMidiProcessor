@@ -103,10 +103,6 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   chart/IRealProgressionParser.cpp
   chart/SongChartWidget.h
   chart/SongChartWidget.cpp
-  SilentPlaybackEngine.h
-  SilentPlaybackEngine.cpp
-  playback/BandPlaybackEngine.h
-  playback/BandPlaybackEngine.cpp
   playback/VirtuosoBalladMvpPlaybackEngine.h
   playback/VirtuosoBalladMvpPlaybackEngine.cpp
   playback/BalladReferenceTuning.h
@@ -127,20 +123,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   music/ChordSymbol.cpp
   music/ChordDictionary.h
   music/ChordDictionary.cpp
-  music/BassProfile.h
-  music/BassProfile.cpp
-  music/BassPresets.h
-  music/BassPresets.cpp
-  music/PianoProfile.h
-  music/PianoProfile.cpp
-  music/PianoPresets.h
-  music/PianoPresets.cpp
   music/ScaleLibrary.h
   music/ScaleLibrary.cpp
-  music/WalkingBassGenerator.h
-  music/WalkingBassGenerator.cpp
-  music/JazzPianoGenerator.h
-  music/JazzPianoGenerator.cpp
   music/SelfTest.h
   music/SelfTest.cpp
   virtuoso/ui/GuitarFretboardWidget.h

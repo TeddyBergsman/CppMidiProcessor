@@ -611,6 +611,12 @@
 			"MU",
 			"4CIAGTWHZ2/moc_TheoryEvent.cpp",
 			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h",
+			"MU",
+			"VILKOAHGZ4/moc_VocabularyRegistry.cpp",
+			null
 		]
 	],
 	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
@@ -726,6 +732,11 @@
 		],
 		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.cpp",
 			"MU",
 			null
 		]

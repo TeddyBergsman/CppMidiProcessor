@@ -50,14 +50,19 @@ template <> constexpr inline auto virtuoso::engine::VirtuosoEngine::qt_create_me
         "value",
         "theoryEventJson",
         "json",
+        "plannedTheoryEventJson",
         "start",
         "stop",
         "scheduleNote",
         "AgentIntentNote",
+        "humanizeIntent",
+        "groove::HumanizedEvent",
+        "scheduleHumanizedIntentNote",
+        "he",
+        "logicTagOverride",
         "scheduleHumanizedNote",
         "agent",
         "virtuoso::groove::HumanizedEvent",
-        "he",
         "logicTag"
     };
 
@@ -82,22 +87,38 @@ template <> constexpr inline auto virtuoso::engine::VirtuosoEngine::qt_create_me
         QtMocHelpers::SignalData<void(const QString &)>(10, 2, QMC::AccessPublic, QMetaType::Void, {{
             { QMetaType::QString, 11 },
         }}),
+        // Signal 'plannedTheoryEventJson'
+        QtMocHelpers::SignalData<void(const QString &)>(12, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 11 },
+        }}),
         // Slot 'start'
-        QtMocHelpers::SlotData<void()>(12, 2, QMC::AccessPublic, QMetaType::Void),
-        // Slot 'stop'
         QtMocHelpers::SlotData<void()>(13, 2, QMC::AccessPublic, QMetaType::Void),
+        // Slot 'stop'
+        QtMocHelpers::SlotData<void()>(14, 2, QMC::AccessPublic, QMetaType::Void),
         // Slot 'scheduleNote'
-        QtMocHelpers::SlotData<void(const AgentIntentNote &)>(14, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { 0x80000000 | 15, 4 },
+        QtMocHelpers::SlotData<void(const AgentIntentNote &)>(15, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { 0x80000000 | 16, 4 },
+        }}),
+        // Slot 'humanizeIntent'
+        QtMocHelpers::SlotData<groove::HumanizedEvent(const AgentIntentNote &)>(17, 2, QMC::AccessPublic, 0x80000000 | 18, {{
+            { 0x80000000 | 16, 4 },
+        }}),
+        // Slot 'scheduleHumanizedIntentNote'
+        QtMocHelpers::SlotData<void(const AgentIntentNote &, const groove::HumanizedEvent &, const QString &)>(19, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { 0x80000000 | 16, 4 }, { 0x80000000 | 18, 20 }, { QMetaType::QString, 21 },
+        }}),
+        // Slot 'scheduleHumanizedIntentNote'
+        QtMocHelpers::SlotData<void(const AgentIntentNote &, const groove::HumanizedEvent &)>(19, 2, QMC::AccessPublic | QMC::MethodCloned, QMetaType::Void, {{
+            { 0x80000000 | 16, 4 }, { 0x80000000 | 18, 20 },
         }}),
         // Slot 'scheduleHumanizedNote'
-        QtMocHelpers::SlotData<void(const QString &, int, int, const virtuoso::groove::HumanizedEvent &, const QString &)>(16, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::QString, 17 }, { QMetaType::Int, 3 }, { QMetaType::Int, 4 }, { 0x80000000 | 18, 19 },
-            { QMetaType::QString, 20 },
+        QtMocHelpers::SlotData<void(const QString &, int, int, const virtuoso::groove::HumanizedEvent &, const QString &)>(22, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 23 }, { QMetaType::Int, 3 }, { QMetaType::Int, 4 }, { 0x80000000 | 24, 20 },
+            { QMetaType::QString, 25 },
         }}),
         // Slot 'scheduleHumanizedNote'
-        QtMocHelpers::SlotData<void(const QString &, int, int, const virtuoso::groove::HumanizedEvent &)>(16, 2, QMC::AccessPublic | QMC::MethodCloned, QMetaType::Void, {{
-            { QMetaType::QString, 17 }, { QMetaType::Int, 3 }, { QMetaType::Int, 4 }, { 0x80000000 | 18, 19 },
+        QtMocHelpers::SlotData<void(const QString &, int, int, const virtuoso::groove::HumanizedEvent &)>(22, 2, QMC::AccessPublic | QMC::MethodCloned, QMetaType::Void, {{
+            { QMetaType::QString, 23 }, { QMetaType::Int, 3 }, { QMetaType::Int, 4 }, { 0x80000000 | 24, 20 },
         }}),
     };
     QtMocHelpers::UintData qt_properties {
@@ -127,11 +148,16 @@ void virtuoso::engine::VirtuosoEngine::qt_static_metacall(QObject *_o, QMetaObje
         case 2: _t->allNotesOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
         case 3: _t->cc((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3]))); break;
         case 4: _t->theoryEventJson((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
-        case 5: _t->start(); break;
-        case 6: _t->stop(); break;
-        case 7: _t->scheduleNote((*reinterpret_cast< std::add_pointer_t<AgentIntentNote>>(_a[1]))); break;
-        case 8: _t->scheduleHumanizedNote((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<virtuoso::groove::HumanizedEvent>>(_a[4])),(*reinterpret_cast< std::add_pointer_t<QString>>(_a[5]))); break;
-        case 9: _t->scheduleHumanizedNote((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<virtuoso::groove::HumanizedEvent>>(_a[4]))); break;
+        case 5: _t->plannedTheoryEventJson((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
+        case 6: _t->start(); break;
+        case 7: _t->stop(); break;
+        case 8: _t->scheduleNote((*reinterpret_cast< std::add_pointer_t<AgentIntentNote>>(_a[1]))); break;
+        case 9: { groove::HumanizedEvent _r = _t->humanizeIntent((*reinterpret_cast< std::add_pointer_t<AgentIntentNote>>(_a[1])));
+            if (_a[0]) *reinterpret_cast< groove::HumanizedEvent*>(_a[0]) = std::move(_r); }  break;
+        case 10: _t->scheduleHumanizedIntentNote((*reinterpret_cast< std::add_pointer_t<AgentIntentNote>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<groove::HumanizedEvent>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<QString>>(_a[3]))); break;
+        case 11: _t->scheduleHumanizedIntentNote((*reinterpret_cast< std::add_pointer_t<AgentIntentNote>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<groove::HumanizedEvent>>(_a[2]))); break;
+        case 12: _t->scheduleHumanizedNote((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<virtuoso::groove::HumanizedEvent>>(_a[4])),(*reinterpret_cast< std::add_pointer_t<QString>>(_a[5]))); break;
+        case 13: _t->scheduleHumanizedNote((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<virtuoso::groove::HumanizedEvent>>(_a[4]))); break;
         default: ;
         }
     }
@@ -145,6 +171,8 @@ void virtuoso::engine::VirtuosoEngine::qt_static_metacall(QObject *_o, QMetaObje
         if (QtMocHelpers::indexOfMethod<void (VirtuosoEngine::*)(int , int , int )>(_a, &VirtuosoEngine::cc, 3))
             return;
         if (QtMocHelpers::indexOfMethod<void (VirtuosoEngine::*)(const QString & )>(_a, &VirtuosoEngine::theoryEventJson, 4))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (VirtuosoEngine::*)(const QString & )>(_a, &VirtuosoEngine::plannedTheoryEventJson, 5))
             return;
     }
 }
@@ -168,14 +196,14 @@ int virtuoso::engine::VirtuosoEngine::qt_metacall(QMetaObject::Call _c, int _id,
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 10)
+        if (_id < 14)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 10;
+        _id -= 14;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 10)
+        if (_id < 14)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 10;
+        _id -= 14;
     }
     return _id;
 }
@@ -208,5 +236,11 @@ void virtuoso::engine::VirtuosoEngine::cc(int _t1, int _t2, int _t3)
 void virtuoso::engine::VirtuosoEngine::theoryEventJson(const QString & _t1)
 {
     QMetaObject::activate<void>(this, &staticMetaObject, 4, nullptr, _t1);
+}
+
+// SIGNAL 5
+void virtuoso::engine::VirtuosoEngine::plannedTheoryEventJson(const QString & _t1)
+{
+    QMetaObject::activate<void>(this, &staticMetaObject, 5, nullptr, _t1);
 }
 QT_WARNING_POP

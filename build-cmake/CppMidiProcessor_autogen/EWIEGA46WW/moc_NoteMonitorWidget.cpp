@@ -39,8 +39,17 @@ template <> constexpr inline auto NoteMonitorWidget::qt_create_metaobjectdata<qt
     namespace QMC = QtMocConstants;
     QtMocHelpers::StringRefStorage qt_stringData {
         "NoteMonitorWidget",
-        "setGuitarNote",
+        "virtuosoTheoryEventJson",
         "",
+        "json",
+        "virtuosoPlannedTheoryEventJson",
+        "virtuosoLookaheadPlanJson",
+        "stopAllPlayback",
+        "requestVirtuosoLookaheadOnce",
+        "setVirtuosoAgentEnergyMultiplier",
+        "agent",
+        "mult01to2",
+        "setGuitarNote",
         "midiNote",
         "cents",
         "setVoiceNote",
@@ -56,33 +65,53 @@ template <> constexpr inline auto NoteMonitorWidget::qt_create_metaobjectdata<qt
     };
 
     QtMocHelpers::UintData qt_methods {
+        // Signal 'virtuosoTheoryEventJson'
+        QtMocHelpers::SignalData<void(const QString &)>(1, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 3 },
+        }}),
+        // Signal 'virtuosoPlannedTheoryEventJson'
+        QtMocHelpers::SignalData<void(const QString &)>(4, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 3 },
+        }}),
+        // Signal 'virtuosoLookaheadPlanJson'
+        QtMocHelpers::SignalData<void(const QString &)>(5, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 3 },
+        }}),
+        // Slot 'stopAllPlayback'
+        QtMocHelpers::SlotData<void()>(6, 2, QMC::AccessPublic, QMetaType::Void),
+        // Slot 'requestVirtuosoLookaheadOnce'
+        QtMocHelpers::SlotData<void()>(7, 2, QMC::AccessPublic, QMetaType::Void),
+        // Slot 'setVirtuosoAgentEnergyMultiplier'
+        QtMocHelpers::SlotData<void(const QString &, double)>(8, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 9 }, { QMetaType::Double, 10 },
+        }}),
         // Slot 'setGuitarNote'
-        QtMocHelpers::SlotData<void(int, double)>(1, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 3 }, { QMetaType::Double, 4 },
+        QtMocHelpers::SlotData<void(int, double)>(11, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 12 }, { QMetaType::Double, 13 },
         }}),
         // Slot 'setVoiceNote'
-        QtMocHelpers::SlotData<void(int, double)>(5, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 3 }, { QMetaType::Double, 4 },
+        QtMocHelpers::SlotData<void(int, double)>(14, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 12 }, { QMetaType::Double, 13 },
         }}),
         // Slot 'setGuitarHz'
-        QtMocHelpers::SlotData<void(double)>(6, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Double, 7 },
+        QtMocHelpers::SlotData<void(double)>(15, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Double, 16 },
         }}),
         // Slot 'setVoiceHz'
-        QtMocHelpers::SlotData<void(double)>(8, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Double, 7 },
+        QtMocHelpers::SlotData<void(double)>(17, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Double, 16 },
         }}),
         // Slot 'setGuitarAmplitude'
-        QtMocHelpers::SlotData<void(int)>(9, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 10 },
+        QtMocHelpers::SlotData<void(int)>(18, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 19 },
         }}),
         // Slot 'setVoiceAmplitude'
-        QtMocHelpers::SlotData<void(int)>(11, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 12 },
+        QtMocHelpers::SlotData<void(int)>(20, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 21 },
         }}),
         // Slot 'setGuitarVelocity'
-        QtMocHelpers::SlotData<void(int)>(13, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 14 },
+        QtMocHelpers::SlotData<void(int)>(22, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 23 },
         }}),
     };
     QtMocHelpers::UintData qt_properties {
@@ -107,15 +136,29 @@ void NoteMonitorWidget::qt_static_metacall(QObject *_o, QMetaObject::Call _c, in
     auto *_t = static_cast<NoteMonitorWidget *>(_o);
     if (_c == QMetaObject::InvokeMetaMethod) {
         switch (_id) {
-        case 0: _t->setGuitarNote((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
-        case 1: _t->setVoiceNote((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
-        case 2: _t->setGuitarHz((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
-        case 3: _t->setVoiceHz((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
-        case 4: _t->setGuitarAmplitude((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 5: _t->setVoiceAmplitude((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 6: _t->setGuitarVelocity((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 0: _t->virtuosoTheoryEventJson((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
+        case 1: _t->virtuosoPlannedTheoryEventJson((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
+        case 2: _t->virtuosoLookaheadPlanJson((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
+        case 3: _t->stopAllPlayback(); break;
+        case 4: _t->requestVirtuosoLookaheadOnce(); break;
+        case 5: _t->setVirtuosoAgentEnergyMultiplier((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
+        case 6: _t->setGuitarNote((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
+        case 7: _t->setVoiceNote((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
+        case 8: _t->setGuitarHz((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
+        case 9: _t->setVoiceHz((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
+        case 10: _t->setGuitarAmplitude((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 11: _t->setVoiceAmplitude((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 12: _t->setGuitarVelocity((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
         default: ;
         }
+    }
+    if (_c == QMetaObject::IndexOfMethod) {
+        if (QtMocHelpers::indexOfMethod<void (NoteMonitorWidget::*)(const QString & )>(_a, &NoteMonitorWidget::virtuosoTheoryEventJson, 0))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (NoteMonitorWidget::*)(const QString & )>(_a, &NoteMonitorWidget::virtuosoPlannedTheoryEventJson, 1))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (NoteMonitorWidget::*)(const QString & )>(_a, &NoteMonitorWidget::virtuosoLookaheadPlanJson, 2))
+            return;
     }
 }
 
@@ -138,15 +181,33 @@ int NoteMonitorWidget::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 7)
+        if (_id < 13)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 7;
+        _id -= 13;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 7)
+        if (_id < 13)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 7;
+        _id -= 13;
     }
     return _id;
+}
+
+// SIGNAL 0
+void NoteMonitorWidget::virtuosoTheoryEventJson(const QString & _t1)
+{
+    QMetaObject::activate<void>(this, &staticMetaObject, 0, nullptr, _t1);
+}
+
+// SIGNAL 1
+void NoteMonitorWidget::virtuosoPlannedTheoryEventJson(const QString & _t1)
+{
+    QMetaObject::activate<void>(this, &staticMetaObject, 1, nullptr, _t1);
+}
+
+// SIGNAL 2
+void NoteMonitorWidget::virtuosoLookaheadPlanJson(const QString & _t1)
+{
+    QMetaObject::activate<void>(this, &staticMetaObject, 2, nullptr, _t1);
 }
 QT_WARNING_POP

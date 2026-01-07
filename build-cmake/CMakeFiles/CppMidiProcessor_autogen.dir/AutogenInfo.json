@@ -505,12 +505,6 @@
 	"HEADERS" : 
 	[
 		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/BassStyleEditorDialog.h",
-			"MU",
-			"EWIEGA46WW/moc_BassStyleEditorDialog.cpp",
-			null
-		],
-		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/GrooveLabWindow.h",
 			"MU",
 			"EWIEGA46WW/moc_GrooveLabWindow.cpp",
@@ -526,12 +520,6 @@
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/NoteMonitorWidget.h",
 			"MU",
 			"EWIEGA46WW/moc_NoteMonitorWidget.cpp",
-			null
-		],
-		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PianoStyleEditorDialog.h",
-			"MU",
-			"EWIEGA46WW/moc_PianoStyleEditorDialog.cpp",
 			null
 		],
 		[
@@ -565,15 +553,15 @@
 			null
 		],
 		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/SilentPlaybackEngine.h",
-			"MU",
-			"EWIEGA46WW/moc_SilentPlaybackEngine.cpp",
-			null
-		],
-		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoPresetInspectorWindow.h",
 			"MU",
 			"EWIEGA46WW/moc_VirtuosoPresetInspectorWindow.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoVocabularyWindow.h",
+			"MU",
+			"EWIEGA46WW/moc_VirtuosoVocabularyWindow.cpp",
 			null
 		],
 		[
@@ -631,18 +619,6 @@
 			null
 		],
 		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/BassPresets.h",
-			"MU",
-			"PVHNC2DLQ7/moc_BassPresets.cpp",
-			null
-		],
-		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/BassProfile.h",
-			"MU",
-			"PVHNC2DLQ7/moc_BassProfile.cpp",
-			null
-		],
-		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordDictionary.h",
 			"MU",
 			"PVHNC2DLQ7/moc_ChordDictionary.cpp",
@@ -652,24 +628,6 @@
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordSymbol.h",
 			"MU",
 			"PVHNC2DLQ7/moc_ChordSymbol.cpp",
-			null
-		],
-		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/JazzPianoGenerator.h",
-			"MU",
-			"PVHNC2DLQ7/moc_JazzPianoGenerator.cpp",
-			null
-		],
-		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/PianoPresets.h",
-			"MU",
-			"PVHNC2DLQ7/moc_PianoPresets.cpp",
-			null
-		],
-		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/PianoProfile.h",
-			"MU",
-			"PVHNC2DLQ7/moc_PianoProfile.cpp",
 			null
 		],
 		[
@@ -691,21 +649,15 @@
 			null
 		],
 		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/WalkingBassGenerator.h",
-			"MU",
-			"PVHNC2DLQ7/moc_WalkingBassGenerator.cpp",
-			null
-		],
-		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BalladReferenceTuning.h",
 			"MU",
 			"QDVNTGK2R4/moc_BalladReferenceTuning.cpp",
 			null
 		],
 		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BandPlaybackEngine.h",
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h",
 			"MU",
-			"QDVNTGK2R4/moc_BandPlaybackEngine.cpp",
+			"QDVNTGK2R4/moc_BrushesBalladDrummer.cpp",
 			null
 		],
 		[
@@ -718,6 +670,18 @@
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h",
 			"MU",
 			"QDVNTGK2R4/moc_JazzBalladPianoPlanner.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h",
+			"MU",
+			"QDVNTGK2R4/moc_SemanticMidiAnalyzer.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VibeStateMachine.h",
+			"MU",
+			"QDVNTGK2R4/moc_VibeStateMachine.cpp",
 			null
 		],
 		[
@@ -832,11 +796,6 @@
 	"SOURCES" : 
 	[
 		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/BassStyleEditorDialog.cpp",
-			"MU",
-			null
-		],
-		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/GrooveLabWindow.cpp",
 			"MU",
 			null
@@ -848,11 +807,6 @@
 		],
 		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/NoteMonitorWidget.cpp",
-			"MU",
-			null
-		],
-		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PianoStyleEditorDialog.cpp",
 			"MU",
 			null
 		],
@@ -872,12 +826,12 @@
 			null
 		],
 		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/SilentPlaybackEngine.cpp",
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoPresetInspectorWindow.cpp",
 			"MU",
 			null
 		],
 		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoPresetInspectorWindow.cpp",
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/VirtuosoVocabularyWindow.cpp",
 			"MU",
 			null
 		],
@@ -922,37 +876,12 @@
 			null
 		],
 		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/BassPresets.cpp",
-			"MU",
-			null
-		],
-		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/BassProfile.cpp",
-			"MU",
-			null
-		],
-		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordDictionary.cpp",
 			"MU",
 			null
 		],
 		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordSymbol.cpp",
-			"MU",
-			null
-		],
-		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/JazzPianoGenerator.cpp",
-			"MU",
-			null
-		],
-		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/PianoPresets.cpp",
-			"MU",
-			null
-		],
-		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/PianoProfile.cpp",
 			"MU",
 			null
 		],
@@ -972,17 +901,12 @@
 			null
 		],
 		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/WalkingBassGenerator.cpp",
-			"MU",
-			null
-		],
-		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BalladReferenceTuning.cpp",
 			"MU",
 			null
 		],
 		[
-			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BandPlaybackEngine.cpp",
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BrushesBalladDrummer.cpp",
 			"MU",
 			null
 		],
@@ -993,6 +917,16 @@
 		],
 		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VibeStateMachine.cpp",
 			"MU",
 			null
 		],

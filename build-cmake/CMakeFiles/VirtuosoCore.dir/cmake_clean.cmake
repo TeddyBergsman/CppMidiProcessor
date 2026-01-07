@@ -28,6 +28,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o.d"
   "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o"
   "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o.d"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o.d"
   "VirtuosoCore_autogen/mocs_compilation.cpp"
   "VirtuosoCore_autogen/timestamp"
   "libVirtuosoCore.a"

@@ -22,6 +22,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/NegativeHarmony.cpp" "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o" "gcc" "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o.d"
   "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.cpp" "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o" "gcc" "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o.d"
   "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.cpp" "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o" "gcc" "CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o.d"
+  "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.cpp" "CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o" "gcc" "CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

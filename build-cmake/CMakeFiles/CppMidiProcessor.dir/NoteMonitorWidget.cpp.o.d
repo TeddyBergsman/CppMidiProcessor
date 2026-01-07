@@ -971,8 +971,6 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: \
   /opt/homebrew/lib/QtCore.framework/Headers/qstring.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QVector \
   /opt/homebrew/lib/QtCore.framework/Headers/qvector.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/BassProfile.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/PianoProfile.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/WaveVisualizer.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QElapsedTimer \
   /opt/homebrew/lib/QtCore.framework/Headers/qelapsedtimer.h \
@@ -994,9 +992,18 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: \
   /opt/homebrew/include/QtWidgets/qwidget.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/chart/IRealProgressionParser.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/ireal/IRealTypes.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BandPlaybackEngine.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VirtuosoBalladMvpPlaybackEngine.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QObject \
   /opt/homebrew/lib/QtCore.framework/Headers/qobject.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordSymbol.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QHash \
+  /opt/homebrew/lib/QtCore.framework/Headers/qhash.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoClock.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoScheduler.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QtGlobal \
+  /opt/homebrew/lib/QtCore.framework/Headers/qglobal.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QRandomGenerator \
   /opt/homebrew/lib/QtCore.framework/Headers/qrandom.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/random \
@@ -1034,18 +1041,6 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/student_t_distribution.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/weibull_distribution.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QHash \
-  /opt/homebrew/lib/QtCore.framework/Headers/qhash.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/WalkingBassGenerator.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordSymbol.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/JazzPianoGenerator.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VirtuosoBalladMvpPlaybackEngine.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoClock.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoScheduler.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QtGlobal \
-  /opt/homebrew/lib/QtCore.framework/Headers/qglobal.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/FeelTemplate.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveGrid.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.h \
@@ -1065,14 +1060,22 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: \
   /opt/homebrew/include/QtCore/qjsonparseerror.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QStringList \
+  /opt/homebrew/lib/QtCore.framework/Headers/qstringlist.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/IInstrumentDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/ConstraintsTypes.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QStringList \
-  /opt/homebrew/lib/QtCore.framework/Headers/qstringlist.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QSet \
+  /opt/homebrew/lib/QtCore.framework/Headers/qset.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/midiprocessor.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/thread \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__thread/formatter.h \
@@ -1116,12 +1119,6 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: \
   /opt/homebrew/lib/QtCore.framework/Headers/qlist.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QMap \
   /opt/homebrew/lib/QtCore.framework/Headers/qmap.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/BassStyleEditorDialog.h \
-  /opt/homebrew/lib/QtWidgets.framework/Headers/QDialog \
-  /opt/homebrew/lib/QtWidgets.framework/Headers/qdialog.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QMetaObject \
-  /opt/homebrew/lib/QtCore.framework/Headers/qobjectdefs.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/PianoStyleEditorDialog.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/QtWidgets \
   /opt/homebrew/include/QtWidgets/QtWidgetsDepends \
   /opt/homebrew/include/QtCore/QtCore \
@@ -1448,6 +1445,7 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qdatawidgetmapper.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qdatetimeedit.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qdial.h \
+  /opt/homebrew/lib/QtWidgets.framework/Headers/qdialog.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qdialogbuttonbox.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qdockwidget.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qdrawutil.h \
@@ -1576,4 +1574,8 @@ CMakeFiles/CppMidiProcessor.dir/NoteMonitorWidget.cpp.o: \
   /opt/homebrew/lib/QtCore.framework/Headers/QCryptographicHash \
   /opt/homebrew/lib/QtCore.framework/Headers/qcryptographichash.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QSettings \
-  /opt/homebrew/lib/QtCore.framework/Headers/qsettings.h
+  /opt/homebrew/lib/QtCore.framework/Headers/qsettings.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QJsonDocument \
+  /opt/homebrew/lib/QtCore.framework/Headers/qjsondocument.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QEasingCurve \
+  /opt/homebrew/lib/QtCore.framework/Headers/qeasingcurve.h

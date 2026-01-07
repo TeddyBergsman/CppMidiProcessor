@@ -5,11 +5,8 @@
 #include "chart/SongChartWidget.h"
 #include "chart/IRealProgressionParser.h"
 #include "ireal/IRealTypes.h"
-#include "playback/BandPlaybackEngine.h"
 #include "playback/VirtuosoBalladMvpPlaybackEngine.h"
 #include "midiprocessor.h"
-#include "music/BassProfile.h"
-#include "music/PianoProfile.h"
 #include "virtuoso/groove/GrooveRegistry.h"
 #include <QtWidgets>
 #include <cmath>
@@ -419,10 +416,6 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     }
     populateKeyCombo(m_keyCombo, /*isMinorSong=*/false, /*default=*/{}, /*selected=*/"C major");
 
-    m_playButton = new QPushButton("Play", chartHeader);
-    m_playButton->setEnabled(false);
-    m_playButton->setFixedWidth(70);
-
     // Virtuoso MVP preset selector + play button
     m_virtuosoPresetCombo = new QComboBox(chartHeader);
     m_virtuosoPresetCombo->setEnabled(false);
@@ -461,7 +454,6 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     headerLayout->addWidget(m_virtuosoPresetCombo, 0);
     headerLayout->addWidget(m_virtuosoPlayButton, 0);
     headerLayout->addWidget(m_virtuosoDebugToggle, 0);
-    headerLayout->addWidget(m_playButton, 0);
     chartHeader->setLayout(headerLayout);
 
     m_chartWidget = new chart::SongChartWidget(m_chartContainer);
@@ -470,11 +462,6 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     chartLayout->addWidget(chartHeader);
     chartLayout->addWidget(m_chartWidget, 1);
     m_chartContainer->setLayout(chartLayout);
-
-    // Band playback engine (drives highlighting + virtual musicians)
-    m_playback = new playback::BandPlaybackEngine(this);
-    connect(m_playback, &playback::BandPlaybackEngine::currentCellChanged,
-            m_chartWidget, &chart::SongChartWidget::setCurrentCellIndex);
 
     // Virtuoso MVP playback engine (drives highlighting + new VirtuosoEngine groove pipeline)
     m_virtuosoPlayback = new playback::VirtuosoBalladMvpPlaybackEngine(this);
@@ -835,14 +822,12 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
                 const bool flats = preferFlatsForKeyCenter(sel);
                 const chart::ChartModel m = transposeChartModel(m_baseChartModel, delta, flats);
                 m_chartWidget->setChartModel(m);
-                if (m_playback) m_playback->setChartModel(m);
                 if (m_virtuosoPlayback) m_virtuosoPlayback->setChartModel(m);
             }
         }
     });
 
     connect(m_tempoSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int bpm) {
-        if (m_playback) m_playback->setTempoBpm(bpm);
         if (m_virtuosoPlayback) m_virtuosoPlayback->setTempoBpm(bpm);
         if (m_pitchMonitor) m_pitchMonitor->setBpm(bpm);
         if (!m_isApplyingSongState && !m_currentSongId.isEmpty()) {
@@ -852,7 +837,6 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     });
 
     connect(m_repeatsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int reps) {
-        if (m_playback) m_playback->setRepeats(reps);
         if (m_virtuosoPlayback) m_virtuosoPlayback->setRepeats(reps);
         if (!m_isApplyingSongState && !m_currentSongId.isEmpty()) {
             QSettings s;
@@ -873,32 +857,12 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
         }
     });
 
-    connect(m_playButton, &QPushButton::clicked, this, [this]() {
-        if (!m_playback) return;
-        if (m_playback->isPlaying()) {
-            m_playback->stop();
-            m_playButton->setText("Play");
-        } else {
-            // Never run both engines at once (avoid confusing playhead + double MIDI).
-            if (m_virtuosoPlayback && m_virtuosoPlayback->isPlaying()) {
-                m_virtuosoPlayback->stop();
-                if (m_virtuosoPlayButton) m_virtuosoPlayButton->setText("Virtuoso");
-            }
-            m_playback->play();
-            m_playButton->setText("Stop");
-        }
-    });
-
     connect(m_virtuosoPlayButton, &QPushButton::clicked, this, [this]() {
         if (!m_virtuosoPlayback) return;
         if (m_virtuosoPlayback->isPlaying()) {
             m_virtuosoPlayback->stop();
             m_virtuosoPlayButton->setText("Virtuoso");
         } else {
-            if (m_playback && m_playback->isPlaying()) {
-                m_playback->stop();
-                if (m_playButton) m_playButton->setText("Play");
-            }
             m_virtuosoPlayback->play();
             m_virtuosoPlayButton->setText("Stop V");
         }
@@ -909,26 +873,6 @@ void NoteMonitorWidget::setMidiProcessor(MidiProcessor* processor) {
     m_midiProcessor = processor;
     if (!m_midiProcessor) return;
 
-    if (m_playback) {
-        // Route virtual bass MIDI events through MidiProcessor's thread-safe enqueuing slots.
-        connect(m_playback, &playback::BandPlaybackEngine::bassNoteOn,
-                m_midiProcessor, &MidiProcessor::sendVirtualNoteOn, Qt::UniqueConnection);
-        connect(m_playback, &playback::BandPlaybackEngine::bassNoteOff,
-                m_midiProcessor, &MidiProcessor::sendVirtualNoteOff, Qt::UniqueConnection);
-        connect(m_playback, &playback::BandPlaybackEngine::bassAllNotesOff,
-                m_midiProcessor, &MidiProcessor::sendVirtualAllNotesOff, Qt::UniqueConnection);
-
-        // Route virtual piano MIDI events through MidiProcessor's thread-safe enqueuing slots.
-        connect(m_playback, &playback::BandPlaybackEngine::pianoNoteOn,
-                m_midiProcessor, &MidiProcessor::sendVirtualNoteOn, Qt::UniqueConnection);
-        connect(m_playback, &playback::BandPlaybackEngine::pianoNoteOff,
-                m_midiProcessor, &MidiProcessor::sendVirtualNoteOff, Qt::UniqueConnection);
-        connect(m_playback, &playback::BandPlaybackEngine::pianoAllNotesOff,
-                m_midiProcessor, &MidiProcessor::sendVirtualAllNotesOff, Qt::UniqueConnection);
-        connect(m_playback, &playback::BandPlaybackEngine::pianoCC,
-                m_midiProcessor, &MidiProcessor::sendVirtualCC, Qt::UniqueConnection);
-    }
-
     if (m_virtuosoPlayback) {
         m_virtuosoPlayback->setMidiProcessor(m_midiProcessor);
     }
@@ -938,8 +882,6 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
     if (!m_playlist || idx < 0 || idx >= m_playlist->songs.size()) return;
 
     // Stop playback when switching songs.
-    if (m_playback) m_playback->stop();
-    if (m_playButton) m_playButton->setText("Play");
     if (m_virtuosoPlayback) m_virtuosoPlayback->stop();
     if (m_virtuosoPlayButton) m_virtuosoPlayButton->setText("Virtuoso");
 
@@ -972,57 +914,7 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
         const bool flats = preferFlatsForKeyCenter(selectedKeyCenter);
         const chart::ChartModel m = transposeChartModel(m_baseChartModel, delta, flats);
         m_chartWidget->setChartModel(m);
-        if (m_playback) m_playback->setChartModel(m);
         if (m_virtuosoPlayback) m_virtuosoPlayback->setChartModel(m);
-    }
-
-    // Apply per-song bass settings.
-    if (m_playback) {
-        const QString prefix = group + "/bassProfile";
-        const bool hasProfile = settings.contains(prefix + "/version") || settings.contains(prefix + "/enabled");
-
-        music::BassProfile p;
-        if (hasProfile) {
-            p = music::loadBassProfile(settings, prefix);
-        } else {
-            // Back-compat: import old simple bass settings if present.
-            const QString bg = group + "/bass";
-            p = music::defaultBassProfile();
-            p.enabled = settings.value(bg + "/enabled", false).toBool();
-            p.midiChannel = settings.value(bg + "/channel", 3).toInt();
-            p.baseVelocity = settings.value(bg + "/velocity", 90).toInt();
-            p.minMidiNote = settings.value(bg + "/minNote", 28).toInt();
-            p.maxMidiNote = settings.value(bg + "/maxNote", 48).toInt();
-            p.honorSlashBass = settings.value(bg + "/honorSlash", true).toBool();
-            p.chromaticism = settings.value(bg + "/chromaticism", 0.6).toDouble();
-            // Derive a stable per-song seed if none was persisted.
-            p.humanizeSeed = (quint32)qHash(m_currentSongId);
-            if (p.humanizeSeed == 0) p.humanizeSeed = 1;
-        }
-
-        m_bassProfile = p;
-        m_playback->setBassProfile(m_bassProfile);
-    }
-
-    // Apply per-song piano settings.
-    if (m_playback) {
-        const QString prefix = group + "/pianoProfile";
-        const bool hasProfile = settings.contains(prefix + "/version") || settings.contains(prefix + "/enabled");
-
-        music::PianoProfile p;
-        if (hasProfile) {
-            p = music::loadPianoProfile(settings, prefix);
-        } else {
-            p = music::defaultPianoProfile();
-            // Derive a stable per-song seed if none was persisted.
-            p.humanizeSeed = (quint32)qHash(QString("piano|") + m_currentSongId);
-            if (p.humanizeSeed == 0) p.humanizeSeed = 1;
-        }
-        // Ensure defaults match our reserved routing.
-        if (p.midiChannel < 1 || p.midiChannel > 16) p.midiChannel = 4;
-
-        m_pianoProfile = p;
-        m_playback->setPianoProfile(m_pianoProfile);
     }
 
     // Tempo preference: song tempo if present, else current spin.
@@ -1033,7 +925,6 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
     m_tempoSpin->setValue(bpm);
     m_tempoSpin->blockSignals(false);
 
-    m_playback->setTempoBpm(bpm);
     if (m_virtuosoPlayback) m_virtuosoPlayback->setTempoBpm(bpm);
     if (m_pitchMonitor) m_pitchMonitor->setBpm(bpm);
 
@@ -1046,10 +937,8 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
         m_repeatsSpin->setValue(reps);
         m_repeatsSpin->blockSignals(false);
     }
-    if (m_playback) m_playback->setRepeats(reps);
     if (m_virtuosoPlayback) m_virtuosoPlayback->setRepeats(reps);
 
-    m_playButton->setEnabled(true);
     if (m_virtuosoPlayButton) m_virtuosoPlayButton->setEnabled(true);
     if (m_virtuosoPresetCombo) m_virtuosoPresetCombo->setEnabled(true);
 
@@ -1122,12 +1011,9 @@ void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
     if (m_keyCombo) m_keyCombo->setEnabled(hasSongs);
     if (m_virtuosoPresetCombo) m_virtuosoPresetCombo->setEnabled(hasSongs);
     if (m_virtuosoPlayButton) m_virtuosoPlayButton->setEnabled(hasSongs);
-    m_playButton->setEnabled(false);
 
     if (!hasSongs) {
         if (m_chartWidget) m_chartWidget->clear();
-        if (m_playback) m_playback->stop();
-        m_playButton->setText("Play");
         if (m_virtuosoPlayback) m_virtuosoPlayback->stop();
         if (m_virtuosoPlayButton) m_virtuosoPlayButton->setText("Virtuoso");
         return;
@@ -1171,10 +1057,6 @@ void NoteMonitorWidget::setVirtuosoAgentEnergyMultiplier(const QString& agent, d
 }
 
 void NoteMonitorWidget::stopAllPlayback() {
-    if (m_playback && m_playback->isPlaying()) {
-        m_playback->stop();
-        if (m_playButton) m_playButton->setText("Play");
-    }
     if (m_virtuosoPlayback && m_virtuosoPlayback->isPlaying()) {
         m_virtuosoPlayback->stop();
         if (m_virtuosoPlayButton) m_virtuosoPlayButton->setText("Virtuoso");

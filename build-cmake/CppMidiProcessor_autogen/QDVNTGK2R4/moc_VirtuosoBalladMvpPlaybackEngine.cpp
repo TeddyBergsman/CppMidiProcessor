@@ -44,9 +44,37 @@ template <> constexpr inline auto playback::VirtuosoBalladMvpPlaybackEngine::qt_
         "cellIndex",
         "theoryEventJson",
         "json",
+        "plannedTheoryEventJson",
+        "lookaheadPlanJson",
+        "debugStatus",
+        "text",
+        "debugEnergy",
+        "energy01",
+        "isAuto",
         "play",
         "stop",
-        "onTick"
+        "emitLookaheadPlanOnce",
+        "setDebugEnergyAuto",
+        "on",
+        "setDebugEnergy",
+        "setAgentEnergyMultiplier",
+        "agent",
+        "mult01to2",
+        "setVirtuosityAuto",
+        "setVirtuosity",
+        "harmonicRisk01",
+        "rhythmicComplexity01",
+        "interaction01",
+        "toneDark01",
+        "onTick",
+        "onGuitarNoteOn",
+        "note",
+        "vel",
+        "onGuitarNoteOff",
+        "onVoiceCc2Stream",
+        "cc2",
+        "onVoiceNoteOn",
+        "onVoiceNoteOff"
     };
 
     QtMocHelpers::UintData qt_methods {
@@ -58,12 +86,70 @@ template <> constexpr inline auto playback::VirtuosoBalladMvpPlaybackEngine::qt_
         QtMocHelpers::SignalData<void(const QString &)>(4, 2, QMC::AccessPublic, QMetaType::Void, {{
             { QMetaType::QString, 5 },
         }}),
+        // Signal 'plannedTheoryEventJson'
+        QtMocHelpers::SignalData<void(const QString &)>(6, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 5 },
+        }}),
+        // Signal 'lookaheadPlanJson'
+        QtMocHelpers::SignalData<void(const QString &)>(7, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 5 },
+        }}),
+        // Signal 'debugStatus'
+        QtMocHelpers::SignalData<void(const QString &)>(8, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 9 },
+        }}),
+        // Signal 'debugEnergy'
+        QtMocHelpers::SignalData<void(double, bool)>(10, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Double, 11 }, { QMetaType::Bool, 12 },
+        }}),
         // Slot 'play'
-        QtMocHelpers::SlotData<void()>(6, 2, QMC::AccessPublic, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(13, 2, QMC::AccessPublic, QMetaType::Void),
         // Slot 'stop'
-        QtMocHelpers::SlotData<void()>(7, 2, QMC::AccessPublic, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(14, 2, QMC::AccessPublic, QMetaType::Void),
+        // Slot 'emitLookaheadPlanOnce'
+        QtMocHelpers::SlotData<void()>(15, 2, QMC::AccessPublic, QMetaType::Void),
+        // Slot 'setDebugEnergyAuto'
+        QtMocHelpers::SlotData<void(bool)>(16, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Bool, 17 },
+        }}),
+        // Slot 'setDebugEnergy'
+        QtMocHelpers::SlotData<void(double)>(18, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Double, 11 },
+        }}),
+        // Slot 'setAgentEnergyMultiplier'
+        QtMocHelpers::SlotData<void(const QString &, double)>(19, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 20 }, { QMetaType::Double, 21 },
+        }}),
+        // Slot 'setVirtuosityAuto'
+        QtMocHelpers::SlotData<void(bool)>(22, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Bool, 17 },
+        }}),
+        // Slot 'setVirtuosity'
+        QtMocHelpers::SlotData<void(double, double, double, double)>(23, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Double, 24 }, { QMetaType::Double, 25 }, { QMetaType::Double, 26 }, { QMetaType::Double, 27 },
+        }}),
         // Slot 'onTick'
-        QtMocHelpers::SlotData<void()>(8, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(28, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'onGuitarNoteOn'
+        QtMocHelpers::SlotData<void(int, int)>(29, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 30 }, { QMetaType::Int, 31 },
+        }}),
+        // Slot 'onGuitarNoteOff'
+        QtMocHelpers::SlotData<void(int)>(32, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 30 },
+        }}),
+        // Slot 'onVoiceCc2Stream'
+        QtMocHelpers::SlotData<void(int)>(33, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 34 },
+        }}),
+        // Slot 'onVoiceNoteOn'
+        QtMocHelpers::SlotData<void(int, int)>(35, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 30 }, { QMetaType::Int, 31 },
+        }}),
+        // Slot 'onVoiceNoteOff'
+        QtMocHelpers::SlotData<void(int)>(36, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 30 },
+        }}),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -89,9 +175,24 @@ void playback::VirtuosoBalladMvpPlaybackEngine::qt_static_metacall(QObject *_o, 
         switch (_id) {
         case 0: _t->currentCellChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
         case 1: _t->theoryEventJson((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
-        case 2: _t->play(); break;
-        case 3: _t->stop(); break;
-        case 4: _t->onTick(); break;
+        case 2: _t->plannedTheoryEventJson((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
+        case 3: _t->lookaheadPlanJson((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
+        case 4: _t->debugStatus((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
+        case 5: _t->debugEnergy((*reinterpret_cast< std::add_pointer_t<double>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<bool>>(_a[2]))); break;
+        case 6: _t->play(); break;
+        case 7: _t->stop(); break;
+        case 8: _t->emitLookaheadPlanOnce(); break;
+        case 9: _t->setDebugEnergyAuto((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 10: _t->setDebugEnergy((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
+        case 11: _t->setAgentEnergyMultiplier((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
+        case 12: _t->setVirtuosityAuto((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 13: _t->setVirtuosity((*reinterpret_cast< std::add_pointer_t<double>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[4]))); break;
+        case 14: _t->onTick(); break;
+        case 15: _t->onGuitarNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
+        case 16: _t->onGuitarNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 17: _t->onVoiceCc2Stream((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 18: _t->onVoiceNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
+        case 19: _t->onVoiceNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
         default: ;
         }
     }
@@ -99,6 +200,14 @@ void playback::VirtuosoBalladMvpPlaybackEngine::qt_static_metacall(QObject *_o, 
         if (QtMocHelpers::indexOfMethod<void (VirtuosoBalladMvpPlaybackEngine::*)(int )>(_a, &VirtuosoBalladMvpPlaybackEngine::currentCellChanged, 0))
             return;
         if (QtMocHelpers::indexOfMethod<void (VirtuosoBalladMvpPlaybackEngine::*)(const QString & )>(_a, &VirtuosoBalladMvpPlaybackEngine::theoryEventJson, 1))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (VirtuosoBalladMvpPlaybackEngine::*)(const QString & )>(_a, &VirtuosoBalladMvpPlaybackEngine::plannedTheoryEventJson, 2))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (VirtuosoBalladMvpPlaybackEngine::*)(const QString & )>(_a, &VirtuosoBalladMvpPlaybackEngine::lookaheadPlanJson, 3))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (VirtuosoBalladMvpPlaybackEngine::*)(const QString & )>(_a, &VirtuosoBalladMvpPlaybackEngine::debugStatus, 4))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (VirtuosoBalladMvpPlaybackEngine::*)(double , bool )>(_a, &VirtuosoBalladMvpPlaybackEngine::debugEnergy, 5))
             return;
     }
 }
@@ -122,14 +231,14 @@ int playback::VirtuosoBalladMvpPlaybackEngine::qt_metacall(QMetaObject::Call _c,
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 5)
+        if (_id < 20)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 5;
+        _id -= 20;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 5)
+        if (_id < 20)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 5;
+        _id -= 20;
     }
     return _id;
 }
@@ -144,5 +253,29 @@ void playback::VirtuosoBalladMvpPlaybackEngine::currentCellChanged(int _t1)
 void playback::VirtuosoBalladMvpPlaybackEngine::theoryEventJson(const QString & _t1)
 {
     QMetaObject::activate<void>(this, &staticMetaObject, 1, nullptr, _t1);
+}
+
+// SIGNAL 2
+void playback::VirtuosoBalladMvpPlaybackEngine::plannedTheoryEventJson(const QString & _t1)
+{
+    QMetaObject::activate<void>(this, &staticMetaObject, 2, nullptr, _t1);
+}
+
+// SIGNAL 3
+void playback::VirtuosoBalladMvpPlaybackEngine::lookaheadPlanJson(const QString & _t1)
+{
+    QMetaObject::activate<void>(this, &staticMetaObject, 3, nullptr, _t1);
+}
+
+// SIGNAL 4
+void playback::VirtuosoBalladMvpPlaybackEngine::debugStatus(const QString & _t1)
+{
+    QMetaObject::activate<void>(this, &staticMetaObject, 4, nullptr, _t1);
+}
+
+// SIGNAL 5
+void playback::VirtuosoBalladMvpPlaybackEngine::debugEnergy(double _t1, bool _t2)
+{
+    QMetaObject::activate<void>(this, &staticMetaObject, 5, nullptr, _t1, _t2);
 }
 QT_WARNING_POP

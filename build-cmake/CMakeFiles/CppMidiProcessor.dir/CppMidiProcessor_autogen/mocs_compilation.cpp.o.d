@@ -1,9 +1,9 @@
 CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o: \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/mocs_compilation.cpp \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_BassStyleEditorDialog.cpp \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../BassStyleEditorDialog.h \
-  /opt/homebrew/lib/QtWidgets.framework/Headers/QDialog \
-  /opt/homebrew/lib/QtWidgets.framework/Headers/qdialog.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_GrooveLabWindow.cpp \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../GrooveLabWindow.h \
+  /opt/homebrew/lib/QtWidgets.framework/Headers/QMainWindow \
+  /opt/homebrew/lib/QtWidgets.framework/Headers/qmainwindow.h \
   /opt/homebrew/include/QtWidgets/qtwidgetsglobal.h \
   /opt/homebrew/include/QtGui/qtguiglobal.h \
   /opt/homebrew/include/QtCore/qglobal.h \
@@ -968,31 +968,18 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /opt/homebrew/include/QtWidgets/qsizepolicy.h \
   /opt/homebrew/include/QtGui/qcursor.h \
   /opt/homebrew/include/QtGui/qbitmap.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QMetaObject \
-  /opt/homebrew/lib/QtCore.framework/Headers/qobjectdefs.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QStringList \
-  /opt/homebrew/lib/QtCore.framework/Headers/qstringlist.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../music/BassProfile.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QString \
-  /opt/homebrew/lib/QtCore.framework/Headers/qstring.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QVector \
-  /opt/homebrew/lib/QtCore.framework/Headers/qvector.h \
-  /opt/homebrew/include/QtCore/qtmochelpers.h \
-  /opt/homebrew/include/QtCore/qtmocconstants.h \
-  /opt/homebrew/include/QtCore/q20algorithm.h \
-  /opt/homebrew/include/QtCore/q23type_traits.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_GrooveLabWindow.cpp \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../GrooveLabWindow.h \
-  /opt/homebrew/lib/QtWidgets.framework/Headers/QMainWindow \
-  /opt/homebrew/lib/QtWidgets.framework/Headers/qmainwindow.h \
   /opt/homebrew/include/QtWidgets/qtabwidget.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QHash \
   /opt/homebrew/lib/QtCore.framework/Headers/qhash.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../virtuoso/groove/FeelTemplate.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QString \
+  /opt/homebrew/lib/QtCore.framework/Headers/qstring.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveGrid.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QtGlobal \
   /opt/homebrew/lib/QtCore.framework/Headers/qglobal.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../virtuoso/groove/GrooveRegistry.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QVector \
+  /opt/homebrew/lib/QtCore.framework/Headers/qvector.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/FeelTemplate.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h \
@@ -1062,26 +1049,29 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /opt/homebrew/include/QtCore/quuid.h \
   /opt/homebrew/include/QtCore/qjsondocument.h \
   /opt/homebrew/include/QtCore/qjsonparseerror.h \
+  /opt/homebrew/include/QtCore/qtmochelpers.h \
+  /opt/homebrew/include/QtCore/qtmocconstants.h \
+  /opt/homebrew/include/QtCore/q20algorithm.h \
+  /opt/homebrew/include/QtCore/q23type_traits.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_LibraryWindow.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../LibraryWindow.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QSet \
   /opt/homebrew/lib/QtCore.framework/Headers/qset.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../virtuoso/ontology/OntologyRegistry.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QStringList \
+  /opt/homebrew/lib/QtCore.framework/Headers/qstringlist.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_NoteMonitorWidget.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../NoteMonitorWidget.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/QWidget \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qwidget.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../chart/ChartModel.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../music/PianoProfile.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_PianoStyleEditorDialog.cpp \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../PianoStyleEditorDialog.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_PitchMonitorWidget.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../PitchMonitorWidget.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_SilentPlaybackEngine.cpp \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../SilentPlaybackEngine.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_VirtuosoPresetInspectorWindow.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../VirtuosoPresetInspectorWindow.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../virtuoso/ui/GrooveTimelineWidget.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_VirtuosoVocabularyWindow.cpp \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../VirtuosoVocabularyWindow.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_WaveVisualizer.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../WaveVisualizer.h \
   /opt/homebrew/lib/QtGui.framework/Headers/QColor \
@@ -1147,24 +1137,24 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /opt/homebrew/lib/QtCore.framework/Headers/qprocess.h \
   /opt/homebrew/include/QtCore/qiodevice.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/moc_midiprocessor.cpp \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/QDVNTGK2R4/moc_BandPlaybackEngine.cpp \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/QDVNTGK2R4/../../../playback/BandPlaybackEngine.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/WalkingBassGenerator.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordSymbol.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/BassProfile.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/JazzPianoGenerator.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/PianoProfile.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/QDVNTGK2R4/moc_VirtuosoBalladMvpPlaybackEngine.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/QDVNTGK2R4/../../../playback/VirtuosoBalladMvpPlaybackEngine.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordSymbol.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/IInstrumentDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/ConstraintsTypes.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/2AYID5HISM/moc_GrooveTimelineWidget.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/2AYID5HISM/../../../virtuoso/ui/GrooveTimelineWidget.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/2AYID5HISM/moc_GuitarFretboardWidget.cpp \

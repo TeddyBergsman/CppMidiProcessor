@@ -5,6 +5,7 @@
 
 #include <QtGlobal>
 #include <algorithm>
+#include <limits>
 
 namespace playback {
 namespace {
@@ -17,6 +18,8 @@ JazzBalladPianoPlanner::JazzBalladPianoPlanner() {
 
 void JazzBalladPianoPlanner::reset() {
     m_lastVoicing.clear();
+    m_state.heldNotes.clear();
+    m_state.ints.insert("cc64", 0);
     m_lastRhythmBar = -1;
     m_barHits.clear();
     m_lastTopMidi = -1;
@@ -196,7 +199,14 @@ QVector<int> JazzBalladPianoPlanner::repairToFeasible(QVector<int> midiNotes) co
 QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(const Context& c,
                                                                            int midiChannel,
                                                                            const virtuoso::groove::TimeSignature& ts) {
-    QVector<virtuoso::engine::AgentIntentNote> out;
+    return planBeatWithActions(c, midiChannel, ts).notes;
+}
+
+JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(const Context& c,
+                                                                             int midiChannel,
+                                                                             const virtuoso::groove::TimeSignature& ts) {
+    BeatPlan plan;
+    auto& out = plan.notes;
 
     using virtuoso::groove::GrooveGrid;
     using virtuoso::groove::Rational;
@@ -217,6 +227,92 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     hitsThisBeat.reserve(4);
     for (const auto& hit : m_barHits) {
         if (hit.beatInBar == c.beatInBar) hitsThisBeat.push_back(hit);
+    }
+
+    // --- PerformanceAction v1: sustain pedal (CC64) planning ---
+    // We model pedaling as an action with constraint costs (wash / over-sustain) using PianoDriver.
+    // This gives phrase-level realism without forcing fixed register lanes.
+    const bool phraseLandmark = c.chordIsNew || (c.cadence01 >= 0.55) || c.phraseEndBar;
+    const bool chordBoundarySoon = c.nextChanges && (c.beatsUntilChordChange <= 1);
+    // IMPORTANT: do NOT gate pedal decisions on comp hits on *this beat*.
+    // Ballad comping often places hits on offbeats; if we gate on hitsThisBeat,
+    // we may never engage sustain at all.
+    const bool considerPedalNow = (c.beatInBar == 0) || phraseLandmark || chordBoundarySoon;
+    if (considerPedalNow) {
+        const int cc64Now = m_state.ints.value("cc64", 0);
+        const bool sustainNow = (cc64Now >= 64);
+
+        // Heuristic "want sustain": ballads generally pedal unless the user is busy or harmony is about to change.
+        // IMPORTANT: bias toward using sustain; otherwise "keep pedal up" dominates every time.
+        const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+        const double wantDownScore =
+            (0.90 * qBound(0.0, c.toneDark, 1.0)) +
+            (0.55 * (c.userSilence ? 1.0 : 0.0)) +
+            (0.35 * (1.0 - qBound(0.0, c.energy, 1.0))) -
+            (1.10 * (userBusy ? 1.0 : 0.0)) -
+            (0.75 * (chordBoundarySoon ? 1.0 : 0.0));
+        const bool preferDown = (wantDownScore >= 0.15) && !chordBoundarySoon;
+
+        struct PedalCand { QString id; int cc64 = 0; bool clearHeld = false; double actionCost = 0.0; };
+        QVector<PedalCand> cands;
+        cands.reserve(3);
+        // Keep current pedal state.
+        cands.push_back({"keep", cc64Now, false, 0.0});
+        // Lift: clear sustain/held notes (good at chord boundaries).
+        cands.push_back({"lift", 0, true, chordBoundarySoon ? 0.0 : 0.10});
+        // Press: only meaningful if not already down.
+        if (!sustainNow) cands.push_back({"down", 127, false, preferDown ? -0.10 : 0.10});
+
+        // Evaluate candidates by simulating a small chordal gesture.
+        // IMPORTANT: keep span <= maxSpanSemitones, otherwise all candidates become infeasible and pedal never engages.
+        virtuoso::constraints::CandidateGesture g;
+        {
+            int a = qBound(0, (c.lhLo + c.lhHi) / 2, 127);
+            int b = qBound(0, (c.rhLo + c.rhHi) / 2, 127);
+            // Fold to keep within a 10th span.
+            while (b - a > m_driver.constraints().maxSpanSemitones && (b - 12) >= 0) b -= 12;
+            while (b - a > m_driver.constraints().maxSpanSemitones && (a + 12) <= 127) a += 12;
+            const int c3 = qBound(0, b + 4, 127);
+            g.midiNotes = {a, b, c3};
+        }
+
+        int bestIdx = 0;
+        double bestScore = 1e18;
+        for (int i = 0; i < cands.size(); ++i) {
+            virtuoso::constraints::PerformanceState s = m_state;
+            s.ints.insert("cc64", cands[i].cc64);
+            if (cands[i].clearHeld) s.heldNotes.clear();
+            const auto fr = m_driver.evaluateFeasibility(s, g);
+            if (!fr.ok) continue;
+
+            double score = fr.cost + cands[i].actionCost;
+            // Bias toward the musical intent (down when desired, lift near chord boundaries).
+            if (preferDown && cands[i].cc64 < 64) score += 1.00;
+            if (chordBoundarySoon && cands[i].cc64 >= 64) score += 1.10;
+            // If we're currently up and we want down, discourage "keep" strongly.
+            if (preferDown && !sustainNow && cands[i].id == "keep") score += 0.85;
+            // Tiny deterministic tie-break.
+            score += (double(virtuoso::util::StableHash::fnv1a32(cands[i].id.toUtf8())) / double(std::numeric_limits<uint>::max())) * 1e-6;
+
+            if (score < bestScore) { bestScore = score; bestIdx = i; }
+        }
+
+        const PedalCand chosen = cands[bestIdx];
+        if (chosen.cc64 != cc64Now) {
+            // Emit pedal action slightly ahead of the chord (16th before the beat when possible),
+            // to avoid blurring the new harmony.
+            const int sub = (c.beatInBar == 0) ? 0 : 0;
+            const int count = 4;
+            CcIntent ci;
+            ci.cc = 64;
+            ci.value = chosen.cc64;
+            ci.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, sub, count, ts);
+            ci.structural = (c.beatInBar == 0) || phraseLandmark;
+            ci.logic_tag = QString("Piano:pedal_%1").arg(chosen.id);
+            plan.ccs.push_back(ci);
+            m_state.ints.insert("cc64", chosen.cc64);
+            if (chosen.clearHeld) m_state.heldNotes.clear();
+        }
     }
 
     // Lush ballad broken-chord comp gestures (Bill-ish):
@@ -282,7 +378,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
             arrival.rhythmTag = "forced_arrival1";
             hitsThisBeat.push_back(arrival);
         } else {
-            return out;
+            return plan;
         }
     }
 
@@ -697,7 +793,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
     sortUnique(midi);
     midi = repairToFeasible(midi);
-    if (midi.isEmpty()) return out;
+    if (midi.isEmpty()) return plan;
 
     // Avoid playing the exact same voicing twice in a row (can feel procedural).
     // Deterministic: if identical, gently nudge one RH color tone by an octave (within range), or
@@ -1229,7 +1325,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                         for (int i = 0; i < 7; ++i) keySafe.insert((t + steps[i]) % 12);
                         safe.intersect(keySafe);
                     }
-                    if (safe.isEmpty()) return out;
+                    if (safe.isEmpty()) return plan;
 
                     auto nearestPcInSet = [&](int fromPc) -> int {
                         const int f = (fromPc % 12 + 12) % 12;
@@ -1305,7 +1401,27 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     // If we want richer harmony, it should come from selecting a richer *main voicing* candidate.
 
     // NOTE: No separate silence fill dyads.
-    return out;
+    // Track sustained notes approximately for pedaling wash constraints.
+    // This is intentionally conservative (adds notes when sustain is down; clears on pedal-up decisions).
+    const int cc64After = m_state.ints.value("cc64", 0);
+    const bool sustainAfter = (cc64After >= 64);
+    if (!out.isEmpty()) {
+        if (sustainAfter) {
+            for (const auto& n : out) {
+                if (n.note < 0) continue;
+                if (!m_state.heldNotes.contains(n.note)) m_state.heldNotes.push_back(n.note);
+            }
+        } else {
+            // Without sustain, approximate that only the latest voicing is sounding.
+            m_state.heldNotes.clear();
+            for (const auto& n : out) {
+                if (n.note < 0) continue;
+                m_state.heldNotes.push_back(n.note);
+            }
+        }
+    }
+
+    return plan;
 }
 
 void JazzBalladPianoPlanner::ensureBarRhythmPlanned(const Context& c) {

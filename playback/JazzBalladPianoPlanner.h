@@ -10,6 +10,7 @@
 #include "virtuoso/theory/FunctionalHarmony.h"
 #include "virtuoso/ontology/OntologyRegistry.h"
 #include "virtuoso/memory/MotivicMemory.h"
+#include "virtuoso/constraints/ConstraintsTypes.h"
 
 namespace playback {
 
@@ -19,6 +20,19 @@ namespace playback {
 // - Constraint-gated by PianoDriver (polyphony + span)
 class JazzBalladPianoPlanner {
 public:
+    struct CcIntent {
+        int cc = 64;
+        int value = 0; // 0..127
+        virtuoso::groove::GridPos startPos;
+        bool structural = false;
+        QString logic_tag;
+    };
+
+    struct BeatPlan {
+        QVector<virtuoso::engine::AgentIntentNote> notes;
+        QVector<CcIntent> ccs;
+    };
+
     struct CompHit {
         int beatInBar = 0;     // 0-based
         int sub = 0;           // sub-index within count
@@ -123,6 +137,10 @@ public:
                                                         int midiChannel,
                                                         const virtuoso::groove::TimeSignature& ts);
 
+    BeatPlan planBeatWithActions(const Context& c,
+                                 int midiChannel,
+                                 const virtuoso::groove::TimeSignature& ts);
+
 private:
     static int thirdIntervalForQuality(music::ChordQuality q);
     static int fifthIntervalForQuality(music::ChordQuality q);
@@ -151,6 +169,7 @@ private:
 
     virtuoso::constraints::PianoDriver m_driver;
     QVector<int> m_lastVoicing;
+    virtuoso::constraints::PerformanceState m_state;
 
     int m_lastRhythmBar = -1;
     QVector<CompHit> m_barHits;

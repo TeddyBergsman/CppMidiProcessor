@@ -1,5 +1,8 @@
 #include "virtuoso/engine/VirtuosoEngine.h"
 
+#include "virtuoso/theory/TheoryEvent.h"
+#include "virtuoso/groove/GrooveGrid.h"
+
 #include <QtGlobal>
 
 namespace virtuoso::engine {
@@ -139,6 +142,63 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
 
     VirtuosoScheduler::ScheduledEvent tj;
     tj.dueMs = he.onMs;
+    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+    tj.theoryJson = te.toJsonString(true);
+    m_sched.schedule(tj);
+}
+
+void VirtuosoEngine::scheduleCC(const QString& agent,
+                                int channel,
+                                int cc,
+                                int value,
+                                const groove::GridPos& startPos,
+                                bool structural,
+                                const QString& logicTag) {
+    if (!m_clock.isRunning()) return;
+    if (channel < 1 || channel > 16) return;
+    if (cc < 0 || cc > 127) return;
+    if (value < 0 || value > 127) return;
+
+    // CC timing should be "decisive" and must not arrive after notes that depend on it
+    // (especially sustain pedal). So we schedule CCs grid-aligned with a tiny lead.
+    const qint64 baseOn = virtuoso::groove::GrooveGrid::posToMs(startPos, m_ts, m_bpm);
+    const int leadMs = structural ? 12 : 8;
+    const qint64 on = qMax<qint64>(0, baseOn - qMax(0, leadMs));
+
+    VirtuosoScheduler::ScheduledEvent ev;
+    ev.dueMs = on;
+    ev.kind = VirtuosoScheduler::Kind::CC;
+    ev.channel = channel;
+    ev.cc = cc;
+    ev.ccValue = value;
+    m_sched.schedule(ev);
+
+    // Explainability: represent CC actions as TheoryEvents too.
+    virtuoso::theory::TheoryEvent te;
+    te.event_kind = "cc";
+    te.agent = agent;
+    te.timestamp = virtuoso::groove::GrooveGrid::toString(startPos, m_ts);
+    te.logic_tag = logicTag;
+    te.dynamic_marking = QString::number(value);
+    te.grid_pos = virtuoso::groove::GrooveGrid::toString(startPos, m_ts);
+    te.timing_offset_ms = int(on - baseOn);
+    te.velocity_adjustment = 0;
+    te.humanize_seed = 0u;
+    te.channel = channel;
+    te.note = -1;
+    te.cc = cc;
+    te.cc_value = value;
+    te.on_ms = on;
+    te.off_ms = on;
+    te.tempo_bpm = m_bpm;
+    te.ts_num = m_ts.num;
+    te.ts_den = m_ts.den;
+    te.engine_now_ms = m_clock.elapsedMs();
+
+    emit plannedTheoryEventJson(te.toJsonString(true));
+
+    VirtuosoScheduler::ScheduledEvent tj;
+    tj.dueMs = on;
     tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
     tj.theoryJson = te.toJsonString(true);
     m_sched.schedule(tj);

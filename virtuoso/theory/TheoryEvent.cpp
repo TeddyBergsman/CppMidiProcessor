@@ -6,6 +6,7 @@ namespace virtuoso::theory {
 
 QJsonObject TheoryEvent::toJsonObject() const {
     QJsonObject o;
+    if (!event_kind.trimmed().isEmpty()) o.insert("event_kind", event_kind);
     o.insert("agent", agent);
     o.insert("timestamp", timestamp);
     o.insert("chord_context", chord_context);
@@ -28,6 +29,8 @@ QJsonObject TheoryEvent::toJsonObject() const {
     // Optional event detail fields
     if (channel > 0) o.insert("channel", channel);
     if (note >= 0) o.insert("note", note);
+    if (cc >= 0) o.insert("cc", cc);
+    if (cc_value >= 0) o.insert("cc_value", cc_value);
     if (on_ms > 0) o.insert("on_ms", on_ms);
     if (off_ms > 0) o.insert("off_ms", off_ms);
     if (tempo_bpm > 0) o.insert("tempo_bpm", tempo_bpm);

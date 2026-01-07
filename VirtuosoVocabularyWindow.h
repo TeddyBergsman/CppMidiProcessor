@@ -85,8 +85,11 @@ private:
     struct LiveEv {
         qint64 onMs = 0;
         qint64 offMs = 0;
+        QString kind; // "note" (default) or "cc"
         int note = -1;
         int velocity = 0;
+        int cc = -1;
+        int ccValue = -1;
         QString logic;
         QString grid;
         qint64 engineNowMs = 0;

@@ -11,6 +11,10 @@ namespace virtuoso::theory {
 
 // Explainable event stream emitted by Virtuoso engines (glass-box).
 struct TheoryEvent {
+    // Optional event kind for non-note actions (e.g. "cc").
+    // When empty, consumers may assume "note" semantics.
+    QString event_kind;
+
     QString agent;
     QString timestamp;
     QString chord_context;
@@ -33,6 +37,8 @@ struct TheoryEvent {
     // Event detail (optional): allows UI to build live timelines
     int channel = 0;     // 1..16
     int note = -1;       // 0..127
+    int cc = -1;         // 0..127 (when event_kind == "cc")
+    int cc_value = -1;   // 0..127 (when event_kind == "cc")
     qint64 on_ms = 0;    // engine clock domain
     qint64 off_ms = 0;   // engine clock domain
     int tempo_bpm = 0;

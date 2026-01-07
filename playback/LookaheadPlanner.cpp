@@ -20,6 +20,10 @@
 namespace playback {
 namespace {
 
+static int adaptivePhraseBarsLocal(int bpm) {
+    return (bpm <= 84) ? 8 : 4;
+}
+
 } // namespace
 
 QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, int horizonBars) {
@@ -100,6 +104,36 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
         arr.push_back(te.toJsonObject());
     };
 
+    auto emitCcAsJson = [&](const QString& agent,
+                            int channel,
+                            int cc,
+                            int value,
+                            const virtuoso::groove::GridPos& pos,
+                            const QString& logicTag) {
+        virtuoso::theory::TheoryEvent te;
+        te.event_kind = "cc";
+        te.agent = agent;
+        te.timestamp = "";
+        te.logic_tag = logicTag;
+        te.dynamic_marking = QString::number(value);
+        te.grid_pos = virtuoso::groove::GrooveGrid::toString(pos, in.ts);
+        te.channel = channel;
+        te.note = -1;
+        te.cc = cc;
+        te.cc_value = value;
+        te.tempo_bpm = in.bpm;
+        te.ts_num = in.ts.num;
+        te.ts_den = in.ts.den;
+        te.engine_now_ms = in.engineNowMs;
+        const qint64 on = virtuoso::groove::GrooveGrid::posToMs(pos, in.ts, in.bpm);
+        te.on_ms = on;
+        te.off_ms = on; // actions are instantaneous in the plan view
+        te.vibe_state = vibeStr;
+        te.user_intents = intentStr;
+        te.user_outside_ratio = intent.outsideRatio;
+        arr.push_back(te.toJsonObject());
+    };
+
     for (int step = startStep; step < endStep; ++step) {
         const int playbackBarIndex = step / beatsPerBar;
         const int beatInBar = step % beatsPerBar;
@@ -153,8 +187,8 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
         const bool nextChanges = haveNext && !nextChord.noChord && (nextChord.rootPc >= 0) &&
                                  ((nextChord.rootPc != chord.rootPc) || (nextChord.bassPc != chord.bassPc));
 
-        // Phrase model (v1): 4-bar phrases.
-        const int phraseBars = 4;
+        // Phrase model: adaptive 4–8 bars (tempo-based).
+        const int phraseBars = adaptivePhraseBarsLocal(in.bpm);
         const int barInPhrase = (phraseBars > 0) ? (qMax(0, playbackBarIndex) % phraseBars) : 0;
         const bool phraseEndBar = (phraseBars > 0) ? (barInPhrase == (phraseBars - 1)) : false;
         const bool phraseSetupBar = (phraseBars > 1) ? (barInPhrase == (phraseBars - 2)) : false;
@@ -297,7 +331,11 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
                 pc.toneDark = in.virtToneDark;
             }
 
-            auto pnotes = pianoSim.planBeat(pc, in.chPiano, in.ts);
+            const auto pplan = pianoSim.planBeatWithActions(pc, in.chPiano, in.ts);
+            for (const auto& ci : pplan.ccs) {
+                emitCcAsJson("Piano", in.chPiano, ci.cc, ci.value, ci.startPos, ci.logic_tag);
+            }
+            auto pnotes = pplan.notes;
             for (auto& n : pnotes) {
                 n.key_center = keyCenterStr;
                 if (!roman.isEmpty()) n.roman = roman;

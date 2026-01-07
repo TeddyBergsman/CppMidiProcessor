@@ -508,7 +508,11 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         pc.harmonicRisk *= 0.45;
         pc.cadence01 *= 0.55;
     }
-    auto pianoIntents = in.pianoPlanner->planBeat(pc, in.chPiano, ts);
+    const auto pianoPlan = in.pianoPlanner->planBeatWithActions(pc, in.chPiano, ts);
+    for (const auto& ci : pianoPlan.ccs) {
+        in.engine->scheduleCC("Piano", in.chPiano, ci.cc, ci.value, ci.startPos, ci.structural, ci.logic_tag);
+    }
+    auto pianoIntents = pianoPlan.notes;
     int pianoSum = 0;
     int pianoN = 0;
     for (auto& n : pianoIntents) {

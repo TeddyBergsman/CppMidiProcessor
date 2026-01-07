@@ -196,8 +196,65 @@ void VirtuosoVocabularyWindow::rebuildTimelineFromLivePlan() {
 
         const QString sel = m_list && m_list->currentItem() ? m_list->currentItem()->text() : QString("All");
         const bool filter = (!sel.isEmpty() && sel != "All");
+
+        // Precompute a 4-bar window end for pedal interval visualization.
+        const double quarterMs = 60000.0 / double(qMax(1, m_liveBpm));
+        const double beatMs = quarterMs * (4.0 / double(qMax(1, m_liveTsDen)));
+        const double barMs = beatMs * double(qMax(1, m_liveTsNum));
+        const qint64 previewEndMsAbs = baseMs + qint64(llround(barMs * 4.0));
+
+        // Sustain reconstruction: treat CC64>=64 as down, <64 as up, and draw intervals on a "Pedal" lane.
+        QVector<virtuoso::ui::GrooveTimelineWidget::LaneEvent> pedalEvents;
+        if (m_instrument == Instrument::Piano) {
+            // Collect CC64 changes in time order.
+            struct CcEv { qint64 t; int v; QString logic; };
+            QVector<CcEv> ccs;
+            for (const auto& e : m_liveBuf) {
+                if (e.kind != "cc") continue;
+                if (e.cc != 64) continue;
+                if (filter && e.logic != sel) continue;
+                ccs.push_back({e.onMs, e.ccValue, e.logic});
+            }
+            std::sort(ccs.begin(), ccs.end(), [](const CcEv& a, const CcEv& b) { return a.t < b.t; });
+
+            bool down = false;
+            qint64 downT = 0;
+            QString downLogic;
+            for (const auto& ce : ccs) {
+                const bool isDown = (ce.v >= 64);
+                if (isDown && !down) {
+                    down = true;
+                    downT = ce.t;
+                    downLogic = ce.logic;
+                } else if (!isDown && down) {
+                    // Close interval.
+                    const qint64 upT = ce.t;
+                    virtuoso::ui::GrooveTimelineWidget::LaneEvent pev;
+                    pev.lane = "Pedal";
+                    pev.note = 64;
+                    pev.velocity = 127;
+                    pev.onMs = qMax<qint64>(0, downT - baseMs);
+                    pev.offMs = qMax<qint64>(pev.onMs + 6, upT - baseMs);
+                    pev.label = downLogic.isEmpty() ? QString("Sustain") : downLogic;
+                    pedalEvents.push_back(pev);
+                    down = false;
+                }
+            }
+            if (down) {
+                virtuoso::ui::GrooveTimelineWidget::LaneEvent pev;
+                pev.lane = "Pedal";
+                pev.note = 64;
+                pev.velocity = 127;
+                pev.onMs = qMax<qint64>(0, downT - baseMs);
+                pev.offMs = qMax<qint64>(pev.onMs + 6, previewEndMsAbs - baseMs);
+                pev.label = downLogic.isEmpty() ? QString("Sustain") : downLogic;
+                pedalEvents.push_back(pev);
+            }
+        }
+
         for (const auto& e : m_liveBuf) {
             if (filter && e.logic != sel) continue;
+            if (e.kind == "cc") continue; // CC visualized separately (pedal intervals)
             virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
             ev.lane = lane;
             ev.note = e.note;
@@ -207,12 +264,18 @@ void VirtuosoVocabularyWindow::rebuildTimelineFromLivePlan() {
             ev.label = e.logic;
             m_displayEvents.push_back(ev);
         }
+
+        for (const auto& pev : pedalEvents) m_displayEvents.push_back(pev);
     }
 
     m_timeline->setTempoAndSignature(m_liveBpm, m_liveTsNum, m_liveTsDen);
     m_timeline->setPreviewBars(4);
     m_timeline->setSubdivision(4);
-    m_timeline->setLanes(QStringList() << lane);
+    if (m_instrument == Instrument::Piano) {
+        m_timeline->setLanes(QStringList() << lane << "Pedal");
+    } else {
+        m_timeline->setLanes(QStringList() << lane);
+    }
     m_timeline->setEvents(m_displayEvents);
     m_timeline->setPlayheadMs(-1);
 
@@ -330,11 +393,14 @@ void VirtuosoVocabularyWindow::ingestTheoryEventJson(const QString& json) {
         const auto o = v.toObject();
         const QString agent = o.value("agent").toString();
         if (agent.trimmed() != instrumentName(m_instrument)) continue;
+        const QString kind = o.value("event_kind").toString().trimmed();
         const QString grid = o.value("grid_pos").toString(o.value("timestamp").toString());
         const QString logic = o.value("logic_tag").toString();
         const QString target = o.value("target_note").toString();
         const int note = o.value("note").toInt(-1);
         const int vel = o.value("dynamic_marking").toString().toInt();
+        const int cc = o.value("cc").toInt(-1);
+        const int ccValue = o.value("cc_value").toInt(-1);
         const qint64 onMs = qint64(o.value("on_ms").toDouble(0.0));
         const qint64 offMs = qint64(o.value("off_ms").toDouble(0.0));
         const int bpm = o.value("tempo_bpm").toInt(0);
@@ -344,18 +410,26 @@ void VirtuosoVocabularyWindow::ingestTheoryEventJson(const QString& json) {
         if (bpm > 0) m_liveBpm = bpm;
         if (tsNum > 0) m_liveTsNum = tsNum;
         if (tsDen > 0) m_liveTsDen = tsDen;
-        if (onMs > 0 && offMs > onMs) {
+        const bool isCc = (kind == "cc") || (cc >= 0);
+        if (onMs > 0 && (isCc || offMs > onMs)) {
             LiveEv ev;
             ev.onMs = onMs;
-            ev.offMs = offMs;
+            ev.offMs = isCc ? onMs : offMs;
+            ev.kind = isCc ? "cc" : "note";
             ev.note = note;
             ev.velocity = vel;
+            ev.cc = cc;
+            ev.ccValue = ccValue;
             ev.logic = logic;
             ev.grid = grid;
             ev.engineNowMs = engineNowMs;
             m_liveBuf.push_back(ev);
         }
-        logLines.push_back(QString("%1  %2  %3").arg(grid, logic, target));
+        if (isCc && cc == 64) {
+            logLines.push_back(QString("%1  %2  sustain=%3").arg(grid, logic, QString::number(ccValue)));
+        } else {
+            logLines.push_back(QString("%1  %2  %3").arg(grid, logic, target));
+        }
     }
 
     if (m_liveLog) {

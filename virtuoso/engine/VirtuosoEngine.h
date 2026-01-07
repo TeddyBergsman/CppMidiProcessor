@@ -7,7 +7,6 @@
 #include "virtuoso/engine/VirtuosoClock.h"
 #include "virtuoso/engine/VirtuosoScheduler.h"
 #include "virtuoso/groove/TimingHumanizer.h"
-#include "virtuoso/theory/TheoryEvent.h"
 #include "virtuoso/control/VirtuosityMatrix.h"
 
 namespace virtuoso::engine {
@@ -66,6 +65,15 @@ public slots:
 
     // Manual scheduling API (used until agent planners are implemented).
     void scheduleNote(const AgentIntentNote& note);
+
+    // Schedule a MIDI CC event aligned to the groove grid (for embodiment actions like sustain pedal).
+    void scheduleCC(const QString& agent,
+                    int channel,
+                    int cc,
+                    int value,
+                    const groove::GridPos& startPos,
+                    bool structural = false,
+                    const QString& logicTag = QString());
 
     // Humanize an intent using the engine's per-agent humanizer stream.
     // IMPORTANT: This advances the agent's RNG/drift state (same as scheduleNote()).

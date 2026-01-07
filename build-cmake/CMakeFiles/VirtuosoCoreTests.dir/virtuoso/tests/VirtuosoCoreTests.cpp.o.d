@@ -955,6 +955,7 @@ CMakeFiles/VirtuosoCoreTests.dir/virtuoso/tests/VirtuosoCoreTests.cpp.o: \
   /opt/homebrew/include/QtCore/qendian.h \
   /opt/homebrew/include/QtCore/qjsondocument.h \
   /opt/homebrew/include/QtCore/qjsonparseerror.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/NegativeHarmony.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QSet \

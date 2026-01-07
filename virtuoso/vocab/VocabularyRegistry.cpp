@@ -1,5 +1,7 @@
 #include "virtuoso/vocab/VocabularyRegistry.h"
 
+#include "virtuoso/util/StableHash.h"
+
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -59,12 +61,8 @@ static VocabularyRegistry::DrumArticulation parseDrumArticulation(const QString&
 } // namespace
 
 quint32 VocabularyRegistry::fnv1a32(const QByteArray& bytes) {
-    quint32 h = 2166136261u;
-    for (unsigned char c : bytes) {
-        h ^= quint32(c);
-        h *= 16777619u;
-    }
-    return h;
+    // Canonical hash across the app (do not use qHash for determinism).
+    return virtuoso::util::StableHash::fnv1a32(bytes);
 }
 
 bool VocabularyRegistry::energyMatches(double e, double minE, double maxE) {

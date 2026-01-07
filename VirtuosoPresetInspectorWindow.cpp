@@ -25,6 +25,8 @@
 #include <QTimer>
 #include <QDateTime>
 
+#include "virtuoso/util/StableHash.h"
+
 using virtuoso::groove::GrooveRegistry;
 
 VirtuosoPresetInspectorWindow::VirtuosoPresetInspectorWindow(MidiProcessor* midi, QWidget* parent)
@@ -332,7 +334,7 @@ void VirtuosoPresetInspectorWindow::onGeneratePreview() {
     piano.reset();
 
     const auto tune = playback::tuningForReferenceTrack(currentPresetKey());
-    const quint32 detSeed = quint32(qHash(QString("ballad|") + currentPresetKey()));
+    const quint32 detSeed = virtuoso::util::StableHash::fnv1a32((QString("ballad|") + currentPresetKey()).toUtf8());
 
     virtuoso::groove::TimeSignature ts{4, 4};
     const int bpm = m_bpm ? m_bpm->value() : 60;

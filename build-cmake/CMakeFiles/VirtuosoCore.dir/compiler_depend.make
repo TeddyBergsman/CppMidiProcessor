@@ -774,6 +774,7 @@ VirtuosoCore_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/MacOSX1
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/IInstrumentDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoClock.h \
@@ -798,6 +799,7 @@ VirtuosoCore_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/MacOSX1
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableHash.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QElapsedTimer \
@@ -13221,6 +13223,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
   /Library/Developer/CommandLineTools/usr/lib/clang/17/include/stddef.h \
   /Library/Developer/CommandLineTools/usr/lib/clang/17/include/stdint.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveGrid.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableHash.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /opt/homebrew/include/QtCore/q17memory.h \
   /opt/homebrew/include/QtCore/q20functional.h \
@@ -13355,6 +13358,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
   /opt/homebrew/include/QtCore/qversiontagging.h \
   /opt/homebrew/include/QtCore/qxptype_traits.h \
   /opt/homebrew/include/QtCore/qyieldcpu.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QByteArray \
   /opt/homebrew/lib/QtCore.framework/Headers/QFile \
   /opt/homebrew/lib/QtCore.framework/Headers/QJsonArray \
   /opt/homebrew/lib/QtCore.framework/Headers/QJsonDocument \
@@ -13362,6 +13366,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
   /opt/homebrew/lib/QtCore.framework/Headers/QString \
   /opt/homebrew/lib/QtCore.framework/Headers/QVector \
   /opt/homebrew/lib/QtCore.framework/Headers/QtGlobal \
+  /opt/homebrew/lib/QtCore.framework/Headers/qbytearray.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qfile.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qglobal.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qjsonarray.h \
@@ -13372,6 +13377,8 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 
 
 /opt/homebrew/lib/QtCore.framework/Headers/qfile.h:
+
+/opt/homebrew/lib/QtCore.framework/Headers/QByteArray:
 
 /opt/homebrew/include/QtCore/qspan.h:
 
@@ -15703,6 +15710,14 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoEngine.cpp:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.cpp:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/insert_iterator.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/functional.h:
+
+/opt/homebrew/lib/cmake/Qt6CorePrivate/Qt6CorePrivateTargets.cmake:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h:
+
 /opt/homebrew/include/QtCore/qprocessordetection.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__utility/empty.h:
@@ -17273,6 +17288,8 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__math/traits.h:
 
+/opt/homebrew/lib/QtCore.framework/Headers/qbytearray.h:
+
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__iterator/default_sentinel.h:
@@ -17319,6 +17336,8 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6QTgaPluginAdditionalTargetInfo.cmake:
 
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/make_const_lvalue_ref.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/reverse.h:
@@ -17326,6 +17345,8 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 /opt/homebrew/lib/cmake/Qt6DBusPrivate/Qt6DBusPrivateConfigVersion.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/minmax_element.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableHash.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/iota.h:
 
@@ -17770,14 +17791,6 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternal.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__compare/synth_three_way.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/insert_iterator.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/functional.h:
-
-/opt/homebrew/lib/cmake/Qt6CorePrivate/Qt6CorePrivateTargets.cmake:
-
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/shuffle.h:
 

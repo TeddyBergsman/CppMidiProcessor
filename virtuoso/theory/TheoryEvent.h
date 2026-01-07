@@ -5,6 +5,8 @@
 #include <QString>
 #include <QJsonObject>
 
+#include "virtuoso/control/VirtuosityMatrix.h"
+
 namespace virtuoso::theory {
 
 // Explainable event stream emitted by Virtuoso engines (glass-box).
@@ -42,6 +44,10 @@ struct TheoryEvent {
     QString vibe_state;      // e.g. "Simmer", "Build", "Climax", "CoolDown"
     QString user_intents;    // comma-separated flags (MVP): "DENSITY_HIGH,REGISTER_HIGH,..."
     double user_outside_ratio = 0.0;
+
+    // Virtuosity Matrix snapshot (optional; when present, emitted as a nested JSON object).
+    bool has_virtuosity = false;
+    virtuoso::control::VirtuosityMatrix virtuosity{};
 
     QJsonObject toJsonObject() const;
     QString toJsonString(bool compact = true) const;

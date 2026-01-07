@@ -1303,6 +1303,30 @@ playback/JazzBalladPianoPlanner.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.s
 .PHONY : playback/JazzBalladPianoPlanner.cpp.s
 
+playback/LookaheadPlanner.o: playback/LookaheadPlanner.cpp.o
+.PHONY : playback/LookaheadPlanner.o
+
+# target to build an object file
+playback/LookaheadPlanner.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o
+.PHONY : playback/LookaheadPlanner.cpp.o
+
+playback/LookaheadPlanner.i: playback/LookaheadPlanner.cpp.i
+.PHONY : playback/LookaheadPlanner.i
+
+# target to preprocess a source file
+playback/LookaheadPlanner.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.i
+.PHONY : playback/LookaheadPlanner.cpp.i
+
+playback/LookaheadPlanner.s: playback/LookaheadPlanner.cpp.s
+.PHONY : playback/LookaheadPlanner.s
+
+# target to generate assembly for a file
+playback/LookaheadPlanner.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.s
+.PHONY : playback/LookaheadPlanner.cpp.s
+
 playback/SemanticMidiAnalyzer.o: playback/SemanticMidiAnalyzer.cpp.o
 .PHONY : playback/SemanticMidiAnalyzer.o
 
@@ -1940,6 +1964,9 @@ help:
 	@echo "... playback/JazzBalladPianoPlanner.o"
 	@echo "... playback/JazzBalladPianoPlanner.i"
 	@echo "... playback/JazzBalladPianoPlanner.s"
+	@echo "... playback/LookaheadPlanner.o"
+	@echo "... playback/LookaheadPlanner.i"
+	@echo "... playback/LookaheadPlanner.s"
 	@echo "... playback/SemanticMidiAnalyzer.o"
 	@echo "... playback/SemanticMidiAnalyzer.i"
 	@echo "... playback/SemanticMidiAnalyzer.s"

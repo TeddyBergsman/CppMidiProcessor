@@ -846,10 +846,13 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BalladReferenceTuning.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyTypes.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadPlanner.cpp \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.cpp \
@@ -2040,6 +2043,8 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.h:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.cpp:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadPlanner.h:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h:
 
@@ -3949,6 +3954,8 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 
 /opt/homebrew/lib/cmake/Qt6GuiTools/Qt6GuiToolsTargets-release.cmake:
 
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyTypes.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__thread/jthread.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/push_heap.h:
@@ -4130,6 +4137,8 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__math/traits.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadPlanner.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__utility/forward.h:
 

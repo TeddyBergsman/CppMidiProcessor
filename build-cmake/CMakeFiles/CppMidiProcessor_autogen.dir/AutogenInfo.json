@@ -594,6 +594,12 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/HarmonyTypes.h",
+			"MU",
+			"QDVNTGK2R4/moc_HarmonyTypes.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h",
 			"MU",
 			"QDVNTGK2R4/moc_JazzBalladBassPlanner.cpp",
@@ -603,6 +609,12 @@
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h",
 			"MU",
 			"QDVNTGK2R4/moc_JazzBalladPianoPlanner.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/LookaheadPlanner.h",
+			"MU",
+			"QDVNTGK2R4/moc_LookaheadPlanner.cpp",
 			null
 		],
 		[
@@ -844,6 +856,11 @@
 		],
 		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/LookaheadPlanner.cpp",
 			"MU",
 			null
 		],

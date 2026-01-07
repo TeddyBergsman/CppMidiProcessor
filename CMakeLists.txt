@@ -19,6 +19,8 @@ enable_testing()
 
 # --- VirtuosoCore (new library, Stage 1) ---
 add_library(VirtuosoCore STATIC
+  virtuoso/util/StableHash.h
+  virtuoso/control/VirtuosityMatrix.h
   virtuoso/ontology/OntologyRegistry.h
   virtuoso/ontology/OntologyRegistry.cpp
   virtuoso/vocab/VocabularyRegistry.h
@@ -105,6 +107,9 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   chart/SongChartWidget.cpp
   playback/VirtuosoBalladMvpPlaybackEngine.h
   playback/VirtuosoBalladMvpPlaybackEngine.cpp
+  playback/HarmonyTypes.h
+  playback/LookaheadPlanner.h
+  playback/LookaheadPlanner.cpp
   playback/BalladReferenceTuning.h
   playback/BalladReferenceTuning.cpp
   playback/JazzBalladBassPlanner.h

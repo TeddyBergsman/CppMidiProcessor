@@ -8,6 +8,7 @@
 #include "virtuoso/engine/VirtuosoEngine.h"
 #include "virtuoso/groove/GrooveGrid.h"
 #include "virtuoso/theory/FunctionalHarmony.h"
+#include "virtuoso/ontology/OntologyRegistry.h"
 
 namespace playback {
 
@@ -113,6 +114,9 @@ public:
     // Deprecated (kept for compatibility): pianist is fully procedural.
     void setVocabulary(const void*) {}
 
+    // Ontology registry is the single source of truth for voicing choices.
+    void setOntology(const virtuoso::ontology::OntologyRegistry* ont) { m_ont = ont; }
+
     QVector<virtuoso::engine::AgentIntentNote> planBeat(const Context& c,
                                                         int midiChannel,
                                                         const virtuoso::groove::TimeSignature& ts);
@@ -170,6 +174,8 @@ private:
     // Coherence: keep a stable "hand position" pitch-class set across a 2-bar block.
     int m_anchorBlockStartBar = -1;
     QString m_anchorChordText;
+    QString m_anchorVoicingKey;
+    QString m_anchorVoicingName;
     QVector<int> m_anchorPcs; // pitch classes 0..11
     QVector<int> m_anchorLhPcs; // explicit LH shell pcs
     QVector<int> m_anchorRhPcs; // explicit RH color pcs
@@ -177,6 +183,8 @@ private:
     // Arpeggiation anti-repeat (deterministic).
     int m_lastArpBar = -1;
     int m_lastArpStyle = -1;
+
+    const virtuoso::ontology::OntologyRegistry* m_ont = nullptr; // not owned
 };
 
 } // namespace playback

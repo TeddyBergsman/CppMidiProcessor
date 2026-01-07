@@ -944,5 +944,6 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o: \
   /opt/homebrew/include/QtCore/qendian.h \
   /opt/homebrew/include/QtCore/qjsondocument.h \
   /opt/homebrew/include/QtCore/qjsonparseerror.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QJsonDocument \
   /opt/homebrew/lib/QtCore.framework/Headers/qjsondocument.h

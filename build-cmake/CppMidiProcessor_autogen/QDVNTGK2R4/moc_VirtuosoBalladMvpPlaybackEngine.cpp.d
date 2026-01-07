@@ -764,6 +764,7 @@
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/chart/ChartModel.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordSymbol.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyTypes.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h \

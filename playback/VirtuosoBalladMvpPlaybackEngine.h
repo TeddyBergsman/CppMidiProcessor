@@ -11,25 +11,18 @@
 #include "virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h"
 #include "virtuoso/theory/FunctionalHarmony.h"
 #include "virtuoso/ontology/OntologyRegistry.h"
+#include "virtuoso/vocab/VocabularyRegistry.h"
 
 #include "playback/JazzBalladBassPlanner.h"
 #include "playback/JazzBalladPianoPlanner.h"
 #include "playback/BrushesBalladDrummer.h"
+#include "playback/HarmonyTypes.h"
 #include "playback/SemanticMidiAnalyzer.h"
 #include "playback/VibeStateMachine.h"
 
 class MidiProcessor;
 
 namespace playback {
-
-struct LocalKeyEstimate {
-    int tonicPc = 0;
-    QString scaleKey;
-    QString scaleName;
-    virtuoso::theory::KeyMode mode = virtuoso::theory::KeyMode::Major;
-    double score = 0.0;
-    double coverage = 0.0;
-};
 
 // MVP: chart-driven Drums/Bass/Piano for jazz brushes ballad.
 // - Uses the new virtuoso::engine::VirtuosoEngine + groove templates (no legacy generators).
@@ -149,6 +142,11 @@ private:
     JazzBalladBassPlanner m_bassPlanner;
     JazzBalladPianoPlanner m_pianoPlanner;
     BrushesBalladDrummer m_drummer;
+
+    // Data-driven rhythmic vocabulary (optional, but enabled by default for ballad MVP).
+    virtuoso::vocab::VocabularyRegistry m_vocab;
+    bool m_vocabLoaded = false;
+    QString m_vocabError;
 
     // Listening MVP (semantic analysis of user input)
     SemanticMidiAnalyzer m_listener;

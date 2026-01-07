@@ -265,6 +265,11 @@ GrooveRegistry GrooveRegistry::builtins() {
         p.templateAmount = 0.80;
         p.defaultBpm = 130;
         p.defaultTimeSig = TimeSignature{4, 4};
+        // Swing: moderate harmonic color + rhythmic motion, brighter overall.
+        p.virtuosityDefaults.harmonicRisk = 0.45;
+        p.virtuosityDefaults.rhythmicComplexity = 0.55;
+        p.virtuosityDefaults.interaction = 0.55;
+        p.virtuosityDefaults.toneDark = 0.45;
 
         InstrumentGrooveProfile piano;
         piano.instrument = "Piano";
@@ -302,6 +307,11 @@ GrooveRegistry GrooveRegistry::builtins() {
         p.templateAmount = 1.0;
         p.defaultBpm = 60;
         p.defaultTimeSig = TimeSignature{4, 4};
+        // Ballad: low risk, sparse rhythm, warmer tone, higher conversational space.
+        p.virtuosityDefaults.harmonicRisk = 0.20;
+        p.virtuosityDefaults.rhythmicComplexity = 0.25;
+        p.virtuosityDefaults.interaction = 0.60;
+        p.virtuosityDefaults.toneDark = 0.65;
 
         InstrumentGrooveProfile piano;
         piano.instrument = "Piano";
@@ -339,6 +349,10 @@ GrooveRegistry GrooveRegistry::builtins() {
         p.templateAmount = 1.0;
         p.defaultBpm = 50;
         p.defaultTimeSig = TimeSignature{4, 4};
+        p.virtuosityDefaults.harmonicRisk = 0.18;
+        p.virtuosityDefaults.rhythmicComplexity = 0.20;
+        p.virtuosityDefaults.interaction = 0.62;
+        p.virtuosityDefaults.toneDark = 0.70;
 
         InstrumentGrooveProfile piano;
         piano.instrument = "Piano";
@@ -376,6 +390,10 @@ GrooveRegistry GrooveRegistry::builtins() {
         p.templateAmount = 1.0;
         p.defaultBpm = 72;
         p.defaultTimeSig = TimeSignature{4, 4};
+        p.virtuosityDefaults.harmonicRisk = 0.22;
+        p.virtuosityDefaults.rhythmicComplexity = 0.28;
+        p.virtuosityDefaults.interaction = 0.58;
+        p.virtuosityDefaults.toneDark = 0.62;
 
         InstrumentGrooveProfile piano;
         piano.instrument = "Piano";
@@ -413,6 +431,10 @@ GrooveRegistry GrooveRegistry::builtins() {
         p.templateAmount = 0.70;
         p.defaultBpm = 90;
         p.defaultTimeSig = TimeSignature{4, 4};
+        p.virtuosityDefaults.harmonicRisk = 0.28;
+        p.virtuosityDefaults.rhythmicComplexity = 0.34;
+        p.virtuosityDefaults.interaction = 0.55;
+        p.virtuosityDefaults.toneDark = 0.58;
 
         InstrumentGrooveProfile piano;
         piano.instrument = "Piano";
@@ -452,6 +474,10 @@ GrooveRegistry GrooveRegistry::builtins() {
         p.templateAmount = 1.0;
         p.defaultBpm = 60;
         p.defaultTimeSig = TimeSignature{4, 4};
+        p.virtuosityDefaults.harmonicRisk = 0.18;
+        p.virtuosityDefaults.rhythmicComplexity = 0.20;
+        p.virtuosityDefaults.interaction = 0.65;
+        p.virtuosityDefaults.toneDark = 0.72;
 
         InstrumentGrooveProfile piano;
         piano.instrument = "Piano";
@@ -506,6 +532,14 @@ GrooveRegistry GrooveRegistry::builtins() {
         p.templateAmount = 1.0;
         p.defaultBpm = 60;
         p.defaultTimeSig = TimeSignature{4, 4};
+        p.virtuosityDefaults.harmonicRisk = 0.25;
+        p.virtuosityDefaults.rhythmicComplexity = 0.22;
+        p.virtuosityDefaults.interaction = 0.65;
+        p.virtuosityDefaults.toneDark = 0.75;
+        p.virtuosityDefaults.harmonicRisk = 0.22;
+        p.virtuosityDefaults.rhythmicComplexity = 0.25;
+        p.virtuosityDefaults.interaction = 0.62;
+        p.virtuosityDefaults.toneDark = 0.68;
 
         InstrumentGrooveProfile piano;
         piano.instrument = "Piano";
@@ -618,6 +652,10 @@ GrooveRegistry GrooveRegistry::builtins() {
         p.templateAmount = 1.0;
         p.defaultBpm = 90;
         p.defaultTimeSig = TimeSignature{4, 4};
+        p.virtuosityDefaults.harmonicRisk = 0.35;
+        p.virtuosityDefaults.rhythmicComplexity = 0.30;
+        p.virtuosityDefaults.interaction = 0.55;
+        p.virtuosityDefaults.toneDark = 0.60;
 
         InstrumentGrooveProfile piano;
         piano.instrument = "Piano";
@@ -657,6 +695,10 @@ GrooveRegistry GrooveRegistry::builtins() {
         p.templateAmount = 0.55;
         p.defaultBpm = 240;
         p.defaultTimeSig = TimeSignature{4, 4};
+        p.virtuosityDefaults.harmonicRisk = 0.55;
+        p.virtuosityDefaults.rhythmicComplexity = 0.75;
+        p.virtuosityDefaults.interaction = 0.45;
+        p.virtuosityDefaults.toneDark = 0.40;
 
         InstrumentGrooveProfile piano;
         piano.instrument = "Piano";
@@ -694,6 +736,10 @@ GrooveRegistry GrooveRegistry::builtins() {
         p.templateAmount = 0.95;
         p.defaultBpm = 160;
         p.defaultTimeSig = TimeSignature{4, 4};
+        p.virtuosityDefaults.harmonicRisk = 0.50;
+        p.virtuosityDefaults.rhythmicComplexity = 0.60;
+        p.virtuosityDefaults.interaction = 0.48;
+        p.virtuosityDefaults.toneDark = 0.45;
 
         InstrumentGrooveProfile piano;
         piano.instrument = "Piano";
@@ -731,6 +777,10 @@ GrooveRegistry GrooveRegistry::builtins() {
         p.templateAmount = 0.75;
         p.defaultBpm = 180;
         p.defaultTimeSig = TimeSignature{3, 4};
+        p.virtuosityDefaults.harmonicRisk = 0.45;
+        p.virtuosityDefaults.rhythmicComplexity = 0.55;
+        p.virtuosityDefaults.interaction = 0.50;
+        p.virtuosityDefaults.toneDark = 0.50;
 
         InstrumentGrooveProfile piano;
         piano.instrument = "Piano";
@@ -768,6 +818,10 @@ GrooveRegistry GrooveRegistry::builtins() {
         p.templateAmount = 1.0;
         p.defaultBpm = 120;
         p.defaultTimeSig = TimeSignature{4, 4};
+        p.virtuosityDefaults.harmonicRisk = 0.40;
+        p.virtuosityDefaults.rhythmicComplexity = 0.60;
+        p.virtuosityDefaults.interaction = 0.48;
+        p.virtuosityDefaults.toneDark = 0.48;
 
         InstrumentGrooveProfile piano;
         piano.instrument = "Piano";

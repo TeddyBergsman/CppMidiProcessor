@@ -1149,4 +1149,7 @@ CMakeFiles/CppMidiProcessor.dir/VirtuosoPresetInspectorWindow.cpp.o: \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qpushbutton.h \
   /opt/homebrew/include/QtWidgets/qabstractbutton.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QDateTime \
-  /opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h
+  /opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableHash.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QByteArray \
+  /opt/homebrew/lib/QtCore.framework/Headers/qbytearray.h

@@ -1138,14 +1138,15 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/IInstrumentDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/ConstraintsTypes.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyTypes.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/2AYID5HISM/moc_GrooveTimelineWidget.cpp \

@@ -934,4 +934,59 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/seed_seq.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/student_t_distribution.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/weibull_distribution.h
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/weibull_distribution.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
+  /opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
+  /opt/homebrew/include/QtCore/qjsonvalue.h \
+  /opt/homebrew/include/QtCore/qcborvalue.h \
+  /opt/homebrew/include/QtCore/qcborcommon.h \
+  /opt/homebrew/include/QtCore/qobjectdefs.h \
+  /opt/homebrew/include/QtCore/qobjectdefs_impl.h \
+  /opt/homebrew/include/QtCore/qfunctionaltools_impl.h \
+  /opt/homebrew/include/QtCore/qmetatype.h \
+  /opt/homebrew/include/QtCore/qdatastream.h \
+  /opt/homebrew/include/QtCore/qscopedpointer.h \
+  /opt/homebrew/include/QtCore/qiodevicebase.h \
+  /opt/homebrew/include/QtCore/qfloat16.h \
+  /opt/homebrew/include/QtCore/qmath.h \
+  /opt/homebrew/include/QtCore/qtformat_impl.h \
+  /opt/homebrew/include/QtCore/qiterable.h \
+  /opt/homebrew/include/QtCore/qmetacontainer.h \
+  /opt/homebrew/include/QtCore/qcontainerinfo.h \
+  /opt/homebrew/include/QtCore/qtaggedpointer.h \
+  /opt/homebrew/include/QtCore/qscopeguard.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/list \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/map \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__tree \
+  /opt/homebrew/include/QtCore/qdatetime.h \
+  /opt/homebrew/include/QtCore/qcalendar.h \
+  /opt/homebrew/include/QtCore/qlocale.h \
+  /opt/homebrew/include/QtCore/qvariant.h \
+  /opt/homebrew/include/QtCore/qdebug.h \
+  /opt/homebrew/include/QtCore/qtextstream.h \
+  /opt/homebrew/include/QtCore/qcontiguouscache.h \
+  /opt/homebrew/include/QtCore/qsharedpointer.h \
+  /opt/homebrew/include/QtCore/qshareddata.h \
+  /opt/homebrew/include/QtCore/qsharedpointer_impl.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/chrono \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/file_clock.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/forward_list \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/set \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/unordered_set \
+  /opt/homebrew/include/QtCore/qmap.h \
+  /opt/homebrew/include/QtCore/qshareddata_impl.h \
+  /opt/homebrew/include/QtCore/qset.h \
+  /opt/homebrew/include/QtCore/qhash.h \
+  /opt/homebrew/include/QtCore/qvarlengtharray.h \
+  /opt/homebrew/include/QtCore/q23utility.h \
+  /opt/homebrew/include/QtCore/q20utility.h \
+  /opt/homebrew/include/QtCore/qobject.h \
+  /opt/homebrew/include/QtCore/qobject_impl.h \
+  /opt/homebrew/include/QtCore/qbindingstorage.h \
+  /opt/homebrew/include/QtCore/qregularexpression.h \
+  /opt/homebrew/include/QtCore/qurl.h \
+  /opt/homebrew/include/QtCore/quuid.h \
+  /opt/homebrew/include/QtCore/qendian.h \
+  /opt/homebrew/include/QtCore/qjsondocument.h \
+  /opt/homebrew/include/QtCore/qjsonparseerror.h

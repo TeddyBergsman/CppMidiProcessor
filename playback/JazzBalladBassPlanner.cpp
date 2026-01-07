@@ -1,6 +1,9 @@
 #include "playback/JazzBalladBassPlanner.h"
 
+#include "virtuoso/util/StableHash.h"
+
 #include <QtGlobal>
+#include <limits>
 
 namespace playback {
 
@@ -213,10 +216,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         auto chooseApproachTo = [&](int targetMidi) -> int {
             // Prefer half-step approaches; at cadence/dominant allow occasional whole-step.
             const bool spicy = (c.chordFunction == "Dominant") || (c.cadence01 >= 0.55);
-            const quint32 h = quint32(qHash(QString("bwalk_app|%1|%2|%3")
-                                                .arg(c.chordText)
-                                                .arg(c.playbackBarIndex)
-                                                .arg(c.determinismSeed)));
+            const quint32 h = virtuoso::util::StableHash::fnv1a32(QString("bwalk_app|%1|%2|%3")
+                                                                      .arg(c.chordText)
+                                                                      .arg(c.playbackBarIndex)
+                                                                      .arg(c.determinismSeed)
+                                                                      .toUtf8());
             const int step = (spicy && c.harmonicRisk >= 0.55 && int(h % 100u) < 35) ? 2 : 1;
             const int below = targetMidi - step;
             const int above = targetMidi + step;
@@ -257,7 +261,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                 // Avoid sitting on root too much.
                 if (k.id == "root") s += 0.10;
                 // Deterministic tiny tiebreak.
-                s += (double(qHash(k.id)) / double(std::numeric_limits<uint>::max())) * 1e-6;
+                s += (double(virtuoso::util::StableHash::fnv1a32(k.id.toUtf8())) / double(std::numeric_limits<uint>::max())) * 1e-6;
                 return s;
             };
             const Cand* best = nullptr;
@@ -286,7 +290,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                 if (k.id == "nextRoot" && !wantMove) s += 0.6;
                 if (k.id == "nextRoot" && wantMove) s -= 0.10;
                 if (c.chordFunction == "Dominant" && k.id == "third") s -= 0.10;
-                s += (double(qHash(k.id)) / double(std::numeric_limits<uint>::max())) * 1e-6;
+                s += (double(virtuoso::util::StableHash::fnv1a32(k.id.toUtf8())) / double(std::numeric_limits<uint>::max())) * 1e-6;
                 return s;
             };
             const Cand* best = nullptr;
@@ -305,10 +309,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                 const bool wantEnclosure = !userBusy && c.allowApproachFromAbove &&
                                            (c.chordFunction == "Dominant" || c.cadence01 >= 0.75) &&
                                            (c.rhythmicComplexity >= 0.70);
-                const quint32 he = quint32(qHash(QString("bwalk_enc|%1|%2|%3")
-                                                     .arg(c.chordText)
-                                                     .arg(c.playbackBarIndex)
-                                                     .arg(c.determinismSeed)));
+                const quint32 he = virtuoso::util::StableHash::fnv1a32(QString("bwalk_enc|%1|%2|%3")
+                                                                           .arg(c.chordText)
+                                                                           .arg(c.playbackBarIndex)
+                                                                           .arg(c.determinismSeed)
+                                                                           .toUtf8());
                 if (wantEnclosure && int(he % 100u) < int(llround(25.0 + 55.0 * qBound(0.0, c.cadence01, 1.0)))) {
                     int a = nextRootMidi + 1;
                     int b = nextRootMidi - 1;
@@ -473,10 +478,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             // Keep the old "Chet space" behavior but modulate by Virtuosity weights.
             const bool stableHarmony = !nextChanges && !c.chordIsNew;
             if (stableHarmony) {
-                const quint32 hStable = quint32(qHash(QString("%1|%2|%3|b3")
-                                                     .arg(c.chordText)
-                                                     .arg(c.playbackBarIndex)
-                                                     .arg(c.determinismSeed)));
+                const quint32 hStable = virtuoso::util::StableHash::fnv1a32(QString("%1|%2|%3|b3")
+                                                                                .arg(c.chordText)
+                                                                                .arg(c.playbackBarIndex)
+                                                                                .arg(c.determinismSeed)
+                                                                                .toUtf8());
                 // If interaction is low or user is busy, omit more; otherwise omit less as song progresses.
                 const double omit = qBound(0.0,
                                            c.skipBeat3ProbStable
@@ -533,7 +539,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                 if (m_lastMidi >= 0) s += 0.012 * double(qAbs(m - m_lastMidi));
                 // Avoid color when user is busy.
                 if (userBusy && k.id == "sixth") s += 0.9;
-                s += (double(qHash(k.id)) / double(std::numeric_limits<uint>::max())) * 1e-6;
+                s += (double(virtuoso::util::StableHash::fnv1a32(k.id.toUtf8())) / double(std::numeric_limits<uint>::max())) * 1e-6;
                 return s;
             };
 
@@ -629,10 +635,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
 
         // Deterministic probability, slightly higher at phrase ends (4-bar phrasing).
         const bool phraseEnd = ((c.playbackBarIndex % 4) == 3);
-        const quint32 hApp = quint32(qHash(QString("%1|%2|%3|app4")
-                                           .arg(c.chordText)
-                                           .arg(c.playbackBarIndex)
-                                           .arg(c.determinismSeed)));
+        const quint32 hApp = virtuoso::util::StableHash::fnv1a32(QString("%1|%2|%3|app4")
+                                                                     .arg(c.chordText)
+                                                                     .arg(c.playbackBarIndex)
+                                                                     .arg(c.determinismSeed)
+                                                                     .toUtf8());
         // Make Virt rhythmicComplexity audibly affect pickup frequency.
         // (Higher complexity => more pickups/approaches; darker tone does not affect bass much here.)
         const double baseP = qBound(0.0, (c.approachProbBeat3 * 0.45) * (0.35 + 0.95 * qBound(0.0, c.rhythmicComplexity, 1.0)), 1.0);
@@ -683,10 +690,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         } else {
             // On stable harmony, occasionally hold the root for the whole bar (Chet ballad vibe).
             const bool stable = (!c.hasNextChord) || ((c.nextChord.rootPc == c.chord.rootPc) && !c.chordIsNew);
-            const quint32 hLen = quint32(qHash(QString("%1|%2|%3|len")
-                                               .arg(c.chordText)
-                                               .arg(c.playbackBarIndex)
-                                               .arg(c.determinismSeed)));
+            const quint32 hLen = virtuoso::util::StableHash::fnv1a32(QString("%1|%2|%3|len")
+                                                                         .arg(c.chordText)
+                                                                         .arg(c.playbackBarIndex)
+                                                                         .arg(c.determinismSeed)
+                                                                         .toUtf8());
             const bool longHold = stable && ((hLen % 4u) == 0u);
             // Walk articulation: slightly legato when stepwise, otherwise normal quarter.
             if (doWalk) {

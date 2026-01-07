@@ -1004,6 +1004,7 @@ CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.o: \
   /opt/homebrew/include/QtCore/qendian.h \
   /opt/homebrew/include/QtCore/qjsondocument.h \
   /opt/homebrew/include/QtCore/qjsonparseerror.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
   /opt/homebrew/include/QtCore/qtmochelpers.h \
   /opt/homebrew/include/QtCore/qtmocconstants.h \
   /opt/homebrew/include/QtCore/q20algorithm.h \

@@ -798,6 +798,7 @@ VirtuosoCore_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/MacOSX1
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableHash.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QElapsedTimer \
@@ -3135,6 +3136,8 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/dangling.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/minmax_element.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableHash.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/_types/_locale_t.h:
 

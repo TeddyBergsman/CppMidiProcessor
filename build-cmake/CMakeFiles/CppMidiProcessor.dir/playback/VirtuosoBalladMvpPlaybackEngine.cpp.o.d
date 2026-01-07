@@ -1012,14 +1012,15 @@ CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.o: 
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QStringList \
   /opt/homebrew/lib/QtCore.framework/Headers/qstringlist.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/IInstrumentDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/ConstraintsTypes.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyTypes.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QSet \
   /opt/homebrew/lib/QtCore.framework/Headers/qset.h \
@@ -1061,7 +1062,11 @@ CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.o: 
   /opt/homebrew/lib/QtCore.framework/Headers/QMap \
   /opt/homebrew/lib/QtCore.framework/Headers/qmap.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BalladReferenceTuning.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableHash.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QByteArray \
+  /opt/homebrew/lib/QtCore.framework/Headers/qbytearray.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QDateTime \
   /opt/homebrew/lib/QtCore.framework/Headers/qdatetime.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QJsonArray \

@@ -8,6 +8,7 @@
 #include "virtuoso/engine/VirtuosoScheduler.h"
 #include "virtuoso/groove/TimingHumanizer.h"
 #include "virtuoso/theory/TheoryEvent.h"
+#include "virtuoso/control/VirtuosityMatrix.h"
 
 namespace virtuoso::engine {
 
@@ -37,6 +38,10 @@ struct AgentIntentNote {
     QString vibe_state;
     QString user_intents;
     double user_outside_ratio = 0.0;
+
+    // Virtuosity Matrix snapshot (optional; used for glass-box logging and later solver decisions).
+    bool has_virtuosity = false;
+    virtuoso::control::VirtuosityMatrix virtuosity{};
 };
 
 // Stage 1 engine: schedules intents through groove humanization and emits MIDI + TheoryEvent JSON.

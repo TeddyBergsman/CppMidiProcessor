@@ -132,6 +132,8 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
     te.vibe_state = note.vibe_state;
     te.user_intents = note.user_intents;
     te.user_outside_ratio = note.user_outside_ratio;
+    te.has_virtuosity = note.has_virtuosity;
+    te.virtuosity = note.virtuosity;
 
     emit plannedTheoryEventJson(te.toJsonString(true));
 
@@ -206,6 +208,8 @@ void VirtuosoEngine::scheduleHumanizedIntentNote(const AgentIntentNote& note,
     te.vibe_state = note.vibe_state;
     te.user_intents = note.user_intents;
     te.user_outside_ratio = note.user_outside_ratio;
+    te.has_virtuosity = note.has_virtuosity;
+    te.virtuosity = note.virtuosity;
 
     emit plannedTheoryEventJson(te.toJsonString(true));
 

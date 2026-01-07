@@ -56,6 +56,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o.d"
   "CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o"
   "CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o.d"
+  "CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o"
+  "CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o.d"
   "CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.o"
   "CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.o.d"
   "CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.o"

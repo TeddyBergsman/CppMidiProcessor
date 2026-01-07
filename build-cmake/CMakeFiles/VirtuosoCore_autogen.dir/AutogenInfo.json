@@ -462,6 +462,12 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h",
+			"MU",
+			"SFFMX5EKHP/moc_VirtuosityMatrix.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h",
 			"MU",
 			"S5EEVERIQV/moc_FluffyAudioJazzDrumsBrushesMapping.cpp",
@@ -543,6 +549,12 @@
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h",
 			"MU",
 			"4CIAGTWHZ2/moc_TheoryEvent.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/util/StableHash.h",
+			"MU",
+			"KPZOHDUKAK/moc_StableHash.cpp",
 			null
 		],
 		[

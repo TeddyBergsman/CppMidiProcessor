@@ -1,5 +1,7 @@
 #include "playback/JazzBalladPianoPlanner.h"
 
+#include "virtuoso/util/StableHash.h"
+
 #include <QtGlobal>
 #include <algorithm>
 
@@ -201,7 +203,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     const bool climaxDense = c.forceClimax && (c.energy >= 0.75);
 
     // Deterministic hash for this beat.
-    const quint32 h = quint32(qHash(QString("%1|%2|%3").arg(c.chordText).arg(c.playbackBarIndex).arg(c.determinismSeed)));
+    const quint32 h = virtuoso::util::StableHash::fnv1a32(QString("%1|%2|%3")
+                                                              .arg(c.chordText)
+                                                              .arg(c.playbackBarIndex)
+                                                              .arg(c.determinismSeed)
+                                                              .toUtf8());
     const double progress01 = qBound(0.0, double(qMax(0, c.playbackBarIndex)) / 24.0, 1.0); // ~24 bars to reach "later in song"
 
     // Bar-coherent rhythmic planning: choose a small set of syncopated comp hits once per bar.
@@ -220,11 +226,12 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         const bool lush = (c.toneDark >= 0.55) && (c.interaction >= 0.35);
         const bool allow = !userBusy && lush && (c.rhythmicComplexity >= 0.35) && !climaxDense;
         if (allow && !hitsThisBeat.isEmpty()) {
-            const quint32 hb = quint32(qHash(QString("pno_broken|%1|%2|%3|%4")
-                                                 .arg(c.chordText)
-                                                 .arg(c.playbackBarIndex)
-                                                 .arg(c.beatInBar)
-                                                 .arg(c.determinismSeed)));
+            const quint32 hb = virtuoso::util::StableHash::fnv1a32(QString("pno_broken|%1|%2|%3|%4")
+                                                                       .arg(c.chordText)
+                                                                       .arg(c.playbackBarIndex)
+                                                                       .arg(c.beatInBar)
+                                                                       .arg(c.determinismSeed)
+                                                                       .toUtf8());
             const int p = qBound(0, int(llround(10.0 + 28.0 * c.rhythmicComplexity + 18.0 * (c.userSilence ? 1.0 : 0.0))), 55);
             if (int(hb % 100u) < p) {
                 // Duplicate one of the hits and offset by a 16th (count=4), with lighter velocity.
@@ -300,164 +307,169 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     const int pc11 = pcForDegree(c.chord, 11);
     const int pc13 = pcForDegree(c.chord, 13);
 
-    struct Cand {
-        QString id;
-        QString voicingType;
-        QVector<int> lhPcs; // 0..11 (shell bed)
-        QVector<int> rhPcs; // 0..11 (colors/cluster)
-        bool prefersRootless = false;
-        QVector<int> pcsAll() const {
-            QVector<int> x = lhPcs;
-            for (int pc : rhPcs) x.push_back(pc);
-            JazzBalladPianoPlanner::sortUnique(x);
-            return x;
-        }
-    };
-    auto mk = [&](QString id, QString vt, QVector<int> lh, QVector<int> rh, bool rootless = false) -> Cand {
-        sortUnique(lh);
-        sortUnique(rh);
-        return {std::move(id), std::move(vt), std::move(lh), std::move(rh), rootless};
-    };
-
-    const bool allowRootless = chordHas7 && (c.harmonicRisk >= 0.35);
-    const bool wantMoreColor = (c.harmonicRisk >= 0.45) || (progress01 >= 0.55);
-    const bool allowQuartal = chordHas7 && (c.harmonicRisk >= 0.60);
+    // --- Ontology-driven voicing selection (single source of musical truth) ---
+    // We select a VoicingDef from the ontology and realize it into LH/RH pitch-class sets.
+    // This replaces procedural chord-tone set generation.
     const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+    const bool wantShell = c.preferShells || userBusy || !chordHas7 || (c.harmonicRisk < 0.35);
+    const bool wantRootless = chordHas7 && !wantShell && (c.harmonicRisk >= 0.35);
+    const bool wantQuartal = chordHas7 && !wantShell && (c.harmonicRisk >= 0.60) && !c.toneDark;
+    const bool wantUst = dominant && (c.harmonicRisk >= 0.70);
 
-    QVector<Cand> candidates;
-    candidates.reserve(12);
-
-    // Core LH shell: (3,7) if present else (3,5). RH starts empty and gets colors.
-    const bool isMinor = (c.chord.quality == music::ChordQuality::Minor);
-    QVector<int> lhShell;
-    if (pc3 >= 0) lhShell.push_back(pc3);
-    if (pc7 >= 0) lhShell.push_back(pc7);
-    else if (pc5 >= 0) lhShell.push_back(pc5);
-    sortUnique(lhShell);
-
-    // RH sweet colors by quality (ballad-safe).
-    const int sweetA = pc9;
-    const int sweetB = isMinor ? pc11 : pc13;
-    const int sweetC = pc5;
-
-    candidates.push_back(mk("shell", chordHas7 ? "Ballad Shell (LH 3-7)" : "Ballad Shell (LH 3-5)", lhShell, {}, false));
-    if (sweetA >= 0) candidates.push_back(mk("shell+9", "Ballad Shell + RH 9", lhShell, {sweetA}, false));
-    if (sweetB >= 0) candidates.push_back(mk("shell+sweetB", isMinor ? "Ballad Shell + RH 11" : "Ballad Shell + RH 13", lhShell, {sweetB}, false));
-    if (sweetA >= 0 && sweetB >= 0) candidates.push_back(mk("shell+2colors", "Ballad Shell + RH 9+Sweet", lhShell, {sweetA, sweetB}, false));
-    if (wantMoreColor && sweetA >= 0 && sweetB >= 0 && sweetC >= 0) candidates.push_back(mk("shell+3colors", "Ballad Shell + RH 5+9+Sweet", lhShell, {sweetC, sweetA, sweetB}, true));
-
-    // Root in LH only (open) when bright and safe.
-    if (!c.toneDark && pc1 >= 0 && (c.harmonicRisk >= 0.55) && !spicy) {
-        candidates.push_back(mk("lh_root_shell", "Ballad LH Root + Shell", QVector<int>{pc1} + lhShell, {sweetA, sweetB}, false));
-    }
-
-    // Rootless A/B (explicit split: LH guides, RH colors)
-    if (allowRootless) {
-        if (pc3 >= 0 && pc7 >= 0) {
-            QVector<int> rh;
-            if (pc9 >= 0) rh.push_back(pc9);
-            if (isMinor) { if (pc11 >= 0) rh.push_back(pc11); }
-            else { if (pc13 >= 0) rh.push_back(pc13); }
-            if (pc5 >= 0 && wantMoreColor) rh.push_back(pc5);
-            candidates.push_back(mk("rootless", "Ballad Rootless (LH 3-7 + RH colors)", QVector<int>{pc3, pc7}, rh, true));
+    auto voicingPcsFor = [&](const virtuoso::ontology::VoicingDef* v) -> QVector<int> {
+        QVector<int> outPcs;
+        if (!v) return outPcs;
+        QSet<int> pcs;
+        const int rootPc = (c.chord.rootPc >= 0) ? (c.chord.rootPc % 12) : 0;
+        if (!v->intervals.isEmpty()) {
+            for (int iv : v->intervals) pcs.insert((rootPc + iv + 1200) % 12);
+        } else {
+            for (int deg : v->chordDegrees) {
+                const int p = pcForDegree(c.chord, deg);
+                if (p >= 0) pcs.insert((p + 12) % 12);
+            }
         }
-    }
-
-    // Quartal flavor: keep it in RH only, LH remains shell (avoids low quartal mud).
-    if (allowQuartal && !c.toneDark && pc3 >= 0) {
-        QVector<int> rh;
-        if (pc9 >= 0) rh.push_back(pc9);
-        if (pc5 >= 0) rh.push_back(pc5);
-        if (isMinor && pc11 >= 0 && c.harmonicRisk >= 0.70) rh.push_back(pc11);
-        if (rh.size() >= 2) candidates.push_back(mk("quartal_rh", "Ballad Quartal RH (LH shell)", lhShell, rh, true));
-    }
-
-    // Bill-ish clustered colors / drop-ish stacks (procedural vocab).
-    // Keep it tasteful: only when there is space and risk is moderate+.
-    const bool allowBillVocab = chordHas7 && (c.harmonicRisk >= 0.35) && !userBusy;
-    if (allowBillVocab) {
-        // Evans-ish: LH 3-7, RH 9-13 (or 9-11 in minor) + optional 5.
-        if (!spicy && pc3 >= 0 && pc7 >= 0) {
-            QVector<int> rh;
-            if (pc9 >= 0) rh.push_back(pc9);
-            if (isMinor) { if (pc11 >= 0) rh.push_back(pc11); }
-            else { if (pc13 >= 0) rh.push_back(pc13); }
-            if (pc5 >= 0 && (wantMoreColor || c.cadence01 >= 0.55)) rh.push_back(pc5);
-            candidates.push_back(mk("evans_lush", "Evans Lush (LH 3-7 + RH 9/13/5)", QVector<int>{pc3, pc7}, rh, true));
-        }
-    }
-
-    auto scoreCand = [&](const Cand& cand) -> double {
-        double s = 0.0;
-        const QVector<int> pcsAll = cand.pcsAll();
-        // Prefer consistency within the 2-bar anchor unless chord is new.
-        if (!m_anchorPcs.isEmpty() && !c.chordIsNew) {
-            int common = 0;
-            for (int pc : pcsAll) if (m_anchorPcs.contains(pc)) ++common;
-            const int total = qMax(1, pcsAll.size());
-            const double overlap = double(common) / double(total);
-            s += (1.0 - overlap) * 1.4; // penalize big PC-set change
-        }
-        // Penalize thickness early / low risk.
-        const int n = pcsAll.size();
-        const double target = 2.0 + 2.0 * c.harmonicRisk + 1.0 * progress01;
-        s += 0.55 * qAbs(double(n) - target);
-        // Penalize root-in-RH when dark
-        if (pcsAll.contains(pc1) && c.toneDark > 0.55) s += 0.8;
-        // Penalize spicy colors on non-spicy chords at low risk
-        if (!spicy && c.harmonicRisk < 0.45) {
-            if (pcsAll.contains(pc11) && !isMinor) s += 0.8; // natural 11 over major-ish is rough
-        }
-        // Interaction: if user is active, bias simpler (fewer pcs).
-        if (!c.userSilence && (c.userDensityHigh || c.userIntensityPeak)) s += 0.35 * qMax(0, n - 2);
-        // Small bias: shells early; richer later.
-        if (progress01 < 0.25 && cand.prefersRootless) s += 0.4;
-        if (progress01 > 0.60 && cand.id == "shell") s += 0.25;
-        // Deterministic tie breaker
-        s += (double(qHash(cand.id)) / double(std::numeric_limits<uint>::max())) * 1e-6;
-        return s;
+        outPcs = pcs.values().toVector();
+        sortUnique(outPcs);
+        return outPcs;
     };
 
-    // Coherence: keep a stable pitch-class set across a 2-bar block (hand position),
-    // refreshing at chord changes.
     const int blockStart = (qMax(0, c.playbackBarIndex) / 2) * 2;
-    const bool anchorValid = (m_anchorBlockStartBar == blockStart && m_anchorChordText == c.chordText && !m_anchorPcs.isEmpty());
+    const bool anchorValid = (m_anchorBlockStartBar == blockStart &&
+                              m_anchorChordText == c.chordText &&
+                              !m_anchorPcs.isEmpty() &&
+                              !m_anchorVoicingKey.trimmed().isEmpty());
     const bool refreshAnchor = (!anchorValid) || c.chordIsNew;
 
     QString voicingType;
+    QString voicingKey;
     QVector<int> pcs;
+
     if (refreshAnchor) {
         m_anchorBlockStartBar = blockStart;
         m_anchorChordText = c.chordText;
 
-        const Cand* best = nullptr;
+        const auto* ont = m_ont;
+        QVector<const virtuoso::ontology::VoicingDef*> pool;
+        if (ont) pool = ont->voicingsFor(virtuoso::ontology::InstrumentKind::Piano);
+
+        QVector<const virtuoso::ontology::VoicingDef*> cands;
+        cands.reserve(pool.size());
+        for (const auto* v : pool) {
+            if (!v) continue;
+            const QString cat = v->category.trimmed().toLower();
+            const bool isShell = (cat == "shell") || v->tags.contains("shell") || v->tags.contains("guide_tones");
+            const bool isRootless = (cat == "rootless") || v->tags.contains("rootless");
+            const bool isQuartal = (cat == "quartal") || v->tags.contains("quartal");
+            const bool isUst = (cat == "ust") || v->tags.contains("ust");
+            if (wantShell && isShell) cands.push_back(v);
+            else if (wantRootless && (isRootless || isShell)) cands.push_back(v);
+            else if (wantQuartal && (isQuartal || isRootless || isShell)) cands.push_back(v);
+            else if (wantUst && (isUst || isRootless || isShell)) cands.push_back(v);
+        }
+        if (cands.isEmpty()) cands = pool;
+
+        auto scoreVoicing = [&](const virtuoso::ontology::VoicingDef* v) -> double {
+            if (!v) return 1e9;
+            const QVector<int> pcsAll = voicingPcsFor(v);
+            if (pcsAll.isEmpty()) return 1e9;
+
+            double s = 0.0;
+            // Prefer stability within the 2-bar anchor unless chord is new.
+            if (!m_anchorPcs.isEmpty() && !c.chordIsNew) {
+                int common = 0;
+                for (int pc : pcsAll) if (m_anchorPcs.contains(pc)) ++common;
+                const int tot = qMax(1, pcsAll.size());
+                const double overlap = double(common) / double(tot);
+                s += (1.0 - overlap) * 1.2;
+            }
+            // Thickness target based on virtuosity + song progress.
+            const int n = pcsAll.size();
+            const double target = 2.0 + 2.0 * qBound(0.0, c.harmonicRisk, 1.0) + 1.0 * progress01;
+            s += 0.55 * qAbs(double(n) - target);
+
+            // Penalize root in dark tones (mud).
+            if (pcsAll.contains((pc1 + 12) % 12) && c.toneDark > 0.55) s += 0.7;
+
+            // UST is dominant-centric: penalize if not dominant.
+            if (v->tags.contains("ust") && !dominant) s += 0.9;
+
+            // Quartal can read bright/open; avoid when tone is very dark.
+            if (v->tags.contains("quartal") && c.toneDark > 0.70) s += 0.8;
+
+            // Interaction: if user is active, bias simpler (fewer pcs).
+            if (!c.userSilence && userBusy) s += 0.35 * qMax(0, n - 2);
+
+            // Deterministic tie breaker.
+            s += (double(virtuoso::util::StableHash::fnv1a32(v->key.toUtf8())) / double(std::numeric_limits<uint>::max())) * 1e-6;
+            return s;
+        };
+
+        const virtuoso::ontology::VoicingDef* best = nullptr;
         double bestScore = 1e9;
-        for (const auto& cand : candidates) {
-            const QVector<int> pcsAll = cand.pcsAll();
-            if (pcsAll.isEmpty()) continue;
-            const double sc = scoreCand(cand);
-            if (sc < bestScore) { bestScore = sc; best = &cand; }
+        for (const auto* v : cands) {
+            const double sc = scoreVoicing(v);
+            if (sc < bestScore) { bestScore = sc; best = v; }
         }
+        if (!best && !pool.isEmpty()) best = pool.first();
+
         if (best) {
-            m_anchorLhPcs = best->lhPcs;
-            m_anchorRhPcs = best->rhPcs;
-            m_anchorPcs = best->pcsAll();
-            voicingType = best->voicingType;
+            m_anchorVoicingKey = best->key;
+            m_anchorVoicingName = best->name;
+            m_anchorPcs = voicingPcsFor(best);
         } else {
-            m_anchorPcs = lhShell;
-            m_anchorLhPcs = lhShell;
-            m_anchorRhPcs.clear();
-            voicingType = chordHas7 ? "Ballad Shell (3-7)" : "Ballad Shell (3-5)";
+            m_anchorVoicingKey.clear();
+            m_anchorVoicingName = "Shell (fallback)";
+            // Absolute fallback: guides only.
+            m_anchorPcs.clear();
+            if (pc3 >= 0) m_anchorPcs.push_back((pc3 + 12) % 12);
+            if (pc7 >= 0) m_anchorPcs.push_back((pc7 + 12) % 12);
+            else if (pc5 >= 0) m_anchorPcs.push_back((pc5 + 12) % 12);
+            sortUnique(m_anchorPcs);
         }
-    } else {
-        pcs = m_anchorPcs;
-        // Reconstruct the label from the stored pcs (best-effort); keeps old behavior if UI relies on text.
-        voicingType = chordHas7 ? "Ballad Shell (3-7)" : "Ballad Shell (3-5)";
+
+        // Derive LH/RH split from the chosen pitch-class pool:
+        // - LH gets guide tones (3/7 or 3/5)
+        // - RH gets the remaining colors
+        QVector<int> lh;
+        if (pc3 >= 0) lh.push_back((pc3 + 12) % 12);
+        if (pc7 >= 0) lh.push_back((pc7 + 12) % 12);
+        else if (pc5 >= 0) lh.push_back((pc5 + 12) % 12);
+        sortUnique(lh);
+        // Keep only pcs that exist in the chosen pool (unless pool is tiny).
+        if (!m_anchorPcs.isEmpty()) {
+            QVector<int> filtered;
+            for (int p : lh) if (m_anchorPcs.contains(p)) filtered.push_back(p);
+            if (!filtered.isEmpty()) lh = filtered;
+        }
+        if (lh.size() > 2) lh.resize(2);
+        if (lh.isEmpty() && !m_anchorPcs.isEmpty()) {
+            lh.push_back(m_anchorPcs.first());
+            if (m_anchorPcs.size() > 1) lh.push_back(m_anchorPcs[1]);
+            sortUnique(lh);
+            if (lh.size() > 2) lh.resize(2);
+        }
+
+        QVector<int> rh = m_anchorPcs;
+        for (int p : lh) rh.removeAll(p);
+        sortUnique(rh);
+        // Ensure RH has something if the pool is >2 (avoid all-LH mud).
+        if (rh.isEmpty() && m_anchorPcs.size() > lh.size()) {
+            for (int p : m_anchorPcs) {
+                if (!lh.contains(p)) { rh.push_back(p); break; }
+            }
+            sortUnique(rh);
+        }
+
+        m_anchorLhPcs = lh;
+        m_anchorRhPcs = rh;
     }
 
     pcs = m_anchorPcs;
     QVector<int> lhShellPcs = m_anchorLhPcs;
     QVector<int> rhColorPcs = m_anchorRhPcs;
+    voicingType = m_anchorVoicingName.isEmpty() ? QString("Piano voicing") : m_anchorVoicingName;
+    voicingKey = m_anchorVoicingKey;
 
     const QVector<int> prevVoicing = m_lastVoicing;
 
@@ -537,10 +549,11 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         ? (double(qBound(0, c.barInPhrase, phraseBars - 1)) / double(phraseBars - 1))
         : 0.0;
     // (cadence already computed above)
-    const quint32 hrz = quint32(qHash(QString("pno_reg|%1|%2|%3")
-                                          .arg(phraseStart)
-                                          .arg(phraseBars)
-                                          .arg(c.determinismSeed)));
+    const quint32 hrz = virtuoso::util::StableHash::fnv1a32(QString("pno_reg|%1|%2|%3")
+                                                                .arg(phraseStart)
+                                                                .arg(phraseBars)
+                                                                .arg(c.determinismSeed)
+                                                                .toUtf8());
     const int baseShift = int((hrz % 3u)) - 1; // -1..+1 semitones
     const int arcShift = int(llround(3.0 * qSin(3.1415926535 * phrasePos01))); // 0..3..0
     const int cadenceLift = cadence ? 1 : 0;
@@ -789,11 +802,12 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         const int topNote = notes.last();
         const int lowNote = notes.first();
 
-        const quint32 hr = quint32(qHash(QString("roll|%1|%2|%3|%4")
-                                             .arg(c.chordText)
-                                             .arg(c.playbackBarIndex)
-                                             .arg(hit.beatInBar)
-                                             .arg(c.determinismSeed)));
+        const quint32 hr = virtuoso::util::StableHash::fnv1a32(QString("roll|%1|%2|%3|%4")
+                                                                   .arg(c.chordText)
+                                                                   .arg(c.playbackBarIndex)
+                                                                   .arg(hit.beatInBar)
+                                                                   .arg(c.determinismSeed)
+                                                                   .toUtf8());
         const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
         const bool cadence = (c.cadence01 >= 0.55) || c.phraseEndBar;
         const bool arrival = c.chordIsNew || hit.rhythmTag.contains("arrival") || hit.rhythmTag.contains("forced_arrival1");
@@ -818,11 +832,12 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         // 0=none/subtle roll, 1=up, 2=down, 3=inside-out, 4=outside-in, 5=skip, 6=triplet (cadence only)
         int style = 0;
         if (doArp) {
-            const quint32 hs = quint32(qHash(QString("arpStyle|%1|%2|%3|%4")
-                                                 .arg(c.chordText)
-                                                 .arg(c.playbackBarIndex)
-                                                 .arg(hit.beatInBar)
-                                                 .arg(c.determinismSeed)));
+            const quint32 hs = virtuoso::util::StableHash::fnv1a32(QString("arpStyle|%1|%2|%3|%4")
+                                                                       .arg(c.chordText)
+                                                                       .arg(c.playbackBarIndex)
+                                                                       .arg(hit.beatInBar)
+                                                                       .arg(c.determinismSeed)
+                                                                       .toUtf8());
             const int wantTrip = (cadence && (int((hs / 11u) % 100u) < 18)) ? 1 : 0;
             const int pool = wantTrip ? 6 : 5;
             style = 1 + int((hs % uint(pool)) % uint(pool)); // 1..pool
@@ -881,12 +896,13 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         // - ReStrike: allow re-articulating held notes (esp. arrivals) for touch/definition
         // - Ghost: very soft, short "breath" comp
         enum class CompArt { Stab, Tenuto, HalfPedalWash, ReStrike, Ghost };
-        const quint32 ha = quint32(qHash(QString("pno_art|%1|%2|%3|%4|%5")
-                                             .arg(c.chordText)
-                                             .arg(c.playbackBarIndex)
-                                             .arg(hit.beatInBar)
-                                             .arg(hit.sub)
-                                             .arg(c.determinismSeed)));
+        const quint32 ha = virtuoso::util::StableHash::fnv1a32(QString("pno_art|%1|%2|%3|%4|%5")
+                                                                   .arg(c.chordText)
+                                                                   .arg(c.playbackBarIndex)
+                                                                   .arg(hit.beatInBar)
+                                                                   .arg(hit.sub)
+                                                                   .arg(c.determinismSeed)
+                                                                   .toUtf8());
         const bool isUpbeat = (hit.count >= 2) ? (hit.sub > 0) : false;
         const bool wantsGhost = hit.rhythmTag.contains("breath") || hit.rhythmTag.contains("jab") || hit.rhythmTag.contains("delay");
         CompArt art = CompArt::Tenuto;
@@ -1090,12 +1106,13 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         n.structural = c.chordIsNew;
         n.chord_context = c.chordText;
             n.voicing_type = voicingType + (doRoll ? (doArp ? " + Arpeggiated" : " + RolledHands") : "");
+            const QString ontTag = voicingKey.trimmed().isEmpty() ? QString() : (QString("|ont=") + voicingKey);
             QString artTag = "tenuto";
             if (art == CompArt::Stab) artTag = "stab";
             else if (art == CompArt::HalfPedalWash) artTag = "half_pedal";
             else if (art == CompArt::ReStrike) artTag = "restrike";
             else if (art == CompArt::Ghost) artTag = "ghost";
-            n.logic_tag = (hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag)) + "|art=" + artTag;
+            n.logic_tag = (hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag)) + "|art=" + artTag + ontTag;
             n.target_note = isTop ? "Comp (top voice)" : (isLow ? "Comp (LH anchor)" : "Comp (inner)");
         out.push_back(n);
     }
@@ -1125,11 +1142,12 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
 
         const bool allow = !userBusy && (c.userSilence || c.interaction >= 0.40 || hasTopEventThisBeat) && (c.rhythmicComplexity >= 0.25);
         if (allow && !m_lastVoicing.isEmpty()) {
-            const quint32 hg = quint32(qHash(QString("pno_rh_gesture|%1|%2|%3|%4")
-                                                 .arg(c.chordText)
-                                                 .arg(c.playbackBarIndex)
-                                                 .arg(c.beatInBar)
-                                                 .arg(c.determinismSeed)));
+            const quint32 hg = virtuoso::util::StableHash::fnv1a32(QString("pno_rh_gesture|%1|%2|%3|%4")
+                                                                       .arg(c.chordText)
+                                                                       .arg(c.playbackBarIndex)
+                                                                       .arg(c.beatInBar)
+                                                                       .arg(c.determinismSeed)
+                                                                       .toUtf8());
             const bool cadence = (c.cadence01 >= 0.55) || c.phraseEndBar;
             const int p = qBound(0, int(llround((hasTopEventThisBeat ? 35.0 : 6.0)
                                                + 18.0 * qBound(0.0, c.rhythmicComplexity, 1.0)
@@ -1215,7 +1233,10 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                             nte.structural = false;
                             nte.chord_context = c.chordText;
                             nte.voicing_type = voicingType + (wantTriad ? " + RH TriadGesture" : " + RH DyadGesture");
-                            nte.logic_tag = wantTriad ? "ballad_comp|rh_gesture|triad" : "ballad_comp|rh_gesture|dyad";
+                            {
+                                const QString ontTag = voicingKey.trimmed().isEmpty() ? QString() : (QString("|ont=") + voicingKey);
+                                nte.logic_tag = (wantTriad ? "ballad_comp|rh_gesture|triad" : "ballad_comp|rh_gesture|dyad") + ontTag;
+                            }
                             nte.target_note = (i == gestureNotes.size() - 1) ? "RH gesture (top)" : "RH gesture";
                             out.push_back(nte);
                         }
@@ -1272,9 +1293,10 @@ void JazzBalladPianoPlanner::buildMotifBlockTemplates(const Context& c) {
     const int phraseBars = qMax(1, c.phraseBars);
     const int phraseStart = (bar / phraseBars) * phraseBars;
     const int phraseIndex = phraseStart / phraseBars;
-    const quint32 h = quint32(qHash(QString("pno_motif4|%1|%2")
-                                        .arg(phraseIndex)
-                                        .arg(c.determinismSeed)));
+    const quint32 h = virtuoso::util::StableHash::fnv1a32(QString("pno_motif4|%1|%2")
+                                                              .arg(phraseIndex)
+                                                              .arg(c.determinismSeed)
+                                                              .toUtf8());
     const double e = qBound(0.0, c.energy, 1.0);
     const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
     const bool allow = !userBusy && (c.userSilence || e >= 0.32 || c.chordIsNew || c.cadence01 >= 0.55 || c.phraseEndBar);
@@ -1544,7 +1566,11 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
 
     // Deterministic decision: we want a bit more continuous RH intention than the old sparse motifs,
     // but still back off when user is not silent and energy is very low.
-    const quint32 h = quint32(qHash(QString("pno_gt|%1|%2|%3").arg(c.chordText).arg(bar).arg(c.determinismSeed)));
+    const quint32 h = virtuoso::util::StableHash::fnv1a32(QString("pno_gt|%1|%2|%3")
+                                                              .arg(c.chordText)
+                                                              .arg(bar)
+                                                              .arg(c.determinismSeed)
+                                                              .toUtf8());
     const bool wantAny =
         c.userSilence
         || c.chordIsNew
@@ -1726,7 +1752,11 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
 
     // Coherence: keep the comping feel stable for 2-bar blocks (less "random new pattern every bar").
     const int barBlock = qMax(0, c.playbackBarIndex) / 2;
-    const quint32 h = quint32(qHash(QString("pno_rhy|%1|%2|%3").arg(c.chordText).arg(barBlock).arg(c.determinismSeed)));
+    const quint32 h = virtuoso::util::StableHash::fnv1a32(QString("pno_rhy|%1|%2|%3")
+                                                              .arg(c.chordText)
+                                                              .arg(barBlock)
+                                                              .arg(c.determinismSeed)
+                                                              .toUtf8());
     const double e = qBound(0.0, c.energy, 1.0);
     const double progress01 = qBound(0.0, double(qMax(0, c.playbackBarIndex)) / 24.0, 1.0);
     const bool climax = c.forceClimax && (e >= 0.75);

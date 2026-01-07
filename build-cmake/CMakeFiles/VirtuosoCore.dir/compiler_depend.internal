@@ -775,6 +775,7 @@
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/IInstrumentDriver.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/engine/VirtuosoClock.h
@@ -799,6 +800,7 @@
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/util/StableHash.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h
  /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QElapsedTimer
@@ -13236,6 +13238,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o
  /Library/Developer/CommandLineTools/usr/lib/clang/17/include/stddef.h
  /Library/Developer/CommandLineTools/usr/lib/clang/17/include/stdint.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/groove/GrooveGrid.h
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/util/StableHash.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h
  /opt/homebrew/include/QtCore/q17memory.h
  /opt/homebrew/include/QtCore/q20functional.h
@@ -13370,6 +13373,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o
  /opt/homebrew/include/QtCore/qversiontagging.h
  /opt/homebrew/include/QtCore/qxptype_traits.h
  /opt/homebrew/include/QtCore/qyieldcpu.h
+ /opt/homebrew/lib/QtCore.framework/Headers/QByteArray
  /opt/homebrew/lib/QtCore.framework/Headers/QFile
  /opt/homebrew/lib/QtCore.framework/Headers/QJsonArray
  /opt/homebrew/lib/QtCore.framework/Headers/QJsonDocument
@@ -13377,6 +13381,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o
  /opt/homebrew/lib/QtCore.framework/Headers/QString
  /opt/homebrew/lib/QtCore.framework/Headers/QVector
  /opt/homebrew/lib/QtCore.framework/Headers/QtGlobal
+ /opt/homebrew/lib/QtCore.framework/Headers/qbytearray.h
  /opt/homebrew/lib/QtCore.framework/Headers/qfile.h
  /opt/homebrew/lib/QtCore.framework/Headers/qglobal.h
  /opt/homebrew/lib/QtCore.framework/Headers/qjsonarray.h

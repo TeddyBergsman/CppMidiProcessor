@@ -1002,4 +1002,5 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o: \
   /opt/homebrew/include/QtCore/quuid.h \
   /opt/homebrew/include/QtCore/qendian.h \
   /opt/homebrew/include/QtCore/qjsondocument.h \
-  /opt/homebrew/include/QtCore/qjsonparseerror.h
+  /opt/homebrew/include/QtCore/qjsonparseerror.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h

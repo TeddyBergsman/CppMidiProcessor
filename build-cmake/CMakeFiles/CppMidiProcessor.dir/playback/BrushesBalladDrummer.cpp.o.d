@@ -1004,6 +1004,7 @@ CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.o: \
   /opt/homebrew/include/QtCore/qendian.h \
   /opt/homebrew/include/QtCore/qjsondocument.h \
   /opt/homebrew/include/QtCore/qjsonparseerror.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QtMath \
   /opt/homebrew/lib/QtCore.framework/Headers/qmath.h

@@ -771,9 +771,12 @@ VirtuosoCore_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/MacOSX1
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/ConstraintsTypes.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.cpp \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/IInstrumentDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoClock.h \
@@ -788,8 +791,10 @@ VirtuosoCore_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/MacOSX1
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/memory/MotivicMemory.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/solver/CspSolver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/NegativeHarmony.cpp \
@@ -1819,8 +1824,6 @@ VirtuosoCore_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/MacOSX1
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q20utility.h:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q20type_traits.h:
-
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QtGlobal:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QTimer:
@@ -1833,11 +1836,21 @@ VirtuosoCore_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/MacOSX1
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.cpp:
 
-/opt/homebrew/lib/cmake/Qt6Gui/Qt6QCocoaIntegrationPluginTargets.cmake:
+/opt/homebrew/lib/cmake/Qt6CorePrivate/Qt6CorePrivateTargets.cmake:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_trivially_relocatable.h:
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h:
 
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.h:
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qset.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.cpp:
+
+/opt/homebrew/lib/cmake/Qt6Gui/Qt6QMacHeifPluginAdditionalTargetInfo.cmake:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.cpp:
+
+/opt/homebrew/lib/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateConfig.cmake:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/NegativeHarmony.h:
 
 /opt/homebrew/lib/cmake/Qt6Core/Qt6QDarwinMicrophonePermissionPluginDependencies.cmake:
 
@@ -1868,6 +1881,8 @@ VirtuosoCore_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/MacOSX1
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/add_const.h:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.cpp:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qiodevicebase.h:
 
@@ -2054,6 +2069,8 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 /opt/homebrew/share/cmake/Modules/Platform/Darwin.cmake:
 
 /opt/homebrew/share/cmake/Modules/Linker/AppleClang-CXX.cmake:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/memory/MotivicMemory.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/utility:
 
@@ -2293,6 +2310,10 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_primary_template.h:
 
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q20type_traits.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/solver/CspSolver.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_pointer.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_pod.h:
@@ -2493,6 +2514,10 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/data.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/binder2nd.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.cpp:
+
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6QJp2PluginAdditionalTargetInfo.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_timespec.h:
@@ -2536,10 +2561,6 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/find_segment_if.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/is_seed_sequence.h:
-
-/opt/homebrew/lib/cmake/Qt6Gui/Qt6QMacHeifPluginAdditionalTargetInfo.cmake:
-
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/independent_bits_engine.h:
 
@@ -2592,8 +2613,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QVector:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/nat.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/binder2nd.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/function.h:
 
@@ -3131,6 +3150,8 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6QTgaPluginAdditionalTargetInfo.cmake:
 
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/reverse.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/dangling.h:
@@ -3479,10 +3500,6 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/_static_assert.h:
 
-/opt/homebrew/lib/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateConfig.cmake:
-
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/NegativeHarmony.h:
-
 /opt/homebrew/lib/cmake/Qt6CoreTools/Qt6CoreToolsDependencies.cmake:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.cpp:
@@ -3575,10 +3592,6 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__compare/synth_three_way.h:
 
-/opt/homebrew/lib/cmake/Qt6CorePrivate/Qt6CorePrivateTargets.cmake:
-
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h:
-
 /opt/homebrew/lib/cmake/Qt6Xml/Qt6XmlTargets-release.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__math/hyperbolic_functions.h:
@@ -3596,6 +3609,12 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/generate_n.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/format.h:
+
+/opt/homebrew/lib/cmake/Qt6Gui/Qt6QCocoaIntegrationPluginTargets.cmake:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_trivially_relocatable.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/partition.h:
 
@@ -3686,10 +3705,6 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__format/width_estimation_table.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/_types.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qset.h:
-
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/ranges_transform.h:
 

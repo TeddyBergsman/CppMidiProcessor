@@ -21,6 +21,8 @@ enable_testing()
 add_library(VirtuosoCore STATIC
   virtuoso/util/StableHash.h
   virtuoso/control/VirtuosityMatrix.h
+  virtuoso/solver/CspSolver.h
+  virtuoso/memory/MotivicMemory.h
   virtuoso/ontology/OntologyRegistry.h
   virtuoso/ontology/OntologyRegistry.cpp
   virtuoso/vocab/VocabularyRegistry.h
@@ -31,6 +33,8 @@ add_library(VirtuosoCore STATIC
   virtuoso/constraints/PianoDriver.cpp
   virtuoso/constraints/BassDriver.h
   virtuoso/constraints/BassDriver.cpp
+  virtuoso/constraints/DrumDriver.h
+  virtuoso/constraints/DrumDriver.cpp
   virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h
   virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp
   virtuoso/groove/GrooveGrid.h
@@ -108,8 +112,18 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/VirtuosoBalladMvpPlaybackEngine.h
   playback/VirtuosoBalladMvpPlaybackEngine.cpp
   playback/HarmonyTypes.h
+  playback/HarmonyContext.h
+  playback/HarmonyContext.cpp
+  playback/InteractionContext.h
+  playback/InteractionContext.cpp
+  playback/AgentCoordinator.h
+  playback/AgentCoordinator.cpp
+  playback/LookaheadWindow.h
+  playback/LookaheadWindow.cpp
   playback/LookaheadPlanner.h
   playback/LookaheadPlanner.cpp
+  playback/TransportTimeline.h
+  playback/TransportTimeline.cpp
   playback/BalladReferenceTuning.h
   playback/BalladReferenceTuning.cpp
   playback/JazzBalladBassPlanner.h

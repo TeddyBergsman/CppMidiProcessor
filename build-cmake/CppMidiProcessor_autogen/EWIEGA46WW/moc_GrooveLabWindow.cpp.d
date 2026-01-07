@@ -762,6 +762,7 @@
   /Library/Developer/CommandLineTools/usr/lib/clang/17/include/__stdarg_va_list.h \
   /Library/Developer/CommandLineTools/usr/lib/clang/17/include/limits.h \
   /Library/Developer/CommandLineTools/usr/lib/clang/17/include/stdarg.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoClock.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoScheduler.h \

@@ -1,6 +1,7 @@
 #include "playback/JazzBalladBassPlanner.h"
 
 #include "virtuoso/util/StableHash.h"
+#include "virtuoso/solver/CspSolver.h"
 
 #include <QtGlobal>
 #include <limits>
@@ -13,6 +14,7 @@ JazzBalladBassPlanner::JazzBalladBassPlanner() {
 
 void JazzBalladBassPlanner::reset() {
     m_state.ints.insert("lastFret", -1);
+    m_state.ints.insert("lastString", -1);
     m_lastMidi = -1;
     m_walkPosBlockStartBar = -1;
     m_walkPosMidi = -1;
@@ -60,13 +62,14 @@ bool JazzBalladBassPlanner::feasibleOrRepair(int& midi) {
         g.midiNotes = {midi};
         const auto r = m_driver.evaluateFeasibility(m_state, g);
         if (r.ok) {
-            // Update lastFret by parsing the OK message.
-            for (const auto& line : r.reasons) {
+            // Update lastFret/lastString by parsing the OK message (prefer the last OK note line).
+            for (int i = r.reasons.size() - 1; i >= 0; --i) {
+                const QString& line = r.reasons[i];
                 const int f = parseFretFromReasonLine(line);
-                if (f >= 0) {
-                    m_state.ints.insert("lastFret", f);
-                    break;
-                }
+                const int sIdx = parseStringFromReasonLine(line);
+                if (f >= 0) m_state.ints.insert("lastFret", f);
+                if (sIdx >= 0) m_state.ints.insert("lastString", sIdx);
+                if (f >= 0 || sIdx >= 0) break;
             }
             m_lastMidi = midi;
             return true;
@@ -77,18 +80,55 @@ bool JazzBalladBassPlanner::feasibleOrRepair(int& midi) {
     }
     // If we're stuck due to lastFret shift, reset and try once more.
     m_state.ints.insert("lastFret", -1);
+    m_state.ints.insert("lastString", -1);
     virtuoso::constraints::CandidateGesture g;
     g.midiNotes = {midi};
     const auto r2 = m_driver.evaluateFeasibility(m_state, g);
     if (r2.ok) {
-        for (const auto& line : r2.reasons) {
+        for (int i = r2.reasons.size() - 1; i >= 0; --i) {
+            const QString& line = r2.reasons[i];
             const int f = parseFretFromReasonLine(line);
-            if (f >= 0) { m_state.ints.insert("lastFret", f); break; }
+            const int sIdx = parseStringFromReasonLine(line);
+            if (f >= 0) m_state.ints.insert("lastFret", f);
+            if (sIdx >= 0) m_state.ints.insert("lastString", sIdx);
+            if (f >= 0 || sIdx >= 0) break;
         }
         m_lastMidi = midi;
         return true;
     }
     return false;
+}
+
+int JazzBalladBassPlanner::chooseApproachMidiWithConstraints(int nextRootMidi) const {
+    // Two candidates: chromatic below / above.
+    QVector<virtuoso::solver::Candidate<int>> cands;
+    cands.push_back({"below", nextRootMidi - 1});
+    cands.push_back({"above", nextRootMidi + 1});
+
+    const int bestIdx = virtuoso::solver::CspSolver::chooseMinCost(cands, [&](const auto& cand) {
+        virtuoso::solver::EvalResult er;
+        const int midi = clampMidi(cand.value);
+        virtuoso::constraints::CandidateGesture g;
+        g.midiNotes = {midi};
+        const auto fr = m_driver.evaluateFeasibility(m_state, g);
+        if (!fr.ok) {
+            er.ok = false;
+            er.reasons = fr.reasons;
+            return er;
+        }
+
+        // Cost: prefer smaller leap + more playable fingering.
+        double s = fr.cost;
+        if (m_lastMidi >= 0) s += 0.04 * double(qAbs(midi - m_lastMidi));
+        er.ok = true;
+        er.cost = s;
+        er.reasons = fr.reasons;
+        return er;
+    });
+
+    if (bestIdx >= 0) return cands[bestIdx].value;
+    // Fallback (should be rare): below.
+    return nextRootMidi - 1;
 }
 
 QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const Context& c,
@@ -397,7 +437,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             if (ph.action == BA::Rest) return out;
             if (ph.action == BA::ApproachToNext && nextChanges) {
                 const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
+                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi) : (nextRootMidi - 1);
                 while (approachMidi < 40) approachMidi += 12;
                 while (approachMidi > 57) approachMidi -= 12;
                 int repaired = approachMidi;
@@ -437,7 +477,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             if (vocabChoice.action == BA::Rest) return out;
             if (vocabChoice.action == BA::ApproachToNext && nextChanges) {
                 const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
+                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi) : (nextRootMidi - 1);
                 while (approachMidi < 40) approachMidi += 12;
                 while (approachMidi > 57) approachMidi -= 12;
                 int repaired = approachMidi;
@@ -552,7 +592,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             if (best && best->rest) return out;
             if (best && best->approach && nextChanges) {
                 const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
+                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi) : (nextRootMidi - 1);
                 while (approachMidi < 40) approachMidi += 12;
                 while (approachMidi > 57) approachMidi -= 12;
                 int repaired = approachMidi;
@@ -585,7 +625,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             const auto& ph = phraseHits.first();
             if (ph.action == virtuoso::vocab::VocabularyRegistry::BassAction::PickupToNext) {
                 const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
+                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi) : (nextRootMidi - 1);
                 while (approachMidi < 40) approachMidi += 12;
                 while (approachMidi > 57) approachMidi -= 12;
                 int repaired = approachMidi;
@@ -609,7 +649,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
 
         if (haveVocab && vocabChoice.action == virtuoso::vocab::VocabularyRegistry::BassAction::PickupToNext) {
             const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-            int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
+            int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi) : (nextRootMidi - 1);
             while (approachMidi < 40) approachMidi += 12;
             while (approachMidi > 57) approachMidi -= 12;
             int repaired = approachMidi;
@@ -647,7 +687,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         if (int(hApp % 100u) >= int(llround(p * 100.0))) return out;
 
         const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-        int approachMidi = c.allowApproachFromAbove ? chooseApproachMidi(nextRootMidi, m_lastMidi) : (nextRootMidi - 1);
+        int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi) : (nextRootMidi - 1);
         while (approachMidi < 40) approachMidi += 12;
         while (approachMidi > 57) approachMidi -= 12;
         int repaired = approachMidi;

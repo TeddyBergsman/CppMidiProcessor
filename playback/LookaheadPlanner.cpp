@@ -346,11 +346,13 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
         const bool strongBeat = (beatInBar == 0 || beatInBar == 2);
         const bool structural = strongBeat || chordIsNew;
 
-        // Key context (per-bar local estimate if available).
+        // Key context (sliding window preferred).
         const int barIdx = cellIndex / 4;
-        const LocalKeyEstimate lk = (in.localKeysByBar && barIdx >= 0 && barIdx < in.localKeysByBar->size())
-            ? (*in.localKeysByBar)[barIdx]
-            : LocalKeyEstimate{in.keyPcGuess, in.keyScaleKey, in.keyScaleName, in.keyMode, 0.0, 0.0};
+        const LocalKeyEstimate lk = (in.harmonyCtx)
+            ? in.harmonyCtx->estimateLocalKeyWindow(*in.model, barIdx, qMax(1, in.keyWindowBars))
+            : ((in.localKeysByBar && barIdx >= 0 && barIdx < in.localKeysByBar->size())
+                   ? (*in.localKeysByBar)[barIdx]
+                   : LocalKeyEstimate{in.keyPcGuess, in.keyScaleKey, in.keyScaleName, in.keyMode, 0.0, 0.0});
         const int keyPc = in.hasKeyPcGuess ? lk.tonicPc : normalizePc(chord.rootPc);
         const QString keyCenterStr = QString("%1 %2").arg(pcName(keyPc)).arg(lk.scaleName.isEmpty() ? QString("Ionian (Major)") : lk.scaleName);
 

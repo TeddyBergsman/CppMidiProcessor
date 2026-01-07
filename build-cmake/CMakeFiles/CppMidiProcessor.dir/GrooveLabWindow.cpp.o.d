@@ -1018,6 +1018,20 @@ CMakeFiles/CppMidiProcessor.dir/GrooveLabWindow.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/student_t_distribution.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/weibull_distribution.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
+  /opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
+  /opt/homebrew/include/QtCore/qjsonvalue.h \
+  /opt/homebrew/include/QtCore/qcborvalue.h \
+  /opt/homebrew/include/QtCore/qcborcommon.h \
+  /opt/homebrew/include/QtCore/qdatetime.h \
+  /opt/homebrew/include/QtCore/qcalendar.h \
+  /opt/homebrew/include/QtCore/qlocale.h \
+  /opt/homebrew/include/QtCore/qregularexpression.h \
+  /opt/homebrew/include/QtCore/qurl.h \
+  /opt/homebrew/include/QtCore/quuid.h \
+  /opt/homebrew/include/QtCore/qjsondocument.h \
+  /opt/homebrew/include/QtCore/qjsonparseerror.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QObject \
   /opt/homebrew/lib/QtCore.framework/Headers/qobject.h \
@@ -1033,19 +1047,6 @@ CMakeFiles/CppMidiProcessor.dir/GrooveLabWindow.cpp.o: \
   /opt/homebrew/include/QtCore/qdeadlinetimer.h \
   /opt/homebrew/include/QtCore/qelapsedtimer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
-  /opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
-  /opt/homebrew/include/QtCore/qjsonvalue.h \
-  /opt/homebrew/include/QtCore/qcborvalue.h \
-  /opt/homebrew/include/QtCore/qcborcommon.h \
-  /opt/homebrew/include/QtCore/qdatetime.h \
-  /opt/homebrew/include/QtCore/qcalendar.h \
-  /opt/homebrew/include/QtCore/qlocale.h \
-  /opt/homebrew/include/QtCore/qregularexpression.h \
-  /opt/homebrew/include/QtCore/qurl.h \
-  /opt/homebrew/include/QtCore/quuid.h \
-  /opt/homebrew/include/QtCore/qjsondocument.h \
-  /opt/homebrew/include/QtCore/qjsonparseerror.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/QComboBox \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qcombobox.h \
   /opt/homebrew/include/QtWidgets/qabstractitemdelegate.h \

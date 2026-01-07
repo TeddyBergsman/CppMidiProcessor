@@ -1020,6 +1020,20 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/student_t_distribution.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/weibull_distribution.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
+  /opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
+  /opt/homebrew/include/QtCore/qjsonvalue.h \
+  /opt/homebrew/include/QtCore/qcborvalue.h \
+  /opt/homebrew/include/QtCore/qcborcommon.h \
+  /opt/homebrew/include/QtCore/qdatetime.h \
+  /opt/homebrew/include/QtCore/qcalendar.h \
+  /opt/homebrew/include/QtCore/qlocale.h \
+  /opt/homebrew/include/QtCore/qregularexpression.h \
+  /opt/homebrew/include/QtCore/qurl.h \
+  /opt/homebrew/include/QtCore/quuid.h \
+  /opt/homebrew/include/QtCore/qjsondocument.h \
+  /opt/homebrew/include/QtCore/qjsonparseerror.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../virtuoso/groove/TimingHumanizer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/../../../virtuoso/engine/VirtuosoEngine.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QObject \
@@ -1036,19 +1050,6 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /opt/homebrew/include/QtCore/qdeadlinetimer.h \
   /opt/homebrew/include/QtCore/qelapsedtimer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
-  /opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
-  /opt/homebrew/include/QtCore/qjsonvalue.h \
-  /opt/homebrew/include/QtCore/qcborvalue.h \
-  /opt/homebrew/include/QtCore/qcborcommon.h \
-  /opt/homebrew/include/QtCore/qdatetime.h \
-  /opt/homebrew/include/QtCore/qcalendar.h \
-  /opt/homebrew/include/QtCore/qlocale.h \
-  /opt/homebrew/include/QtCore/qregularexpression.h \
-  /opt/homebrew/include/QtCore/qurl.h \
-  /opt/homebrew/include/QtCore/quuid.h \
-  /opt/homebrew/include/QtCore/qjsondocument.h \
-  /opt/homebrew/include/QtCore/qjsonparseerror.h \
   /opt/homebrew/include/QtCore/qtmochelpers.h \
   /opt/homebrew/include/QtCore/qtmocconstants.h \
   /opt/homebrew/include/QtCore/q20algorithm.h \
@@ -1136,7 +1137,6 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h \
@@ -1145,8 +1145,13 @@ CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/mocs_compilation.cpp.o:
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/ConstraintsTypes.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/memory/MotivicMemory.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyContext.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyTypes.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/TransportTimeline.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/InteractionContext.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/2AYID5HISM/moc_GrooveTimelineWidget.cpp \

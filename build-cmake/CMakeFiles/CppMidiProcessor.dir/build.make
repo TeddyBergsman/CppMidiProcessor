@@ -354,10 +354,66 @@ CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.s: 
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VirtuosoBalladMvpPlaybackEngine.cpp" -o CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.s
 
+CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
+CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyContext.cpp
+CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_22) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/HarmonyContext.cpp"
+
+CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/HarmonyContext.cpp" > CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.i
+
+CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/HarmonyContext.cpp" -o CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.s
+
+CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
+CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/InteractionContext.cpp
+CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_23) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/InteractionContext.cpp"
+
+CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/InteractionContext.cpp" > CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.i
+
+CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/InteractionContext.cpp" -o CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.s
+
+CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
+CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/AgentCoordinator.cpp
+CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_24) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/AgentCoordinator.cpp"
+
+CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/AgentCoordinator.cpp" > CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.i
+
+CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/AgentCoordinator.cpp" -o CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.s
+
+CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
+CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadWindow.cpp
+CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_25) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/LookaheadWindow.cpp"
+
+CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/LookaheadWindow.cpp" > CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.i
+
+CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/LookaheadWindow.cpp" -o CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.s
+
 CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadPlanner.cpp
 CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_22) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_26) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/LookaheadPlanner.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.i: cmake_force
@@ -368,10 +424,24 @@ CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/LookaheadPlanner.cpp" -o CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.s
 
+CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
+CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/TransportTimeline.cpp
+CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_27) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/TransportTimeline.cpp"
+
+CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/TransportTimeline.cpp" > CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.i
+
+CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/TransportTimeline.cpp" -o CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.s
+
 CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BalladReferenceTuning.cpp
 CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_23) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_28) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BalladReferenceTuning.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.i: cmake_force
@@ -385,7 +455,7 @@ CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.s: cmake_forc
 CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.cpp
 CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_24) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_29) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.i: cmake_force
@@ -399,7 +469,7 @@ CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.s: cmake_forc
 CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.cpp
 CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_25) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_30) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.i: cmake_force
@@ -413,7 +483,7 @@ CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.s: cmake_for
 CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.cpp
 CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_26) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_31) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BrushesBalladDrummer.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.i: cmake_force
@@ -427,7 +497,7 @@ CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.s: cmake_force
 CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.cpp
 CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_27) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_32) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.i: cmake_force
@@ -441,7 +511,7 @@ CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.s: cmake_force
 CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.cpp
 CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_28) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_33) "Building CXX object CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VibeStateMachine.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.i: cmake_force
@@ -455,7 +525,7 @@ CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.s: cmake_force
 CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/Pitch.cpp
 CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_29) "Building CXX object CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_34) "Building CXX object CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/Pitch.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.i: cmake_force
@@ -469,7 +539,7 @@ CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.s: cmake_force
 CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordSymbol.cpp
 CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_30) "Building CXX object CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_35) "Building CXX object CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordSymbol.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.i: cmake_force
@@ -483,7 +553,7 @@ CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.s: cmake_force
 CMakeFiles/CppMidiProcessor.dir/music/ChordDictionary.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/music/ChordDictionary.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordDictionary.cpp
 CMakeFiles/CppMidiProcessor.dir/music/ChordDictionary.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_31) "Building CXX object CMakeFiles/CppMidiProcessor.dir/music/ChordDictionary.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_36) "Building CXX object CMakeFiles/CppMidiProcessor.dir/music/ChordDictionary.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/music/ChordDictionary.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/music/ChordDictionary.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/music/ChordDictionary.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordDictionary.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/music/ChordDictionary.cpp.i: cmake_force
@@ -497,7 +567,7 @@ CMakeFiles/CppMidiProcessor.dir/music/ChordDictionary.cpp.s: cmake_force
 CMakeFiles/CppMidiProcessor.dir/music/ScaleLibrary.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/music/ScaleLibrary.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ScaleLibrary.cpp
 CMakeFiles/CppMidiProcessor.dir/music/ScaleLibrary.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_32) "Building CXX object CMakeFiles/CppMidiProcessor.dir/music/ScaleLibrary.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_37) "Building CXX object CMakeFiles/CppMidiProcessor.dir/music/ScaleLibrary.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/music/ScaleLibrary.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/music/ScaleLibrary.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/music/ScaleLibrary.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ScaleLibrary.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/music/ScaleLibrary.cpp.i: cmake_force
@@ -511,7 +581,7 @@ CMakeFiles/CppMidiProcessor.dir/music/ScaleLibrary.cpp.s: cmake_force
 CMakeFiles/CppMidiProcessor.dir/music/SelfTest.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/music/SelfTest.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/SelfTest.cpp
 CMakeFiles/CppMidiProcessor.dir/music/SelfTest.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_33) "Building CXX object CMakeFiles/CppMidiProcessor.dir/music/SelfTest.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_38) "Building CXX object CMakeFiles/CppMidiProcessor.dir/music/SelfTest.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/music/SelfTest.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/music/SelfTest.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/music/SelfTest.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/SelfTest.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/music/SelfTest.cpp.i: cmake_force
@@ -525,7 +595,7 @@ CMakeFiles/CppMidiProcessor.dir/music/SelfTest.cpp.s: cmake_force
 CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ui/GuitarFretboardWidget.cpp
 CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_34) "Building CXX object CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_39) "Building CXX object CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/GuitarFretboardWidget.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.i: cmake_force
@@ -539,7 +609,7 @@ CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GuitarFretboardWidget.cpp.s: cmake_f
 CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ui/PianoKeyboardWidget.cpp
 CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_35) "Building CXX object CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_40) "Building CXX object CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/PianoKeyboardWidget.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.i: cmake_force
@@ -553,7 +623,7 @@ CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/PianoKeyboardWidget.cpp.s: cmake_for
 CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ui/GrooveTimelineWidget.cpp
 CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_36) "Building CXX object CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_41) "Building CXX object CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ui/GrooveTimelineWidget.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.i: cmake_force
@@ -567,7 +637,7 @@ CMakeFiles/CppMidiProcessor.dir/virtuoso/ui/GrooveTimelineWidget.cpp.s: cmake_fo
 CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp.o: CMakeFiles/CppMidiProcessor.dir/flags.make
 CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp.o: CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp
 CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp.o: CMakeFiles/CppMidiProcessor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_37) "Building CXX object CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_42) "Building CXX object CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp.o -MF CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp.o.d -o CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp"
 
 CMakeFiles/CppMidiProcessor.dir/CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp.i: cmake_force
@@ -599,7 +669,12 @@ CppMidiProcessor_OBJECTS = \
 "CMakeFiles/CppMidiProcessor.dir/chart/IRealProgressionParser.cpp.o" \
 "CMakeFiles/CppMidiProcessor.dir/chart/SongChartWidget.cpp.o" \
 "CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.o" \
+"CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.o" \
+"CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.o" \
+"CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.o" \
+"CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.o" \
 "CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o" \
+"CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.o" \
 "CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.o" \
 "CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o" \
 "CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o" \
@@ -638,7 +713,12 @@ CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcesso
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/chart/IRealProgressionParser.cpp.o
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/chart/SongChartWidget.cpp.o
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.o
+CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.o
+CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.o
+CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.o
+CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.o
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o
+CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.o
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.o
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o
@@ -661,7 +741,7 @@ CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: libVirtuosoCore.a
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: /opt/homebrew/lib/QtGui.framework/Versions/A/QtGui
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: /opt/homebrew/lib/QtCore.framework/Versions/A/QtCore
 CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor: CMakeFiles/CppMidiProcessor.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_38) "Linking CXX executable CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_43) "Linking CXX executable CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/CppMidiProcessor.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

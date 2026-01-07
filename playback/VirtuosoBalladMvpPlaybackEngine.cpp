@@ -1,13 +1,13 @@
 #include "playback/VirtuosoBalladMvpPlaybackEngine.h"
 
 #include "midiprocessor.h"
-#include "playback/BalladReferenceTuning.h"
+#include "playback/AgentCoordinator.h"
+#include "playback/HarmonyContext.h"
 #include "playback/LookaheadPlanner.h"
 #include "playback/SemanticMidiAnalyzer.h"
-#include "playback/VibeStateMachine.h"
+#include "playback/TransportTimeline.h"
 #include "virtuoso/theory/FunctionalHarmony.h"
 #include "virtuoso/theory/ScaleSuggester.h"
-#include "virtuoso/util/StableHash.h"
 
 #include <QHash>
 #include <QDateTime>
@@ -17,7 +17,6 @@
 #include <QSet>
 #include <QtGlobal>
 #include <algorithm>
-#include <limits>
 
 namespace playback {
 namespace {
@@ -308,139 +307,6 @@ static QString chooseScaleUsedForChord(const virtuoso::ontology::OntologyRegistr
     return QString("%1 (%2)").arg(best.name).arg(pcName(best.bestTranspose));
 }
 
-// Copied (intentionally) from BandPlaybackEngine/SilentPlaybackEngine to keep repeat/ending behavior stable.
-static QVector<int> buildPlaybackSequenceFrom(const chart::ChartModel& model) {
-    const QVector<const chart::Bar*> bars = flattenBarsFrom(model);
-    const int nBars = bars.size();
-    QVector<int> seq;
-    if (nBars <= 0) return seq;
-    seq.reserve(nBars * 4);
-
-    int fineBar = -1;
-    int segnoBar = -1;
-    for (int i = 0; i < nBars; ++i) {
-        const QString ann = bars[i]->annotation.trimmed();
-        if (fineBar < 0 && ann.compare("Fine", Qt::CaseInsensitive) == 0) fineBar = i;
-        if (segnoBar < 0 && ann.contains("Segno", Qt::CaseInsensitive)) segnoBar = i;
-    }
-
-    const QString footer = model.footerText.trimmed();
-    const bool wantsJump = footer.startsWith("D.C.", Qt::CaseInsensitive) || footer.startsWith("D.S.", Qt::CaseInsensitive);
-    const bool jumpIsDS = footer.startsWith("D.S.", Qt::CaseInsensitive);
-    const bool alFine = footer.contains("al Fine", Qt::CaseInsensitive);
-    const int jumpTarget = jumpIsDS ? (segnoBar >= 0 ? segnoBar : 0) : 0;
-
-    QVector<int> repeatStartStack;
-    QHash<int, int> startToEnd;
-    QHash<int, int> endToStart;
-    repeatStartStack.reserve(8);
-    for (int i = 0; i < nBars; ++i) {
-        const QString l = bars[i]->barlineLeft;
-        const QString r = bars[i]->barlineRight;
-        if (l.contains('{')) {
-            repeatStartStack.push_back(i);
-        }
-        if (r.contains('}')) {
-            int start = 0;
-            if (!repeatStartStack.isEmpty()) {
-                start = repeatStartStack.takeLast();
-            }
-            startToEnd.insert(start, i);
-            endToStart.insert(i, start);
-        }
-    }
-
-    QHash<int, int> endingStartToEnd;
-    for (int i = 0; i < nBars; ++i) {
-        const int n = bars[i]->endingStart;
-        if (n <= 0) continue;
-        int end = i;
-        for (int j = i; j < nBars; ++j) {
-            if (bars[j]->endingEnd == n) { end = j; break; }
-        }
-        endingStartToEnd.insert(i, end);
-    }
-
-    QHash<int, int> repeatEndToPasses;
-    for (auto it = startToEnd.constBegin(); it != startToEnd.constEnd(); ++it) {
-        const int start = it.key();
-        const int end = it.value();
-        int maxEnding = 0;
-        for (int i = start; i <= end && i < nBars; ++i) {
-            maxEnding = std::max(maxEnding, bars[i]->endingStart);
-            maxEnding = std::max(maxEnding, bars[i]->endingEnd);
-        }
-        repeatEndToPasses.insert(end, std::max(2, maxEnding));
-    }
-
-    struct RepeatCtx { int start = 0; int end = -1; int pass = 1; int passes = 2; };
-    QVector<RepeatCtx> stack;
-    stack.reserve(4);
-
-    bool jumped = false;
-    int pc = 0;
-    int guardSteps = 0;
-    const int guardMax = 20000;
-
-    auto currentPass = [&]() -> int { return stack.isEmpty() ? 1 : stack.last().pass; };
-
-    while (pc < nBars && guardSteps++ < guardMax) {
-        if (startToEnd.contains(pc)) {
-            const int end = startToEnd.value(pc);
-            bool already = false;
-            if (!stack.isEmpty() && stack.last().start == pc && stack.last().end == end) already = true;
-            if (!already) {
-                RepeatCtx ctx;
-                ctx.start = pc;
-                ctx.end = end;
-                ctx.pass = 1;
-                ctx.passes = repeatEndToPasses.value(end, 2);
-                stack.push_back(ctx);
-            }
-        }
-
-        if (!stack.isEmpty()) {
-            const int n = bars[pc]->endingStart;
-            if (n > 0 && n != currentPass()) {
-                const int end = endingStartToEnd.value(pc, pc);
-                pc = end + 1;
-                continue;
-            }
-        }
-
-        for (int c = 0; c < 4; ++c) {
-            seq.push_back(pc * 4 + c);
-        }
-
-        if (jumped && alFine && fineBar >= 0 && pc == fineBar) {
-            break;
-        }
-
-        if (!stack.isEmpty() && pc == stack.last().end) {
-            if (stack.last().pass < stack.last().passes) {
-                stack.last().pass += 1;
-                pc = stack.last().start;
-                continue;
-            }
-            stack.removeLast();
-            pc += 1;
-            continue;
-        }
-
-        pc += 1;
-        if (pc >= nBars) {
-            if (wantsJump && !jumped) {
-                jumped = true;
-                pc = jumpTarget;
-                continue;
-            }
-            break;
-        }
-    }
-
-    return seq;
-}
-
 static bool sameChordKey(const music::ChordSymbol& a, const music::ChordSymbol& b) {
     return (a.rootPc == b.rootPc && a.bassPc == b.bassPc && a.quality == b.quality && a.seventh == b.seventh && a.extension == b.extension && a.alt == b.alt);
 }
@@ -453,36 +319,26 @@ static virtuoso::groove::Rational durationWholeFromHoldMs(int holdMs, int bpm) {
     return virtuoso::groove::Rational(qint64(holdMs) * qint64(bpm), qint64(240000));
 }
 
-static QString intentsToString(const SemanticMidiAnalyzer::IntentState& i) {
-    QStringList out;
-    if (i.densityHigh) out << "DENSITY_HIGH";
-    if (i.registerHigh) out << "REGISTER_HIGH";
-    if (i.intensityPeak) out << "INTENSITY_PEAK";
-    if (i.playingOutside) out << "PLAYING_OUTSIDE";
-    if (i.silence) out << "SILENCE";
-    return out.join(",");
-}
-
 } // namespace
 
 void VirtuosoBalladMvpPlaybackEngine::onGuitarNoteOn(int note, int vel) {
-    m_listener.ingestGuitarNoteOn(note, vel, QDateTime::currentMSecsSinceEpoch());
+    m_interaction.ingestGuitarNoteOn(note, vel, QDateTime::currentMSecsSinceEpoch());
 }
 
 void VirtuosoBalladMvpPlaybackEngine::onGuitarNoteOff(int note) {
-    m_listener.ingestGuitarNoteOff(note, QDateTime::currentMSecsSinceEpoch());
+    m_interaction.ingestGuitarNoteOff(note, QDateTime::currentMSecsSinceEpoch());
 }
 
 void VirtuosoBalladMvpPlaybackEngine::onVoiceCc2Stream(int cc2) {
-    m_listener.ingestCc2(cc2, QDateTime::currentMSecsSinceEpoch());
+    m_interaction.ingestCc2(cc2, QDateTime::currentMSecsSinceEpoch());
 }
 
 void VirtuosoBalladMvpPlaybackEngine::onVoiceNoteOn(int note, int vel) {
-    m_listener.ingestVoiceNoteOn(note, vel, QDateTime::currentMSecsSinceEpoch());
+    m_interaction.ingestVoiceNoteOn(note, vel, QDateTime::currentMSecsSinceEpoch());
 }
 
 void VirtuosoBalladMvpPlaybackEngine::onVoiceNoteOff(int note) {
-    m_listener.ingestVoiceNoteOff(note, QDateTime::currentMSecsSinceEpoch());
+    m_interaction.ingestVoiceNoteOff(note, QDateTime::currentMSecsSinceEpoch());
 }
 
 VirtuosoBalladMvpPlaybackEngine::VirtuosoBalladMvpPlaybackEngine(QObject* parent)
@@ -510,6 +366,10 @@ VirtuosoBalladMvpPlaybackEngine::VirtuosoBalladMvpPlaybackEngine(QObject* parent
 
     // Ontology is the canonical musical truth for voicing choices.
     m_pianoPlanner.setOntology(&m_ontology);
+    m_pianoPlanner.setMotivicMemory(&m_motivicMemory);
+
+    // Harmony context uses ontology as its substrate.
+    m_harmony.setOntology(&m_ontology);
 }
 
 void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
@@ -528,17 +388,22 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
     li.repeats = m_repeats;
     li.model = &m_model;
     li.sequence = &m_sequence;
-    li.hasLastChord = m_hasLastChord;
-    li.lastChord = m_lastChord;
+    li.hasLastChord = m_harmony.hasLastChord();
+    li.lastChord = m_harmony.lastChord();
     li.ontology = &m_ontology;
-    li.hasKeyPcGuess = m_hasKeyPcGuess;
-    li.keyPcGuess = m_keyPcGuess;
-    li.keyScaleKey = m_keyScaleKey;
-    li.keyScaleName = m_keyScaleName;
-    li.keyMode = m_keyMode;
-    li.localKeysByBar = &m_localKeysByBar;
-    li.listener = &m_listener;
-    li.vibe = &m_vibe;
+    li.harmonyCtx = &m_harmony;
+    li.keyWindowBars = 8;
+    li.hasKeyPcGuess = m_harmony.hasKeyPcGuess();
+    li.keyPcGuess = m_harmony.keyPcGuess();
+    li.keyScaleKey = m_harmony.keyScaleKey();
+    li.keyScaleName = m_harmony.keyScaleName();
+    li.keyMode = m_harmony.keyMode();
+    {
+        const auto& lks = m_harmony.localKeysByBar();
+        li.localKeysByBar = &lks;
+    }
+    li.listener = &m_interaction.listener();
+    li.vibe = &m_interaction.vibe();
     li.bassPlanner = &m_bassPlanner;
     li.pianoPlanner = &m_pianoPlanner;
     li.drummer = &m_drummer;
@@ -605,6 +470,7 @@ void VirtuosoBalladMvpPlaybackEngine::setRepeats(int repeats) {
 
 void VirtuosoBalladMvpPlaybackEngine::setChartModel(const chart::ChartModel& model) {
     m_model = model;
+    m_transport.setModel(&m_model);
     rebuildSequence();
 
     virtuoso::groove::TimeSignature ts;
@@ -612,50 +478,8 @@ void VirtuosoBalladMvpPlaybackEngine::setChartModel(const chart::ChartModel& mod
     ts.den = (m_model.timeSigDen > 0) ? m_model.timeSigDen : 4;
     m_engine.setTimeSignature(ts);
 
-    // Stage 2: Estimate a global key center + scale (major/minor/modal) from the chart,
-    // and compute a per-bar local key (sliding window) for modulation detection.
-    QVector<music::ChordSymbol> chords;
-    chords.reserve(128);
-    int fallbackPc = 0;
-    bool haveFallback = false;
-    const QVector<const chart::Bar*> bars = flattenBarsFrom(m_model);
-    for (const auto* bar : bars) {
-        if (!bar) continue;
-        for (const auto& cell : bar->cells) {
-            const QString t = cell.chord.trimmed();
-            if (t.isEmpty()) continue;
-            music::ChordSymbol parsed;
-            if (!music::parseChordSymbol(t, parsed)) continue;
-            if (parsed.placeholder || parsed.noChord || parsed.rootPc < 0) continue;
-            chords.push_back(parsed);
-            if (!haveFallback) { fallbackPc = parsed.rootPc; haveFallback = true; }
-        }
-    }
-    if (!chords.isEmpty()) {
-        estimateGlobalKeyByScale(m_ontology, chords, fallbackPc, &m_keyPcGuess, &m_keyScaleKey, &m_keyScaleName, &m_keyMode);
-        // Keep the old major-key heuristic available as fallback for now.
-        if (m_keyScaleKey.trimmed().isEmpty()) {
-            m_keyPcGuess = estimateMajorKeyPcGuess(m_ontology, chords, fallbackPc);
-            m_keyScaleKey = "ionian";
-            m_keyScaleName = "Ionian (Major)";
-            m_keyMode = virtuoso::theory::KeyMode::Major;
-        }
-        m_hasKeyPcGuess = true;
-    } else {
-        m_keyPcGuess = 0;
-        m_keyScaleKey.clear();
-        m_keyScaleName.clear();
-        m_keyMode = virtuoso::theory::KeyMode::Major;
-        m_hasKeyPcGuess = false;
-    }
-
-    m_localKeysByBar = estimateLocalKeysByBar(m_ontology,
-                                              bars,
-                                              /*windowBars=*/8,
-                                              m_keyPcGuess,
-                                              m_keyScaleKey,
-                                              m_keyScaleName,
-                                              m_keyMode);
+    // Harmony analysis (global key + local keys).
+    m_harmony.rebuildFromModel(m_model);
 }
 
 void VirtuosoBalladMvpPlaybackEngine::setStylePresetKey(const QString& key) {
@@ -677,12 +501,11 @@ void VirtuosoBalladMvpPlaybackEngine::play() {
     m_lastPlayheadStep = -1;
     m_lastEmittedCell = -1;
     m_nextScheduledStep = 0;
-    m_hasLastChord = false;
-    m_lastChord = music::ChordSymbol{};
+    m_harmony.resetRuntimeState();
     m_bassPlanner.reset();
     m_pianoPlanner.reset();
-    m_listener.reset();
-    m_vibe.reset();
+    m_interaction.reset();
+    m_motivicMemory.clear();
     // Keep drummer profile wired to channel/mapping choices.
     {
         auto p = m_drummer.profile();
@@ -713,7 +536,8 @@ void VirtuosoBalladMvpPlaybackEngine::stop() {
 }
 
 void VirtuosoBalladMvpPlaybackEngine::rebuildSequence() {
-    m_sequence = buildPlaybackSequenceFromModel();
+    m_transport.rebuild();
+    m_sequence = m_transport.sequence();
 }
 
 void VirtuosoBalladMvpPlaybackEngine::applyPresetToEngine() {
@@ -740,56 +564,12 @@ void VirtuosoBalladMvpPlaybackEngine::applyPresetToEngine() {
     m_virtToneDark = qBound(0.0, preset->virtuosityDefaults.toneDark, 1.0);
 }
 
-QVector<const chart::Bar*> VirtuosoBalladMvpPlaybackEngine::flattenBars() const {
-    return flattenBarsFrom(m_model);
-}
-
-QVector<int> VirtuosoBalladMvpPlaybackEngine::buildPlaybackSequenceFromModel() const {
-    return buildPlaybackSequenceFrom(m_model);
-}
-
 const chart::Cell* VirtuosoBalladMvpPlaybackEngine::cellForFlattenedIndex(int cellIndex) const {
-    if (cellIndex < 0) return nullptr;
-    const QVector<const chart::Bar*> bars = flattenBars();
-    const int barIndex = cellIndex / 4;
-    const int cellInBar = cellIndex % 4;
-    if (barIndex < 0 || barIndex >= bars.size()) return nullptr;
-    const auto* bar = bars[barIndex];
-    if (!bar) return nullptr;
-    if (cellInBar < 0 || cellInBar >= bar->cells.size()) return nullptr;
-    return &bar->cells[cellInBar];
+    return m_transport.cellForFlattenedIndex(cellIndex);
 }
 
 bool VirtuosoBalladMvpPlaybackEngine::chordForCellIndex(int cellIndex, music::ChordSymbol& outChord, bool& isNewChord) {
-    isNewChord = false;
-    const chart::Cell* c = cellForFlattenedIndex(cellIndex);
-    if (!c) return false;
-
-    const QString t = c->chord.trimmed();
-    if (t.isEmpty()) {
-        if (m_hasLastChord) { outChord = m_lastChord; return true; }
-        return false;
-    }
-
-    music::ChordSymbol parsed;
-    if (!music::parseChordSymbol(t, parsed)) {
-        if (m_hasLastChord) { outChord = m_lastChord; return true; }
-        return false;
-    }
-    if (parsed.placeholder) {
-        if (m_hasLastChord) { outChord = m_lastChord; return true; }
-        return false;
-    }
-
-    outChord = parsed;
-    if (!m_hasLastChord) {
-        isNewChord = true;
-    } else {
-        isNewChord = !sameChordKey(outChord, m_lastChord);
-    }
-    m_lastChord = outChord;
-    m_hasLastChord = true;
-    return true;
+    return m_harmony.chordForCellIndex(m_model, cellIndex, outChord, isNewChord);
 }
 
 void VirtuosoBalladMvpPlaybackEngine::onTick() {
@@ -832,17 +612,22 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
         li.repeats = m_repeats;
         li.model = &m_model;
         li.sequence = &m_sequence;
-        li.hasLastChord = m_hasLastChord;
-        li.lastChord = m_lastChord;
+        li.hasLastChord = m_harmony.hasLastChord();
+        li.lastChord = m_harmony.lastChord();
         li.ontology = &m_ontology;
-        li.hasKeyPcGuess = m_hasKeyPcGuess;
-        li.keyPcGuess = m_keyPcGuess;
-        li.keyScaleKey = m_keyScaleKey;
-        li.keyScaleName = m_keyScaleName;
-        li.keyMode = m_keyMode;
-        li.localKeysByBar = &m_localKeysByBar;
-        li.listener = &m_listener;
-        li.vibe = &m_vibe;
+        li.harmonyCtx = &m_harmony;
+        li.keyWindowBars = 8;
+        li.hasKeyPcGuess = m_harmony.hasKeyPcGuess();
+        li.keyPcGuess = m_harmony.keyPcGuess();
+        li.keyScaleKey = m_harmony.keyScaleKey();
+        li.keyScaleName = m_harmony.keyScaleName();
+        li.keyMode = m_harmony.keyMode();
+        {
+            const auto& lks = m_harmony.localKeysByBar();
+            li.localKeysByBar = &lks;
+        }
+        li.listener = &m_interaction.listener();
+        li.vibe = &m_interaction.vibe();
         li.bassPlanner = &m_bassPlanner;
         li.pianoPlanner = &m_pianoPlanner;
         li.drummer = &m_drummer;
@@ -876,442 +661,42 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
 }
 
 void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
-    // "Playback position" defines absolute time (monotonic), independent of chart jumps (D.C./D.S.).
-    virtuoso::groove::TimeSignature ts{4, 4};
-    ts.num = (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4;
-    ts.den = (m_model.timeSigDen > 0) ? m_model.timeSigDen : 4;
+    (void)seqLen;
+    AgentCoordinator::Inputs ai;
+    ai.owner = this;
+    ai.model = &m_model;
+    ai.sequence = &m_sequence;
+    ai.repeats = m_repeats;
+    ai.bpm = m_bpm;
+    ai.stylePresetKey = m_stylePresetKey;
+    ai.agentEnergyMult = m_agentEnergyMult;
 
-    const int playbackBarIndex = (ts.num > 0) ? (stepIndex / ts.num) : (stepIndex / 4);
-    const int beatInBar = (ts.num > 0) ? (stepIndex % ts.num) : (stepIndex % 4);
+    ai.virtAuto = m_virtAuto;
+    ai.virtHarmonicRisk = m_virtHarmonicRisk;
+    ai.virtRhythmicComplexity = m_virtRhythmicComplexity;
+    ai.virtInteraction = m_virtInteraction;
+    ai.virtToneDark = m_virtToneDark;
 
-    music::ChordSymbol chord;
-    bool chordIsNew = false;
-    const int cellIndex = m_sequence[stepIndex % seqLen];
-    const bool haveChord = chordForCellIndex(cellIndex, chord, chordIsNew);
+    ai.debugEnergyAuto = m_debugEnergyAuto;
+    ai.debugEnergy = m_debugEnergy;
 
-    // Update listener harmonic context for "playing outside" classification.
-    if (haveChord && !chord.noChord) m_listener.setChordContext(chord);
+    ai.chDrums = m_chDrums;
+    ai.chBass = m_chBass;
+    ai.chPiano = m_chPiano;
+    ai.noteKick = m_noteKick;
+    ai.kickLocksBass = m_kickLocksBass;
+    ai.kickLockMaxMs = m_kickLockMaxMs;
 
-    // Lookahead: next harmony boundary (prefer within-bar chord changes; fallback to barline).
-    // IMPORTANT: do NOT call chordForCellIndex() here, because it mutates last-chord state.
-    auto parseCellChordNoState = [&](int anyCellIndex, const music::ChordSymbol& fallback, bool* outIsExplicit = nullptr) -> music::ChordSymbol {
-        if (outIsExplicit) *outIsExplicit = false;
-        const chart::Cell* c = cellForFlattenedIndex(anyCellIndex);
-        if (!c) return fallback;
-        const QString t = c->chord.trimmed();
-        if (t.isEmpty()) return fallback;
-        music::ChordSymbol parsed;
-        if (!music::parseChordSymbol(t, parsed)) return fallback;
-        if (parsed.placeholder) return fallback;
-        if (outIsExplicit) *outIsExplicit = true;
-        return parsed;
-    };
+    ai.harmony = &m_harmony;
+    ai.interaction = &m_interaction;
+    ai.engine = &m_engine;
+    ai.ontology = &m_ontology;
+    ai.bassPlanner = &m_bassPlanner;
+    ai.pianoPlanner = &m_pianoPlanner;
+    ai.drummer = &m_drummer;
+    ai.motivicMemory = &m_motivicMemory;
 
-    music::ChordSymbol nextChord;
-    bool haveNext = false;
-    int beatsUntilChange = 0;
-    if (seqLen > 0 && haveChord) {
-        const int beatsPerBar = (ts.num > 0) ? ts.num : 4;
-        const int total = seqLen * qMax(1, m_repeats);
-        // 1) Within-bar scan for explicit chord change (prevents "old chord rings until beat 4" on mid-bar changes).
-        const int maxLook = qMax(1, beatsPerBar - beatInBar);
-        for (int k = 1; k <= maxLook; ++k) {
-            const int stepFwd = stepIndex + k;
-            if (stepFwd >= total) break;
-            const int cellNext = m_sequence[stepFwd % seqLen];
-            bool explicitNext = false;
-            const music::ChordSymbol cand = parseCellChordNoState(cellNext, /*fallback*/chord, &explicitNext);
-            if (!explicitNext || cand.noChord) continue;
-            if (!sameChordKey(cand, chord)) {
-                nextChord = cand;
-                haveNext = true;
-                beatsUntilChange = k;
-                break;
-            }
-        }
-        // 2) Fallback: barline chord (for bass approaches / phrase cadence intent).
-        if (!haveNext) {
-            const int stepNextBar = stepIndex + (beatsPerBar - beatInBar);
-            if (stepNextBar < total) {
-                const int cellNext = m_sequence[stepNextBar % seqLen];
-                bool explicitNext = false;
-                nextChord = parseCellChordNoState(cellNext, /*fallback*/chord, &explicitNext);
-                haveNext = explicitNext || (nextChord.rootPc >= 0);
-                if (nextChord.noChord) haveNext = false;
-            }
-        }
-    }
-
-    const bool nextChanges = haveNext && !nextChord.noChord && (nextChord.rootPc >= 0) &&
-                             ((nextChord.rootPc != chord.rootPc) || (nextChord.bassPc != chord.bassPc));
-
-    // Phrase model (v1): 4-bar phrases with cadence intent on bar 4 and setup on bar 3.
-    const int phraseBars = 4;
-    const int barInPhrase = (phraseBars > 0) ? (qMax(0, playbackBarIndex) % phraseBars) : 0;
-    const bool phraseEndBar = (phraseBars > 0) ? (barInPhrase == (phraseBars - 1)) : false;
-    const bool phraseSetupBar = (phraseBars > 1) ? (barInPhrase == (phraseBars - 2)) : false;
-    double cadence01 = 0.0;
-    if (phraseEndBar) cadence01 = (nextChanges || chordIsNew) ? 1.0 : 0.65;
-    else if (phraseSetupBar) cadence01 = (nextChanges ? 0.60 : 0.35);
-
-    const bool strongBeat = (beatInBar == 0 || beatInBar == 2);
-    const bool structural = strongBeat || chordIsNew;
-
-    // Snapshot live intent state once per scheduled step (ms domain).
-    const qint64 nowMsWall = QDateTime::currentMSecsSinceEpoch();
-    const auto intent = m_listener.compute(nowMsWall);
-    auto vibeEff = m_vibe.update(intent, nowMsWall);
-    const double baseEnergy = qBound(0.0, m_debugEnergyAuto ? vibeEff.energy : m_debugEnergy, 1.0);
-    const QString vibeStr = m_debugEnergyAuto ? VibeStateMachine::vibeName(vibeEff.vibe)
-                                              : (VibeStateMachine::vibeName(vibeEff.vibe) + " (manual)");
-
-    const QString intentStr = intentsToString(intent);
-    const bool userBusy = (intent.densityHigh || intent.intensityPeak || intent.registerHigh);
-
-    // Debug UI status (emitted once per beat step).
-    const QString virtStr = m_virtAuto
-        ? "Virt=Auto"
-        : QString("Virt=Manual r=%1 rc=%2 i=%3 t=%4")
-              .arg(m_virtHarmonicRisk, 0, 'f', 2)
-              .arg(m_virtRhythmicComplexity, 0, 'f', 2)
-              .arg(m_virtInteraction, 0, 'f', 2)
-              .arg(m_virtToneDark, 0, 'f', 2);
-    emit debugStatus(QString("Preset=%1  Vibe=%2  energy=%3  %4  intents=%5  nps=%6  reg=%7  gVel=%8  cc2=%9  vNote=%10  silenceMs=%11  outside=%12")
-                         .arg(m_stylePresetKey)
-                         .arg(vibeStr)
-                         .arg(baseEnergy, 0, 'f', 2)
-                         .arg(virtStr)
-                         .arg(intentStr.isEmpty() ? "-" : intentStr)
-                         .arg(intent.notesPerSec, 0, 'f', 2)
-                         .arg(intent.registerCenterMidi)
-                         .arg(intent.lastGuitarVelocity)
-                         .arg(intent.lastCc2)
-                         .arg(intent.lastVoiceMidi)
-                         .arg(intent.msSinceLastActivity == std::numeric_limits<qint64>::max() ? -1 : intent.msSinceLastActivity)
-                         .arg(intent.outsideRatio, 0, 'f', 2));
-    emit debugEnergy(baseEnergy, m_debugEnergyAuto);
-
-    // Energy-driven instrument layering:
-    // - energy ~0.0: piano only
-    // - then bass enters
-    // - then drums enter
-    const double eBand = qBound(0.0, baseEnergy, 1.0);
-    const bool allowBass = (eBand >= 0.10);
-    const bool allowDrums = (eBand >= 0.22);
-
-    // Drums: enter after bass (energy layering). We schedule Drums first when enabled,
-    // because Bass groove-lock references Drums kick timing.
-    const quint32 detSeed = virtuoso::util::StableHash::fnv1a32((QString("ballad|") + m_stylePresetKey).toUtf8());
-    virtuoso::engine::AgentIntentNote kickIntent;
-    virtuoso::groove::HumanizedEvent kickHe;
-    bool haveKickHe = false;
-
-    if (allowDrums) {
-        BrushesBalladDrummer::Context dc;
-        dc.bpm = m_bpm;
-        dc.ts = ts;
-        dc.playbackBarIndex = playbackBarIndex;
-        dc.beatInBar = beatInBar;
-        dc.structural = structural;
-        dc.determinismSeed = detSeed ^ 0xD00D'BEEFu;
-        dc.phraseBars = phraseBars;
-        dc.barInPhrase = barInPhrase;
-        dc.phraseEndBar = phraseEndBar;
-        dc.cadence01 = cadence01;
-        {
-            const double mult = m_agentEnergyMult.value("Drums", 1.0);
-            dc.energy = qBound(0.0, baseEnergy * mult, 1.0);
-        }
-        // Interaction ducking: when user is busy, keep drummer in timekeeper mode (avoid extra ride patterns).
-        if (userBusy) dc.energy = qMin(dc.energy, 0.55);
-        dc.intensityPeak = intent.intensityPeak;
-
-        auto drumIntents = m_drummer.planBeat(dc);
-
-        // If there is a kick intent, humanize/schedule it first so bass can lock to its onMs.
-        int kickIndex = -1;
-        for (int i = 0; i < drumIntents.size(); ++i) {
-            if (drumIntents[i].note == m_noteKick) { kickIndex = i; break; }
-        }
-        if (kickIndex >= 0) {
-            kickIntent = drumIntents[kickIndex];
-            kickIntent.vibe_state = vibeStr;
-            kickIntent.user_intents = intentStr;
-            kickIntent.user_outside_ratio = intent.outsideRatio;
-            kickHe = m_engine.humanizeIntent(kickIntent);
-            haveKickHe = (kickHe.offMs > kickHe.onMs);
-            if (haveKickHe) {
-                m_engine.scheduleHumanizedIntentNote(kickIntent, kickHe);
-            }
-            drumIntents.removeAt(kickIndex);
-        }
-
-        for (auto n : drumIntents) {
-            // Macro dynamics: scale drums velocity by energy (much softer at low energies).
-            // e=0.22 -> ~0.67x, e=1.0 -> ~1.10x
-            const double e = qBound(0.0, baseEnergy, 1.0);
-            const double mult = 0.55 + 0.55 * e;
-            n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * mult)), 127);
-            n.vibe_state = vibeStr;
-            n.user_intents = intentStr;
-            n.user_outside_ratio = intent.outsideRatio;
-            m_engine.scheduleNote(n);
-        }
-
-        // IMPORTANT: single source of truth for drums is `BrushesBalladDrummer`.
-        // We intentionally do not add any extra JSON-driven drum vocabulary here.
-    }
-
-    if (!haveChord || chord.noChord) return; // leave space on N.C.
-
-    // Bass + piano planners (Ballad Brain v1).
-    const QString chordText = chord.originalText.trimmed().isEmpty() ? QString("pc=%1").arg(chord.rootPc) : chord.originalText.trimmed();
-    const int barIdx = cellIndex / 4;
-    const playback::LocalKeyEstimate lk = (barIdx >= 0 && barIdx < m_localKeysByBar.size())
-        ? m_localKeysByBar[barIdx]
-        : playback::LocalKeyEstimate{m_keyPcGuess, m_keyScaleKey, m_keyScaleName, m_keyMode, 0.0, 0.0};
-    const int keyPc = m_hasKeyPcGuess ? lk.tonicPc : normalizePc(chord.rootPc);
-    const auto keyCenterStr = QString("%1 %2").arg(pcName(keyPc)).arg(lk.scaleName.isEmpty() ? QString("Ionian (Major)") : lk.scaleName);
-    const auto* chordDef = chordDefForSymbol(m_ontology, chord);
-    QString roman;
-    QString func;
-    const QString scaleUsed = (chordDef && chord.rootPc >= 0)
-        ? chooseScaleUsedForChord(m_ontology, keyPc, lk.mode, chord, *chordDef, &roman, &func)
-        : QString();
-    const BalladRefTuning tune = tuningForReferenceTrack(m_stylePresetKey);
-
-    JazzBalladBassPlanner::Context bc;
-    bc.bpm = m_bpm;
-    bc.playbackBarIndex = playbackBarIndex;
-    bc.beatInBar = beatInBar;
-    bc.chordIsNew = chordIsNew;
-    bc.chord = chord;
-    bc.hasNextChord = haveNext && !nextChord.noChord;
-    bc.nextChord = nextChord;
-    bc.chordText = chordText;
-    bc.phraseBars = phraseBars;
-    bc.barInPhrase = barInPhrase;
-    bc.phraseEndBar = phraseEndBar;
-    bc.cadence01 = cadence01;
-    bc.determinismSeed = detSeed;
-    bc.approachProbBeat3 = tune.bassApproachProbBeat3;
-    bc.skipBeat3ProbStable = tune.bassSkipBeat3ProbStable;
-    bc.allowApproachFromAbove = tune.bassAllowApproachFromAbove;
-    bc.userDensityHigh = intent.densityHigh;
-    bc.userIntensityPeak = intent.intensityPeak;
-    bc.userSilence = intent.silence;
-    bc.forceClimax = (baseEnergy >= 0.85);
-    {
-        const double mult = m_agentEnergyMult.value("Bass", 1.0);
-        bc.energy = qBound(0.0, baseEnergy * mult, 1.0);
-    }
-    // Very low energy (before drums enter): keep bass extremely sparse/supportive.
-    if (!allowDrums) {
-        bc.energy *= 0.70;
-        bc.rhythmicComplexity *= 0.55;
-        bc.approachProbBeat3 *= 0.35;
-        bc.skipBeat3ProbStable = qMin(0.98, bc.skipBeat3ProbStable + 0.12);
-    }
-    // Stage 2 context for Stage 3 solver.
-    bc.chordFunction = func;
-    bc.roman = roman;
-    // Stage 3 solver weights.
-    const double progress01 = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
-    if (m_virtAuto) {
-        // Preset-driven baseline + dynamic adjustments.
-        bc.harmonicRisk = qBound(0.0, m_virtHarmonicRisk + 0.35 * bc.energy + 0.15 * progress01, 1.0);
-        bc.rhythmicComplexity = qBound(0.0, m_virtRhythmicComplexity + 0.45 * bc.energy + 0.20 * progress01, 1.0);
-        bc.interaction = qBound(0.0, m_virtInteraction + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.10 * bc.energy, 1.0);
-        bc.toneDark = qBound(0.0, m_virtToneDark + 0.15 * (1.0 - bc.energy), 1.0);
-    } else {
-        bc.harmonicRisk = m_virtHarmonicRisk;
-        bc.rhythmicComplexity = m_virtRhythmicComplexity;
-        bc.interaction = m_virtInteraction;
-        bc.toneDark = m_virtToneDark;
-    }
-    // Interaction heuristics: when user is dense/high/intense, bass simplifies and avoids chromaticism.
-    if (intent.densityHigh || intent.intensityPeak) {
-        bc.approachProbBeat3 *= 0.35;
-        bc.skipBeat3ProbStable = qMin(0.65, bc.skipBeat3ProbStable + 0.20);
-    }
-    // Phrase cadence: more motion into turnarounds (session bassist sets up the next bar).
-    if (bc.cadence01 >= 0.55) {
-        bc.approachProbBeat3 = qMin(1.0, bc.approachProbBeat3 + 0.25 * bc.cadence01);
-        bc.skipBeat3ProbStable = qMax(0.0, bc.skipBeat3ProbStable - 0.15 * bc.cadence01);
-    }
-    // Interaction ducking: if user is busy, bass simplifies (less chromaticism/walk) and ducks motion.
-    if (userBusy) {
-        bc.approachProbBeat3 *= 0.35;
-        bc.skipBeat3ProbStable = qMin(0.90, bc.skipBeat3ProbStable + 0.20);
-        bc.rhythmicComplexity *= 0.35;
-        bc.harmonicRisk *= 0.45;
-        bc.cadence01 *= 0.55;
-    }
-    if (baseEnergy >= 0.85) {
-        bc.approachProbBeat3 *= 0.60; // slightly more motion, but still ballad-safe
-        bc.skipBeat3ProbStable = qMax(0.10, bc.skipBeat3ProbStable - 0.08);
-    }
-    if (baseEnergy >= 0.55 && baseEnergy < 0.85) {
-        // Make Build audibly different: fewer omissions, slightly more motion.
-        bc.approachProbBeat3 = qMin(1.0, bc.approachProbBeat3 + 0.12);
-        bc.skipBeat3ProbStable = qMax(0.0, bc.skipBeat3ProbStable - 0.12);
-    }
-    if (allowBass) {
-        auto bassIntents = m_bassPlanner.planBeat(bc, m_chBass, ts);
-        for (auto& n : bassIntents) {
-            if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
-            n.key_center = keyCenterStr;
-            if (!roman.isEmpty()) n.roman = roman;
-            if (!func.isEmpty()) n.chord_function = func;
-            n.vibe_state = vibeStr;
-            n.user_intents = intentStr;
-            n.user_outside_ratio = intent.outsideRatio;
-            n.has_virtuosity = true;
-            n.virtuosity.harmonicRisk = bc.harmonicRisk;
-            n.virtuosity.rhythmicComplexity = bc.rhythmicComplexity;
-            n.virtuosity.interaction = bc.interaction;
-            n.virtuosity.toneDark = bc.toneDark;
-            // Macro dynamics: small velocity lift under higher energy.
-            const double e = qBound(0.0, baseEnergy, 1.0);
-            n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.90 + 0.25 * e))), 127);
-            // Groove lock (prototype): on beat 1, if a feather kick exists, align bass attack to kick.
-            if (m_kickLocksBass && beatInBar == 0 && haveKickHe) {
-                auto bhe = m_engine.humanizeIntent(n);
-                if (bhe.offMs > bhe.onMs) {
-                    const qint64 delta = kickHe.onMs - bhe.onMs;
-                    if (qAbs(delta) <= qMax<qint64>(0, m_kickLockMaxMs)) {
-                        bhe.onMs += delta;
-                        bhe.offMs += delta;
-                        bhe.timing_offset_ms += int(delta);
-                        const QString tag = n.logic_tag.isEmpty() ? "GrooveLock:Kick" : (n.logic_tag + "|GrooveLock:Kick");
-                        m_engine.scheduleHumanizedIntentNote(n, bhe, tag);
-                        continue;
-                    }
-                }
-            }
-            m_engine.scheduleNote(n);
-        }
-    }
-
-    JazzBalladPianoPlanner::Context pc;
-    pc.bpm = m_bpm;
-    pc.playbackBarIndex = playbackBarIndex;
-    pc.beatInBar = beatInBar;
-    pc.chordIsNew = chordIsNew;
-    pc.chord = chord;
-    pc.chordText = chordText;
-    pc.phraseBars = phraseBars;
-    pc.barInPhrase = barInPhrase;
-    pc.phraseEndBar = phraseEndBar;
-    pc.cadence01 = cadence01;
-    pc.hasKey = true;
-    pc.keyTonicPc = lk.tonicPc;
-    pc.keyMode = lk.mode;
-    pc.hasNextChord = haveNext && !nextChord.noChord;
-    pc.nextChord = nextChord;
-    pc.nextChanges = nextChanges;
-    pc.beatsUntilChordChange = beatsUntilChange;
-    pc.determinismSeed = detSeed ^ 0xBADC0FFEu;
-    pc.lhLo = tune.pianoLhLo; pc.lhHi = tune.pianoLhHi;
-    pc.rhLo = tune.pianoRhLo; pc.rhHi = tune.pianoRhHi;
-    pc.sparkleLo = tune.pianoSparkleLo; pc.sparkleHi = tune.pianoSparkleHi;
-    pc.skipBeat2ProbStable = tune.pianoSkipBeat2ProbStable;
-    pc.addSecondColorProb = tune.pianoAddSecondColorProb;
-    pc.sparkleProbBeat4 = tune.pianoSparkleProbBeat4;
-    pc.preferShells = tune.pianoPreferShells;
-    pc.userDensityHigh = intent.densityHigh;
-    pc.userIntensityPeak = intent.intensityPeak;
-    pc.userRegisterHigh = intent.registerHigh;
-    pc.userSilence = intent.silence;
-    pc.forceClimax = (baseEnergy >= 0.85);
-    {
-        const double mult = m_agentEnergyMult.value("Piano", 1.0);
-        pc.energy = qBound(0.0, baseEnergy * mult, 1.0);
-    }
-    // Very low energy: keep piano extremely sparse/soft and avoid bright features.
-    if (eBand < 0.12) {
-        pc.preferShells = true;
-        pc.skipBeat2ProbStable = qMin(0.995, pc.skipBeat2ProbStable + 0.25);
-        pc.sparkleProbBeat4 = 0.0;
-        pc.rhythmicComplexity *= 0.30;
-        pc.harmonicRisk *= 0.25;
-        pc.cadence01 *= 0.65;
-    }
-    // Stage 3 solver weights (Virtuosity Matrix).
-    const double progress01p = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
-    if (m_virtAuto) {
-        // Preset-driven baseline + dynamic adjustments.
-        pc.harmonicRisk = qBound(0.0, m_virtHarmonicRisk + 0.40 * pc.energy + 0.20 * progress01p, 1.0);
-        pc.rhythmicComplexity = qBound(0.0, m_virtRhythmicComplexity + 0.55 * pc.energy + 0.15 * progress01p, 1.0);
-        pc.interaction = qBound(0.0, m_virtInteraction + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.15 * pc.energy, 1.0);
-        pc.toneDark = qBound(0.0, m_virtToneDark + 0.20 * (1.0 - pc.energy) + 0.10 * (intent.registerHigh ? 1.0 : 0.0), 1.0);
-    } else {
-        pc.harmonicRisk = m_virtHarmonicRisk;
-        pc.rhythmicComplexity = m_virtRhythmicComplexity;
-        pc.interaction = m_virtInteraction;
-        pc.toneDark = m_virtToneDark;
-    }
-    // Interaction heuristics:
-    // - User register high => piano stays lower (and reduces sparkle)
-    // - User density high/intensity peak => piano comp sparser
-    // - User silence => piano is allowed to fill slightly more
-    if (intent.registerHigh) {
-        pc.rhHi = qMax(pc.rhLo + 4, pc.rhHi - 6);
-        pc.sparkleProbBeat4 *= 0.25;
-    }
-    if (intent.densityHigh || intent.intensityPeak) {
-        pc.skipBeat2ProbStable = qMin(0.95, pc.skipBeat2ProbStable + 0.25);
-        pc.preferShells = true;
-        pc.sparkleProbBeat4 *= 0.20;
-    } else if (intent.silence) {
-        pc.skipBeat2ProbStable = qMax(0.0, pc.skipBeat2ProbStable - 0.12);
-        pc.sparkleProbBeat4 = qMin(0.40, pc.sparkleProbBeat4 + 0.08);
-    }
-    if (vibeEff.vibe == VibeStateMachine::Vibe::Climax) {
-        pc.skipBeat2ProbStable = qMax(0.0, pc.skipBeat2ProbStable - 0.10);
-        pc.addSecondColorProb = qMin(0.65, pc.addSecondColorProb + 0.10);
-        pc.sparkleProbBeat4 = qMin(0.55, pc.sparkleProbBeat4 + 0.08);
-    }
-    if (vibeEff.vibe == VibeStateMachine::Vibe::Build) {
-        // Make Build audibly different without needing huge boost:
-        // more comp density + color, but not full Climax.
-        pc.skipBeat2ProbStable = qMax(0.0, pc.skipBeat2ProbStable - 0.18);
-        pc.addSecondColorProb = qMin(0.60, pc.addSecondColorProb + 0.15);
-        pc.sparkleProbBeat4 = qMin(0.45, pc.sparkleProbBeat4 + 0.10);
-    }
-    if (vibeEff.vibe == VibeStateMachine::Vibe::CoolDown) {
-        pc.skipBeat2ProbStable = qMin(0.98, pc.skipBeat2ProbStable + 0.10);
-        pc.sparkleProbBeat4 *= 0.20;
-    }
-    // Interaction ducking: if user is busy, pianist stays supportive (lower register + fewer RH ornaments).
-    if (userBusy) {
-        pc.preferShells = true;
-        pc.skipBeat2ProbStable = qMin(0.98, pc.skipBeat2ProbStable + 0.18);
-        pc.sparkleProbBeat4 *= 0.05;
-        pc.rhHi = qMax(pc.rhLo + 4, pc.rhHi - 8);
-        pc.rhythmicComplexity *= 0.35;
-        pc.harmonicRisk *= 0.45;
-        pc.cadence01 *= 0.55;
-    }
-    auto pianoIntents = m_pianoPlanner.planBeat(pc, m_chPiano, ts);
-    for (auto& n : pianoIntents) {
-        if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
-        n.key_center = keyCenterStr;
-        if (!roman.isEmpty()) n.roman = roman;
-        if (!func.isEmpty()) n.chord_function = func;
-        n.vibe_state = vibeStr;
-        n.user_intents = intentStr;
-        n.user_outside_ratio = intent.outsideRatio;
-        n.has_virtuosity = true;
-        n.virtuosity.harmonicRisk = pc.harmonicRisk;
-        n.virtuosity.rhythmicComplexity = pc.rhythmicComplexity;
-        n.virtuosity.interaction = pc.interaction;
-        n.virtuosity.toneDark = pc.toneDark;
-        // Macro dynamics: piano a bit more responsive to vibe energy.
-        const double e = qBound(0.0, vibeEff.energy, 1.0);
-        n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.82 + 0.40 * e))), 127);
-        m_engine.scheduleNote(n);
-    }
+    AgentCoordinator::scheduleStep(ai, stepIndex);
 }
 
 int VirtuosoBalladMvpPlaybackEngine::thirdIntervalForQuality(music::ChordQuality q) {

@@ -149,10 +149,24 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.cpp" -o CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.s
 
+CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o: CMakeFiles/VirtuosoCore.dir/flags.make
+CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.cpp
+CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o: CMakeFiles/VirtuosoCore.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o -MF CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o.d -o CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.cpp"
+
+CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.cpp" > CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.i
+
+CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.cpp" -o CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.s
+
 CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o: CMakeFiles/VirtuosoCore.dir/flags.make
 CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp
 CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o: CMakeFiles/VirtuosoCore.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o -MF CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o.d -o CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp"
 
 CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.i: cmake_force
@@ -166,7 +180,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cp
 CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.o: CMakeFiles/VirtuosoCore.dir/flags.make
 CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.cpp
 CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.o: CMakeFiles/VirtuosoCore.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.o -MF CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.o.d -o CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.cpp"
 
 CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.i: cmake_force
@@ -180,7 +194,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.s: cmake_force
 CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o: CMakeFiles/VirtuosoCore.dir/flags.make
 CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveRegistry.cpp
 CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o: CMakeFiles/VirtuosoCore.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o -MF CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o.d -o CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/groove/GrooveRegistry.cpp"
 
 CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.i: cmake_force
@@ -194,7 +208,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.s: cmake_force
 CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.o: CMakeFiles/VirtuosoCore.dir/flags.make
 CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoScheduler.cpp
 CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.o: CMakeFiles/VirtuosoCore.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.o -MF CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.o.d -o CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/engine/VirtuosoScheduler.cpp"
 
 CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.i: cmake_force
@@ -208,7 +222,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoScheduler.cpp.s: cmake_force
 CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o: CMakeFiles/VirtuosoCore.dir/flags.make
 CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.cpp
 CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o: CMakeFiles/VirtuosoCore.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o -MF CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o.d -o CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.cpp"
 
 CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.i: cmake_force
@@ -222,7 +236,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.s: cmake_force
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o: CMakeFiles/VirtuosoCore.dir/flags.make
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.cpp
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o: CMakeFiles/VirtuosoCore.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o -MF CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o.d -o CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.cpp"
 
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.i: cmake_force
@@ -236,7 +250,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/theory/TheoryEvent.cpp.s: cmake_force
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o: CMakeFiles/VirtuosoCore.dir/flags.make
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/NegativeHarmony.cpp
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o: CMakeFiles/VirtuosoCore.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o -MF CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o.d -o CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/NegativeHarmony.cpp"
 
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.i: cmake_force
@@ -250,7 +264,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/theory/NegativeHarmony.cpp.s: cmake_force
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.o: CMakeFiles/VirtuosoCore.dir/flags.make
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.cpp
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.o: CMakeFiles/VirtuosoCore.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.o -MF CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.o.d -o CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.cpp"
 
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.i: cmake_force
@@ -264,7 +278,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony.cpp.s: cmake_force
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o: CMakeFiles/VirtuosoCore.dir/flags.make
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.cpp
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o: CMakeFiles/VirtuosoCore.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_16) "Building CXX object CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o -MF CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o.d -o CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o -c "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.cpp"
 
 CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.i: cmake_force
@@ -282,6 +296,7 @@ VirtuosoCore_OBJECTS = \
 "CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o" \
 "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/PianoDriver.cpp.o" \
 "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.o" \
+"CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o" \
 "CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o" \
 "CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.o" \
 "CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o" \
@@ -300,6 +315,7 @@ libVirtuosoCore.a: CMakeFiles/VirtuosoCore.dir/virtuoso/ontology/OntologyRegistr
 libVirtuosoCore.a: CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o
 libVirtuosoCore.a: CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/PianoDriver.cpp.o
 libVirtuosoCore.a: CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.o
+libVirtuosoCore.a: CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o
 libVirtuosoCore.a: CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o
 libVirtuosoCore.a: CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveTemplate.cpp.o
 libVirtuosoCore.a: CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o
@@ -311,7 +327,7 @@ libVirtuosoCore.a: CMakeFiles/VirtuosoCore.dir/virtuoso/theory/FunctionalHarmony
 libVirtuosoCore.a: CMakeFiles/VirtuosoCore.dir/virtuoso/theory/ScaleSuggester.cpp.o
 libVirtuosoCore.a: CMakeFiles/VirtuosoCore.dir/build.make
 libVirtuosoCore.a: CMakeFiles/VirtuosoCore.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_16) "Linking CXX static library libVirtuosoCore.a"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_17) "Linking CXX static library libVirtuosoCore.a"
 	$(CMAKE_COMMAND) -P CMakeFiles/VirtuosoCore.dir/cmake_clean_target.cmake
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/VirtuosoCore.dir/link.txt --verbose=$(VERBOSE)
 

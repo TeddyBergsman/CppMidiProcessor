@@ -901,6 +901,10 @@ CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o: \
   /opt/homebrew/lib/QtCore.framework/Headers/QtGlobal \
   /opt/homebrew/lib/QtCore.framework/Headers/qglobal.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyContext.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QSet \
+  /opt/homebrew/lib/QtCore.framework/Headers/qset.h \
+  /opt/homebrew/include/QtCore/qhash.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyTypes.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.h \
@@ -1002,7 +1006,6 @@ CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o: \
   /opt/homebrew/include/QtCore/qmap.h \
   /opt/homebrew/include/QtCore/qshareddata_impl.h \
   /opt/homebrew/include/QtCore/qset.h \
-  /opt/homebrew/include/QtCore/qhash.h \
   /opt/homebrew/include/QtCore/qvarlengtharray.h \
   /opt/homebrew/include/QtCore/q23utility.h \
   /opt/homebrew/include/QtCore/q20utility.h \
@@ -1012,6 +1015,7 @@ CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o: \
   /opt/homebrew/include/QtCore/qendian.h \
   /opt/homebrew/include/QtCore/qjsondocument.h \
   /opt/homebrew/include/QtCore/qjsonparseerror.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.h \
@@ -1020,9 +1024,8 @@ CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o: \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/memory/MotivicMemory.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QSet \
-  /opt/homebrew/lib/QtCore.framework/Headers/qset.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableHash.h \

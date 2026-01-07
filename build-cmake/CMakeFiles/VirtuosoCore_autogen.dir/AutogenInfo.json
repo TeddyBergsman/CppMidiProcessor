@@ -450,6 +450,12 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.h",
+			"MU",
+			"HZZHNJULOI/moc_DrumDriver.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/IInstrumentDriver.h",
 			"MU",
 			"HZZHNJULOI/moc_IInstrumentDriver.cpp",
@@ -522,9 +528,21 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/memory/MotivicMemory.h",
+			"MU",
+			"CN63BRHKPB/moc_MotivicMemory.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h",
 			"MU",
 			"ZLCSGSXAA4/moc_OntologyRegistry.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/solver/CspSolver.h",
+			"MU",
+			"36LEAZL3PE/moc_CspSolver.cpp",
 			null
 		],
 		[
@@ -622,6 +640,11 @@
 	[
 		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.cpp",
 			"MU",
 			null
 		],

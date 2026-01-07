@@ -9,16 +9,16 @@
 #include "virtuoso/engine/VirtuosoEngine.h"
 #include "virtuoso/groove/GrooveRegistry.h"
 #include "virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h"
-#include "virtuoso/theory/FunctionalHarmony.h"
 #include "virtuoso/ontology/OntologyRegistry.h"
 #include "virtuoso/vocab/VocabularyRegistry.h"
 
 #include "playback/JazzBalladBassPlanner.h"
 #include "playback/JazzBalladPianoPlanner.h"
 #include "playback/BrushesBalladDrummer.h"
-#include "playback/HarmonyTypes.h"
-#include "playback/SemanticMidiAnalyzer.h"
-#include "playback/VibeStateMachine.h"
+#include "playback/HarmonyContext.h"
+#include "playback/TransportTimeline.h"
+#include "playback/InteractionContext.h"
+#include "virtuoso/memory/MotivicMemory.h"
 
 class MidiProcessor;
 
@@ -92,8 +92,6 @@ private:
     void rebuildSequence();
     void applyPresetToEngine();
 
-    QVector<const chart::Bar*> flattenBars() const;
-    QVector<int> buildPlaybackSequenceFromModel() const;
     const chart::Cell* cellForFlattenedIndex(int cellIndex) const;
     bool chordForCellIndex(int cellIndex, music::ChordSymbol& outChord, bool& isNewChord);
 
@@ -129,15 +127,10 @@ private:
 
     MidiProcessor* m_midi = nullptr; // not owned
 
-    // Harmony tracking
-    music::ChordSymbol m_lastChord;
-    bool m_hasLastChord = false;
-    int m_keyPcGuess = 0;           // 0..11 (major-key heuristic)
-    bool m_hasKeyPcGuess = false;
-    QString m_keyScaleKey;          // e.g. "ionian", "dorian", "aeolian"
-    QString m_keyScaleName;         // e.g. "Ionian (Major)"
-    virtuoso::theory::KeyMode m_keyMode = virtuoso::theory::KeyMode::Major;
-    QVector<LocalKeyEstimate> m_localKeysByBar; // flattened chart bars
+    HarmonyContext m_harmony;
+
+    // Transport: repeat/ending expansion + cell lookup.
+    TransportTimeline m_transport;
 
     JazzBalladBassPlanner m_bassPlanner;
     JazzBalladPianoPlanner m_pianoPlanner;
@@ -148,9 +141,11 @@ private:
     bool m_vocabLoaded = false;
     QString m_vocabError;
 
-    // Listening MVP (semantic analysis of user input)
-    SemanticMidiAnalyzer m_listener;
-    VibeStateMachine m_vibe;
+    // Interaction: listening + macro-dynamics
+    InteractionContext m_interaction;
+
+    // Shared memory for motivic/counterpoint logic across agents.
+    virtuoso::memory::MotivicMemory m_motivicMemory;
 
     // Channels (1..16)
     int m_chDrums = 6;

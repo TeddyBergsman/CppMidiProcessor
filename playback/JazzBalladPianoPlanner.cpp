@@ -1,6 +1,7 @@
 #include "playback/JazzBalladPianoPlanner.h"
 
 #include "virtuoso/util/StableHash.h"
+#include "virtuoso/solver/CspSolver.h"
 
 #include <QtGlobal>
 #include <algorithm>
@@ -345,6 +346,13 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
     QString voicingKey;
     QVector<int> pcs;
 
+    // If a RH topline target exists on this beat, we can bias voicing selection to support it.
+    int desiredTopPcForScoring = -1;
+    for (const auto& th : m_barTopHits) {
+        if (th.beatInBar != c.beatInBar) continue;
+        if (th.pc >= 0) { desiredTopPcForScoring = (th.pc % 12 + 12) % 12; break; }
+    }
+
     if (refreshAnchor) {
         m_anchorBlockStartBar = blockStart;
         m_anchorChordText = c.chordText;
@@ -353,8 +361,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         QVector<const virtuoso::ontology::VoicingDef*> pool;
         if (ont) pool = ont->voicingsFor(virtuoso::ontology::InstrumentKind::Piano);
 
-        QVector<const virtuoso::ontology::VoicingDef*> cands;
-        cands.reserve(pool.size());
+        QVector<const virtuoso::ontology::VoicingDef*> filtered;
+        filtered.reserve(pool.size());
         for (const auto* v : pool) {
             if (!v) continue;
             const QString cat = v->category.trimmed().toLower();
@@ -362,20 +370,30 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
             const bool isRootless = (cat == "rootless") || v->tags.contains("rootless");
             const bool isQuartal = (cat == "quartal") || v->tags.contains("quartal");
             const bool isUst = (cat == "ust") || v->tags.contains("ust");
-            if (wantShell && isShell) cands.push_back(v);
-            else if (wantRootless && (isRootless || isShell)) cands.push_back(v);
-            else if (wantQuartal && (isQuartal || isRootless || isShell)) cands.push_back(v);
-            else if (wantUst && (isUst || isRootless || isShell)) cands.push_back(v);
+            if (wantShell && isShell) filtered.push_back(v);
+            else if (wantRootless && (isRootless || isShell)) filtered.push_back(v);
+            else if (wantQuartal && (isQuartal || isRootless || isShell)) filtered.push_back(v);
+            else if (wantUst && (isUst || isRootless || isShell)) filtered.push_back(v);
         }
-        if (cands.isEmpty()) cands = pool;
+        if (filtered.isEmpty()) filtered = pool;
 
-        auto scoreVoicing = [&](const virtuoso::ontology::VoicingDef* v) -> double {
-            if (!v) return 1e9;
+        QVector<virtuoso::solver::Candidate<const virtuoso::ontology::VoicingDef*>> cands;
+        cands.reserve(filtered.size());
+        for (const auto* v : filtered) {
+            if (!v) continue;
+            cands.push_back({v->key, v});
+        }
+
+        virtuoso::solver::DecisionTrace trace;
+        const int bestIdx = virtuoso::solver::CspSolver::chooseMinCost(cands, [&](const auto& cand) {
+            const auto* v = cand.value;
+            virtuoso::solver::EvalResult er;
+            if (!v) { er.ok = false; return er; }
             const QVector<int> pcsAll = voicingPcsFor(v);
-            if (pcsAll.isEmpty()) return 1e9;
+            if (pcsAll.isEmpty()) { er.ok = false; return er; }
 
             double s = 0.0;
-            // Prefer stability within the 2-bar anchor unless chord is new.
+            // Voice-leading stability within 2-bar anchor (unless chord is new).
             if (!m_anchorPcs.isEmpty() && !c.chordIsNew) {
                 int common = 0;
                 for (int pc : pcsAll) if (m_anchorPcs.contains(pc)) ++common;
@@ -383,34 +401,56 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                 const double overlap = double(common) / double(tot);
                 s += (1.0 - overlap) * 1.2;
             }
-            // Thickness target based on virtuosity + song progress.
+            // Thickness target.
             const int n = pcsAll.size();
             const double target = 2.0 + 2.0 * qBound(0.0, c.harmonicRisk, 1.0) + 1.0 * progress01;
             s += 0.55 * qAbs(double(n) - target);
 
-            // Penalize root in dark tones (mud).
+            // Harmonic stability rules.
             if (pcsAll.contains((pc1 + 12) % 12) && c.toneDark > 0.55) s += 0.7;
-
-            // UST is dominant-centric: penalize if not dominant.
             if (v->tags.contains("ust") && !dominant) s += 0.9;
-
-            // Quartal can read bright/open; avoid when tone is very dark.
             if (v->tags.contains("quartal") && c.toneDark > 0.70) s += 0.8;
-
-            // Interaction: if user is active, bias simpler (fewer pcs).
             if (!c.userSilence && userBusy) s += 0.35 * qMax(0, n - 2);
+
+            // Shared motivic memory + counterpoint heuristic (lightweight):
+            // - Prefer including the desired topline pitch-class, if we have one.
+            // - Penalize parallel perfect intervals (5ths/8ves) with bass motion.
+            if (desiredTopPcForScoring >= 0) {
+                if (!pcsAll.contains(desiredTopPcForScoring)) s += 0.35;
+            }
+            if (m_mem) {
+                const int bassNow = m_mem->lastMidi("Bass");
+                const int bassPrev = m_mem->prevMidi("Bass");
+                if (bassNow >= 0 && bassPrev >= 0 && desiredTopPcForScoring >= 0) {
+                    const int around = (m_lastTopMidi >= 0) ? m_lastTopMidi : ((c.rhLo + c.rhHi) / 2);
+                    const int topNow = nearestMidiForPc(desiredTopPcForScoring, around, c.rhLo, c.rhHi);
+                    const int topPrev = (m_lastTopMidi >= 0) ? m_lastTopMidi : topNow;
+                    const int intPrev = ((topPrev - bassPrev) % 12 + 12) % 12;
+                    const int intNow = ((topNow - bassNow) % 12 + 12) % 12;
+                    const int bassMove = (bassNow > bassPrev) ? 1 : (bassNow < bassPrev ? -1 : 0);
+                    const int topMove = (topNow > topPrev) ? 1 : (topNow < topPrev ? -1 : 0);
+                    const bool perfectPrev = (intPrev == 0 || intPrev == 7);
+                    const bool perfectNow = (intNow == 0 || intNow == 7);
+                    if (perfectPrev && perfectNow && bassMove != 0 && topMove != 0 && bassMove == topMove) {
+                        s += 0.65;
+                    } else if (bassMove != 0 && topMove != 0 && bassMove != topMove) {
+                        s -= 0.08;
+                    }
+                }
+            }
 
             // Deterministic tie breaker.
             s += (double(virtuoso::util::StableHash::fnv1a32(v->key.toUtf8())) / double(std::numeric_limits<uint>::max())) * 1e-6;
-            return s;
-        };
 
-        const virtuoso::ontology::VoicingDef* best = nullptr;
-        double bestScore = 1e9;
-        for (const auto* v : cands) {
-            const double sc = scoreVoicing(v);
-            if (sc < bestScore) { bestScore = sc; best = v; }
-        }
+            er.ok = true;
+            er.cost = s;
+            er.reasons = {QString("cost=%1").arg(s, 0, 'f', 3),
+                          QString("pcs=%1").arg(n),
+                          QString("cat=%1").arg(v->category)};
+            return er;
+        }, &trace);
+
+        const virtuoso::ontology::VoicingDef* best = (bestIdx >= 0) ? cands[bestIdx].value : nullptr;
         if (!best && !pool.isEmpty()) best = pool.first();
 
         if (best) {

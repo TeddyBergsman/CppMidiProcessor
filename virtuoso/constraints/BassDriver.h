@@ -11,6 +11,15 @@ struct BassConstraints {
     // If we track a lastFret, disallow shifting more than this per note.
     int maxFretShiftPerNote = 7;
 
+    // If we track a lastString, disallow jumping more than this many strings per note.
+    int maxStringJumpPerNote = 1;
+
+    // Legato/slide modeling for multi-note gestures:
+    // - Favor same-string legato for small fret deltas.
+    // - Allow slides up to this delta (higher cost).
+    int maxLegatoFretDelta = 4;
+    int maxSlideFretDelta = 12;
+
     // Prefer open strings slightly (tone/effort).
     double openStringBonus = 0.35;
 };

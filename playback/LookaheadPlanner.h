@@ -9,6 +9,7 @@
 #include "virtuoso/ontology/OntologyRegistry.h"
 #include "virtuoso/groove/GrooveGrid.h"
 #include "virtuoso/theory/FunctionalHarmony.h"
+#include "playback/HarmonyContext.h"
 #include "playback/HarmonyTypes.h"
 
 namespace playback {
@@ -37,6 +38,11 @@ public:
 
         // Ontology + harmony context
         const virtuoso::ontology::OntologyRegistry* ontology = nullptr; // not owned
+        // Preferred: compute sliding-window key context via HarmonyContext.
+        const HarmonyContext* harmonyCtx = nullptr; // not owned
+        int keyWindowBars = 8;
+
+        // Legacy fallback key context (used if harmonyCtx is null)
         bool hasKeyPcGuess = false;
         int keyPcGuess = 0;
         QString keyScaleKey;

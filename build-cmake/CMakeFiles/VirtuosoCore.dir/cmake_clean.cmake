@@ -6,6 +6,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.o.d"
   "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.o"
   "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.o.d"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o"
+  "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o.d"
   "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/PianoDriver.cpp.o"
   "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/PianoDriver.cpp.o.d"
   "CMakeFiles/VirtuosoCore.dir/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.cpp.o"

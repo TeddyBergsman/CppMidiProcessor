@@ -842,19 +842,29 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ScaleLibrary.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/SelfTest.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/SelfTest.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/AgentCoordinator.cpp \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/AgentCoordinator.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BalladReferenceTuning.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BalladReferenceTuning.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyContext.cpp \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyContext.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyTypes.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/InteractionContext.cpp \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/InteractionContext.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadPlanner.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadPlanner.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadWindow.cpp \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadWindow.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/TransportTimeline.cpp \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/TransportTimeline.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VirtuosoBalladMvpPlaybackEngine.cpp \
@@ -864,6 +874,7 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/ConstraintsTypes.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/IInstrumentDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoClock.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.h \
@@ -873,6 +884,7 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/memory/MotivicMemory.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h \
@@ -1466,8 +1478,6 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
 
 /opt/homebrew/lib/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateTargets.cmake:
 
-/opt/homebrew/lib/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateConfigVersionImpl.cmake:
-
 /opt/homebrew/lib/cmake/Qt6Widgets/Qt6WidgetsVersionlessAliasTargets.cmake:
 
 /opt/homebrew/lib/cmake/Qt6Widgets/Qt6WidgetsTargets-release.cmake:
@@ -1950,8 +1960,6 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qcomparehelpers.h:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qchar.h:
-
 /opt/homebrew/lib/cmake/Qt6Core/Qt6QDarwinBluetoothPermissionPluginTargets-release.cmake:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qcalendar.h:
@@ -1963,8 +1971,6 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qbasicatomic.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qatomic_cxx11.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qassert.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/cmake/Qt6/QtPublicAndroidHelpers.cmake:
 
@@ -2042,6 +2048,8 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.h:
 
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/TransportTimeline.cpp:
+
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.cpp:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadPlanner.h:
@@ -2054,6 +2062,16 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.cpp:
 
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/InteractionContext.h:
+
+/opt/homebrew/lib/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateConfigVersionImpl.cmake:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/InteractionContext.cpp:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qchar.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyContext.cpp:
+
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.cpp:
@@ -2063,6 +2081,10 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
 /opt/homebrew/Cellar/qt/6.9.1/lib/cmake/Qt6/QtPublicExternalProjectHelpers.cmake:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BalladReferenceTuning.cpp:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qassert.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/AgentCoordinator.cpp:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/SelfTest.cpp:
 
@@ -2300,6 +2322,8 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 
 /opt/homebrew/share/cmake/Modules/Linker/AppleClang-CXX.cmake:
 
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/memory/MotivicMemory.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/utility:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_id_t.h:
@@ -2307,6 +2331,8 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/tuple:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_pthread/_pthread_condattr_t.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/TransportTimeline.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/typeinfo:
 
@@ -2347,6 +2373,8 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 /opt/homebrew/lib/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateConfig.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/stack:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyContext.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/partition_copy.h:
 
@@ -2718,6 +2746,8 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_bounded_array.h:
 
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadWindow.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__tuple/tuple_element.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__tuple/tuple_like_no_subrange.h:
@@ -2981,6 +3011,8 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__mutex/tag_types.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/AgentCoordinator.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/fstream.h:
 
@@ -3506,6 +3538,8 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6QTgaPluginAdditionalTargetInfo.cmake:
 
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/reverse.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/dangling.h:
@@ -4007,6 +4041,8 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__concepts/boolean_testable.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q17memory.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/LookaheadWindow.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/boyer_moore_searcher.h:
 

@@ -9,6 +9,7 @@
 #include "virtuoso/groove/GrooveGrid.h"
 #include "virtuoso/theory/FunctionalHarmony.h"
 #include "virtuoso/ontology/OntologyRegistry.h"
+#include "virtuoso/memory/MotivicMemory.h"
 
 namespace playback {
 
@@ -116,6 +117,7 @@ public:
 
     // Ontology registry is the single source of truth for voicing choices.
     void setOntology(const virtuoso::ontology::OntologyRegistry* ont) { m_ont = ont; }
+    void setMotivicMemory(const virtuoso::memory::MotivicMemory* mem) { m_mem = mem; }
 
     QVector<virtuoso::engine::AgentIntentNote> planBeat(const Context& c,
                                                         int midiChannel,
@@ -185,6 +187,7 @@ private:
     int m_lastArpStyle = -1;
 
     const virtuoso::ontology::OntologyRegistry* m_ont = nullptr; // not owned
+    const virtuoso::memory::MotivicMemory* m_mem = nullptr;      // not owned
 };
 
 } // namespace playback

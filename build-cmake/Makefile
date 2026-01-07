@@ -1207,6 +1207,30 @@ music/SelfTest.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/SelfTest.cpp.s
 .PHONY : music/SelfTest.cpp.s
 
+playback/AgentCoordinator.o: playback/AgentCoordinator.cpp.o
+.PHONY : playback/AgentCoordinator.o
+
+# target to build an object file
+playback/AgentCoordinator.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.o
+.PHONY : playback/AgentCoordinator.cpp.o
+
+playback/AgentCoordinator.i: playback/AgentCoordinator.cpp.i
+.PHONY : playback/AgentCoordinator.i
+
+# target to preprocess a source file
+playback/AgentCoordinator.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.i
+.PHONY : playback/AgentCoordinator.cpp.i
+
+playback/AgentCoordinator.s: playback/AgentCoordinator.cpp.s
+.PHONY : playback/AgentCoordinator.s
+
+# target to generate assembly for a file
+playback/AgentCoordinator.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/AgentCoordinator.cpp.s
+.PHONY : playback/AgentCoordinator.cpp.s
+
 playback/BalladReferenceTuning.o: playback/BalladReferenceTuning.cpp.o
 .PHONY : playback/BalladReferenceTuning.o
 
@@ -1254,6 +1278,54 @@ playback/BrushesBalladDrummer.s: playback/BrushesBalladDrummer.cpp.s
 playback/BrushesBalladDrummer.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.s
 .PHONY : playback/BrushesBalladDrummer.cpp.s
+
+playback/HarmonyContext.o: playback/HarmonyContext.cpp.o
+.PHONY : playback/HarmonyContext.o
+
+# target to build an object file
+playback/HarmonyContext.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.o
+.PHONY : playback/HarmonyContext.cpp.o
+
+playback/HarmonyContext.i: playback/HarmonyContext.cpp.i
+.PHONY : playback/HarmonyContext.i
+
+# target to preprocess a source file
+playback/HarmonyContext.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.i
+.PHONY : playback/HarmonyContext.cpp.i
+
+playback/HarmonyContext.s: playback/HarmonyContext.cpp.s
+.PHONY : playback/HarmonyContext.s
+
+# target to generate assembly for a file
+playback/HarmonyContext.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.s
+.PHONY : playback/HarmonyContext.cpp.s
+
+playback/InteractionContext.o: playback/InteractionContext.cpp.o
+.PHONY : playback/InteractionContext.o
+
+# target to build an object file
+playback/InteractionContext.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.o
+.PHONY : playback/InteractionContext.cpp.o
+
+playback/InteractionContext.i: playback/InteractionContext.cpp.i
+.PHONY : playback/InteractionContext.i
+
+# target to preprocess a source file
+playback/InteractionContext.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.i
+.PHONY : playback/InteractionContext.cpp.i
+
+playback/InteractionContext.s: playback/InteractionContext.cpp.s
+.PHONY : playback/InteractionContext.s
+
+# target to generate assembly for a file
+playback/InteractionContext.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.s
+.PHONY : playback/InteractionContext.cpp.s
 
 playback/JazzBalladBassPlanner.o: playback/JazzBalladBassPlanner.cpp.o
 .PHONY : playback/JazzBalladBassPlanner.o
@@ -1327,6 +1399,30 @@ playback/LookaheadPlanner.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.s
 .PHONY : playback/LookaheadPlanner.cpp.s
 
+playback/LookaheadWindow.o: playback/LookaheadWindow.cpp.o
+.PHONY : playback/LookaheadWindow.o
+
+# target to build an object file
+playback/LookaheadWindow.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.o
+.PHONY : playback/LookaheadWindow.cpp.o
+
+playback/LookaheadWindow.i: playback/LookaheadWindow.cpp.i
+.PHONY : playback/LookaheadWindow.i
+
+# target to preprocess a source file
+playback/LookaheadWindow.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.i
+.PHONY : playback/LookaheadWindow.cpp.i
+
+playback/LookaheadWindow.s: playback/LookaheadWindow.cpp.s
+.PHONY : playback/LookaheadWindow.s
+
+# target to generate assembly for a file
+playback/LookaheadWindow.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/LookaheadWindow.cpp.s
+.PHONY : playback/LookaheadWindow.cpp.s
+
 playback/SemanticMidiAnalyzer.o: playback/SemanticMidiAnalyzer.cpp.o
 .PHONY : playback/SemanticMidiAnalyzer.o
 
@@ -1350,6 +1446,30 @@ playback/SemanticMidiAnalyzer.s: playback/SemanticMidiAnalyzer.cpp.s
 playback/SemanticMidiAnalyzer.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.s
 .PHONY : playback/SemanticMidiAnalyzer.cpp.s
+
+playback/TransportTimeline.o: playback/TransportTimeline.cpp.o
+.PHONY : playback/TransportTimeline.o
+
+# target to build an object file
+playback/TransportTimeline.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.o
+.PHONY : playback/TransportTimeline.cpp.o
+
+playback/TransportTimeline.i: playback/TransportTimeline.cpp.i
+.PHONY : playback/TransportTimeline.i
+
+# target to preprocess a source file
+playback/TransportTimeline.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.i
+.PHONY : playback/TransportTimeline.cpp.i
+
+playback/TransportTimeline.s: playback/TransportTimeline.cpp.s
+.PHONY : playback/TransportTimeline.s
+
+# target to generate assembly for a file
+playback/TransportTimeline.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/TransportTimeline.cpp.s
+.PHONY : playback/TransportTimeline.cpp.s
 
 playback/VibeStateMachine.o: playback/VibeStateMachine.cpp.o
 .PHONY : playback/VibeStateMachine.o
@@ -1422,6 +1542,30 @@ virtuoso/constraints/BassDriver.s: virtuoso/constraints/BassDriver.cpp.s
 virtuoso/constraints/BassDriver.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.s
 .PHONY : virtuoso/constraints/BassDriver.cpp.s
+
+virtuoso/constraints/DrumDriver.o: virtuoso/constraints/DrumDriver.cpp.o
+.PHONY : virtuoso/constraints/DrumDriver.o
+
+# target to build an object file
+virtuoso/constraints/DrumDriver.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o
+.PHONY : virtuoso/constraints/DrumDriver.cpp.o
+
+virtuoso/constraints/DrumDriver.i: virtuoso/constraints/DrumDriver.cpp.i
+.PHONY : virtuoso/constraints/DrumDriver.i
+
+# target to preprocess a source file
+virtuoso/constraints/DrumDriver.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.i
+.PHONY : virtuoso/constraints/DrumDriver.cpp.i
+
+virtuoso/constraints/DrumDriver.s: virtuoso/constraints/DrumDriver.cpp.s
+.PHONY : virtuoso/constraints/DrumDriver.s
+
+# target to generate assembly for a file
+virtuoso/constraints/DrumDriver.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.s
+.PHONY : virtuoso/constraints/DrumDriver.cpp.s
 
 virtuoso/constraints/PianoDriver.o: virtuoso/constraints/PianoDriver.cpp.o
 .PHONY : virtuoso/constraints/PianoDriver.o
@@ -1952,12 +2096,21 @@ help:
 	@echo "... music/SelfTest.o"
 	@echo "... music/SelfTest.i"
 	@echo "... music/SelfTest.s"
+	@echo "... playback/AgentCoordinator.o"
+	@echo "... playback/AgentCoordinator.i"
+	@echo "... playback/AgentCoordinator.s"
 	@echo "... playback/BalladReferenceTuning.o"
 	@echo "... playback/BalladReferenceTuning.i"
 	@echo "... playback/BalladReferenceTuning.s"
 	@echo "... playback/BrushesBalladDrummer.o"
 	@echo "... playback/BrushesBalladDrummer.i"
 	@echo "... playback/BrushesBalladDrummer.s"
+	@echo "... playback/HarmonyContext.o"
+	@echo "... playback/HarmonyContext.i"
+	@echo "... playback/HarmonyContext.s"
+	@echo "... playback/InteractionContext.o"
+	@echo "... playback/InteractionContext.i"
+	@echo "... playback/InteractionContext.s"
 	@echo "... playback/JazzBalladBassPlanner.o"
 	@echo "... playback/JazzBalladBassPlanner.i"
 	@echo "... playback/JazzBalladBassPlanner.s"
@@ -1967,9 +2120,15 @@ help:
 	@echo "... playback/LookaheadPlanner.o"
 	@echo "... playback/LookaheadPlanner.i"
 	@echo "... playback/LookaheadPlanner.s"
+	@echo "... playback/LookaheadWindow.o"
+	@echo "... playback/LookaheadWindow.i"
+	@echo "... playback/LookaheadWindow.s"
 	@echo "... playback/SemanticMidiAnalyzer.o"
 	@echo "... playback/SemanticMidiAnalyzer.i"
 	@echo "... playback/SemanticMidiAnalyzer.s"
+	@echo "... playback/TransportTimeline.o"
+	@echo "... playback/TransportTimeline.i"
+	@echo "... playback/TransportTimeline.s"
 	@echo "... playback/VibeStateMachine.o"
 	@echo "... playback/VibeStateMachine.i"
 	@echo "... playback/VibeStateMachine.s"
@@ -1979,6 +2138,9 @@ help:
 	@echo "... virtuoso/constraints/BassDriver.o"
 	@echo "... virtuoso/constraints/BassDriver.i"
 	@echo "... virtuoso/constraints/BassDriver.s"
+	@echo "... virtuoso/constraints/DrumDriver.o"
+	@echo "... virtuoso/constraints/DrumDriver.i"
+	@echo "... virtuoso/constraints/DrumDriver.s"
 	@echo "... virtuoso/constraints/PianoDriver.o"
 	@echo "... virtuoso/constraints/PianoDriver.i"
 	@echo "... virtuoso/constraints/PianoDriver.s"

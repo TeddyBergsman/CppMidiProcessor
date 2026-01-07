@@ -582,6 +582,12 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/AgentCoordinator.h",
+			"MU",
+			"QDVNTGK2R4/moc_AgentCoordinator.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BalladReferenceTuning.h",
 			"MU",
 			"QDVNTGK2R4/moc_BalladReferenceTuning.cpp",
@@ -594,9 +600,21 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/HarmonyContext.h",
+			"MU",
+			"QDVNTGK2R4/moc_HarmonyContext.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/HarmonyTypes.h",
 			"MU",
 			"QDVNTGK2R4/moc_HarmonyTypes.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/InteractionContext.h",
+			"MU",
+			"QDVNTGK2R4/moc_InteractionContext.cpp",
 			null
 		],
 		[
@@ -618,9 +636,21 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/LookaheadWindow.h",
+			"MU",
+			"QDVNTGK2R4/moc_LookaheadWindow.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h",
 			"MU",
 			"QDVNTGK2R4/moc_SemanticMidiAnalyzer.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/TransportTimeline.h",
+			"MU",
+			"QDVNTGK2R4/moc_TransportTimeline.cpp",
 			null
 		],
 		[
@@ -840,12 +870,27 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/AgentCoordinator.cpp",
+			"MU",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BalladReferenceTuning.cpp",
 			"MU",
 			null
 		],
 		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/BrushesBalladDrummer.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/HarmonyContext.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/InteractionContext.cpp",
 			"MU",
 			null
 		],
@@ -865,7 +910,17 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/LookaheadWindow.cpp",
+			"MU",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/TransportTimeline.cpp",
 			"MU",
 			null
 		],

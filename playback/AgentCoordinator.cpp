@@ -3,6 +3,7 @@
 #include "playback/BalladReferenceTuning.h"
 #include "playback/LookaheadWindow.h"
 #include "playback/VirtuosoBalladMvpPlaybackEngine.h"
+#include "virtuoso/solver/BeatCostModel.h"
 #include "virtuoso/util/StableHash.h"
 
 #include <QDateTime>
@@ -502,6 +503,9 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     QString bassChoiceId = "base";
     QString pianoChoiceId = "base";
     QString drumChoiceId = "base";
+    virtuoso::solver::CostWeights jointWeights{};
+    virtuoso::solver::CostBreakdown jointBd{};
+    bool haveJointBd = false;
 
     // Drums candidates (stateless planner): build contexts once, reuse in optimizer.
     BrushesBalladDrummer::Context dcBase;
@@ -531,9 +535,15 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         dcDry = dcBase;
         dcWet = dcBase;
         dcDry.energy = qMin(dcDry.energy, 0.42);
+        dcDry.gestureBias = -0.75;
+        dcDry.allowRide = false;
+        dcDry.allowPhraseGestures = false;
         dcDry.intensityPeak = false;
         const double vibeBoost = (vibeEff.vibe == VibeStateMachine::Vibe::Build || vibeEff.vibe == VibeStateMachine::Vibe::Climax) ? 0.10 : 0.0;
         dcWet.energy = qBound(0.0, dcWet.energy + vibeBoost + 0.15 * cadence01, 1.0);
+        dcWet.gestureBias = 0.85;
+        dcWet.allowRide = true;
+        dcWet.allowPhraseGestures = true;
         dcWet.intensityPeak = intent.intensityPeak || (cadence01 >= 0.70);
 
         drumPlanDry = in.drummer->planBeat(dcDry);
@@ -542,6 +552,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
 
     if (allowBass) {
         JazzBalladBassPlanner::Context bcSparse = bc;
+        JazzBalladBassPlanner::Context bcBase = bc;
         JazzBalladBassPlanner::Context bcRich = bc;
         // Sparse = more air / fewer approaches; Rich = more motion.
         bcSparse.rhythmicComplexity *= 0.55;
@@ -584,13 +595,15 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         };
 
         QVector<BassCand> bCands;
-        bCands.reserve(2);
+        bCands.reserve(3);
         bCands.push_back(planBass("sparse", bcSparse));
+        bCands.push_back(planBass("base", bcBase));
         bCands.push_back(planBass("rich", bcRich));
 
         QVector<PianoCand> pCands;
-        pCands.reserve(2);
+        pCands.reserve(3);
         pCands.push_back(planPiano("sparse", pcSparse));
+        pCands.push_back(planPiano("base", pc));
         pCands.push_back(planPiano("rich", pcRich));
 
         QVector<DrumCand> dCands;
@@ -626,67 +639,79 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         const int prevBassCenter = in.story ? clampBassCenterMidi(in.story->lastBassCenterMidi) : regs.bassCenterMidi;
         const int prevPianoCenter = in.story ? clampPianoCenterMidi(in.story->lastPianoCenterMidi) : regs.pianoCenterMidi;
 
-        auto comboCost = [&](const NoteStats& bs, const NoteStats& ps, const NoteStats& ds, const QString& drumId) -> double {
-            double cost = 0.0;
+        const virtuoso::control::VirtuosityMatrix virtAvg{
+            /*harmonicRisk=*/0.5 * (bc.harmonicRisk + pc.harmonicRisk),
+            /*rhythmicComplexity=*/0.5 * (bc.rhythmicComplexity + pc.rhythmicComplexity),
+            /*interaction=*/0.5 * (bc.interaction + pc.interaction),
+            /*toneDark=*/0.5 * (bc.toneDark + pc.toneDark),
+        };
+        const auto w = virtuoso::solver::weightsFromVirtuosity(virtAvg);
 
-            // 1) Physical/spectral spacing (avoid mud).
-            if (bs.count > 0 && ps.count > 0) {
-                const int bassHi = bs.maxMidi;
-                const int pianoLo = ps.minMidi;
-                const int spacingMin = 7;
-                if (pianoLo < bassHi + spacingMin) {
-                    const int overlap = (bassHi + spacingMin) - pianoLo;
-                    cost += 10.0 + 0.75 * double(overlap);
-                }
-            }
+        auto comboCost = [&](const QVector<virtuoso::engine::AgentIntentNote>& bassNotes,
+                             const QVector<virtuoso::engine::AgentIntentNote>& pianoNotes,
+                             const QVector<virtuoso::engine::AgentIntentNote>& drumNotes,
+                             const QString& drumId,
+                             virtuoso::solver::CostBreakdown* outBd) -> double {
+            virtuoso::solver::CostBreakdown bd;
 
-            // 2) Voice-leading continuity (story).
-            if (bs.count > 0) cost += 0.06 * double(qAbs(int(llround(bs.meanMidi)) - prevBassCenter));
-            if (ps.count > 0) cost += 0.05 * double(qAbs(int(llround(ps.meanMidi)) - prevPianoCenter));
+            // --- Harmonic stability: "outside" pcs relative to chord.
+            bd.harmonicStability =
+                0.65 * virtuoso::solver::harmonicOutsidePenalty01(bassNotes, chord) +
+                0.95 * virtuoso::solver::harmonicOutsidePenalty01(pianoNotes, chord);
 
-            // 3) Interaction / density targeting.
-            // Drums are texture; count them less in "density" relative to pitch instruments.
-            const double totalNotes = double(bs.count + ps.count) + 0.35 * double(ds.count);
-            const double rc = qBound(0.0, 0.5 * (bc.rhythmicComplexity + pc.rhythmicComplexity), 1.0);
+            // --- Voice-leading: phrase-continuity against last centers.
+            bd.voiceLeadingDistance =
+                0.55 * virtuoso::solver::voiceLeadingPenalty(bassNotes, prevBassCenter) +
+                0.55 * virtuoso::solver::voiceLeadingPenalty(pianoNotes, prevPianoCenter);
+
+            // --- Rhythm: penalize too much offbeat density unless virt wants it.
+            bd.rhythmicInterest =
+                0.55 * virtuoso::solver::rhythmicInterestPenalty01(bassNotes, ts) +
+                0.65 * virtuoso::solver::rhythmicInterestPenalty01(pianoNotes, ts) +
+                0.20 * virtuoso::solver::rhythmicInterestPenalty01(drumNotes, ts);
+
+            // --- Interaction: density targeting vs user busy/silence + cadence landmarks.
+            const double totalNotes = double(bassNotes.size() + pianoNotes.size()) + 0.35 * double(drumNotes.size());
+            const double rc = qBound(0.0, virtAvg.rhythmicComplexity, 1.0);
             double target = 2.0 + 4.5 * rc;
-            // When user is silent, "interaction" means we should fill space.
-            if (intent.silence) target += qBound(0.0, pc.interaction, 1.0) * 2.0;
-            // When user is busy, reduce density aggressively.
+            if (intent.silence) target += qBound(0.0, virtAvg.interaction, 1.0) * 2.0;
             if (userBusy) target -= 2.5;
             target = qBound(0.0, target, 10.0);
-            cost += 0.55 * qAbs(double(totalNotes) - target);
-            if (userBusy) cost += 0.45 * qMax(0.0, totalNotes - 3.0);
+            bd.interactionFactor = 0.55 * qAbs(totalNotes - target);
+            if (userBusy) bd.interactionFactor += 0.45 * qMax(0.0, totalNotes - 3.0);
 
-            // 4) Cadence support: avoid "nothing happens" on strong cadences.
+            // Cadence support: avoid "nothing happens" on strong cadences.
             if (cadence01 >= 0.80 && beatInBar == 0) {
-                if (totalNotes <= 0.01) cost += 6.0;
-                else cost -= 0.30 * qMin(4.0, totalNotes);
+                if (totalNotes <= 0.01) bd.interactionFactor += 6.0;
+                else bd.interactionFactor = qMax(0.0, bd.interactionFactor - 0.30 * qMin(4.0, totalNotes));
             }
 
-            // 5) Drummer gesture bias at phrase landmarks:
-            // prefer "wet" on setup/end bars on the last beat, especially when cadence is strong.
+            // Drummer gesture bias at phrase landmarks.
             if (drumId != "none") {
                 if ((phraseSetupBar || look.phraseEndBar) && beatInBar == (qMax(1, ts.num) - 1) && cadence01 >= 0.35) {
-                    if (drumId == "wet") cost -= 0.55 * qBound(0.0, cadence01, 1.0);
-                    else cost += 0.65 * qBound(0.0, cadence01, 1.0);
+                    if (drumId == "wet") bd.interactionFactor = qMax(0.0, bd.interactionFactor - 0.55 * qBound(0.0, cadence01, 1.0));
+                    else bd.interactionFactor += 0.65 * qBound(0.0, cadence01, 1.0);
                 }
-                // When user is busy, strongly prefer dry drums.
-                if (userBusy && drumId == "wet") cost += 1.25;
+                if (userBusy && drumId == "wet") bd.interactionFactor += 1.25;
             }
 
-            return qMax(0.0, cost);
+            if (outBd) *outBd = bd;
+            return bd.total(w);
         };
 
         double bestCost = 1e18;
+        virtuoso::solver::CostBreakdown bestBd;
         int bestBi = 0;
         int bestPi = 0;
         int bestDi = 0;
         for (int bi = 0; bi < bCands.size(); ++bi) {
             for (int pi = 0; pi < pCands.size(); ++pi) {
                 for (int di = 0; di < dCands.size(); ++di) {
-                    const double c = comboCost(bCands[bi].st, pCands[pi].st, dCands[di].st, dCands[di].id);
+                    virtuoso::solver::CostBreakdown bd;
+                    const double c = comboCost(bCands[bi].plan.notes, pCands[pi].plan.notes, dCands[di].plan, dCands[di].id, &bd);
                     if (c < bestCost) {
                         bestCost = c;
+                        bestBd = bd;
                         bestBi = bi;
                         bestPi = pi;
                         bestDi = di;
@@ -703,12 +728,17 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
 
         // Schedule drums first so bass can groove-lock to the kick.
         if (allowDrums) {
-            const QString jt = QString("joint=%1+%2+%3").arg(bassChoiceId, pianoChoiceId, drumChoiceId);
+            const QString jt = QString("joint=%1+%2+%3|%4").arg(bassChoiceId, pianoChoiceId, drumChoiceId, bestBd.shortTag(w));
             scheduleDrums(dCands[bestDi].plan, jt);
         }
+
+        jointWeights = w;
+        jointBd = bestBd;
+        haveJointBd = true;
     }
 
     QString jointTag = QString("joint=%1+%2+%3").arg(bassChoiceId, pianoChoiceId, drumChoiceId);
+    if (haveJointBd) jointTag += "|" + jointBd.shortTag(jointWeights);
 
     // If bass is not participating, still schedule drums (chosen heuristically) so the band breathes.
     if (allowDrums && !haveKickHe && !allowBass) {

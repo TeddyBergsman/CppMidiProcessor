@@ -66,6 +66,14 @@ public:
         int barInPhrase = 0;     // 0..phraseBars-1
         bool phraseEndBar = false;
         double cadence01 = 0.0;  // 0..1 (stronger at phrase end / turnarounds)
+
+        // Joint-solver knobs (embodiment controls):
+        // - gestureBias: -1=dry/minimal, +1=gesture-forward (more phrase pickups/swell).
+        // - allowRide: if false, suppress ride pattern switching (keep snare brush texture only).
+        // - allowPhraseGestures: if false, suppress phrase setup/end gestures entirely.
+        double gestureBias = 0.0; // -1..+1
+        bool allowRide = true;
+        bool allowPhraseGestures = true;
     };
 
     BrushesBalladDrummer() = default;

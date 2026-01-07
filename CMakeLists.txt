@@ -26,6 +26,8 @@ add_library(VirtuosoCore STATIC
   virtuoso/util/StableRng.h
   virtuoso/control/VirtuosityMatrix.h
   virtuoso/solver/CspSolver.h
+  virtuoso/solver/BeatCostModel.h
+  virtuoso/solver/BeatCostModel.cpp
   virtuoso/memory/MotivicMemory.h
   virtuoso/ontology/OntologyRegistry.h
   virtuoso/ontology/OntologyRegistry.cpp

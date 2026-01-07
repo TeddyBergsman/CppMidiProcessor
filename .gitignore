@@ -2,6 +2,9 @@
 build/*
 !build/preset.xml
 !build/preset.logicx
+build-cmake/
+build-asan/
+build-*/
 *.o
 *.a
 *.so

@@ -61,6 +61,9 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
 
     const auto gp = GrooveGrid::fromBarBeatTuplet(bar, beat, 0, 1, ts);
     const double e = qBound(0.0, ctx.energy, 1.0);
+    const double gb = qBound(-1.0, ctx.gestureBias, 1.0);
+    const bool allowRide = ctx.allowRide;
+    const bool allowPhraseGestures = ctx.allowPhraseGestures;
 
     // --- 1) Feather kick on beat 1 (beatInBar==0). ---
     // Keep probability very low; make it slightly more likely on structural beats.
@@ -133,7 +136,7 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
     // --- 3c) Vibe support: ride pattern (audible Build/Climax). ---
     // Start ride/cymbal texture earlier as energy rises.
     // Build: ride on backbeats (2&4). Climax: ride every beat + optional upbeats.
-    if (e >= 0.42) {
+    if (allowRide && e >= 0.42) {
         const bool backbeatOnly = (e < 0.72);
         const bool doRideThisBeat = backbeatOnly ? isBackbeat : true;
         if (doRideThisBeat) {
@@ -160,7 +163,7 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
 
     // --- 3b) Intensity support: brief ride swish on beat 1 when user is peaking. ---
     // This is a *support texture*, not a full pattern switch.
-    if (ctx.intensityPeak && beat == 0) {
+    if (allowRide && ctx.intensityPeak && beat == 0) {
         AgentIntentNote r;
         r.agent = "Drums";
         r.channel = m_p.channel;
@@ -175,7 +178,7 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
 
     // --- 4) Phrase-end swish (longer ride swish / sweep). ---
     // Small probability on the last beat of the phrase to create a subtle phrase marker.
-    if (phraseEndBar && beat == (qMax(1, ts.num) - 1)) {
+    if (allowPhraseGestures && allowRide && phraseEndBar && beat == (qMax(1, ts.num) - 1)) {
         const quint32 s = mixSeed(ctx.determinismSeed, quint32(bar * 23 + 909));
         const double p = unitRand01(s);
         const double pSwish = qBound(0.0, m_p.phraseEndSwishProb + 0.35 * cadence01, 1.0);
@@ -196,7 +199,7 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
 
     // --- 4b) Cadence pickup: soft brush short on the and-of-4 into the next bar. ---
     // This is a key "session drummer" marker: a tiny pickup, not a fill.
-    if (phraseEndBar && cadence01 >= 0.55 && beat == (qMax(1, ts.num) - 1) && !ctx.intensityPeak) {
+    if (allowPhraseGestures && phraseEndBar && cadence01 >= 0.55 && beat == (qMax(1, ts.num) - 1) && !ctx.intensityPeak) {
         const quint32 s = mixSeed(ctx.determinismSeed, quint32(bar * 29 + 0xCADEu));
         const double p = unitRand01(s);
         const double want = qBound(0.0, 0.10 + 0.55 * cadence01 + 0.20 * e, 0.85);
@@ -215,7 +218,7 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
     }
 
     // --- 4c) Cadence orchestration: occasional ride hit on the last beat (more air / shimmer). ---
-    if (phraseEndBar && cadence01 >= 0.70 && beat == (qMax(1, ts.num) - 1)) {
+    if (allowPhraseGestures && allowRide && phraseEndBar && cadence01 >= 0.70 && beat == (qMax(1, ts.num) - 1)) {
         const quint32 s = mixSeed(ctx.determinismSeed, quint32(bar * 37 + 0xBEEFu));
         const double p = unitRand01(s);
         const double want = qBound(0.0, 0.08 + 0.30 * cadence01, 0.50);
@@ -236,12 +239,12 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
     // --- 5) Phrase setup swell (bar before phrase end): set up the cadence.
     // This is a subtle "session drummer" move: a soft ride swish or brush short pickup on the last beat
     // of the setup bar, to make the phrase end feel prepared rather than random.
-    if (phraseSetupBar && beat == (qMax(1, ts.num) - 1) && cadence01 >= 0.35) {
+    if (allowPhraseGestures && phraseSetupBar && beat == (qMax(1, ts.num) - 1) && cadence01 >= 0.35) {
         const quint32 s = mixSeed(ctx.determinismSeed, quint32(bar * 41 + 0x5157u));
         const double p = unitRand01(s);
-        const double want = qBound(0.0, 0.10 + 0.35 * cadence01 + 0.20 * e, 0.65);
+        const double want = qBound(0.0, 0.10 + 0.35 * cadence01 + 0.20 * e + 0.18 * gb, 0.75);
         if (p < want) {
-            const bool doSwish = unitRand01(mixSeed(s, 0x5315u)) < qBound(0.0, 0.35 + 0.45 * e, 0.85);
+            const bool doSwish = allowRide && (unitRand01(mixSeed(s, 0x5315u)) < qBound(0.0, 0.35 + 0.45 * e + 0.20 * gb, 0.92));
             if (doSwish) {
                 AgentIntentNote sw;
                 sw.agent = "Drums";
@@ -276,16 +279,16 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
     // --- 6) Phrase end flourish (strong cadence): a tiny fill, not a "drum fill".
     // When cadence is very strong and energy allows, add a short three-note gesture on the last beat
     // (brush short -> snare swish -> ride hit). This is deliberately sparse and deterministic.
-    if (phraseEndBar && cadence01 >= 0.85 && beat == (qMax(1, ts.num) - 1) && e >= 0.35 && !ctx.intensityPeak) {
+    if (allowPhraseGestures && phraseEndBar && cadence01 >= 0.85 && beat == (qMax(1, ts.num) - 1) && e >= 0.35 && !ctx.intensityPeak) {
         const quint32 s = mixSeed(ctx.determinismSeed, quint32(bar * 43 + 0xF11Eu));
         const double p = unitRand01(s);
-        const double want = qBound(0.0, 0.12 + 0.35 * cadence01 + 0.15 * e, 0.55);
+        const double want = qBound(0.0, 0.12 + 0.35 * cadence01 + 0.15 * e + 0.20 * gb, 0.70);
         if (p < want) {
             struct Hit { int sub; int count; int note; int vel; const char* tag; };
             const Hit hits[] = {
                 {1, 4, m_p.noteBrushShort, qBound(1, 16 + int(llround(14.0 * e)), 127), "Drums:CadenceFlourishBrush"},
                 {2, 4, m_p.noteSnareSwish, qBound(1, 20 + int(llround(20.0 * e)), 127), "Drums:CadenceFlourishSnare"},
-                {3, 4, m_p.noteRideHit,    qBound(1, 18 + int(llround(24.0 * e)), 127), "Drums:CadenceFlourishRide"},
+                {3, 4, allowRide ? m_p.noteRideHit : m_p.noteBrushShort, qBound(1, 18 + int(llround(24.0 * e)), 127), "Drums:CadenceFlourishRide"},
             };
             for (const auto& h : hits) {
                 AgentIntentNote n;

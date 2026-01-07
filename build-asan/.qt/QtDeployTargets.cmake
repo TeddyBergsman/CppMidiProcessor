@@ -1,2 +1,0 @@
-set(__QT_DEPLOY_TARGET_CppMidiProcessor_FILE /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-asan/CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor)
-set(__QT_DEPLOY_TARGET_CppMidiProcessor_TYPE EXECUTABLE)

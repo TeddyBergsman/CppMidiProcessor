@@ -1,8 +1,0 @@
-set(__QT_DEPLOY_TARGET_VirtuosoCore_FILE /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/libVirtuosoCore.a)
-set(__QT_DEPLOY_TARGET_VirtuosoCore_TYPE STATIC_LIBRARY)
-set(__QT_DEPLOY_TARGET_VirtuosoCoreTests_FILE /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/VirtuosoCoreTests)
-set(__QT_DEPLOY_TARGET_VirtuosoCoreTests_TYPE EXECUTABLE)
-set(__QT_DEPLOY_TARGET_VirtuosoPlaybackTests_FILE /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/VirtuosoPlaybackTests)
-set(__QT_DEPLOY_TARGET_VirtuosoPlaybackTests_TYPE EXECUTABLE)
-set(__QT_DEPLOY_TARGET_CppMidiProcessor_FILE /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CppMidiProcessor.app/Contents/MacOS/CppMidiProcessor)
-set(__QT_DEPLOY_TARGET_CppMidiProcessor_TYPE EXECUTABLE)

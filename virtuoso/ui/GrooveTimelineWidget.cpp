@@ -97,6 +97,10 @@ int GrooveTimelineWidget::subRowCountForLane(const QString& lane) const {
     if (l == "keyswitch") return 1;
     if (l == "articulationstate") return 1;
     if (l == "fx") return 1;
+    if (l == "kick") return 1;
+    if (l == "texture") return 1;
+    if (l == "ride") return 1;
+    if (l == "gesture") return 1;
     if (l == "bass") return 4;
     if (l == "drums") return 6;
     if (l == "piano") return 8;
@@ -112,6 +116,10 @@ int GrooveTimelineWidget::subRowIndexForEvent(const QString& lane, int note) con
     if (l == "keyswitch") return 0;
     if (l == "articulationstate") return 0;
     if (l == "fx") return 0;
+    if (l == "kick") return 0;
+    if (l == "texture") return 0;
+    if (l == "ride") return 0;
+    if (l == "gesture") return 0;
     // Pitch mapping: spread notes across subrows so overlapping notes remain visible.
     if (l == "piano") {
         // map ~C3..C6
@@ -246,6 +254,10 @@ void GrooveTimelineWidget::paintEvent(QPaintEvent*) {
         if (ev.lane.compare("KeySwitch", Qt::CaseInsensitive) == 0) fill = QColor(155, 95, 210, 160);
         if (ev.lane.compare("ArticulationState", Qt::CaseInsensitive) == 0) fill = QColor(110, 85, 170, 140);
         if (ev.lane.compare("FX", Qt::CaseInsensitive) == 0) fill = QColor(240, 150, 70, 160);
+        if (ev.lane.compare("Kick", Qt::CaseInsensitive) == 0) fill = QColor(210, 110, 70, 190);
+        if (ev.lane.compare("Texture", Qt::CaseInsensitive) == 0) fill = QColor(170, 140, 80, 170);
+        if (ev.lane.compare("Ride", Qt::CaseInsensitive) == 0) fill = QColor(220, 170, 90, 180);
+        if (ev.lane.compare("Gesture", Qt::CaseInsensitive) == 0) fill = QColor(255, 190, 95, 190);
         p.setPen(Qt::NoPen);
         p.setBrush(fill);
         p.drawRoundedRect(r, 3, 3);

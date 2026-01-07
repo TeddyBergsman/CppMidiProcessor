@@ -2,6 +2,9 @@
 
 #include <QtGlobal>
 #include <QtMath>
+#include <algorithm>
+
+#include "virtuoso/constraints/DrumDriver.h"
 
 namespace playback {
 using virtuoso::engine::AgentIntentNote;
@@ -306,6 +309,105 @@ QVector<AgentIntentNote> BrushesBalladDrummer::planBeat(const Context& ctx) cons
     }
 
     Q_UNUSED(phraseStart);
+
+    // --- Physical constraint enforcement (Module 2: DrumDriver) ---
+    // We enforce the *simultaneous limb* limits by pruning multi-hit clusters occurring at the same GridPos.
+    // This keeps the drummer from "teleporting limbs" on dense gesture candidates.
+    {
+        virtuoso::constraints::DrumDriver driver;
+        // Group indices by exact startPos.
+        struct Key {
+            int bar = 0;
+            qint64 n = 0;
+            qint64 d = 1;
+        };
+        auto keyFor = [](const AgentIntentNote& n) -> Key {
+            Key k;
+            k.bar = n.startPos.barIndex;
+            k.n = n.startPos.withinBarWhole.num;
+            k.d = n.startPos.withinBarWhole.den;
+            return k;
+        };
+        auto lessKey = [](const Key& a, const Key& b) {
+            if (a.bar != b.bar) return a.bar < b.bar;
+            if (a.n * b.d != b.n * a.d) return a.n * b.d < b.n * a.d;
+            return a.d < b.d;
+        };
+
+        QVector<int> idx(out.size());
+        for (int i = 0; i < out.size(); ++i) idx[i] = i;
+        std::sort(idx.begin(), idx.end(), [&](int ia, int ib) {
+            const Key a = keyFor(out[ia]);
+            const Key b = keyFor(out[ib]);
+            return lessKey(a, b);
+        });
+
+        QVector<bool> drop(out.size(), false);
+        int i = 0;
+        while (i < idx.size()) {
+            const Key k0 = keyFor(out[idx[i]]);
+            int j = i + 1;
+            while (j < idx.size()) {
+                const Key k1 = keyFor(out[idx[j]]);
+                if (k1.bar != k0.bar || (k1.n * k0.d != k0.n * k1.d)) break;
+                j++;
+            }
+            // Cluster idx[i..j)
+            QVector<int> cluster;
+            cluster.reserve(j - i);
+            for (int t = i; t < j; ++t) cluster.push_back(idx[t]);
+
+            auto priority = [&](const AgentIntentNote& n) -> int {
+                // Higher keeps.
+                if (n.logic_tag.contains("FeatherKick")) return 100;
+                if (n.logic_tag.contains("BrushStirLoop")) return 90;
+                if (n.logic_tag.contains("SnareSwish")) return 80;
+                if (n.logic_tag.contains("RideSwish")) return 70;
+                if (n.logic_tag.contains("Ride")) return 60;
+                if (n.logic_tag.contains("Phrase") || n.logic_tag.contains("Cadence")) return 50;
+                return 40;
+            };
+
+            // Iteratively drop lowest-priority notes until feasible.
+            while (true) {
+                virtuoso::constraints::CandidateGesture g;
+                for (int ci : cluster) {
+                    if (drop[ci]) continue;
+                    g.midiNotes.push_back(out[ci].note);
+                }
+                const auto fr = driver.evaluateFeasibility(virtuoso::constraints::PerformanceState{}, g);
+                if (fr.ok) break;
+                // Find a droppable note (lowest priority, then lowest velocity).
+                int worst = -1;
+                int worstP = 999;
+                int worstVel = 999;
+                for (int ci : cluster) {
+                    if (drop[ci]) continue;
+                    const int p = priority(out[ci]);
+                    const int vel = out[ci].baseVelocity;
+                    if (worst < 0 || p < worstP || (p == worstP && vel < worstVel)) {
+                        worst = ci;
+                        worstP = p;
+                        worstVel = vel;
+                    }
+                }
+                if (worst < 0) break;
+                drop[worst] = true;
+            }
+
+            i = j;
+        }
+
+        if (drop.contains(true)) {
+            QVector<AgentIntentNote> kept;
+            kept.reserve(out.size());
+            for (int k = 0; k < out.size(); ++k) {
+                if (!drop[k]) kept.push_back(out[k]);
+            }
+            out = std::move(kept);
+        }
+    }
+
     return out;
 }
 

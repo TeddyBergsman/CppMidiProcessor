@@ -343,6 +343,61 @@ void VirtuosoVocabularyWindow::rebuildTimelineFromLivePlan() {
                 m_displayEvents.push_back(ev);
             }
         }
+
+        // Drums lanes: expose texture vs ride vs phrase gestures for debugging.
+        if (m_instrument == Instrument::Drums) {
+            const qint64 minLabelMs = qMax<qint64>(220, qint64(llround((60000.0 / double(qMax(1, m_liveBpm))) / 2.0)));
+            for (const auto& e : m_liveBuf) {
+                if (e.kind != "note") continue;
+                if (filter && e.logic != sel) continue;
+                const QString t = e.logic.trimmed();
+                if (t.startsWith("Drums:FeatherKick")) {
+                    virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
+                    ev.lane = "Kick";
+                    ev.note = 0;
+                    ev.velocity = qBound(1, e.velocity, 127);
+                    ev.onMs = qMax<qint64>(0, e.onMs - baseMs);
+                    ev.offMs = qMax<qint64>(ev.onMs + minLabelMs, e.offMs - baseMs);
+                    ev.label = "Kick";
+                    m_displayEvents.push_back(ev);
+                    continue;
+                }
+                if (t.contains("BrushStirLoop")) {
+                    virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
+                    ev.lane = "Texture";
+                    ev.note = 0;
+                    ev.velocity = qBound(1, e.velocity, 127);
+                    ev.onMs = qMax<qint64>(0, e.onMs - baseMs);
+                    ev.offMs = qMax<qint64>(ev.onMs + qMax<qint64>(minLabelMs, 900), e.offMs - baseMs);
+                    ev.label = "Stir";
+                    m_displayEvents.push_back(ev);
+                    continue;
+                }
+                if (t.contains("Ride")) {
+                    virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
+                    ev.lane = "Ride";
+                    ev.note = 0;
+                    ev.velocity = qBound(1, e.velocity, 127);
+                    ev.onMs = qMax<qint64>(0, e.onMs - baseMs);
+                    ev.offMs = qMax<qint64>(ev.onMs + minLabelMs, e.offMs - baseMs);
+                    ev.label = "Ride";
+                    m_displayEvents.push_back(ev);
+                    continue;
+                }
+                if (t.contains("Phrase") || t.contains("Cadence")) {
+                    virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
+                    ev.lane = "Gesture";
+                    ev.note = 0;
+                    ev.velocity = qBound(1, e.velocity, 127);
+                    ev.onMs = qMax<qint64>(0, e.onMs - baseMs);
+                    ev.offMs = qMax<qint64>(ev.onMs + minLabelMs, e.offMs - baseMs);
+                    // Short label: remove "Drums:" prefix if present.
+                    ev.label = t.startsWith("Drums:") ? t.mid(QString("Drums:").size()) : t;
+                    m_displayEvents.push_back(ev);
+                    continue;
+                }
+            }
+        }
     }
 
     m_timeline->setTempoAndSignature(m_liveBpm, m_liveTsNum, m_liveTsDen);
@@ -352,6 +407,8 @@ void VirtuosoVocabularyWindow::rebuildTimelineFromLivePlan() {
         m_timeline->setLanes(QStringList() << lane << "Pedal");
     } else if (m_instrument == Instrument::Bass) {
         m_timeline->setLanes(QStringList() << lane << "KeySwitch" << "ArticulationState" << "FX");
+    } else if (m_instrument == Instrument::Drums) {
+        m_timeline->setLanes(QStringList() << lane << "Kick" << "Texture" << "Ride" << "Gesture");
     } else {
         m_timeline->setLanes(QStringList() << lane);
     }

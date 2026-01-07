@@ -78,7 +78,9 @@ add_executable(VirtuosoPlaybackTests
   playback/tests/VirtuosoPlaybackTests.cpp
   playback/HarmonyContext.cpp
   playback/InteractionContext.cpp
+  playback/LookaheadWindow.cpp
   playback/LookaheadPlanner.cpp
+  playback/JointPhrasePlanner.cpp
   playback/JazzBalladBassPlanner.cpp
   playback/JazzBalladPianoPlanner.cpp
   playback/BrushesBalladDrummer.cpp
@@ -140,6 +142,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/InteractionContext.h
   playback/InteractionContext.cpp
   playback/StoryState.h
+  playback/JointPhrasePlanner.h
+  playback/JointPhrasePlanner.cpp
   playback/AgentCoordinator.h
   playback/AgentCoordinator.cpp
   playback/LookaheadWindow.h

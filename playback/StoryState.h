@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QVector>
+#include <QString>
 #include <QtGlobal>
 
 namespace playback {
@@ -31,6 +33,18 @@ struct StoryState final {
     int lastBassCenterMidi = 45;
     int lastPianoCenterMidi = 72;
 
+    // Phrase-level joint plan (beam-search output). One entry per beat-step.
+    struct JointStepChoice {
+        int stepIndex = -1; // absolute beat-step index
+        QString bassId;
+        QString pianoId;
+        QString drumsId;
+        QString costTag; // optional debug string
+    };
+    int planStartStep = -1;
+    int planSteps = 0;
+    QVector<JointStepChoice> plan;
+
     void reset() {
         phraseStartBar = -1;
         phraseBars = 4;
@@ -38,6 +52,9 @@ struct StoryState final {
         pianoArc = RegisterArc{72, 72};
         lastBassCenterMidi = 45;
         lastPianoCenterMidi = 72;
+        planStartStep = -1;
+        planSteps = 0;
+        plan.clear();
     }
 };
 

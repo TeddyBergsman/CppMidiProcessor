@@ -1,6 +1,7 @@
 #include "playback/AgentCoordinator.h"
 
 #include "playback/BalladReferenceTuning.h"
+#include "playback/JointPhrasePlanner.h"
 #include "playback/LookaheadWindow.h"
 #include "playback/VirtuosoBalladMvpPlaybackEngine.h"
 #include "virtuoso/solver/BeatCostModel.h"
@@ -238,6 +239,39 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                                                            desiredPianoCenterMidi,
                                                            eBand,
                                                            intent.registerHigh);
+
+    // --- Phrase-level joint planning (beam search) ---
+    // At phrase start, compute a full phrase plan (one decision per beat-step) and store it in StoryState.
+    QString plannedBassId;
+    QString plannedPianoId;
+    QString plannedDrumsId;
+    QString plannedCostTag;
+    if (in.story) {
+        const int phraseStartBar = playbackBarIndex - look.barInPhrase;
+        const int phraseStartStep = phraseStartBar * beatsPerBar;
+        const int phraseSteps = look.phraseBars * beatsPerBar;
+        const bool atPhraseStart = (beatInBar == 0) && (look.barInPhrase == 0);
+        if (atPhraseStart && (in.story->planStartStep != phraseStartStep || in.story->planSteps != phraseSteps || in.story->plan.isEmpty())) {
+            JointPhrasePlanner::Inputs pi;
+            pi.in = in;
+            pi.startStep = phraseStartStep;
+            pi.steps = phraseSteps;
+            pi.beamWidth = 6;
+            in.story->plan = JointPhrasePlanner::plan(pi);
+            in.story->planStartStep = phraseStartStep;
+            in.story->planSteps = phraseSteps;
+        }
+        const int idx = stepIndex - in.story->planStartStep;
+        if (idx >= 0 && idx < in.story->plan.size()) {
+            const auto& ch = in.story->plan[idx];
+            if (ch.stepIndex == stepIndex) {
+                plannedBassId = ch.bassId;
+                plannedPianoId = ch.pianoId;
+                plannedDrumsId = ch.drumsId;
+                plannedCostTag = ch.costTag;
+            }
+        }
+    }
 
     // We will schedule drums as part of the joint optimizer (so they participate in the decision),
     // but still need a fallback: if there is no chord context, run drums-only.
@@ -704,17 +738,28 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         int bestBi = 0;
         int bestPi = 0;
         int bestDi = 0;
-        for (int bi = 0; bi < bCands.size(); ++bi) {
-            for (int pi = 0; pi < pCands.size(); ++pi) {
-                for (int di = 0; di < dCands.size(); ++di) {
-                    virtuoso::solver::CostBreakdown bd;
-                    const double c = comboCost(bCands[bi].plan.notes, pCands[pi].plan.notes, dCands[di].plan, dCands[di].id, &bd);
-                    if (c < bestCost) {
-                        bestCost = c;
-                        bestBd = bd;
-                        bestBi = bi;
-                        bestPi = pi;
-                        bestDi = di;
+        const bool havePlanned = (!plannedBassId.isEmpty() || !plannedPianoId.isEmpty() || !plannedDrumsId.isEmpty());
+        if (havePlanned) {
+            // Follow phrase plan (beam-search output) instead of re-solving locally.
+            for (int bi = 0; bi < bCands.size(); ++bi) if (bCands[bi].id == plannedBassId) bestBi = bi;
+            for (int pi = 0; pi < pCands.size(); ++pi) if (pCands[pi].id == plannedPianoId) bestPi = pi;
+            for (int di = 0; di < dCands.size(); ++di) if (dCands[di].id == plannedDrumsId) bestDi = di;
+            // Still compute cost breakdown for tagging.
+            (void)comboCost(bCands[bestBi].plan.notes, pCands[bestPi].plan.notes, dCands[bestDi].plan, dCands[bestDi].id, &bestBd);
+            bestCost = bestBd.total(w);
+        } else {
+            for (int bi = 0; bi < bCands.size(); ++bi) {
+                for (int pi = 0; pi < pCands.size(); ++pi) {
+                    for (int di = 0; di < dCands.size(); ++di) {
+                        virtuoso::solver::CostBreakdown bd;
+                        const double c = comboCost(bCands[bi].plan.notes, pCands[pi].plan.notes, dCands[di].plan, dCands[di].id, &bd);
+                        if (c < bestCost) {
+                            bestCost = c;
+                            bestBd = bd;
+                            bestBi = bi;
+                            bestPi = pi;
+                            bestDi = di;
+                        }
                     }
                 }
             }
@@ -725,10 +770,16 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         bassChoiceId = bCands[bestBi].id;
         pianoChoiceId = pCands[bestPi].id;
         drumChoiceId = dCands[bestDi].id;
+        if (!plannedCostTag.isEmpty()) {
+            // Prefer phrase-planner cost tag when available (it reflects horizon reasoning).
+            bestBd = virtuoso::solver::CostBreakdown{};
+            // We still append plannedCostTag in jointTag below.
+        }
 
         // Schedule drums first so bass can groove-lock to the kick.
         if (allowDrums) {
-            const QString jt = QString("joint=%1+%2+%3|%4").arg(bassChoiceId, pianoChoiceId, drumChoiceId, bestBd.shortTag(w));
+            const QString costTag = plannedCostTag.isEmpty() ? bestBd.shortTag(w) : plannedCostTag;
+            const QString jt = QString("joint=%1+%2+%3|%4").arg(bassChoiceId, pianoChoiceId, drumChoiceId, costTag);
             scheduleDrums(dCands[bestDi].plan, jt);
         }
 
@@ -738,7 +789,8 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     }
 
     QString jointTag = QString("joint=%1+%2+%3").arg(bassChoiceId, pianoChoiceId, drumChoiceId);
-    if (haveJointBd) jointTag += "|" + jointBd.shortTag(jointWeights);
+    if (!plannedCostTag.isEmpty()) jointTag += "|" + plannedCostTag;
+    else if (haveJointBd) jointTag += "|" + jointBd.shortTag(jointWeights);
 
     // If bass is not participating, still schedule drums (chosen heuristically) so the band breathes.
     if (allowDrums && !haveKickHe && !allowBass) {

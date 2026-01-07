@@ -1894,6 +1894,79 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
         out.push_back(t);
     };
 
+    // --- Motivic memory transforms (spec 3.3) ---
+    // When the user is silent and interaction is high, we may reuse recent RH contour
+    // with a deterministic transform (repeat/sequence/invert/retrograde + rhythmic displacement).
+    if (m_mem && c.userSilence && (c.interaction >= 0.65) && (rc >= 0.35) && (tgt >= 0) && !spicy) {
+        const auto recent = m_mem->recent("Piano", 6);
+        QVector<int> pcs;
+        pcs.reserve(4);
+        for (const auto& e : recent) {
+            if (e.midi < 0) continue;
+            pcs.push_back((e.midi % 12 + 12) % 12);
+        }
+        // Need at least 3 pitch classes to form a contour.
+        if (pcs.size() >= 3) {
+            // Keep the last 3 pcs to reduce stale-history bias.
+            while (pcs.size() > 3) pcs.removeFirst();
+            const int basePc = pcs.first();
+            QVector<int> iv;
+            iv.reserve(pcs.size());
+            for (int ppc : pcs) {
+                int d = ppc - basePc;
+                while (d > 6) d -= 12;
+                while (d < -6) d += 12;
+                iv.push_back(d);
+            }
+
+            const quint32 hm = virtuoso::util::StableHash::fnv1a32(QString("mem_motif|%1|%2|%3")
+                                                                        .arg(c.chordText)
+                                                                        .arg(bar)
+                                                                        .arg(c.determinismSeed)
+                                                                        .toUtf8());
+            const int mode = int(hm % 5u); // 0=repeat,1=sequence,2=invert,3=retro,4=displace
+            QVector<int> tiv = iv;
+            QString tag = "mem:repeat";
+            if (mode == 1) { tag = "mem:sequence"; }
+            else if (mode == 2) { tag = "mem:invert"; for (int& x : tiv) x = -x; }
+            else if (mode == 3) { tag = "mem:retro"; std::reverse(tiv.begin(), tiv.end()); }
+            else if (mode == 4) { tag = "mem:displace"; }
+
+            QVector<int> motifPcs;
+            motifPcs.reserve(tiv.size());
+            for (int x : tiv) motifPcs.push_back((basePc + x + 1200) % 12);
+
+            // Sequence: transpose so the final note resolves to the guide target.
+            if (mode == 1 && !motifPcs.isEmpty()) {
+                const int lastPc = motifPcs.last();
+                const int tr = (tgt - lastPc + 1200) % 12;
+                for (int& ppc : motifPcs) ppc = (ppc + tr + 1200) % 12;
+            }
+
+            // Snap into tonalSafe to avoid atonal memory artifacts.
+            for (int& ppc : motifPcs) ppc = nearestInSet(ppc, tonalSafe);
+
+            // Rhythm: 3-note contour ending with a beat-4 resolve.
+            // Displacement shifts the whole motif by an eighth-note.
+            const bool displace = (mode == 4);
+            const int startBeat = displace ? 2 : 1; // beat 3 (0-based) vs beat 2
+            const int startSub = displace ? 1 : 0;
+
+            // Clear existing "guide-only" gesture so we don't double-stack motifs.
+            out.clear();
+
+            // 2 notes of motif + resolve.
+            const int velA = qBound(-26, int(llround(-18 + 10 * rc + (cadence ? 6 : 0))), -6);
+            const int velB = qBound(-24, int(llround(-14 + 10 * rc + (cadence ? 6 : 0))), -4);
+            push(startBeat, startSub, 2, {1, 16}, velA, motifPcs.value(0, tgt), false, tag + "|a");
+            push(startBeat + 1, 0, 1, {1, 16}, velB, motifPcs.value(1, tgt), false, tag + "|b");
+            const int velR = qBound(-18, int(llround(-12 + 10 * rc + (cadence ? 8 : 0))), +8);
+            push(3, 0, 1, {1, 8}, velR, tgt, true, tag + "|resolve");
+
+            return out;
+        }
+    }
+
     // Main gesture: neighbor-ish tone then resolve to the guide-tone target on beat 4.
     if (wantAny && tgt >= 0) {
         // Put the "approach" on & of 3 (keeps ballad float) unless we're very sparse, then & of 2.

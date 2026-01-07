@@ -90,6 +90,7 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
 
     auto& h = humanizerFor(note.agent);
     const auto he = h.humanizeNote(note.startPos, m_ts, m_bpm, note.baseVelocity, note.durationWhole, note.structural);
+    const quint32 id = nextNoteId();
 
     VirtuosoScheduler::ScheduledEvent on;
     on.dueMs = he.onMs;
@@ -97,6 +98,7 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
     on.channel = note.channel;
     on.note = note.note;
     on.velocity = he.velocity;
+    on.noteId = id;
     m_sched.schedule(on);
 
     VirtuosoScheduler::ScheduledEvent off;
@@ -104,6 +106,7 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
     off.kind = VirtuosoScheduler::Kind::NoteOff;
     off.channel = note.channel;
     off.note = note.note;
+    off.noteId = id;
     m_sched.schedule(off);
 
     // Explainability: emit a TheoryEvent JSON (minimal, groove-focused).
@@ -219,7 +222,9 @@ void VirtuosoEngine::scheduleKeySwitch(const QString& agent,
     const qint64 baseOn = virtuoso::groove::GrooveGrid::posToMs(startPos, m_ts, m_bpm);
     const int lead = qMax(0, leadMs);
     const qint64 on = qMax<qint64>(0, baseOn - lead);
+    const bool latch = (holdMs <= 0);
     const qint64 off = on + qMax<qint64>(1, qMax(6, holdMs));
+    const quint32 id = nextNoteId();
 
     VirtuosoScheduler::ScheduledEvent evOn;
     evOn.dueMs = on;
@@ -227,14 +232,18 @@ void VirtuosoEngine::scheduleKeySwitch(const QString& agent,
     evOn.channel = channel;
     evOn.note = keyswitchMidi;
     evOn.velocity = 1; // keyswitch velocity generally irrelevant
+    evOn.noteId = id;
     m_sched.schedule(evOn);
 
-    VirtuosoScheduler::ScheduledEvent evOff;
-    evOff.dueMs = off;
-    evOff.kind = VirtuosoScheduler::Kind::NoteOff;
-    evOff.channel = channel;
-    evOff.note = keyswitchMidi;
-    m_sched.schedule(evOff);
+    if (!latch) {
+        VirtuosoScheduler::ScheduledEvent evOff;
+        evOff.dueMs = off;
+        evOff.kind = VirtuosoScheduler::Kind::NoteOff;
+        evOff.channel = channel;
+        evOff.note = keyswitchMidi;
+        evOff.noteId = id;
+        m_sched.schedule(evOff);
+    }
 
     virtuoso::theory::TheoryEvent te;
     te.event_kind = "keyswitch";
@@ -249,7 +258,7 @@ void VirtuosoEngine::scheduleKeySwitch(const QString& agent,
     te.channel = channel;
     te.note = keyswitchMidi;
     te.on_ms = on;
-    te.off_ms = off;
+    te.off_ms = latch ? on : off;
     te.tempo_bpm = m_bpm;
     te.ts_num = m_ts.num;
     te.ts_den = m_ts.den;
@@ -263,6 +272,65 @@ void VirtuosoEngine::scheduleKeySwitch(const QString& agent,
     m_sched.schedule(tj);
 
     Q_UNUSED(structural);
+}
+
+void VirtuosoEngine::scheduleKeySwitchAtMs(const QString& agent,
+                                           int channel,
+                                           int keyswitchMidi,
+                                           qint64 onMs,
+                                           int holdMs,
+                                           const QString& logicTag) {
+    if (!m_clock.isRunning()) return;
+    if (channel < 1 || channel > 16) return;
+    if (keyswitchMidi < 0 || keyswitchMidi > 127) return;
+    if (onMs < 0) onMs = 0;
+
+    const bool latch = (holdMs <= 0);
+    const qint64 offMs = onMs + qMax<qint64>(1, qMax(6, holdMs));
+    const quint32 id = nextNoteId();
+
+    VirtuosoScheduler::ScheduledEvent evOn;
+    evOn.dueMs = onMs;
+    evOn.kind = VirtuosoScheduler::Kind::NoteOn;
+    evOn.channel = channel;
+    evOn.note = keyswitchMidi;
+    evOn.velocity = 1;
+    evOn.noteId = id;
+    m_sched.schedule(evOn);
+
+    if (!latch) {
+        VirtuosoScheduler::ScheduledEvent evOff;
+        evOff.dueMs = offMs;
+        evOff.kind = VirtuosoScheduler::Kind::NoteOff;
+        evOff.channel = channel;
+        evOff.note = keyswitchMidi;
+        evOff.noteId = id;
+        m_sched.schedule(evOff);
+    }
+
+    // Glass-box: represent this as a keyswitch action at an absolute time.
+    virtuoso::theory::TheoryEvent te;
+    te.event_kind = "keyswitch";
+    te.agent = agent;
+    te.timestamp = "";
+    te.logic_tag = logicTag;
+    te.dynamic_marking = "1";
+    te.grid_pos = ""; // unknown here (not grid-scheduled)
+    te.channel = channel;
+    te.note = keyswitchMidi;
+    te.on_ms = onMs;
+    te.off_ms = latch ? onMs : offMs;
+    te.tempo_bpm = m_bpm;
+    te.ts_num = m_ts.num;
+    te.ts_den = m_ts.den;
+    te.engine_now_ms = m_clock.elapsedMs();
+    emit plannedTheoryEventJson(te.toJsonString(true));
+
+    VirtuosoScheduler::ScheduledEvent tj;
+    tj.dueMs = onMs;
+    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+    tj.theoryJson = te.toJsonString(true);
+    m_sched.schedule(tj);
 }
 
 groove::HumanizedEvent VirtuosoEngine::humanizeIntent(const AgentIntentNote& note) {
@@ -285,12 +353,14 @@ void VirtuosoEngine::scheduleHumanizedIntentNote(const AgentIntentNote& note,
     if (he.velocity < 1 || he.velocity > 127) return;
     if (he.offMs <= he.onMs) return;
 
+    const quint32 id = nextNoteId();
     VirtuosoScheduler::ScheduledEvent on;
     on.dueMs = he.onMs;
     on.kind = VirtuosoScheduler::Kind::NoteOn;
     on.channel = note.channel;
     on.note = note.note;
     on.velocity = he.velocity;
+    on.noteId = id;
     m_sched.schedule(on);
 
     VirtuosoScheduler::ScheduledEvent off;
@@ -298,6 +368,7 @@ void VirtuosoEngine::scheduleHumanizedIntentNote(const AgentIntentNote& note,
     off.kind = VirtuosoScheduler::Kind::NoteOff;
     off.channel = note.channel;
     off.note = note.note;
+    off.noteId = id;
     m_sched.schedule(off);
 
     // Explainability: preserve full glass-box fields, but use the provided humanized timing.
@@ -352,12 +423,14 @@ void VirtuosoEngine::scheduleHumanizedNote(const QString& agent,
     if (he.velocity < 1 || he.velocity > 127) return;
     if (he.offMs <= he.onMs) return;
 
+    const quint32 id = nextNoteId();
     VirtuosoScheduler::ScheduledEvent on;
     on.dueMs = he.onMs;
     on.kind = VirtuosoScheduler::Kind::NoteOn;
     on.channel = channel;
     on.note = note;
     on.velocity = he.velocity;
+    on.noteId = id;
     m_sched.schedule(on);
 
     VirtuosoScheduler::ScheduledEvent off;
@@ -365,6 +438,7 @@ void VirtuosoEngine::scheduleHumanizedNote(const QString& agent,
     off.kind = VirtuosoScheduler::Kind::NoteOff;
     off.channel = channel;
     off.note = note;
+    off.noteId = id;
     m_sched.schedule(off);
 
     virtuoso::theory::TheoryEvent te;

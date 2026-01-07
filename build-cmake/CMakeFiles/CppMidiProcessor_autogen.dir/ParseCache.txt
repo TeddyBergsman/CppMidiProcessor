@@ -10797,8 +10797,8 @@
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/PitchMonitorWidget.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/VibeStateMachine.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/chart/SongChartWidget.cpp
-/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ScaleLibrary.h
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ChordSymbol.h
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/music/ScaleLibrary.h
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/WaveVisualizer.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/InteractionContext.cpp
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/playback/LookaheadPlanner.h

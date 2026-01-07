@@ -30,6 +30,7 @@ public:
         // Note fields
         int note = 0;
         int velocity = 0;
+        quint32 noteId = 0; // pairs NOTE_ON/OFF; prevents stale NOTE_OFF choking retriggered notes
 
         // CC fields
         int cc = 0;
@@ -69,6 +70,7 @@ private:
     // Track active notes that have actually been emitted as NOTE_ON and not yet NOTE_OFF.
     // [channel-1][note] => on/off
     std::array<std::array<bool, 128>, 16> m_active{};
+    std::array<std::array<quint32, 128>, 16> m_activeId{};
 };
 
 } // namespace virtuoso::engine

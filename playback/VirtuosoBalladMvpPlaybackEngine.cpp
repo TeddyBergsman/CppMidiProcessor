@@ -357,7 +357,9 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
     }
 
     // Lookahead scheduling window (tight timing).
-    constexpr int kLookaheadMs = 220;
+    // We need to schedule far enough ahead for sample-library articulations that must be pressed
+    // before the "previous note" (e.g. Ample Upright Legato Slide).
+    constexpr int kLookaheadMs = 2600;
     const int scheduleUntil = int(double(elapsedMs + kLookaheadMs) / beatMs);
     const int maxStepToSchedule = std::min(total - 1, scheduleUntil);
 

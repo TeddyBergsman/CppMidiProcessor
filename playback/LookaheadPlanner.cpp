@@ -152,9 +152,27 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
         te.ts_num = in.ts.num;
         te.ts_den = in.ts.den;
         te.engine_now_ms = in.engineNowMs;
-        const qint64 on = virtuoso::groove::GrooveGrid::posToMs(pos, in.ts, in.bpm);
+        const double quarterMs = 60000.0 / double(qMax(1, in.bpm));
+        const double beatMs = quarterMs * (4.0 / double(qMax(1, in.ts.den)));
+        const qint64 eighthMs = qMax<qint64>(30, qint64(llround(beatMs / 2.0)));
+        const qint64 sixteenthMs = qMax<qint64>(20, qint64(llround(beatMs / 4.0)));
+
+        const qint64 baseOn = virtuoso::groove::GrooveGrid::posToMs(pos, in.ts, in.bpm);
+        qint64 on = baseOn;
+        qint64 off = baseOn + 24;
+        // Visualize keyswitch lead times in musical subdivisions (not ms):
+        // LS/HP need a bigger pre-trigger window, Sus/PM a smaller one.
+        if (logicTag.endsWith(":LS") || logicTag.endsWith(":HP")) {
+            // For two-feel, the relevant "previous note" is typically 2 beats earlier (beat1->beat3),
+            // so visualize these keyswitches with a larger lead.
+            on = qMax<qint64>(0, baseOn - qint64(llround(beatMs * 2.0)));
+            off = baseOn + sixteenthMs;
+        } else if (logicTag.endsWith(":Sus") || logicTag.endsWith(":PM") || logicTag.contains("PM_Ghost")) {
+            on = qMax<qint64>(0, baseOn - sixteenthMs);
+            off = baseOn + 24;
+        }
         te.on_ms = on;
-        te.off_ms = on + 24;
+        te.off_ms = off;
         te.vibe_state = vibeStr;
         te.user_intents = intentStr;
         te.user_outside_ratio = intent.outsideRatio;
@@ -306,6 +324,7 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
 
             const auto bplan = bassSim.planBeatWithActions(bc, in.chBass, in.ts);
             for (const auto& ks : bplan.keyswitches) {
+                // keyswitches may include visualization-only markers (midi < 0)
                 emitKeyswitchAsJson("Bass", in.chBass, ks.midi, ks.startPos, ks.logic_tag);
             }
             auto bnotes = bplan.notes;
@@ -319,6 +338,9 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
                 n.virtuosity.rhythmicComplexity = bc.rhythmicComplexity;
                 n.virtuosity.interaction = bc.interaction;
                 n.virtuosity.toneDark = bc.toneDark;
+                emitIntentAsJson(n);
+            }
+            for (auto n : bplan.fxNotes) {
                 emitIntentAsJson(n);
             }
 

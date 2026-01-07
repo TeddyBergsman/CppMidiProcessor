@@ -18,11 +18,15 @@ public:
         int midi = -1;
         virtuoso::groove::GridPos startPos;
         QString logic_tag;
+        int leadMs = 18;  // when to press before the beat
+        int holdMs = 60;  // how long to hold keyswitch
     };
 
     struct BeatPlan {
         QVector<virtuoso::engine::AgentIntentNote> notes;
         QVector<KeySwitchIntent> keyswitches;
+        QVector<virtuoso::engine::AgentIntentNote> fxNotes; // library FX notes (not constrained by BassDriver)
+        int desiredArtKeyswitchMidi = -1; // Sustain vs PalmMute keyswitch MIDI
     };
 
     struct Context {
@@ -106,6 +110,8 @@ private:
     bool m_artInit = false;
     Articulation m_art = Articulation::Sustain;
     int m_lastArtBar = -1;
+    bool m_haveSentArt = false;
+    Articulation m_sentArt = Articulation::Sustain;
 
     // For legato-technique decisions (HP/LegatoSlide): previous note context.
     int m_prevMidiBeforeLast = -1;

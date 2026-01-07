@@ -18,6 +18,7 @@ VirtuosoScheduler::VirtuosoScheduler(VirtuosoClock* clock, QObject* parent)
     m_dispatchTimer.setTimerType(Qt::PreciseTimer);
     connect(&m_dispatchTimer, &QTimer::timeout, this, &VirtuosoScheduler::onDispatch);
     for (auto& row : m_active) row.fill(false);
+    for (auto& row : m_activeId) row.fill(0u);
 }
 
 void VirtuosoScheduler::clear() {
@@ -36,6 +37,7 @@ void VirtuosoScheduler::panicSilence() {
             if (!m_active[ch - 1][n]) continue;
             any = true;
             m_active[ch - 1][n] = false;
+            m_activeId[ch - 1][n] = 0u;
             emit noteOff(ch, n);
         }
         if (any) {
@@ -79,18 +81,26 @@ void VirtuosoScheduler::onDispatch() {
         case Kind::NoteOn:
             if (ev.channel >= 1 && ev.channel <= 16 && ev.note >= 0 && ev.note <= 127) {
                 m_active[ev.channel - 1][ev.note] = true;
+                m_activeId[ev.channel - 1][ev.note] = ev.noteId;
             }
             emit noteOn(ev.channel, ev.note, ev.velocity);
             break;
         case Kind::NoteOff:
             if (ev.channel >= 1 && ev.channel <= 16 && ev.note >= 0 && ev.note <= 127) {
-                m_active[ev.channel - 1][ev.note] = false;
+                // Only emit NOTE_OFF if it matches the currently-active note instance.
+                // This prevents stale NOTE_OFF from choking a retriggered note of the same pitch.
+                if (m_active[ev.channel - 1][ev.note] && m_activeId[ev.channel - 1][ev.note] == ev.noteId) {
+                    m_active[ev.channel - 1][ev.note] = false;
+                    m_activeId[ev.channel - 1][ev.note] = 0u;
+                    emit noteOff(ev.channel, ev.note);
+                }
+                break;
             }
-            emit noteOff(ev.channel, ev.note);
             break;
         case Kind::AllNotesOff:
             if (ev.channel >= 1 && ev.channel <= 16) {
                 m_active[ev.channel - 1].fill(false);
+                m_activeId[ev.channel - 1].fill(0u);
             }
             emit allNotesOff(ev.channel);
             break;

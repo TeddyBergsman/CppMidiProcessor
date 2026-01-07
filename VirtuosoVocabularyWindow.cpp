@@ -32,6 +32,8 @@ static QString shortArtLabel(const QString& logic) {
     if (t.endsWith(":SIO")) return "SIO";
     if (t.endsWith(":LS")) return "LS";
     if (t.endsWith(":HP")) return "HP";
+    if (t.endsWith(":art:Sus")) return "Sus";
+    if (t.endsWith(":art:PM")) return "PM";
     // Fallback: last token after ':'
     const int idx = t.lastIndexOf(':');
     if (idx >= 0 && idx + 1 < t.size()) return t.mid(idx + 1);
@@ -230,11 +232,15 @@ void VirtuosoVocabularyWindow::rebuildTimelineFromLivePlan() {
         const QString sel = m_list && m_list->currentItem() ? m_list->currentItem()->text() : QString("All");
         const bool filter = (!sel.isEmpty() && sel != "All");
 
-        // Precompute a 4-bar window end for pedal interval visualization.
+        // Precompute beat/bar durations (for visualization sizing).
         const double quarterMs = 60000.0 / double(qMax(1, m_liveBpm));
         const double beatMs = quarterMs * (4.0 / double(qMax(1, m_liveTsDen)));
         const double barMs = beatMs * double(qMax(1, m_liveTsNum));
         const qint64 previewEndMsAbs = baseMs + qint64(llround(barMs * 4.0));
+        // For debugging/inspection lanes (Pedal/Articulation/FX), we intentionally widen blocks so text is readable.
+        // Otherwise, keyswitches and FX noises are short and will always elide.
+        const qint64 minLabelMs = qMax<qint64>(350, qint64(llround(2.0 * beatMs))); // ~2 beats at current tempo
+        const qint64 minFxLabelMs = qMax<qint64>(220, qint64(llround(1.0 * beatMs))); // ~1 beat
 
         // Sustain reconstruction: treat CC64>=64 as down, <64 as up, and draw intervals on a "Pedal" lane.
         QVector<virtuoso::ui::GrooveTimelineWidget::LaneEvent> pedalEvents;
@@ -288,7 +294,11 @@ void VirtuosoVocabularyWindow::rebuildTimelineFromLivePlan() {
         for (const auto& e : m_liveBuf) {
             if (filter && e.logic != sel) continue;
             if (e.kind == "cc") continue; // CC visualized separately (pedal intervals)
-            if (e.kind == "keyswitch") continue; // keyswitch visualized on Articulation lane
+            if (e.kind == "keyswitch") continue; // handled below in dedicated lanes
+            if (m_instrument == Instrument::Bass && e.kind == "note" && e.logic.trimmed().startsWith("Bass:fx:")) {
+                // Bass FX are visualized on a dedicated FX lane (handled below).
+                continue;
+            }
             virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
             ev.lane = lane;
             ev.note = e.note;
@@ -301,18 +311,35 @@ void VirtuosoVocabularyWindow::rebuildTimelineFromLivePlan() {
 
         for (const auto& pev : pedalEvents) m_displayEvents.push_back(pev);
 
-        // Bass articulation visualization: draw keyswitch notes on an Articulation lane.
+        // Bass lanes: split keyswitch, state, and FX for clarity.
         if (m_instrument == Instrument::Bass) {
+            // KeySwitch + ArticulationState (from keyswitch stream)
             for (const auto& e : m_liveBuf) {
                 if (e.kind != "keyswitch") continue;
                 if (filter && e.logic != sel) continue;
                 virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
-                ev.lane = "Articulation";
+                ev.lane = (e.note >= 0) ? "KeySwitch" : "ArticulationState";
                 ev.note = 0;
                 ev.velocity = 100;
                 ev.onMs = qMax<qint64>(0, e.onMs - baseMs);
-                ev.offMs = qMax<qint64>(ev.onMs + 8, e.offMs - baseMs);
+                ev.offMs = qMax<qint64>(ev.onMs + minLabelMs, e.offMs - baseMs);
                 ev.label = shortArtLabel(e.logic);
+                m_displayEvents.push_back(ev);
+            }
+
+            // FX lane (from note stream; logic_tag prefixed with Bass:fx:)
+            for (const auto& e : m_liveBuf) {
+                if (e.kind != "note") continue;
+                if (filter && e.logic != sel) continue;
+                const QString t = e.logic.trimmed();
+                if (!t.startsWith("Bass:fx:")) continue;
+                virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
+                ev.lane = "FX";
+                ev.note = 0;
+                ev.velocity = qBound(1, e.velocity, 127);
+                ev.onMs = qMax<qint64>(0, e.onMs - baseMs);
+                ev.offMs = qMax<qint64>(ev.onMs + minFxLabelMs, e.offMs - baseMs);
+                ev.label = t.mid(QString("Bass:fx:").size());
                 m_displayEvents.push_back(ev);
             }
         }
@@ -324,7 +351,7 @@ void VirtuosoVocabularyWindow::rebuildTimelineFromLivePlan() {
     if (m_instrument == Instrument::Piano) {
         m_timeline->setLanes(QStringList() << lane << "Pedal");
     } else if (m_instrument == Instrument::Bass) {
-        m_timeline->setLanes(QStringList() << lane << "Articulation");
+        m_timeline->setLanes(QStringList() << lane << "KeySwitch" << "ArticulationState" << "FX");
     } else {
         m_timeline->setLanes(QStringList() << lane);
     }

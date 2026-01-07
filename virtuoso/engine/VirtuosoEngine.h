@@ -86,6 +86,15 @@ public slots:
                            int holdMs = 28,
                            const QString& logicTag = QString());
 
+    // Low-level helper: schedule a keyswitch at an absolute engine-clock time.
+    // Used to "restore" the prior articulation after transient legato modes (LS/HP) that can stick in some VSTs.
+    void scheduleKeySwitchAtMs(const QString& agent,
+                               int channel,
+                               int keyswitchMidi,
+                               qint64 onMs,
+                               int holdMs = 60,
+                               const QString& logicTag = QString());
+
     // Humanize an intent using the engine's per-agent humanizer stream.
     // IMPORTANT: This advances the agent's RNG/drift state (same as scheduleNote()).
     groove::HumanizedEvent humanizeIntent(const AgentIntentNote& note);
@@ -119,6 +128,7 @@ signals:
 
 private:
     groove::TimingHumanizer& humanizerFor(const QString& agent);
+    quint32 nextNoteId() { return ++m_noteId; }
 
     int m_bpm = 120;
     groove::TimeSignature m_ts{};
@@ -131,6 +141,7 @@ private:
 
     QHash<QString, groove::InstrumentGrooveProfile> m_profiles;
     QHash<QString, groove::TimingHumanizer> m_humanizers;
+    quint32 m_noteId = 0;
 };
 
 } // namespace virtuoso::engine

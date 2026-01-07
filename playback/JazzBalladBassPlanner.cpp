@@ -22,6 +22,8 @@ void JazzBalladBassPlanner::reset() {
     m_artInit = false;
     m_art = Articulation::Sustain;
     m_lastArtBar = -1;
+    m_haveSentArt = false;
+    m_sentArt = Articulation::Sustain;
 }
 
 int JazzBalladBassPlanner::pcToBassMidiInRange(int pc, int lo, int hi) {
@@ -795,49 +797,53 @@ JazzBalladBassPlanner::BeatPlan JazzBalladBassPlanner::planBeatWithActions(const
     BeatPlan plan;
     const int prevMidi = m_lastMidi;
     plan.notes = planBeat(c, midiChannel, ts);
-    if (plan.notes.isEmpty()) return plan;
+    // Even if there are no notes on this beat, we may still want to:
+    // - expose articulation state (latched)
+    // - emit tasteful FX/percussive events (often on offbeats when the bass rests)
 
     using namespace virtuoso::bass::ample_upright;
     const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
 
-    // Choose a stable articulation per bar to avoid constant switching.
-    const int bar = qMax(0, c.playbackBarIndex);
-    if (bar != m_lastArtBar) {
-        m_lastArtBar = bar;
-        const quint32 h = virtuoso::util::StableHash::fnv1a32(QString("ab_upr_art|%1|%2|%3")
-                                                                  .arg(c.chordText)
-                                                                  .arg(bar)
-                                                                  .arg(c.determinismSeed)
-                                                                  .toUtf8());
-        const double e = qBound(0.0, c.energy, 1.0);
-        const double pmBase = qBound(0.0, 0.10 + 0.70 * (e <= 0.22 ? 1.0 : 0.0) + 0.45 * (userBusy ? 1.0 : 0.0), 0.95);
-        const int pPm = qBound(0, int(llround(pmBase * 100.0)), 95);
-        m_art = (int(h % 100u) < pPm) ? Articulation::PalmMute : Articulation::Sustain;
+    // PM is very aggressive in Ample Upright; using it as a bar-level articulation kills sustain.
+    // We keep the main articulation in Sustain and reserve PM for explicit ghost notes only.
+    m_art = Articulation::Sustain;
+
+    // Articulation keyswitches should be treated as *latched state* for many libraries.
+    // Re-triggering (or releasing) the same articulation while a note is sounding can "choke" the voice.
+    // So: only send Sus/PM when the desired articulation changes (plus a deterministic initialization).
+    if (!m_artInit) {
+        m_artInit = true;
+        m_haveSentArt = false;
+        m_sentArt = Articulation::Sustain;
     }
 
-    // Initialize articulation deterministically at the very start.
-    if (!m_artInit && c.playbackBarIndex == 0 && c.beatInBar == 0) {
+    plan.desiredArtKeyswitchMidi = (m_art == Articulation::PalmMute) ? kKeyswitch_PalmMute_D0
+                                                                     : kKeyswitch_SustainAccent_C0;
+
+    // Always emit a visual "articulation state" marker so the UI lane is readable even when
+    // articulation is latched and not re-sent every bar.
+    {
+        KeySwitchIntent vis;
+        vis.midi = -1; // visualization-only
+        vis.startPos = plan.notes.isEmpty()
+            ? virtuoso::groove::GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts)
+            : plan.notes.first().startPos;
+        vis.logic_tag = (m_art == Articulation::PalmMute) ? "Bass:art:PM" : "Bass:art:Sus";
+        plan.keyswitches.push_back(vis);
+    }
+
+    if (!m_haveSentArt || m_art != m_sentArt) {
         KeySwitchIntent ks;
         ks.midi = kKeyswitch_SustainAccent_C0;
-        ks.startPos = plan.notes.first().startPos;
         ks.logic_tag = "Bass:keyswitch:Sus";
+        ks.startPos = plan.notes.isEmpty()
+            ? virtuoso::groove::GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts)
+            : plan.notes.first().startPos;
+        ks.leadMs = 18;
+        ks.holdMs = 0; // latch (no note-off)
         plan.keyswitches.push_back(ks);
-        m_artInit = true;
-        m_art = Articulation::Sustain;
-    }
-
-    // Apply chosen articulation (Sustain vs Palm Mute).
-    {
-        KeySwitchIntent ks;
-        if (m_art == Articulation::PalmMute) {
-            ks.midi = kKeyswitch_PalmMute_D0;
-            ks.logic_tag = "Bass:keyswitch:PM";
-        } else {
-            ks.midi = kKeyswitch_SustainAccent_C0;
-            ks.logic_tag = "Bass:keyswitch:Sus";
-        }
-        ks.startPos = plan.notes.first().startPos;
-        plan.keyswitches.push_back(ks);
+        m_sentArt = m_art;
+        m_haveSentArt = true;
     }
 
     // Tasteful accents via velocity (Ample: vel>=126 means Accentuation while in Sustain&Accent).
@@ -849,17 +855,12 @@ JazzBalladBassPlanner::BeatPlan JazzBalladBassPlanner::planBeatWithActions(const
         }
     }
 
-    // Slide In (D#0): on approach/pickup notes, press keyswitch before the note.
-    for (const auto& n : plan.notes) {
-        const QString t = n.logic_tag.toLower();
-        const bool isApproach = t.contains("approach") || t.contains("pickup");
-        if (!isApproach) continue;
-        KeySwitchIntent ks;
-        ks.midi = kKeyswitch_SlideInOut_Ds0;
-        ks.startPos = n.startPos;
-        ks.logic_tag = "Bass:keyswitch:SIO";
-        plan.keyswitches.push_back(ks);
-    }
+    // NOTE: Ample's SIO (D#0) behaves like a context-sensitive mode:
+    // - press then play => slide in
+    // - press while note is playing => slide out
+    // In our current planner, long holds + overlaps make it too easy to unintentionally trigger slide-out
+    // and/or have the mode affect subsequent notes. We disable it for now until we have explicit
+    // "gesture-level" scheduling with guaranteed silence windows.
 
     // HP / Legato Slide: if we have a previous note and the interval is small,
     // press the appropriate keyswitch before the destination note.
@@ -867,8 +868,15 @@ JazzBalladBassPlanner::BeatPlan JazzBalladBassPlanner::planBeatWithActions(const
     if (!userBusy && prevMidi >= 0 && !plan.notes.isEmpty()) {
         const int cur = plan.notes.first().note;
         const int d = qAbs(cur - prevMidi);
-        const bool chordStable = !c.chordIsNew && !(c.hasNextChord && c.nextChord.rootPc >= 0 && c.nextChord.rootPc != c.chord.rootPc);
-        if (chordStable && d >= 1 && d <= 7) {
+        // Allow legato inside the bar even if the next chord changes at the barline.
+        // Only avoid it for beat-4 pickups where the destination note belongs to the next harmony.
+        const bool avoidForPickupToNext =
+            (c.beatInBar == 3) &&
+            c.hasNextChord &&
+            (c.nextChord.rootPc >= 0) &&
+            (c.nextChord.rootPc != c.chord.rootPc);
+        const bool okContext = !c.chordIsNew && !avoidForPickupToNext;
+        if (okContext && d >= 1 && d <= 7) {
             KeySwitchIntent ks;
             if (d <= 2) {
                 ks.midi = kKeyswitch_HammerPull_F0;
@@ -887,7 +895,64 @@ JazzBalladBassPlanner::BeatPlan JazzBalladBassPlanner::planBeatWithActions(const
                 n.logic_tag = n.logic_tag.isEmpty() ? "ample:legato_slide" : (n.logic_tag + "|ample:legato_slide");
             }
             ks.startPos = plan.notes.first().startPos;
+            ks.leadMs = 10;
+            ks.holdMs = 90;
             plan.keyswitches.push_back(ks);
+        }
+    }
+
+    // IMPORTANT: We currently do not generate true ghost-note bassline events.
+    // Palm Mute (PM) is extremely aggressive in Ample Upright and can leave the instrument muted,
+    // which makes testing LS/HP impossible and is musically wrong for our current bassline.
+    // So we intentionally do NOT emit PM until we have an explicit ghost-note layer.
+
+    // FX notes: performance noises + intentional percussive taps.
+    // These are NOT bass-range notes, so we keep them out of the BassDriver constraint path.
+    if ((c.phraseEndBar || c.cadence01 >= 0.70) && !userBusy && c.energy <= 0.85) {
+        const quint32 hf = virtuoso::util::StableHash::fnv1a32(QString("ab_upr_fx|%1|%2|%3")
+                                                                   .arg(c.chordText)
+                                                                   .arg(c.playbackBarIndex)
+                                                                   .arg(c.determinismSeed)
+                                                                   .toUtf8());
+        const int roll = int(hf % 100u);
+        const bool bassPlaysThisBeat = (c.beatInBar == 0 || c.beatInBar == 2 || c.beatInBar == 3);
+
+        // Breath/Scratch: best when a note is playing (reads as performance noise).
+        if (roll < 60 && c.beatInBar == 2 && bassPlaysThisBeat) { // beat 3 (0-based)
+            virtuoso::engine::AgentIntentNote fx;
+            fx.agent = "Bass";
+            fx.channel = midiChannel;
+            const double e = qBound(0.0, c.energy, 1.0);
+            const bool breath = (int((hf / 11u) % 100u) < 55);
+            fx.note = breath ? kFx_Breath_Fs5 : kFx_Scratch_F5;
+            fx.baseVelocity = breath ? 44 : 56;
+            fx.logic_tag = breath ? "Bass:fx:Breath" : "Bass:fx:Scratch";
+            // Place on the upbeat of the beat so it reads as a noise gesture, not a note.
+            fx.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, /*sub*/1, /*count*/2, ts);
+            fx.durationWhole = virtuoso::groove::Rational(1, 16);
+            fx.structural = false;
+            fx.chord_context = c.chordText;
+            fx.target_note = "Upright FX";
+            plan.fxNotes.push_back(fx);
+        }
+
+        // Intentional percussive taps: only on offbeats where bass rests, and only near cadences.
+        if (c.beatInBar == 1 && !bassPlaysThisBeat) {
+            const int pTap = qBound(0, int(llround(6.0 + 44.0 * qBound(0.0, c.cadence01, 1.0))), 60);
+            if (int((hf / 7u) % 100u) < pTap) {
+                virtuoso::engine::AgentIntentNote fx;
+                fx.agent = "Bass";
+                fx.channel = midiChannel;
+                fx.note = (int((hf / 13u) % 2u) == 0) ? kFx_HitTopOpen_A4 : kFx_HitRimOpen_As4;
+                fx.baseVelocity = 38;
+                fx.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, /*sub*/1, /*count*/2, ts); // & of 2
+                fx.durationWhole = virtuoso::groove::Rational(1, 16);
+                fx.structural = false;
+                fx.chord_context = c.chordText;
+                fx.logic_tag = (fx.note == kFx_HitTopOpen_A4) ? "Bass:fx:TapTop" : "Bass:fx:TapRim";
+                fx.target_note = "Upright percussive tap";
+                plan.fxNotes.push_back(fx);
+            }
         }
     }
 

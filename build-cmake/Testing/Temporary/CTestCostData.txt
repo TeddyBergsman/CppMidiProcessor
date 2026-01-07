@@ -1,3 +1,3 @@
-VirtuosoCoreTests 45 0.000232756
-VirtuosoPlaybackTests 27 0.00993755
+VirtuosoCoreTests 46 0.000221403
+VirtuosoPlaybackTests 28 0.000606865
 ---

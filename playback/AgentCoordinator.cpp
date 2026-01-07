@@ -238,41 +238,22 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                                                            eBand,
                                                            intent.registerHigh);
 
-    // Drums first (for kick-lock).
-    virtuoso::engine::AgentIntentNote kickIntent;
+    // We will schedule drums as part of the joint optimizer (so they participate in the decision),
+    // but still need a fallback: if there is no chord context, run drums-only.
     virtuoso::groove::HumanizedEvent kickHe;
     bool haveKickHe = false;
-
-    if (allowDrums) {
-        BrushesBalladDrummer::Context dc;
-        dc.bpm = in.bpm;
-        dc.ts = ts;
-        dc.playbackBarIndex = playbackBarIndex;
-        dc.beatInBar = beatInBar;
-        dc.structural = structural;
-        dc.determinismSeed = detSeed ^ 0xD00D'BEEFu;
-        dc.phraseBars = look.phraseBars;
-        dc.barInPhrase = look.barInPhrase;
-        dc.phraseEndBar = look.phraseEndBar;
-        dc.cadence01 = cadence01;
-        {
-            const double mult = in.agentEnergyMult.value("Drums", 1.0);
-            dc.energy = qBound(0.0, baseEnergy * mult, 1.0);
-        }
-        if (userBusy) dc.energy = qMin(dc.energy, 0.55);
-        dc.intensityPeak = intent.intensityPeak;
-
-        auto drumIntents = in.drummer->planBeat(dc);
-
+    auto scheduleDrums = [&](QVector<virtuoso::engine::AgentIntentNote> drumIntents, const QString& jointTag) {
+        // Separate kick for groove-lock timing anchor.
         int kickIndex = -1;
         for (int i = 0; i < drumIntents.size(); ++i) {
             if (drumIntents[i].note == in.noteKick) { kickIndex = i; break; }
         }
         if (kickIndex >= 0) {
-            kickIntent = drumIntents[kickIndex];
+            auto kickIntent = drumIntents[kickIndex];
             kickIntent.vibe_state = vibeStr;
             kickIntent.user_intents = intentStr;
             kickIntent.user_outside_ratio = intent.outsideRatio;
+            kickIntent.logic_tag = kickIntent.logic_tag.isEmpty() ? jointTag : (kickIntent.logic_tag + "|" + jointTag);
             kickHe = in.engine->humanizeIntent(kickIntent);
             haveKickHe = (kickHe.offMs > kickHe.onMs);
             if (haveKickHe) in.engine->scheduleHumanizedIntentNote(kickIntent, kickHe);
@@ -286,11 +267,34 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             n.vibe_state = vibeStr;
             n.user_intents = intentStr;
             n.user_outside_ratio = intent.outsideRatio;
+            n.logic_tag = n.logic_tag.isEmpty() ? jointTag : (n.logic_tag + "|" + jointTag);
             in.engine->scheduleNote(n);
         }
-    }
+    };
 
-    if (!haveChord || chord.noChord) return;
+    if (!haveChord || chord.noChord) {
+        if (allowDrums) {
+            BrushesBalladDrummer::Context dc;
+            dc.bpm = in.bpm;
+            dc.ts = ts;
+            dc.playbackBarIndex = playbackBarIndex;
+            dc.beatInBar = beatInBar;
+            dc.structural = structural;
+            dc.determinismSeed = detSeed ^ 0xD00D'BEEFu;
+            dc.phraseBars = look.phraseBars;
+            dc.barInPhrase = look.barInPhrase;
+            dc.phraseEndBar = look.phraseEndBar;
+            dc.cadence01 = cadence01;
+            {
+                const double mult = in.agentEnergyMult.value("Drums", 1.0);
+                dc.energy = qBound(0.0, baseEnergy * mult, 1.0);
+            }
+            if (userBusy) dc.energy = qMin(dc.energy, 0.55);
+            dc.intensityPeak = intent.intensityPeak;
+            scheduleDrums(in.drummer->planBeat(dc), "joint=drums_only");
+        }
+        return;
+    }
 
     const QString chordText = chord.originalText.trimmed().isEmpty() ? QString("pc=%1").arg(chord.rootPc) : chord.originalText.trimmed();
     const playback::LocalKeyEstimate lk = look.key;
@@ -492,11 +496,49 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         pc.cadence01 *= 0.55;
     }
 
-    // --- Joint beat optimizer (Bass + Piano) ---
+    // --- Joint beat optimizer (Drums + Bass + Piano) ---
     JazzBalladBassPlanner::Context bcChosen = bc;
     JazzBalladPianoPlanner::Context pcChosen = pc;
     QString bassChoiceId = "base";
     QString pianoChoiceId = "base";
+    QString drumChoiceId = "base";
+
+    // Drums candidates (stateless planner): build contexts once, reuse in optimizer.
+    BrushesBalladDrummer::Context dcBase;
+    BrushesBalladDrummer::Context dcDry;
+    BrushesBalladDrummer::Context dcWet;
+    QVector<virtuoso::engine::AgentIntentNote> drumPlanDry;
+    QVector<virtuoso::engine::AgentIntentNote> drumPlanWet;
+    const bool phraseSetupBar = (look.phraseBars > 1) ? (look.barInPhrase == (look.phraseBars - 2)) : false;
+    if (allowDrums) {
+        dcBase.bpm = in.bpm;
+        dcBase.ts = ts;
+        dcBase.playbackBarIndex = playbackBarIndex;
+        dcBase.beatInBar = beatInBar;
+        dcBase.structural = structural;
+        dcBase.determinismSeed = detSeed ^ 0xD00D'BEEFu;
+        dcBase.phraseBars = look.phraseBars;
+        dcBase.barInPhrase = look.barInPhrase;
+        dcBase.phraseEndBar = look.phraseEndBar;
+        dcBase.cadence01 = cadence01;
+        {
+            const double mult = in.agentEnergyMult.value("Drums", 1.0);
+            dcBase.energy = qBound(0.0, baseEnergy * mult, 1.0);
+        }
+        if (userBusy) dcBase.energy = qMin(dcBase.energy, 0.55);
+        dcBase.intensityPeak = intent.intensityPeak;
+
+        dcDry = dcBase;
+        dcWet = dcBase;
+        dcDry.energy = qMin(dcDry.energy, 0.42);
+        dcDry.intensityPeak = false;
+        const double vibeBoost = (vibeEff.vibe == VibeStateMachine::Vibe::Build || vibeEff.vibe == VibeStateMachine::Vibe::Climax) ? 0.10 : 0.0;
+        dcWet.energy = qBound(0.0, dcWet.energy + vibeBoost + 0.15 * cadence01, 1.0);
+        dcWet.intensityPeak = intent.intensityPeak || (cadence01 >= 0.70);
+
+        drumPlanDry = in.drummer->planBeat(dcDry);
+        drumPlanWet = in.drummer->planBeat(dcWet);
+    }
 
     if (allowBass) {
         JazzBalladBassPlanner::Context bcSparse = bc;
@@ -526,6 +568,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
 
         struct BassCand { QString id; JazzBalladBassPlanner::Context ctx; JazzBalladBassPlanner::BeatPlan plan; NoteStats st; };
         struct PianoCand { QString id; JazzBalladPianoPlanner::Context ctx; JazzBalladPianoPlanner::BeatPlan plan; NoteStats st; };
+        struct DrumCand { QString id; BrushesBalladDrummer::Context ctx; QVector<virtuoso::engine::AgentIntentNote> plan; NoteStats st; bool hasKick = false; };
 
         auto planBass = [&](const QString& id, const JazzBalladBassPlanner::Context& ctx) -> BassCand {
             in.bassPlanner->restoreState(bassSnap);
@@ -550,6 +593,32 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         pCands.push_back(planPiano("sparse", pcSparse));
         pCands.push_back(planPiano("rich", pcRich));
 
+        QVector<DrumCand> dCands;
+        dCands.reserve(2);
+        auto planDrums = [&](const QString& id, const BrushesBalladDrummer::Context& ctx, const QVector<virtuoso::engine::AgentIntentNote>& plan) -> DrumCand {
+            DrumCand c;
+            c.id = id;
+            c.ctx = ctx;
+            c.plan = plan;
+            c.st = statsForNotes(c.plan);
+            c.hasKick = false;
+            for (const auto& n : c.plan) {
+                if (n.note == in.noteKick) { c.hasKick = true; break; }
+            }
+            return c;
+        };
+        if (allowDrums) {
+            dCands.push_back(planDrums("dry", dcDry, drumPlanDry));
+            dCands.push_back(planDrums("wet", dcWet, drumPlanWet));
+        } else {
+            DrumCand c;
+            c.id = "none";
+            c.plan.clear();
+            c.st = statsForNotes(c.plan);
+            c.hasKick = false;
+            dCands.push_back(c);
+        }
+
         // Restore to live state before committing to the chosen plan.
         in.bassPlanner->restoreState(bassSnap);
         in.pianoPlanner->restoreState(pianoSnap);
@@ -557,7 +626,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         const int prevBassCenter = in.story ? clampBassCenterMidi(in.story->lastBassCenterMidi) : regs.bassCenterMidi;
         const int prevPianoCenter = in.story ? clampPianoCenterMidi(in.story->lastPianoCenterMidi) : regs.pianoCenterMidi;
 
-        auto comboCost = [&](const NoteStats& bs, const NoteStats& ps) -> double {
+        auto comboCost = [&](const NoteStats& bs, const NoteStats& ps, const NoteStats& ds, const QString& drumId) -> double {
             double cost = 0.0;
 
             // 1) Physical/spectral spacing (avoid mud).
@@ -576,7 +645,8 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             if (ps.count > 0) cost += 0.05 * double(qAbs(int(llround(ps.meanMidi)) - prevPianoCenter));
 
             // 3) Interaction / density targeting.
-            const int totalNotes = bs.count + ps.count;
+            // Drums are texture; count them less in "density" relative to pitch instruments.
+            const double totalNotes = double(bs.count + ps.count) + 0.35 * double(ds.count);
             const double rc = qBound(0.0, 0.5 * (bc.rhythmicComplexity + pc.rhythmicComplexity), 1.0);
             double target = 2.0 + 4.5 * rc;
             // When user is silent, "interaction" means we should fill space.
@@ -585,12 +655,23 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             if (userBusy) target -= 2.5;
             target = qBound(0.0, target, 10.0);
             cost += 0.55 * qAbs(double(totalNotes) - target);
-            if (userBusy) cost += 0.45 * double(qMax(0, totalNotes - 3));
+            if (userBusy) cost += 0.45 * qMax(0.0, totalNotes - 3.0);
 
             // 4) Cadence support: avoid "nothing happens" on strong cadences.
             if (cadence01 >= 0.80 && beatInBar == 0) {
-                if (totalNotes == 0) cost += 6.0;
-                else cost -= 0.30 * double(qMin(4, totalNotes));
+                if (totalNotes <= 0.01) cost += 6.0;
+                else cost -= 0.30 * qMin(4.0, totalNotes);
+            }
+
+            // 5) Drummer gesture bias at phrase landmarks:
+            // prefer "wet" on setup/end bars on the last beat, especially when cadence is strong.
+            if (drumId != "none") {
+                if ((phraseSetupBar || look.phraseEndBar) && beatInBar == (qMax(1, ts.num) - 1) && cadence01 >= 0.35) {
+                    if (drumId == "wet") cost -= 0.55 * qBound(0.0, cadence01, 1.0);
+                    else cost += 0.65 * qBound(0.0, cadence01, 1.0);
+                }
+                // When user is busy, strongly prefer dry drums.
+                if (userBusy && drumId == "wet") cost += 1.25;
             }
 
             return qMax(0.0, cost);
@@ -599,13 +680,17 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         double bestCost = 1e18;
         int bestBi = 0;
         int bestPi = 0;
+        int bestDi = 0;
         for (int bi = 0; bi < bCands.size(); ++bi) {
             for (int pi = 0; pi < pCands.size(); ++pi) {
-                const double c = comboCost(bCands[bi].st, pCands[pi].st);
-                if (c < bestCost) {
-                    bestCost = c;
-                    bestBi = bi;
-                    bestPi = pi;
+                for (int di = 0; di < dCands.size(); ++di) {
+                    const double c = comboCost(bCands[bi].st, pCands[pi].st, dCands[di].st, dCands[di].id);
+                    if (c < bestCost) {
+                        bestCost = c;
+                        bestBi = bi;
+                        bestPi = pi;
+                        bestDi = di;
+                    }
                 }
             }
         }
@@ -614,9 +699,28 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         pcChosen = pCands[bestPi].ctx;
         bassChoiceId = bCands[bestBi].id;
         pianoChoiceId = pCands[bestPi].id;
+        drumChoiceId = dCands[bestDi].id;
+
+        // Schedule drums first so bass can groove-lock to the kick.
+        if (allowDrums) {
+            const QString jt = QString("joint=%1+%2+%3").arg(bassChoiceId, pianoChoiceId, drumChoiceId);
+            scheduleDrums(dCands[bestDi].plan, jt);
+        }
     }
 
-    const QString jointTag = QString("joint=%1+%2").arg(bassChoiceId, pianoChoiceId);
+    QString jointTag = QString("joint=%1+%2+%3").arg(bassChoiceId, pianoChoiceId, drumChoiceId);
+
+    // If bass is not participating, still schedule drums (chosen heuristically) so the band breathes.
+    if (allowDrums && !haveKickHe && !allowBass) {
+        drumChoiceId = userBusy
+            ? "dry"
+            : (((phraseSetupBar || look.phraseEndBar) && beatInBar == (qMax(1, ts.num) - 1) && cadence01 >= 0.35) ||
+                       (intent.intensityPeak || baseEnergy >= 0.55))
+                  ? "wet"
+                  : "dry";
+        jointTag = QString("joint=%1+%2+%3").arg(bassChoiceId, pianoChoiceId, drumChoiceId);
+        scheduleDrums((drumChoiceId == "wet") ? drumPlanWet : drumPlanDry, jointTag);
+    }
 
     // --- Schedule Bass (chosen) ---
     if (allowBass) {

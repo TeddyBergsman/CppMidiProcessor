@@ -53,13 +53,30 @@ public:
 
     const virtuoso::ontology::ChordDef* chordDefForSymbol(const music::ChordSymbol& c) const;
 
-    // Suggests the best scale label, also fills roman/function (if provided).
-    QString chooseScaleUsedForChord(int keyPc,
+    struct ScaleChoice {
+        QString key;       // ontology scale key (e.g. "altered")
+        QString name;      // ontology scale name (e.g. "Altered")
+        int transposePc = 0; // 0..11, best transposition/root for display
+        QString display;   // preformatted, e.g. "Altered (Ab)"
+    };
+
+    // Suggests the best scale choice, also fills roman/function (if provided).
+    ScaleChoice chooseScaleForChord(int keyPc,
                                    virtuoso::theory::KeyMode keyMode,
                                    const music::ChordSymbol& chordSym,
                                    const virtuoso::ontology::ChordDef& chordDef,
                                    QString* outRoman = nullptr,
                                    QString* outFunction = nullptr) const;
+
+    // Back-compat: display string only.
+    QString chooseScaleUsedForChord(int keyPc,
+                                   virtuoso::theory::KeyMode keyMode,
+                                   const music::ChordSymbol& chordSym,
+                                   const virtuoso::ontology::ChordDef& chordDef,
+                                   QString* outRoman = nullptr,
+                                   QString* outFunction = nullptr) const {
+        return chooseScaleForChord(keyPc, keyMode, chordSym, chordDef, outRoman, outFunction).display;
+    }
 
 private:
     static QVector<const chart::Bar*> flattenBarsFrom(const chart::ChartModel& model);

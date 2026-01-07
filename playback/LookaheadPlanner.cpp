@@ -262,9 +262,10 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
         const auto* chordDef = in.harmonyCtx->chordDefForSymbol(chord);
         QString roman;
         QString func;
-        const QString scaleUsed = (chordDef && chord.rootPc >= 0)
-            ? in.harmonyCtx->chooseScaleUsedForChord(keyPc, lk.mode, chord, *chordDef, &roman, &func)
-            : QString();
+        const auto scaleChoice = (chordDef && chord.rootPc >= 0)
+            ? in.harmonyCtx->chooseScaleForChord(keyPc, lk.mode, chord, *chordDef, &roman, &func)
+            : HarmonyContext::ScaleChoice{};
+        const QString scaleUsed = scaleChoice.display;
 
         // Drums
         {

@@ -2,6 +2,7 @@
 
 #include "virtuoso/util/StableHash.h"
 #include "virtuoso/solver/CspSolver.h"
+#include "virtuoso/memory/MotifTransform.h"
 
 #include <QtGlobal>
 #include <algorithm>
@@ -42,6 +43,8 @@ void JazzBalladPianoPlanner::reset() {
     m_phraseGuidePcByBar.clear();
     m_lastUpperBar = -1;
     m_lastUpperPcs.clear();
+    m_lastMotifSourceAgent.clear();
+    m_lastMotifTransform.clear();
 }
 
 JazzBalladPianoPlanner::PlannerState JazzBalladPianoPlanner::snapshotState() const {
@@ -63,6 +66,8 @@ JazzBalladPianoPlanner::PlannerState JazzBalladPianoPlanner::snapshotState() con
     s.motifC = m_motifC;
     s.motifD = m_motifD;
     s.phraseMotifStartBar = m_phraseMotifStartBar;
+    s.lastMotifSourceAgent = m_lastMotifSourceAgent;
+    s.lastMotifTransform = m_lastMotifTransform;
     s.anchorBlockStartBar = m_anchorBlockStartBar;
     s.anchorChordText = m_anchorChordText;
     s.anchorVoicingKey = m_anchorVoicingKey;
@@ -94,6 +99,8 @@ void JazzBalladPianoPlanner::restoreState(const PlannerState& s) {
     m_motifC = s.motifC;
     m_motifD = s.motifD;
     m_phraseMotifStartBar = s.phraseMotifStartBar;
+    m_lastMotifSourceAgent = s.lastMotifSourceAgent;
+    m_lastMotifTransform = s.lastMotifTransform;
     m_anchorBlockStartBar = s.anchorBlockStartBar;
     m_anchorChordText = s.anchorChordText;
     m_anchorVoicingKey = s.anchorVoicingKey;
@@ -285,6 +292,8 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
 
     // Bar-coherent rhythmic planning: choose a small set of syncopated comp hits once per bar.
     ensureBarRhythmPlanned(c);
+    plan.motifSourceAgent = m_lastMotifSourceAgent;
+    plan.motifTransform = m_lastMotifTransform;
     QVector<CompHit> hitsThisBeat;
     hitsThisBeat.reserve(4);
     for (const auto& hit : m_barHits) {
@@ -672,6 +681,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
     QVector<int> rhColorPcs = m_anchorRhPcs;
     voicingType = m_anchorVoicingName.isEmpty() ? QString("Piano voicing") : m_anchorVoicingName;
     voicingKey = m_anchorVoicingKey;
+    plan.chosenVoicingKey = voicingKey;
 
     const QVector<int> prevVoicing = m_lastVoicing;
 
@@ -1308,14 +1318,13 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
         n.structural = c.chordIsNew;
         n.chord_context = c.chordText;
             n.voicing_type = voicingType + (doRoll ? (doArp ? " + Arpeggiated" : " + RolledHands") : "");
-            const QString ontTag = voicingKey.trimmed().isEmpty() ? QString() : (QString("|ont=") + voicingKey);
             const QString cspTag = m_anchorCspTag.trimmed().isEmpty() ? QString() : m_anchorCspTag;
             QString artTag = "tenuto";
             if (art == CompArt::Stab) artTag = "stab";
             else if (art == CompArt::HalfPedalWash) artTag = "half_pedal";
             else if (art == CompArt::ReStrike) artTag = "restrike";
             else if (art == CompArt::Ghost) artTag = "ghost";
-            n.logic_tag = (hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag)) + "|art=" + artTag + ontTag + cspTag;
+            n.logic_tag = (hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag)) + "|art=" + artTag + cspTag;
             n.target_note = isTop ? "Comp (top voice)" : (isLow ? "Comp (LH anchor)" : "Comp (inner)");
         out.push_back(n);
     }
@@ -1437,9 +1446,8 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
                             nte.chord_context = c.chordText;
                             nte.voicing_type = voicingType + (wantTriad ? " + RH TriadGesture" : " + RH DyadGesture");
                             {
-                                const QString ontTag = voicingKey.trimmed().isEmpty() ? QString() : (QString("|ont=") + voicingKey);
                                 const QString cspTag = m_anchorCspTag.trimmed().isEmpty() ? QString() : m_anchorCspTag;
-                                nte.logic_tag = (wantTriad ? "ballad_comp|rh_gesture|triad" : "ballad_comp|rh_gesture|dyad") + ontTag + cspTag;
+                                nte.logic_tag = (wantTriad ? "ballad_comp|rh_gesture|triad" : "ballad_comp|rh_gesture|dyad") + cspTag;
                             }
                             nte.target_note = (i == gestureNotes.size() - 1) ? "RH gesture (top)" : "RH gesture";
                             out.push_back(nte);
@@ -1494,6 +1502,18 @@ void JazzBalladPianoPlanner::ensureBarRhythmPlanned(const Context& c) {
     ensureMotifBlockPlanned(c);
     ensurePhraseGuideLinePlanned(c);
     m_barTopHits = chooseBarTopLine(c);
+
+    // Capture last motivic-memory usage for explainability (candidate_pool fields).
+    m_lastMotifSourceAgent.clear();
+    m_lastMotifTransform.clear();
+    for (const auto& th : m_barTopHits) {
+        const QString t = th.tag.trimmed();
+        if (t.startsWith("mem:", Qt::CaseInsensitive)) {
+            m_lastMotifSourceAgent = "Piano";
+            m_lastMotifTransform = t.section('|', 0, 0);
+            break;
+        }
+    }
 }
 
 void JazzBalladPianoPlanner::ensureMotifBlockPlanned(const Context& c) {
@@ -1909,46 +1929,21 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
         if (pcs.size() >= 3) {
             // Keep the last 3 pcs to reduce stale-history bias.
             while (pcs.size() > 3) pcs.removeFirst();
-            const int basePc = pcs.first();
-            QVector<int> iv;
-            iv.reserve(pcs.size());
-            for (int ppc : pcs) {
-                int d = ppc - basePc;
-                while (d > 6) d -= 12;
-                while (d < -6) d += 12;
-                iv.push_back(d);
-            }
-
             const quint32 hm = virtuoso::util::StableHash::fnv1a32(QString("mem_motif|%1|%2|%3")
                                                                         .arg(c.chordText)
                                                                         .arg(bar)
                                                                         .arg(c.determinismSeed)
                                                                         .toUtf8());
-            const int mode = int(hm % 5u); // 0=repeat,1=sequence,2=invert,3=retro,4=displace
-            QVector<int> tiv = iv;
-            QString tag = "mem:repeat";
-            if (mode == 1) { tag = "mem:sequence"; }
-            else if (mode == 2) { tag = "mem:invert"; for (int& x : tiv) x = -x; }
-            else if (mode == 3) { tag = "mem:retro"; std::reverse(tiv.begin(), tiv.end()); }
-            else if (mode == 4) { tag = "mem:displace"; }
-
-            QVector<int> motifPcs;
-            motifPcs.reserve(tiv.size());
-            for (int x : tiv) motifPcs.push_back((basePc + x + 1200) % 12);
-
-            // Sequence: transpose so the final note resolves to the guide target.
-            if (mode == 1 && !motifPcs.isEmpty()) {
-                const int lastPc = motifPcs.last();
-                const int tr = (tgt - lastPc + 1200) % 12;
-                for (int& ppc : motifPcs) ppc = (ppc + tr + 1200) % 12;
-            }
+            const auto tr = virtuoso::memory::transformPitchMotif(pcs, tgt, hm);
+            QVector<int> motifPcs = tr.pcs;
+            const QString tag = tr.tag;
 
             // Snap into tonalSafe to avoid atonal memory artifacts.
             for (int& ppc : motifPcs) ppc = nearestInSet(ppc, tonalSafe);
 
             // Rhythm: 3-note contour ending with a beat-4 resolve.
             // Displacement shifts the whole motif by an eighth-note.
-            const bool displace = (mode == 4);
+            const bool displace = tr.displaceRhythm;
             const int startBeat = displace ? 2 : 1; // beat 3 (0-based) vs beat 2
             const int startSub = displace ? 1 : 0;
 

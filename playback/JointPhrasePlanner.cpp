@@ -1,6 +1,7 @@
 #include "playback/JointPhrasePlanner.h"
 
 #include "playback/BalladReferenceTuning.h"
+#include "playback/JointCandidateModel.h"
 #include "playback/LookaheadWindow.h"
 #include "virtuoso/solver/BeatCostModel.h"
 #include "virtuoso/util/StableHash.h"
@@ -19,23 +20,6 @@ static virtuoso::groove::TimeSignature timeSigFromModel(const chart::ChartModel&
     return ts;
 }
 
-struct DrumCand {
-    QString id;
-    QVector<virtuoso::engine::AgentIntentNote> plan;
-};
-struct BassCand {
-    QString id;
-    JazzBalladBassPlanner::Context ctx;
-    JazzBalladBassPlanner::BeatPlan plan;
-    JazzBalladBassPlanner::PlannerState next;
-};
-struct PianoCand {
-    QString id;
-    JazzBalladPianoPlanner::Context ctx;
-    JazzBalladPianoPlanner::BeatPlan plan;
-    JazzBalladPianoPlanner::PlannerState next;
-};
-
 struct BeamNode {
     double cost = 0.0;
     JazzBalladBassPlanner::PlannerState bassState;
@@ -48,19 +32,6 @@ struct BeamNode {
     QString lastPianoId;
     QString lastDrumsId;
 };
-
-static double spacingPenalty(const QVector<virtuoso::engine::AgentIntentNote>& bassNotes,
-                             const QVector<virtuoso::engine::AgentIntentNote>& pianoNotes) {
-    if (bassNotes.isEmpty() || pianoNotes.isEmpty()) return 0.0;
-    int bHi = 0;
-    for (const auto& n : bassNotes) bHi = qMax(bHi, qBound(0, n.note, 127));
-    int pLo = 127;
-    for (const auto& n : pianoNotes) pLo = qMin(pLo, qBound(0, n.note, 127));
-    const int spacingMin = 7;
-    if (pLo >= bHi + spacingMin) return 0.0;
-    const int overlap = (bHi + spacingMin) - pLo;
-    return 6.0 + 0.85 * double(overlap);
-}
 
 } // namespace
 
@@ -126,6 +97,7 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
 
         const int playbackBarIndex = stepIndex / beatsPerBar;
         const int beatInBar = stepIndex % beatsPerBar;
+        const bool phraseSetupBar = (look.phraseBars > 1) ? (look.barInPhrase == (look.phraseBars - 2)) : false;
 
         // Build base contexts (same as AgentCoordinator, but without scheduling).
         const QString chordText = look.currentChord.originalText.trimmed().isEmpty()
@@ -136,9 +108,10 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
         QString roman;
         QString func;
         const int keyPc = in.harmony->hasKeyPcGuess() ? look.key.tonicPc : HarmonyContext::normalizePc(look.currentChord.rootPc);
-        const QString scaleUsed = (chordDef && look.currentChord.rootPc >= 0)
-            ? in.harmony->chooseScaleUsedForChord(keyPc, look.key.mode, look.currentChord, *chordDef, &roman, &func)
-            : QString();
+        const auto scaleChoice = (chordDef && look.currentChord.rootPc >= 0)
+            ? in.harmony->chooseScaleForChord(keyPc, look.key.mode, look.currentChord, *chordDef, &roman, &func)
+            : HarmonyContext::ScaleChoice{};
+        const QString scaleUsed = scaleChoice.display;
 
         const BalladRefTuning tune = tuningForReferenceTrack(in.stylePresetKey);
 
@@ -251,10 +224,33 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
         dcWet.allowPhraseGestures = true;
         dcWet.intensityPeak = intent.intensityPeak || (look.cadence01 >= 0.70);
 
-        QVector<DrumCand> drumCands;
-        drumCands.push_back({"dry", in.drummer->planBeat(dcDry)});
-        drumCands.push_back({"wet", in.drummer->planBeat(dcWet)});
-        if (!allowDrums) drumCands = {{"none", {}}};
+        QVector<JointCandidateModel::DrumCand> drumCands;
+        {
+            JointCandidateModel::DrumCand dry;
+            dry.id = "dry";
+            dry.ctx = dcDry;
+            dry.plan = in.drummer->planBeat(dcDry);
+            dry.st = JointCandidateModel::statsForNotes(dry.plan);
+            dry.hasKick = false;
+            drumCands.push_back(dry);
+
+            JointCandidateModel::DrumCand wet;
+            wet.id = "wet";
+            wet.ctx = dcWet;
+            wet.plan = in.drummer->planBeat(dcWet);
+            wet.st = JointCandidateModel::statsForNotes(wet.plan);
+            wet.hasKick = false;
+            drumCands.push_back(wet);
+        }
+        if (!allowDrums) {
+            drumCands.clear();
+            JointCandidateModel::DrumCand none;
+            none.id = "none";
+            none.plan.clear();
+            none.st = JointCandidateModel::statsForNotes(none.plan);
+            none.hasKick = false;
+            drumCands.push_back(none);
+        }
 
         // Candidate contexts.
         // Hive-mind space negotiation: when the user is busy, prefer sparse across the band.
@@ -308,107 +304,78 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
         nextBeam.reserve(beamWidth * 6);
 
         for (const auto& node : beam) {
-            // Generate bass candidates from this node's state.
-            QVector<BassCand> bassCands;
-            for (const auto& bid : {"sparse", "base", "rich"}) {
-                const JazzBalladBassPlanner::Context ctx = (QString(bid) == "sparse") ? bcSparse : (QString(bid) == "rich") ? bcRich : bcBase;
-                in.bassPlanner->restoreState(node.bassState);
-                auto plan = in.bassPlanner->planBeatWithActions(ctx, in.chBass, ts);
-                const auto nextS = in.bassPlanner->snapshotState();
-                bassCands.push_back({bid, ctx, plan, nextS});
-            }
+            // Generate bass/piano candidates from this node's planner states.
+            JointCandidateModel::GenerationInputs gi;
+            gi.bassPlanner = in.bassPlanner;
+            gi.pianoPlanner = in.pianoPlanner;
+            gi.chBass = in.chBass;
+            gi.chPiano = in.chPiano;
+            gi.ts = ts;
+            gi.bcSparse = bcSparse;
+            gi.bcBase = bcBase;
+            gi.bcRich = bcRich;
+            gi.pcSparse = pcSparse;
+            gi.pcBase = pcBase;
+            gi.pcRich = pcRich;
+            gi.bassStart = node.bassState;
+            gi.pianoStart = node.pianoState;
 
-            // Piano candidates from node state.
-            QVector<PianoCand> pianoCands;
-            for (const auto& pid : {"sparse", "base", "rich"}) {
-                const JazzBalladPianoPlanner::Context ctx = (QString(pid) == "sparse") ? pcSparse : (QString(pid) == "rich") ? pcRich : pcBase;
-                in.pianoPlanner->restoreState(node.pianoState);
-                auto plan = in.pianoPlanner->planBeatWithActions(ctx, in.chPiano, ts);
-                const auto nextS = in.pianoPlanner->snapshotState();
-                pianoCands.push_back({pid, ctx, plan, nextS});
-            }
+            QVector<JointCandidateModel::BassCand> bassCands;
+            QVector<JointCandidateModel::PianoCand> pianoCands;
+            JointCandidateModel::generateBassPianoCandidates(gi, bassCands, pianoCands);
 
-            // Evaluate cartesian products.
-            for (const auto& dc : drumCands) {
-                for (const auto& bcand : bassCands) {
-                    for (const auto& pcand : pianoCands) {
-                        virtuoso::solver::CostBreakdown bd;
-                        bd.harmonicStability =
-                            0.65 * virtuoso::solver::harmonicOutsidePenalty01(bcand.plan.notes, look.currentChord) +
-                            0.95 * virtuoso::solver::harmonicOutsidePenalty01(pcand.plan.notes, look.currentChord);
-                        bd.voiceLeadingDistance =
-                            0.55 * virtuoso::solver::voiceLeadingPenalty(bcand.plan.notes, node.lastBassCenter) +
-                            0.55 * virtuoso::solver::voiceLeadingPenalty(pcand.plan.notes, node.lastPianoCenter);
-                        bd.rhythmicInterest =
-                            0.55 * virtuoso::solver::rhythmicInterestPenalty01(bcand.plan.notes, ts) +
-                            0.65 * virtuoso::solver::rhythmicInterestPenalty01(pcand.plan.notes, ts) +
-                            0.20 * virtuoso::solver::rhythmicInterestPenalty01(dc.plan, ts);
-                        // Interaction: density targeting
-                        const double totalNotes = double(bcand.plan.notes.size() + pcand.plan.notes.size()) + 0.35 * double(dc.plan.size());
-                        double target = 2.0 + 4.5 * qBound(0.0, virtAvg.rhythmicComplexity, 1.0);
-                        if (intent.silence) target += qBound(0.0, virtAvg.interaction, 1.0) * 2.0;
-                        if (userBusy) target -= 2.5;
-                        target = qBound(0.0, target, 10.0);
-                        bd.interactionFactor = 0.55 * qAbs(totalNotes - target);
-                        if (userBusy) bd.interactionFactor += 0.45 * qMax(0.0, totalNotes - 3.0);
-                        // Cadence "something happens"
-                        if (look.cadence01 >= 0.80 && beatInBar == 0) {
-                            if (totalNotes <= 0.01) bd.interactionFactor += 6.0;
-                            else bd.interactionFactor = qMax(0.0, bd.interactionFactor - 0.30 * qMin(4.0, totalNotes));
-                        }
+            // Score all combinations with shared model.
+            JointCandidateModel::ScoringInputs si;
+            si.ts = ts;
+            si.chord = look.currentChord;
+            si.beatInBar = beatInBar;
+            si.cadence01 = look.cadence01;
+            si.phraseSetupBar = phraseSetupBar;
+            si.phraseEndBar = look.phraseEndBar;
+            si.userBusy = userBusy;
+            si.userSilence = intent.silence;
+            si.prevBassCenterMidi = node.lastBassCenter;
+            si.prevPianoCenterMidi = node.lastPianoCenter;
+            si.virtAvg = virtAvg;
+            si.weights = weights;
+            si.lastBassId = node.lastBassId;
+            si.lastPianoId = node.lastPianoId;
+            si.lastDrumsId = node.lastDrumsId;
+            si.inResponse = inResponse;
 
-                        double c = bd.total(weights);
-                        c += spacingPenalty(bcand.plan.notes, pcand.plan.notes);
+            const auto scored = JointCandidateModel::chooseBestCombo(si, bassCands, pianoCands, drumCands);
 
-                        // Transition penalty: avoid flipping decisions too often within phrase.
-                        if (!node.lastBassId.isEmpty() && node.lastBassId != bcand.id) c += 0.20;
-                        if (!node.lastPianoId.isEmpty() && node.lastPianoId != pcand.id) c += 0.15;
-                        if (!node.lastDrumsId.isEmpty() && node.lastDrumsId != dc.id) c += 0.10;
+            for (const auto& ce : scored.combos) {
+                const int bi = ce.bi;
+                const int pi = ce.pi;
+                const int di = ce.di;
 
-                        // Hive-mind: during response, reward "wet" drums and richer piano slightly.
-                        if (inResponse) {
-                            if (dc.id == "wet") c -= 0.25;
-                            if (pcand.id == "rich") c -= 0.18;
-                            if (bcand.id == "rich") c -= 0.08;
-                        }
+                BeamNode nn = node;
+                nn.cost += ce.cost;
+                nn.bassState = bassCands[bi].nextState;
+                nn.pianoState = pianoCands[pi].nextState;
+                nn.lastBassCenter = node.lastBassCenter;
+                if (bassCands[bi].st.count > 0) nn.lastBassCenter = qBound(28, int(llround(bassCands[bi].st.meanMidi)), 67);
+                nn.lastPianoCenter = node.lastPianoCenter;
+                if (pianoCands[pi].st.count > 0) nn.lastPianoCenter = qBound(48, int(llround(pianoCands[pi].st.meanMidi)), 96);
 
-                        BeamNode nn = node;
-                        nn.cost += c;
-                        nn.bassState = bcand.next;
-                        nn.pianoState = pcand.next;
-                        // Update centers (mean midi)
-                        nn.lastBassCenter = node.lastBassCenter;
-                        if (!bcand.plan.notes.isEmpty()) {
-                            qint64 sum = 0;
-                            for (const auto& n : bcand.plan.notes) sum += qBound(0, n.note, 127);
-                            nn.lastBassCenter = qBound(28, int(llround(double(sum) / double(bcand.plan.notes.size()))), 67);
-                        }
-                        nn.lastPianoCenter = node.lastPianoCenter;
-                        if (!pcand.plan.notes.isEmpty()) {
-                            qint64 sum = 0;
-                            for (const auto& n : pcand.plan.notes) sum += qBound(0, n.note, 127);
-                            nn.lastPianoCenter = qBound(48, int(llround(double(sum) / double(pcand.plan.notes.size()))), 96);
-                        }
+                nn.lastBassId = bassCands[bi].id;
+                nn.lastPianoId = pianoCands[pi].id;
+                nn.lastDrumsId = drumCands[di].id;
 
-                        nn.lastBassId = bcand.id;
-                        nn.lastPianoId = pcand.id;
-                        nn.lastDrumsId = dc.id;
-
-                        StoryState::JointStepChoice choice;
-                        choice.stepIndex = stepIndex;
-                        choice.bassId = bcand.id;
-                        choice.pianoId = pcand.id;
-                        choice.drumsId = dc.id;
-                        choice.costTag = bd.shortTag(weights);
-                        choice.drumsNotes = dc.plan;
-                        choice.bassPlan = bcand.plan;
-                        choice.pianoPlan = pcand.plan;
-                        choice.bassStateAfter = bcand.next;
-                        choice.pianoStateAfter = pcand.next;
-                        nn.choices.push_back(choice);
-                        nextBeam.push_back(std::move(nn));
-                    }
-                }
+                StoryState::JointStepChoice choice;
+                choice.stepIndex = stepIndex;
+                choice.bassId = bassCands[bi].id;
+                choice.pianoId = pianoCands[pi].id;
+                choice.drumsId = drumCands[di].id;
+                choice.costTag = ce.bd.shortTag(weights);
+                choice.drumsNotes = drumCands[di].plan;
+                choice.bassPlan = bassCands[bi].plan;
+                choice.pianoPlan = pianoCands[pi].plan;
+                choice.bassStateAfter = bassCands[bi].nextState;
+                choice.pianoStateAfter = pianoCands[pi].nextState;
+                nn.choices.push_back(choice);
+                nextBeam.push_back(std::move(nn));
             }
         }
 

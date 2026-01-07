@@ -10,6 +10,7 @@
 
 #include "music/ChordSymbol.h"
 #include "virtuoso/ontology/OntologyRegistry.h"
+#include "virtuoso/memory/MotifTransform.h"
 
 #include <QCoreApplication>
 #include <QJsonDocument>
@@ -150,16 +151,33 @@ static void testHarmonyContextKeyWindowAndFunctionalTagging() {
     if (def) {
         QString roman;
         QString func;
-        (void)harmony.chooseScaleUsedForChord(/*keyPc=*/0, virtuoso::theory::KeyMode::Major, g7, *def, &roman, &func);
+        const auto sc = harmony.chooseScaleForChord(/*keyPc=*/0, virtuoso::theory::KeyMode::Major, g7, *def, &roman, &func);
         expect(func == "Dominant", "FunctionalHarmony: G7 is Dominant in C");
         expect(!roman.trimmed().isEmpty(), "FunctionalHarmony: roman populated");
+        expect(!sc.key.trimmed().isEmpty(), "HarmonyContext chooseScaleForChord: returns scale key");
+        expect(!sc.name.trimmed().isEmpty(), "HarmonyContext chooseScaleForChord: returns scale name");
+        expect(!sc.display.trimmed().isEmpty(), "HarmonyContext chooseScaleForChord: returns display string");
+        expect(ont.scale(sc.key) != nullptr, "HarmonyContext chooseScaleForChord: key exists in ontology");
     }
+}
+
+static void testMotifTransformDeterminism() {
+    using namespace virtuoso::memory;
+    const QVector<int> pcs = {0, 4, 7}; // C-E-G
+    const quint32 seed = 1234567u;
+    const auto a = transformPitchMotif(pcs, /*resolvePc=*/2, seed);
+    const auto b = transformPitchMotif(pcs, /*resolvePc=*/2, seed);
+    expect(a.kind == b.kind, "MotifTransform is deterministic (kind)");
+    expect(a.displaceRhythm == b.displaceRhythm, "MotifTransform is deterministic (displace flag)");
+    expect(a.tag == b.tag, "MotifTransform is deterministic (tag)");
+    expect(a.pcs == b.pcs, "MotifTransform is deterministic (pcs)");
 }
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     testLookaheadPlannerJsonDeterminism();
     testHarmonyContextKeyWindowAndFunctionalTagging();
+    testMotifTransformDeterminism();
     if (g_failures > 0) {
         qWarning() << "VirtuosoPlaybackTests failures:" << g_failures;
         return 1;

@@ -2,6 +2,7 @@
 
 #include "playback/BalladReferenceTuning.h"
 #include "playback/JointPhrasePlanner.h"
+#include "playback/JointCandidateModel.h"
 #include "playback/LookaheadWindow.h"
 #include "playback/VirtuosoBalladMvpPlaybackEngine.h"
 #include "virtuoso/solver/BeatCostModel.h"
@@ -33,16 +34,6 @@ static int adaptivePhraseBars(int bpm) {
 
 static int clampBassCenterMidi(int m) { return qBound(28, m, 67); }  // ~E1..G4 (upright-ish practical)
 static int clampPianoCenterMidi(int m) { return qBound(48, m, 96); } // ~C3..C7
-
-static QString parseOntVoicingKeyFromLogicTag(const QString& logicTag) {
-    // Our piano planner embeds ontology keys like "|ont=piano_ust_bVI" for explainability.
-    const int idx = logicTag.indexOf("|ont=");
-    if (idx < 0) return {};
-    const int start = idx + 5;
-    int end = logicTag.indexOf('|', start);
-    if (end < 0) end = logicTag.size();
-    return logicTag.mid(start, end - start).trimmed();
-}
 
 static QString representativeVoicingType(const QVector<virtuoso::engine::AgentIntentNote>& notes) {
     // Most notes in the plan share the same voicing_type; pick the longest string among non-empty as a decent proxy.
@@ -144,6 +135,15 @@ static NoteStats statsForNotes(const QVector<virtuoso::engine::AgentIntentNote>&
 }
 
 static QJsonObject noteStatsJson(const NoteStats& st) {
+    QJsonObject o;
+    o.insert("count", st.count);
+    o.insert("min_midi", st.minMidi);
+    o.insert("max_midi", st.maxMidi);
+    o.insert("mean_midi", st.meanMidi);
+    return o;
+}
+
+static QJsonObject noteStatsJson(const JointCandidateModel::NoteStats& st) {
     QJsonObject o;
     o.insert("count", st.count);
     o.insert("min_midi", st.minMidi);
@@ -361,6 +361,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             n.user_outside_ratio = intent.outsideRatio;
             n.logic_tag = n.logic_tag.isEmpty() ? jointTag : (n.logic_tag + "|" + jointTag);
             in.engine->scheduleNote(n);
+            if (in.motivicMemory) in.motivicMemory->push(n);
         }
     };
 
@@ -396,9 +397,12 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     const auto* chordDef = in.harmony->chordDefForSymbol(chord);
     QString roman;
     QString func;
-    const QString scaleUsed = (chordDef && chord.rootPc >= 0)
-        ? in.harmony->chooseScaleUsedForChord(keyPc, lk.mode, chord, *chordDef, &roman, &func)
-        : QString();
+    const auto scaleChoice = (chordDef && chord.rootPc >= 0)
+        ? in.harmony->chooseScaleForChord(keyPc, lk.mode, chord, *chordDef, &roman, &func)
+        : HarmonyContext::ScaleChoice{};
+    const QString scaleUsed = scaleChoice.display;
+    const QString scaleKey = scaleChoice.key;
+    const QString scaleName = scaleChoice.name;
 
     const BalladRefTuning tune = tuningForReferenceTrack(in.stylePresetKey);
 
@@ -639,6 +643,18 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         dcWet.allowPhraseGestures = true;
         dcWet.intensityPeak = intent.intensityPeak || (cadence01 >= 0.70);
 
+        // Shared motivic memory (drums): if the recent drum rhythm is already dense,
+        // avoid repeatedly stacking phrase gestures; if it's very sparse, allow gestures.
+        if (in.motivicMemory) {
+            const quint64 mask = in.motivicMemory->recentRhythmMotifMask16("Drums", /*bars=*/2, ts, /*slotsPerBeat=*/4);
+            const int beatsPerBar = qMax(1, ts.num);
+            const int slotsPerBar = qBound(1, beatsPerBar * 4, 64);
+            const int on = int(__builtin_popcountll((unsigned long long)mask));
+            const double dens01 = (slotsPerBar > 0) ? (double(on) / double(slotsPerBar)) : 0.0;
+            if (dens01 >= 0.45) dcWet.allowPhraseGestures = false;
+            else if (dens01 <= 0.15) dcWet.allowPhraseGestures = true;
+        }
+
         drumPlanDry = in.drummer->planBeat(dcDry);
         drumPlanWet = in.drummer->planBeat(dcWet);
     }
@@ -679,159 +695,93 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         const auto bassSnap = in.bassPlanner->snapshotState();
         const auto pianoSnap = in.pianoPlanner->snapshotState();
 
-        struct BassCand { QString id; JazzBalladBassPlanner::Context ctx; JazzBalladBassPlanner::BeatPlan plan; NoteStats st; };
-        struct PianoCand { QString id; JazzBalladPianoPlanner::Context ctx; JazzBalladPianoPlanner::BeatPlan plan; NoteStats st; };
-        struct DrumCand { QString id; BrushesBalladDrummer::Context ctx; QVector<virtuoso::engine::AgentIntentNote> plan; NoteStats st; bool hasKick = false; };
+        // Generate bass/piano candidates via the shared model.
+        JointCandidateModel::GenerationInputs gi;
+        gi.bassPlanner = in.bassPlanner;
+        gi.pianoPlanner = in.pianoPlanner;
+        gi.chBass = in.chBass;
+        gi.chPiano = in.chPiano;
+        gi.ts = ts;
+        gi.bcSparse = bcSparse;
+        gi.bcBase = bcBase;
+        gi.bcRich = bcRich;
+        gi.pcSparse = pcSparse;
+        gi.pcBase = pc;
+        gi.pcRich = pcRich;
+        gi.bassStart = bassSnap;
+        gi.pianoStart = pianoSnap;
 
-        auto planBass = [&](const QString& id, const JazzBalladBassPlanner::Context& ctx) -> BassCand {
-            in.bassPlanner->restoreState(bassSnap);
-            BassCand c{ id, ctx, in.bassPlanner->planBeatWithActions(ctx, in.chBass, ts), {} };
-            c.st = statsForNotes(c.plan.notes);
-            return c;
-        };
-        auto planPiano = [&](const QString& id, const JazzBalladPianoPlanner::Context& ctx) -> PianoCand {
-            in.pianoPlanner->restoreState(pianoSnap);
-            PianoCand c{ id, ctx, in.pianoPlanner->planBeatWithActions(ctx, in.chPiano, ts), {} };
-            c.st = statsForNotes(c.plan.notes);
-            return c;
-        };
+        QVector<JointCandidateModel::BassCand> bCands;
+        QVector<JointCandidateModel::PianoCand> pCands;
+        JointCandidateModel::generateBassPianoCandidates(gi, bCands, pCands);
+        for (auto& c : bCands) c.plan.chosenScaleKey = scaleKey;
+        for (auto& c : pCands) { c.plan.chosenScaleKey = scaleKey; c.plan.chosenScaleName = scaleName; }
 
-        QVector<BassCand> bCands;
-        bCands.reserve(3);
-        bCands.push_back(planBass("sparse", bcSparse));
-        bCands.push_back(planBass("base", bcBase));
-        bCands.push_back(planBass("rich", bcRich));
-
-        QVector<PianoCand> pCands;
-        pCands.reserve(3);
-        pCands.push_back(planPiano("sparse", pcSparse));
-        pCands.push_back(planPiano("base", pc));
-        pCands.push_back(planPiano("rich", pcRich));
-
-        QVector<DrumCand> dCands;
-        dCands.reserve(2);
-        auto planDrums = [&](const QString& id, const BrushesBalladDrummer::Context& ctx, const QVector<virtuoso::engine::AgentIntentNote>& plan) -> DrumCand {
-            DrumCand c;
-            c.id = id;
-            c.ctx = ctx;
-            c.plan = plan;
-            c.st = statsForNotes(c.plan);
-            c.hasKick = false;
-            for (const auto& n : c.plan) {
-                if (n.note == in.noteKick) { c.hasKick = true; break; }
-            }
-            return c;
-        };
+        // Drum candidates are computed once above (dry/wet) and wrapped here.
+        QVector<JointCandidateModel::DrumCand> dCands;
         if (allowDrums) {
-            dCands.push_back(planDrums("dry", dcDry, drumPlanDry));
-            dCands.push_back(planDrums("wet", dcWet, drumPlanWet));
-        } else {
-            DrumCand c;
-            c.id = "none";
-            c.plan.clear();
-            c.st = statsForNotes(c.plan);
-            c.hasKick = false;
-            dCands.push_back(c);
-        }
+            JointCandidateModel::DrumCand dry;
+            dry.id = "dry";
+            dry.ctx = dcDry;
+            dry.plan = drumPlanDry;
+            dry.st = JointCandidateModel::statsForNotes(dry.plan);
+            dry.hasKick = false;
+            for (const auto& n : dry.plan) if (n.note == in.noteKick) { dry.hasKick = true; break; }
+            dCands.push_back(dry);
 
-        // Restore to live state before committing to the chosen plan.
-        in.bassPlanner->restoreState(bassSnap);
-        in.pianoPlanner->restoreState(pianoSnap);
+            JointCandidateModel::DrumCand wet;
+            wet.id = "wet";
+            wet.ctx = dcWet;
+            wet.plan = drumPlanWet;
+            wet.st = JointCandidateModel::statsForNotes(wet.plan);
+            wet.hasKick = false;
+            for (const auto& n : wet.plan) if (n.note == in.noteKick) { wet.hasKick = true; break; }
+            dCands.push_back(wet);
+        } else {
+            JointCandidateModel::DrumCand none;
+            none.id = "none";
+            none.plan.clear();
+            none.st = JointCandidateModel::statsForNotes(none.plan);
+            none.hasKick = false;
+            dCands.push_back(none);
+        }
 
         const int prevBassCenter = in.story ? clampBassCenterMidi(in.story->lastBassCenterMidi) : regs.bassCenterMidi;
         const int prevPianoCenter = in.story ? clampPianoCenterMidi(in.story->lastPianoCenterMidi) : regs.pianoCenterMidi;
 
         const virtuoso::control::VirtuosityMatrix virtAvg{
-            /*harmonicRisk=*/0.5 * (bc.harmonicRisk + pc.harmonicRisk),
-            /*rhythmicComplexity=*/0.5 * (bc.rhythmicComplexity + pc.rhythmicComplexity),
-            /*interaction=*/0.5 * (bc.interaction + pc.interaction),
-            /*toneDark=*/0.5 * (bc.toneDark + pc.toneDark),
+            0.5 * (bc.harmonicRisk + pc.harmonicRisk),
+            0.5 * (bc.rhythmicComplexity + pc.rhythmicComplexity),
+            0.5 * (bc.interaction + pc.interaction),
+            0.5 * (bc.toneDark + pc.toneDark),
         };
         const auto w = virtuoso::solver::weightsFromVirtuosity(virtAvg);
 
-        auto comboCost = [&](const QVector<virtuoso::engine::AgentIntentNote>& bassNotes,
-                             const QVector<virtuoso::engine::AgentIntentNote>& pianoNotes,
-                             const QVector<virtuoso::engine::AgentIntentNote>& drumNotes,
-                             const QString& drumId,
-                             virtuoso::solver::CostBreakdown* outBd) -> double {
-            virtuoso::solver::CostBreakdown bd;
+        JointCandidateModel::ScoringInputs si;
+        si.ts = ts;
+        si.chord = chord;
+        si.beatInBar = beatInBar;
+        si.cadence01 = cadence01;
+        si.phraseSetupBar = phraseSetupBar;
+        si.phraseEndBar = look.phraseEndBar;
+        si.userBusy = userBusy;
+        si.userSilence = intent.silence;
+        si.prevBassCenterMidi = prevBassCenter;
+        si.prevPianoCenterMidi = prevPianoCenter;
+        si.virtAvg = virtAvg;
+        si.weights = w;
 
-            // --- Harmonic stability: "outside" pcs relative to chord.
-            bd.harmonicStability =
-                0.65 * virtuoso::solver::harmonicOutsidePenalty01(bassNotes, chord) +
-                0.95 * virtuoso::solver::harmonicOutsidePenalty01(pianoNotes, chord);
-
-            // --- Voice-leading: phrase-continuity against last centers.
-            bd.voiceLeadingDistance =
-                0.55 * virtuoso::solver::voiceLeadingPenalty(bassNotes, prevBassCenter) +
-                0.55 * virtuoso::solver::voiceLeadingPenalty(pianoNotes, prevPianoCenter);
-
-            // --- Rhythm: penalize too much offbeat density unless virt wants it.
-            bd.rhythmicInterest =
-                0.55 * virtuoso::solver::rhythmicInterestPenalty01(bassNotes, ts) +
-                0.65 * virtuoso::solver::rhythmicInterestPenalty01(pianoNotes, ts) +
-                0.20 * virtuoso::solver::rhythmicInterestPenalty01(drumNotes, ts);
-
-            // --- Interaction: density targeting vs user busy/silence + cadence landmarks.
-            const double totalNotes = double(bassNotes.size() + pianoNotes.size()) + 0.35 * double(drumNotes.size());
-            const double rc = qBound(0.0, virtAvg.rhythmicComplexity, 1.0);
-            double target = 2.0 + 4.5 * rc;
-            if (intent.silence) target += qBound(0.0, virtAvg.interaction, 1.0) * 2.0;
-            if (userBusy) target -= 2.5;
-            target = qBound(0.0, target, 10.0);
-            bd.interactionFactor = 0.55 * qAbs(totalNotes - target);
-            if (userBusy) bd.interactionFactor += 0.45 * qMax(0.0, totalNotes - 3.0);
-
-            // Cadence support: avoid "nothing happens" on strong cadences.
-            if (cadence01 >= 0.80 && beatInBar == 0) {
-                if (totalNotes <= 0.01) bd.interactionFactor += 6.0;
-                else bd.interactionFactor = qMax(0.0, bd.interactionFactor - 0.30 * qMin(4.0, totalNotes));
-            }
-
-            // Drummer gesture bias at phrase landmarks.
-            if (drumId != "none") {
-                if ((phraseSetupBar || look.phraseEndBar) && beatInBar == (qMax(1, ts.num) - 1) && cadence01 >= 0.35) {
-                    if (drumId == "wet") bd.interactionFactor = qMax(0.0, bd.interactionFactor - 0.55 * qBound(0.0, cadence01, 1.0));
-                    else bd.interactionFactor += 0.65 * qBound(0.0, cadence01, 1.0);
-                }
-                if (userBusy && drumId == "wet") bd.interactionFactor += 1.25;
-            }
-
-            if (outBd) *outBd = bd;
-            return bd.total(w);
-        };
-
-        double bestCost = 1e18;
-        virtuoso::solver::CostBreakdown bestBd;
-        int bestBi = 0;
-        int bestPi = 0;
-        int bestDi = 0;
         const bool havePlanned = (!plannedBassId.isEmpty() || !plannedPianoId.isEmpty() || !plannedDrumsId.isEmpty());
-        if (havePlanned) {
-            // Follow phrase plan (beam-search output) instead of re-solving locally.
-            for (int bi = 0; bi < bCands.size(); ++bi) if (bCands[bi].id == plannedBassId) bestBi = bi;
-            for (int pi = 0; pi < pCands.size(); ++pi) if (pCands[pi].id == plannedPianoId) bestPi = pi;
-            for (int di = 0; di < dCands.size(); ++di) if (dCands[di].id == plannedDrumsId) bestDi = di;
-            // Still compute cost breakdown for tagging.
-            (void)comboCost(bCands[bestBi].plan.notes, pCands[bestPi].plan.notes, dCands[bestDi].plan, dCands[bestDi].id, &bestBd);
-            bestCost = bestBd.total(w);
-        } else {
-            for (int bi = 0; bi < bCands.size(); ++bi) {
-                for (int pi = 0; pi < pCands.size(); ++pi) {
-                    for (int di = 0; di < dCands.size(); ++di) {
-                        virtuoso::solver::CostBreakdown bd;
-                        const double c = comboCost(bCands[bi].plan.notes, pCands[pi].plan.notes, dCands[di].plan, dCands[di].id, &bd);
-                        if (c < bestCost) {
-                            bestCost = c;
-                            bestBd = bd;
-                            bestBi = bi;
-                            bestPi = pi;
-                            bestDi = di;
-                        }
-                    }
-                }
-            }
-        }
+        const auto best = JointCandidateModel::chooseBestCombo(si, bCands, pCands, dCands,
+                                                               havePlanned ? plannedBassId : QString(),
+                                                               havePlanned ? plannedPianoId : QString(),
+                                                               havePlanned ? plannedDrumsId : QString());
+
+        const int bestBi = best.bestBi;
+        const int bestPi = best.bestPi;
+        const int bestDi = best.bestDi;
+        virtuoso::solver::CostBreakdown bestBd = best.bestBd;
+        const double bestCost = best.bestCost;
 
         // Emit exact candidate pool + evaluated combinations for visualization.
         {
@@ -848,6 +798,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             root.insert("on_ms", qint64(virtuoso::groove::GrooveGrid::posToMs(poolPos, ts, in.bpm)));
             root.insert("chord_context", chordText);
             root.insert("scale_used", scaleUsed);
+            root.insert("scale_key", scaleKey);
             root.insert("roman", roman);
             root.insert("chord_function", func);
             root.insert("chord_root_pc", chord.rootPc);
@@ -881,12 +832,9 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                 o.insert("toneDark", c.ctx.toneDark);
                 const QString vt = representativeVoicingType(c.plan.notes);
                 if (!vt.isEmpty()) o.insert("voicing_type", vt);
-                QString vk;
-                for (const auto& n : c.plan.notes) {
-                    vk = parseOntVoicingKeyFromLogicTag(n.logic_tag);
-                    if (!vk.isEmpty()) break;
-                }
-                if (!vk.isEmpty()) o.insert("voicing_key", vk);
+                if (!c.plan.chosenVoicingKey.trimmed().isEmpty()) o.insert("voicing_key", c.plan.chosenVoicingKey.trimmed());
+                if (!c.plan.motifSourceAgent.trimmed().isEmpty()) o.insert("motif_source", c.plan.motifSourceAgent.trimmed());
+                if (!c.plan.motifTransform.trimmed().isEmpty()) o.insert("motif_transform", c.plan.motifTransform.trimmed());
                 pianoCandsJson.push_back(o);
             }
             QJsonArray drumsCandsJson;
@@ -931,29 +879,23 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
 
             // Evaluated cartesian product (exactly what the optimizer compared).
             QJsonArray combos;
-            for (int bi = 0; bi < bCands.size(); ++bi) {
-                for (int pi = 0; pi < pCands.size(); ++pi) {
-                    for (int di = 0; di < dCands.size(); ++di) {
-                        virtuoso::solver::CostBreakdown bd;
-                        const double c = comboCost(bCands[bi].plan.notes, pCands[pi].plan.notes, dCands[di].plan, dCands[di].id, &bd);
-                        QJsonObject cj;
-                        cj.insert("bass", bCands[bi].id);
-                        cj.insert("piano", pCands[pi].id);
-                        cj.insert("drums", dCands[di].id);
-                        cj.insert("total_cost", c);
-                        cj.insert("cost_tag", bd.shortTag(w));
-                        QJsonObject bdj;
-                        bdj.insert("harmonicStability", bd.harmonicStability);
-                        bdj.insert("voiceLeadingDistance", bd.voiceLeadingDistance);
-                        bdj.insert("rhythmicInterest", bd.rhythmicInterest);
-                        bdj.insert("interactionFactor", bd.interactionFactor);
-                        cj.insert("breakdown", bdj);
-                        const bool isChosen = (bi == bestBi && pi == bestPi && di == bestDi);
-                        if (isChosen) cj.insert("chosen", true);
-                        if (havePlanned) cj.insert("planned_choice", isChosen);
-                        combos.push_back(cj);
-                    }
-                }
+            for (const auto& ce : best.combos) {
+                QJsonObject cj;
+                cj.insert("bass", ce.bassId);
+                cj.insert("piano", ce.pianoId);
+                cj.insert("drums", ce.drumsId);
+                cj.insert("total_cost", ce.cost);
+                cj.insert("cost_tag", ce.bd.shortTag(w));
+                QJsonObject bdj;
+                bdj.insert("harmonicStability", ce.bd.harmonicStability);
+                bdj.insert("voiceLeadingDistance", ce.bd.voiceLeadingDistance);
+                bdj.insert("rhythmicInterest", ce.bd.rhythmicInterest);
+                bdj.insert("interactionFactor", ce.bd.interactionFactor);
+                cj.insert("breakdown", bdj);
+                const bool isChosen = (ce.bassId == bCands[bestBi].id && ce.pianoId == pCands[bestPi].id && ce.drumsId == dCands[bestDi].id);
+                if (isChosen) cj.insert("chosen", true);
+                if (havePlanned) cj.insert("planned_choice", isChosen);
+                combos.push_back(cj);
             }
             root.insert("combinations", combos);
 
@@ -962,15 +904,16 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             chosen.insert("piano", pCands[bestPi].id);
             chosen.insert("drums", dCands[bestDi].id);
             chosen.insert("scale_used", scaleUsed);
+            chosen.insert("scale_key", scaleKey);
+            if (!pCands[bestPi].plan.motifSourceAgent.trimmed().isEmpty()) chosen.insert("motif_source", pCands[bestPi].plan.motifSourceAgent.trimmed());
+            if (!pCands[bestPi].plan.motifTransform.trimmed().isEmpty()) chosen.insert("motif_transform", pCands[bestPi].plan.motifTransform.trimmed());
             // Chosen voicing key/type (for exact Library selection).
             {
-                QString vk;
-                for (const auto& n : pCands[bestPi].plan.notes) {
-                    vk = parseOntVoicingKeyFromLogicTag(n.logic_tag);
-                    if (!vk.isEmpty()) break;
-                }
+                const QString vk = pCands[bestPi].plan.chosenVoicingKey.trimmed();
                 if (!vk.isEmpty()) chosen.insert("voicing_key", vk);
-                const QString vt = representativeVoicingType(pCands[bestPi].plan.notes);
+                const QString vt = pCands[bestPi].plan.chosenVoicingKey.trimmed().isEmpty()
+                    ? representativeVoicingType(pCands[bestPi].plan.notes)
+                    : representativeVoicingType(pCands[bestPi].plan.notes);
                 if (!vt.isEmpty()) chosen.insert("voicing_type", vt);
                 chosen.insert("has_polychord", (!vk.isEmpty() && vk.startsWith("piano_ust_", Qt::CaseInsensitive)));
             }
@@ -1263,6 +1206,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         root.insert("on_ms", qint64(virtuoso::groove::GrooveGrid::posToMs(poolPos, ts, in.bpm)));
         root.insert("chord_context", chordText);
         root.insert("scale_used", scaleUsed);
+        root.insert("scale_key", scaleKey);
         root.insert("roman", roman);
         root.insert("chord_function", func);
         root.insert("chord_root_pc", chord.rootPc);
@@ -1284,11 +1228,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             QJsonObject o;
             o.insert("id", pianoChoiceId);
             // voicing key/type from the *actual* chosen piano plan.
-            QString vk;
-            for (const auto& n : pianoPlan.notes) {
-                vk = parseOntVoicingKeyFromLogicTag(n.logic_tag);
-                if (!vk.isEmpty()) break;
-            }
+            const QString vk = pianoPlan.chosenVoicingKey.trimmed();
             if (!vk.isEmpty()) o.insert("voicing_key", vk);
             const QString vt = representativeVoicingType(pianoPlan.notes);
             if (!vt.isEmpty()) o.insert("voicing_type", vt);
@@ -1329,12 +1269,11 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         chosen.insert("piano", pianoChoiceId);
         chosen.insert("drums", drumChoiceId);
         chosen.insert("scale_used", scaleUsed);
+        chosen.insert("scale_key", scaleKey);
+        if (!pianoPlan.motifSourceAgent.trimmed().isEmpty()) chosen.insert("motif_source", pianoPlan.motifSourceAgent.trimmed());
+        if (!pianoPlan.motifTransform.trimmed().isEmpty()) chosen.insert("motif_transform", pianoPlan.motifTransform.trimmed());
         {
-            QString vk;
-            for (const auto& n : pianoPlan.notes) {
-                vk = parseOntVoicingKeyFromLogicTag(n.logic_tag);
-                if (!vk.isEmpty()) break;
-            }
+            const QString vk = pianoPlan.chosenVoicingKey.trimmed();
             if (!vk.isEmpty()) chosen.insert("voicing_key", vk);
             const QString vt = representativeVoicingType(pianoPlan.notes);
             if (!vt.isEmpty()) chosen.insert("voicing_type", vt);

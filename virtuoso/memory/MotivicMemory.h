@@ -5,6 +5,7 @@
 #include <QString>
 
 #include "virtuoso/engine/VirtuosoEngine.h"
+#include "virtuoso/groove/GrooveGrid.h"
 
 namespace virtuoso::memory {
 
@@ -22,44 +23,34 @@ public:
 
     explicit MotivicMemory(int maxEntriesPerAgent = 256) : m_max(maxEntriesPerAgent) {}
 
-    void clear() { m_byAgent.clear(); }
+    void clear();
+    void push(const virtuoso::engine::AgentIntentNote& n);
 
-    void push(const virtuoso::engine::AgentIntentNote& n) {
-        Entry e;
-        e.agent = n.agent;
-        e.midi = n.note;
-        e.pos = n.startPos;
-        auto& v = m_byAgent[e.agent];
-        v.push_back(e);
-        if (m_max > 0 && v.size() > m_max) {
-            v.erase(v.begin(), v.begin() + (v.size() - m_max));
-        }
-    }
+    // Recent raw entries (last maxN, regardless of bars).
+    QVector<Entry> recent(const QString& agent, int maxN = 8) const;
 
-    QVector<Entry> recent(const QString& agent, int maxN = 8) const {
-        const auto it = m_byAgent.find(agent);
-        if (it == m_byAgent.end()) return {};
-        const auto& v = it.value();
-        const int n = qMax(0, qMin(maxN, v.size()));
-        QVector<Entry> out;
-        out.reserve(n);
-        for (int i = v.size() - n; i < v.size(); ++i) out.push_back(v[i]);
-        return out;
-    }
+    // Recent entries restricted to a rolling bar window (inferred from the last-seen barIndex per agent).
+    QVector<Entry> recentInBars(const QString& agent, int bars, int maxN = 16) const;
 
-    int lastMidi(const QString& agent) const {
-        const auto it = m_byAgent.find(agent);
-        if (it == m_byAgent.end() || it.value().isEmpty()) return -1;
-        return it.value().last().midi;
-    }
+    // Convenience: recent pitch-class motif (0..11) for an agent over the last `bars` bars.
+    QVector<int> recentPitchMotif(const QString& agent, int bars, int maxN = 16) const;
 
-    int prevMidi(const QString& agent) const {
-        const auto it = m_byAgent.find(agent);
-        if (it == m_byAgent.end() || it.value().size() < 2) return -1;
-        return it.value()[it.value().size() - 2].midi;
-    }
+    // Convenience: recent rhythm motif as a 16th-grid bitmask across the bar.
+    // slotsPerBeat=4 => 16ths. Returns up to 64 slots (supports up to 16/4=4 beats? Actually ts.num*slotsPerBeat must be <=64).
+    quint64 recentRhythmMotifMask16(const QString& agent,
+                                   int bars,
+                                   const virtuoso::groove::TimeSignature& ts,
+                                   int slotsPerBeat = 4,
+                                   int maxN = 64) const;
+
+    int lastMidi(const QString& agent) const;
+    int prevMidi(const QString& agent) const;
 
 private:
+    static quint64 mask16ForEntries(const QVector<Entry>& entries,
+                                   const virtuoso::groove::TimeSignature& ts,
+                                   int slotsPerBeat);
+
     int m_max = 256;
     QHash<QString, QVector<Entry>> m_byAgent;
 };

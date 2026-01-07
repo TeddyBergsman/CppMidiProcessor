@@ -31,6 +31,13 @@ public:
     struct BeatPlan {
         QVector<virtuoso::engine::AgentIntentNote> notes;
         QVector<CcIntent> ccs;
+        // Ontology-first: explicit keys (no string scraping).
+        QString chosenVoicingKey; // ontology voicing key (e.g. "piano_rootless_A")
+        QString chosenScaleKey;   // ontology scale key (e.g. "altered")
+        QString chosenScaleName;  // ontology scale name (e.g. "Altered")
+        // Motivic explainability (shared memory transforms).
+        QString motifSourceAgent;  // e.g. "Piano"
+        QString motifTransform;    // e.g. "mem:sequence"
     };
 
     struct CompHit {
@@ -88,6 +95,9 @@ public:
         QVector<TopTemplateHit> motifC;
         QVector<TopTemplateHit> motifD;
         int phraseMotifStartBar = -1;
+
+        QString lastMotifSourceAgent;
+        QString lastMotifTransform;
 
         int anchorBlockStartBar = -1;
         QString anchorChordText;
@@ -223,6 +233,10 @@ private:
     // Upper-structure memory (for resolutions).
     int m_lastUpperBar = -1;
     QVector<int> m_lastUpperPcs; // 0..11 (size 2-3)
+
+    // Last "memory motif" usage for explainability.
+    QString m_lastMotifSourceAgent;
+    QString m_lastMotifTransform;
 
     int m_motifBlockStartBar = -1; // even bar index of current 2-bar block
     QVector<TopTemplateHit> m_motifA;

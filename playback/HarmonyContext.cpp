@@ -286,16 +286,17 @@ LocalKeyEstimate HarmonyContext::estimateLocalKeyWindow(const chart::ChartModel&
     return lk;
 }
 
-QString HarmonyContext::chooseScaleUsedForChord(int keyPc,
+HarmonyContext::ScaleChoice HarmonyContext::chooseScaleForChord(int keyPc,
                                                 virtuoso::theory::KeyMode keyMode,
                                                 const music::ChordSymbol& chordSym,
                                                 const virtuoso::ontology::ChordDef& chordDef,
                                                 QString* outRoman,
                                                 QString* outFunction) const {
-    if (!m_ont) return {};
+    ScaleChoice out;
+    if (!m_ont) return out;
     const QSet<int> pcs = pitchClassesForChordDef(chordSym.rootPc, chordDef);
     const auto sugg = virtuoso::theory::suggestScalesForPitchClasses(*m_ont, pcs, 12);
-    if (sugg.isEmpty()) return {};
+    if (sugg.isEmpty()) return out;
     const auto h = virtuoso::theory::analyzeChordInKey(keyPc, keyMode, chordSym.rootPc, chordDef);
     if (outRoman) *outRoman = h.roman;
     if (outFunction) *outFunction = h.function;
@@ -326,7 +327,11 @@ QString HarmonyContext::chooseScaleUsedForChord(int keyPc,
         return a.s.name < b.s.name;
     });
     const auto& best = ranked.first().s;
-    return QString("%1 (%2)").arg(best.name).arg(pcName(best.bestTranspose));
+    out.key = best.key;
+    out.name = best.name;
+    out.transposePc = best.bestTranspose;
+    out.display = QString("%1 (%2)").arg(best.name).arg(pcName(best.bestTranspose));
+    return out;
 }
 
 music::ChordSymbol HarmonyContext::parseCellChordNoState(const chart::ChartModel& model,

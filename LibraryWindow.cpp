@@ -729,6 +729,7 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
     const bool chordIsNew = obj.value("chord_is_new").toBool(false);
     const QJsonObject chosen = obj.value("chosen").toObject();
     scaleUsed = chosen.value("scale_used").toString();
+    const QString scaleKey = chosen.value("scale_key").toString();
     voicingKey = chosen.value("voicing_key").toString();
     voicingType = chosen.value("voicing_type").toString();
     const bool hasPolyChoice = chosen.value("has_polychord").toBool(false);
@@ -763,15 +764,12 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
         }
     }
 
-    // --- Scale tab selection (always update) ---
-    if (!scaleUsed.isEmpty() && m_scalesList) {
-        QString name = scaleUsed.trimmed();
-        const int p = name.indexOf('(');
-        if (p > 0) name = name.left(p).trimmed();
+    // --- Scale tab selection (always update; ontology key, not string matching) ---
+    if (!scaleKey.isEmpty() && m_scalesList) {
         for (int i = 0; i < m_scalesList->count(); ++i) {
             auto* it = m_scalesList->item(i);
             if (!it) continue;
-            if (it->text().compare(name, Qt::CaseInsensitive) == 0) {
+            if (it->data(Qt::UserRole).toString() == scaleKey) {
                 m_scalesList->setCurrentRow(i);
                 break;
             }

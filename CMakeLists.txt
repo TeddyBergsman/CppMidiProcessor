@@ -29,6 +29,9 @@ add_library(VirtuosoCore STATIC
   virtuoso/solver/BeatCostModel.h
   virtuoso/solver/BeatCostModel.cpp
   virtuoso/memory/MotivicMemory.h
+  virtuoso/memory/MotivicMemory.cpp
+  virtuoso/memory/MotifTransform.h
+  virtuoso/memory/MotifTransform.cpp
   virtuoso/ontology/OntologyRegistry.h
   virtuoso/ontology/OntologyRegistry.cpp
   virtuoso/vocab/VocabularyRegistry.h
@@ -81,6 +84,7 @@ add_executable(VirtuosoPlaybackTests
   playback/LookaheadWindow.cpp
   playback/LookaheadPlanner.cpp
   playback/JointPhrasePlanner.cpp
+  playback/JointCandidateModel.cpp
   playback/JazzBalladBassPlanner.cpp
   playback/JazzBalladPianoPlanner.cpp
   playback/BrushesBalladDrummer.cpp
@@ -144,6 +148,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/StoryState.h
   playback/JointPhrasePlanner.h
   playback/JointPhrasePlanner.cpp
+  playback/JointCandidateModel.h
+  playback/JointCandidateModel.cpp
   playback/AgentCoordinator.h
   playback/AgentCoordinator.cpp
   playback/LookaheadWindow.h

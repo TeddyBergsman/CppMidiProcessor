@@ -43,6 +43,8 @@ public:
         QVector<KeySwitchIntent> keyswitches;
         QVector<virtuoso::engine::AgentIntentNote> fxNotes; // library FX notes (not constrained by BassDriver)
         int desiredArtKeyswitchMidi = -1; // Sustain vs PalmMute keyswitch MIDI
+        // Ontology-first: explicit key for the harmonic substrate used.
+        QString chosenScaleKey; // ontology scale key (e.g. "mixolydian")
     };
 
     struct Context {

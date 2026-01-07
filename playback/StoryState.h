@@ -33,6 +33,9 @@ struct StoryState final {
     int lastBassCenterMidi = 45;
     int lastPianoCenterMidi = 72;
 
+    // Call/response macro: when the user ends a phrase, agents should "answer" for a short window.
+    int responseUntilBar = -1; // inclusive playback bar index; <0 means inactive
+
     // Phrase-level joint plan (beam-search output). One entry per beat-step.
     struct JointStepChoice {
         int stepIndex = -1; // absolute beat-step index
@@ -52,6 +55,7 @@ struct StoryState final {
         pianoArc = RegisterArc{72, 72};
         lastBassCenterMidi = 45;
         lastPianoCenterMidi = 72;
+        responseUntilBar = -1;
         planStartStep = -1;
         planSteps = 0;
         plan.clear();

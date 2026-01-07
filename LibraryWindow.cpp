@@ -20,7 +20,6 @@
 #include "midiprocessor.h"
 #include "virtuoso/theory/ScaleSuggester.h"
 #include "virtuoso/theory/FunctionalHarmony.h"
-
 using namespace virtuoso::ontology;
 
 namespace {
@@ -99,6 +98,7 @@ static int normalizeMidi(int midi) {
 LibraryWindow::LibraryWindow(MidiProcessor* midi, QWidget* parent)
     : QMainWindow(parent),
       m_registry(OntologyRegistry::builtins()),
+      m_grooveRegistry(virtuoso::groove::GrooveRegistry::builtins()),
       m_midi(midi) {
     setWindowTitle("Library");
     resize(1100, 520);
@@ -221,6 +221,18 @@ void LibraryWindow::buildUi() {
     polyL->addStretch(1);
     m_tabs->addTab(m_polyTab, "Polychords");
 
+    // Grooves tab (GrooveTemplate library)
+    m_grooveTab = new QWidget(this);
+    QVBoxLayout* gl = new QVBoxLayout(m_grooveTab);
+    m_groovesList = new QListWidget(this);
+    m_groovesList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_grooveInfo = new QLabel("—", this);
+    m_grooveInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_grooveInfo->setStyleSheet("QLabel { font-family: Menlo, monospace; font-size: 9pt; color: #ddd; }");
+    gl->addWidget(m_groovesList, 1);
+    gl->addWidget(m_grooveInfo, 0);
+    m_tabs->addTab(m_grooveTab, "Grooves");
+
     content->addWidget(m_tabs, 0);
 
     // Visualizers on right
@@ -249,6 +261,7 @@ void LibraryWindow::buildUi() {
     connect(m_chordsList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_scalesList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_voicingsList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
+    connect(m_groovesList, &QListWidget::currentRowChanged, this, &LibraryWindow::onSelectionChanged);
 
     // Polychord signals
     connect(m_polyTemplateCombo, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
@@ -272,6 +285,7 @@ void LibraryWindow::populateLists() {
     m_orderedChords = m_registry.allChords();
     m_orderedScales = m_registry.allScales();
     m_orderedVoicings = m_registry.allVoicings();
+    m_orderedGrooves = m_grooveRegistry.allGrooveTemplates();
 
     std::sort(m_orderedChords.begin(), m_orderedChords.end(), [&](const ChordDef* a, const ChordDef* b) {
         if (!a || !b) return a != nullptr;
@@ -316,6 +330,17 @@ void LibraryWindow::populateLists() {
     }
     m_voicingsList->setCurrentRow(0);
 
+    // Grooves
+    if (m_groovesList) {
+        m_groovesList->clear();
+        for (const auto* gt : m_orderedGrooves) {
+            if (!gt) continue;
+            QListWidgetItem* it = new QListWidgetItem(QString("%1  (%2)").arg(gt->name, gt->category), m_groovesList);
+            it->setData(Qt::UserRole, gt->key);
+        }
+        if (m_groovesList->count() > 0) m_groovesList->setCurrentRow(0);
+    }
+
     // Chord context combo should match chord ordering.
     m_chordCtxCombo->clear();
     for (const ChordDef* c : m_orderedChords) {
@@ -355,8 +380,30 @@ void LibraryWindow::populateLists() {
     }
 }
 
+void LibraryWindow::updateGrooveInfo() {
+    if (!m_grooveInfo || !m_groovesList) return;
+    const auto* it = m_groovesList->currentItem();
+    if (!it) { m_grooveInfo->setText("—"); return; }
+    const QString key = it->data(Qt::UserRole).toString();
+    const auto* gt = m_grooveRegistry.grooveTemplate(key);
+    if (!gt) { m_grooveInfo->setText("—"); return; }
+    QStringList lines;
+    lines << QString("key=%1").arg(gt->key);
+    lines << QString("grid=%1 amount=%2").arg(int(gt->gridKind)).arg(gt->amount, 0, 'f', 2);
+    lines << "offsets:";
+    for (const auto& o : gt->offsetMap) {
+        lines << QString("  at %1/%2  unit=%3  delta=%4")
+                     .arg(o.withinBeat.num)
+                     .arg(o.withinBeat.den)
+                     .arg(int(o.unit))
+                     .arg(o.value, 0, 'f', 3);
+    }
+    m_grooveInfo->setText(lines.join("\n"));
+}
+
 void LibraryWindow::onSelectionChanged() {
     updateHighlights();
+    updateGrooveInfo();
     scheduleAutoPlay();
 }
 

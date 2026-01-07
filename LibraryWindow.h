@@ -6,6 +6,7 @@
 #include <QHash>
 
 #include "virtuoso/ontology/OntologyRegistry.h"
+#include "virtuoso/groove/GrooveRegistry.h"
 
 class QListWidget;
 class QTabWidget;
@@ -34,6 +35,7 @@ private:
     void updateHighlights();
     void updatePianoRange();
     void updatePolychordHighlights();
+    void updateGrooveInfo();
 
     static QString pcName(int pc);
     static int pcFromIndex(int idx);
@@ -67,11 +69,13 @@ private:
 
     virtuoso::ontology::OntologyRegistry m_registry;
     MidiProcessor* m_midi = nullptr; // not owned
+    virtuoso::groove::GrooveRegistry m_grooveRegistry;
 
     // Stable, logical ordering (QHash iteration order is not deterministic)
     QVector<const virtuoso::ontology::ChordDef*> m_orderedChords;
     QVector<const virtuoso::ontology::ScaleDef*> m_orderedScales;
     QVector<const virtuoso::ontology::VoicingDef*> m_orderedVoicings;
+    QVector<const virtuoso::groove::GrooveTemplate*> m_orderedGrooves;
 
     QTabWidget* m_tabs = nullptr;
 
@@ -90,6 +94,9 @@ private:
     QListWidget* m_scalesList = nullptr;
     QListWidget* m_voicingsList = nullptr;
     QWidget* m_polyTab = nullptr;
+    QListWidget* m_groovesList = nullptr;
+    QWidget* m_grooveTab = nullptr;
+    QLabel* m_grooveInfo = nullptr;
 
     // Visualizers
     GuitarFretboardWidget* m_guitar = nullptr;

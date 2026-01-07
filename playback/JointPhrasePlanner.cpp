@@ -80,6 +80,7 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
     const auto vibeEff = snap.vibe;
     const double baseEnergy = snap.energy01;
     const bool userBusy = snap.userBusy;
+    const int responseUntilBar = (in.story ? in.story->responseUntilBar : -1);
     const bool allowDrums = (qBound(0.0, baseEnergy, 1.0) >= 0.22);
 
     // Determine phrase length (adaptive 4–8 bars already decided by caller).
@@ -256,6 +257,10 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
         if (!allowDrums) drumCands = {{"none", {}}};
 
         // Candidate contexts.
+        // Hive-mind space negotiation: when the user is busy, prefer sparse across the band.
+        // When we are in a response window, prefer richer/more conversational.
+        const bool inResponse = (responseUntilBar >= 0 && playbackBarIndex <= responseUntilBar);
+
         JazzBalladBassPlanner::Context bcSparse = bc;
         JazzBalladBassPlanner::Context bcBase = bc;
         JazzBalladBassPlanner::Context bcRich = bc;
@@ -278,6 +283,18 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
         pcRich.addSecondColorProb = qMin(0.85, pcRich.addSecondColorProb + 0.18);
         pcRich.sparkleProbBeat4 = qMin(0.85, pcRich.sparkleProbBeat4 + 0.18);
         if (pcRich.harmonicRisk >= 0.55 && !userBusy) pcRich.preferShells = false;
+
+        if (userBusy) {
+            // Strong space negotiation: both agents avoid richness.
+            bcRich = bcBase;
+            pcRich = pcBase;
+        } else if (inResponse) {
+            // Conversational response: bias toward richer candidates.
+            bcSparse = bcBase;
+            pcSparse = pcBase;
+            bcRich.approachProbBeat3 = qMin(1.0, bcRich.approachProbBeat3 + 0.10);
+            pcRich.addSecondColorProb = qMin(0.95, pcRich.addSecondColorProb + 0.10);
+        }
 
         const virtuoso::control::VirtuosityMatrix virtAvg{
             0.5 * (bc.harmonicRisk + pc.harmonicRisk),
@@ -347,6 +364,13 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
                         if (!node.lastBassId.isEmpty() && node.lastBassId != bcand.id) c += 0.20;
                         if (!node.lastPianoId.isEmpty() && node.lastPianoId != pcand.id) c += 0.15;
                         if (!node.lastDrumsId.isEmpty() && node.lastDrumsId != dc.id) c += 0.10;
+
+                        // Hive-mind: during response, reward "wet" drums and richer piano slightly.
+                        if (inResponse) {
+                            if (dc.id == "wet") c -= 0.25;
+                            if (pcand.id == "rich") c -= 0.18;
+                            if (bcand.id == "rich") c -= 0.08;
+                        }
 
                         BeamNode nn = node;
                         nn.cost += c;

@@ -11,6 +11,7 @@ QString InteractionContext::intentsToString(const SemanticMidiAnalyzer::IntentSt
     if (i.intensityPeak) out << "INTENSITY_PEAK";
     if (i.playingOutside) out << "PLAYING_OUTSIDE";
     if (i.silence) out << "SILENCE";
+    if (i.questionEnded) out << "QUESTION_END";
     return out.join(",");
 }
 

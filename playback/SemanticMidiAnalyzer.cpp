@@ -192,6 +192,20 @@ SemanticMidiAnalyzer::IntentState SemanticMidiAnalyzer::compute(qint64 nowMs) co
         out.playingOutside = false;
     }
 
+    // --- Phrase-level interaction heuristics (stateless) ---
+    // Approximate "silence onset" without relying on previous-state memory:
+    // If we're just barely beyond the silence threshold, consider it an onset.
+    const qint64 silMs = qint64(qMax(1, m_s.silenceMs));
+    out.silenceOnset = out.silence && (out.msSinceLastActivity >= silMs) && (out.msSinceLastActivity <= silMs + 260);
+
+    // "Question ended" heuristic:
+    // - user just went silent
+    // - AND they were musically active shortly before (density window still has notes, or CC2 was elevated recently)
+    const bool wasActiveRecently = (out.notesPerSec >= (0.45 * m_s.densityHighNotesPerSec))
+        || (out.msSinceLastGuitarNoteOn <= qint64(900))
+        || (out.lastCc2 >= qMax(0, m_s.intensityPeakCc2 - 18));
+    out.questionEnded = out.silenceOnset && wasActiveRecently;
+
     return out;
 }
 

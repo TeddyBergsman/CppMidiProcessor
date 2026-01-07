@@ -160,6 +160,12 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     const QString intentStr = snap.intentStr;
     const bool userBusy = snap.userBusy;
 
+    // Hive-mind macro: detect user phrase end and set a short response window (1–2 bars).
+    if (in.story && intent.questionEnded && beatInBar == 0) {
+        // Respond for the next bar (and optionally the following, at strong cadences).
+        in.story->responseUntilBar = qMax(in.story->responseUntilBar, playbackBarIndex + (cadence01 >= 0.75 ? 2 : 1));
+    }
+
     // Debug UI status (emitted once per beat step).
     if (in.owner) {
         const QString virtStr = in.virtAuto

@@ -53,6 +53,12 @@ public:
         bool intensityPeak = false;
         bool playingOutside = false;
         bool silence = false;
+
+        // Phrase/interaction events (derived, deterministic; no internal state required).
+        // silenceOnset is true briefly when transitioning into SILENCE.
+        bool silenceOnset = false;
+        // questionEnded is a higher-level heuristic: user phrase ended and the band should respond.
+        bool questionEnded = false;
     };
 
     SemanticMidiAnalyzer() = default;

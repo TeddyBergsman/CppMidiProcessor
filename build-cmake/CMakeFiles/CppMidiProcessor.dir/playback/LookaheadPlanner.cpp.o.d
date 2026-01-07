@@ -894,18 +894,20 @@ CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o: \
   /opt/homebrew/lib/QtCore.framework/Headers/qvector.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/chart/ChartModel.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordSymbol.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QStringList \
-  /opt/homebrew/lib/QtCore.framework/Headers/qstringlist.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveGrid.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QtGlobal \
   /opt/homebrew/lib/QtCore.framework/Headers/qglobal.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyContext.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QSet \
   /opt/homebrew/lib/QtCore.framework/Headers/qset.h \
   /opt/homebrew/include/QtCore/qhash.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/HarmonyTypes.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ontology/OntologyRegistry.h \
+  /opt/homebrew/lib/QtCore.framework/Headers/QStringList \
+  /opt/homebrew/lib/QtCore.framework/Headers/qstringlist.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/BrushesBalladDrummer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QObject \
@@ -946,45 +948,9 @@ CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o: \
   /opt/homebrew/include/QtCore/qdeadlinetimer.h \
   /opt/homebrew/include/QtCore/qelapsedtimer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QRandomGenerator \
-  /opt/homebrew/lib/QtCore.framework/Headers/qrandom.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/random \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/bernoulli_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_real_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/generate_canonical.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/binomial_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/cauchy_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/chi_squared_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/gamma_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/exponential_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/default_random_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/linear_congruential_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/is_seed_sequence.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/discard_block_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/discrete_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/extreme_value_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/fisher_f_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/geometric_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/negative_binomial_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/poisson_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/clamp_to_integral.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/normal_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/independent_bits_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/knuth_b.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/shuffle_order_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/lognormal_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/mersenne_twister_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/piecewise_constant_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/piecewise_linear_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/random_device.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/ranlux.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/subtract_with_carry_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/seed_seq.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/student_t_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/weibull_distribution.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/FeelTemplate.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableRng.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
   /opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
@@ -1025,9 +991,7 @@ CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o: \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladPianoPlanner.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/memory/MotivicMemory.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/SemanticMidiAnalyzer.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/VibeStateMachine.h \
-  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/InteractionContext.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableHash.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QByteArray \
   /opt/homebrew/lib/QtCore.framework/Headers/qbytearray.h \

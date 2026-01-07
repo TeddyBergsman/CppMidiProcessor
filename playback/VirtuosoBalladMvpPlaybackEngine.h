@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QTimer>
 #include <QVector>
+#include <atomic>
 
 #include "chart/ChartModel.h"
 #include "music/ChordSymbol.h"
@@ -51,6 +52,9 @@ public slots:
     // Used by instrument windows for auditioning the current song context without duplicating controls.
     void emitLookaheadPlanOnce();
 
+    // Async lookahead completion (invoked on UI thread).
+    Q_INVOKABLE void applyLookaheadResult(quint64 jobId, int stepNow, const QString& json, int buildMs);
+
     // Debug/validation knobs (glass-box controllable).
     // Global energy override (0..1). When Auto is on (default), energy follows the vibe engine.
     void setDebugEnergyAuto(bool on) { m_debugEnergyAuto = on; }
@@ -89,6 +93,8 @@ private slots:
     void onVoiceNoteOff(int note);
 
 private:
+    void scheduleLookaheadAsync(int stepNow, const virtuoso::groove::TimeSignature& ts, qint64 nowWallMs, qint64 engineNowMs);
+
     void rebuildSequence();
     void applyPresetToEngine();
 
@@ -116,6 +122,10 @@ private:
     int m_lastPlayheadStep = -1;
     int m_lastEmittedCell = -1;
     int m_nextScheduledStep = 0;
+    int m_lastLookaheadStepEmitted = -1;
+    qint64 m_playStartWallMs = 0;
+    std::atomic<quint64> m_lookaheadJobId{0};
+    int m_lastLookaheadBuildMs = -1;
 
     QTimer m_tickTimer;
 

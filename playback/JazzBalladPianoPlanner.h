@@ -178,6 +178,7 @@ private:
     QString m_anchorChordText;
     QString m_anchorVoicingKey;
     QString m_anchorVoicingName;
+    QString m_anchorCspTag; // explainable CSP choice summary for the anchor
     QVector<int> m_anchorPcs; // pitch classes 0..11
     QVector<int> m_anchorLhPcs; // explicit LH shell pcs
     QVector<int> m_anchorRhPcs; // explicit RH color pcs

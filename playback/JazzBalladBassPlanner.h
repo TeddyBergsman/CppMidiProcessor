@@ -71,20 +71,9 @@ private:
     static int pcToBassMidiInRange(int pc, int lo, int hi);
     static int clampMidi(int m) { return (m < 0) ? 0 : (m > 127 ? 127 : m); }
     static int chooseApproachMidi(int nextRootMidi, int lastMidi);
-    static int parseFretFromReasonLine(const QString& s);
-    static int parseStringFromReasonLine(const QString& s) {
-        const int idx = s.indexOf("string=");
-        if (idx < 0) return -1;
-        const int start = idx + 7;
-        int end = start;
-        while (end < s.size() && s[end].isDigit()) end++;
-        bool ok = false;
-        const int str = s.mid(start, end - start).toInt(&ok);
-        return ok ? str : -1;
-    }
 
     bool feasibleOrRepair(int& midi);
-    int chooseApproachMidiWithConstraints(int nextRootMidi) const;
+    int chooseApproachMidiWithConstraints(int nextRootMidi, QString* outChoiceId = nullptr) const;
 
     virtuoso::constraints::BassDriver m_driver;
     virtuoso::constraints::PerformanceState m_state;

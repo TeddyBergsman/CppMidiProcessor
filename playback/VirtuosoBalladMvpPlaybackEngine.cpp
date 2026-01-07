@@ -6,318 +6,69 @@
 #include "playback/LookaheadPlanner.h"
 #include "playback/SemanticMidiAnalyzer.h"
 #include "playback/TransportTimeline.h"
-#include "virtuoso/theory/FunctionalHarmony.h"
-#include "virtuoso/theory/ScaleSuggester.h"
 
 #include <QHash>
 #include <QDateTime>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QSet>
+#include <QElapsedTimer>
+#include <QPointer>
+#include <QThreadPool>
+#include <QRunnable>
 #include <QtGlobal>
 #include <algorithm>
 
 namespace playback {
 namespace {
 
-static QVector<const chart::Bar*> flattenBarsFrom(const chart::ChartModel& model) {
-    QVector<const chart::Bar*> bars;
-    for (const auto& line : model.lines) {
-        for (const auto& bar : line.bars) {
-            bars.push_back(&bar);
-        }
+class LookaheadRunnable final : public QRunnable {
+public:
+    LookaheadRunnable(QPointer<VirtuosoBalladMvpPlaybackEngine> owner,
+                      quint64 jobId,
+                      int stepNow,
+                      int horizonBars,
+                      LookaheadPlanner::Inputs inputs,
+                      JazzBalladBassPlanner bass,
+                      JazzBalladPianoPlanner piano,
+                      BrushesBalladDrummer drummer)
+        : m_owner(std::move(owner))
+        , m_jobId(jobId)
+        , m_stepNow(stepNow)
+        , m_horizonBars(horizonBars)
+        , m_inputs(std::move(inputs))
+        , m_bass(std::move(bass))
+        , m_piano(std::move(piano))
+        , m_drummer(std::move(drummer)) {
+        setAutoDelete(true);
     }
-    return bars;
-}
 
-static int normalizePc(int pc) {
-    int v = pc % 12;
-    if (v < 0) v += 12;
-    return v;
-}
+    void run() override {
+        QElapsedTimer t;
+        t.start();
+        m_inputs.bassPlanner = &m_bass;
+        m_inputs.pianoPlanner = &m_piano;
+        m_inputs.drummer = &m_drummer;
+        const QString json = LookaheadPlanner::buildLookaheadPlanJson(m_inputs, m_stepNow, m_horizonBars);
+        const int ms = int(t.elapsed());
 
-static QString pcName(int pc) {
-    static const char* names[] = {"C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"};
-    return names[normalizePc(pc)];
-}
-
-static QString ontologyChordKeyFor(const music::ChordSymbol& c) {
-    using music::ChordQuality;
-    using music::SeventhQuality;
-    if (c.noChord || c.placeholder) return {};
-    // Dominant family
-    if (c.quality == ChordQuality::Dominant) {
-        if (c.alt) return "7alt";
-        bool hasB9 = false, hasSharp9 = false, hasB13 = false, hasSharp11 = false;
-        for (const auto& a : c.alterations) {
-            if (a.degree == 9 && a.delta < 0) hasB9 = true;
-            if (a.degree == 9 && a.delta > 0) hasSharp9 = true;
-            if (a.degree == 13 && a.delta < 0) hasB13 = true;
-            if (a.degree == 11 && a.delta > 0) hasSharp11 = true;
-        }
-        if (hasB9 && hasSharp9) return "7b9#9";
-        if (hasB9 && hasB13) return "7b9b13";
-        if (hasSharp9 && hasB13) return "7#9b13";
-        if (hasB9) return "7b9";
-        if (hasSharp9) return "7#9";
-        if (hasB13) return "7b13";
-        if (c.extension >= 13 && hasSharp11) return "13#11";
-        if (c.extension >= 13) return "13";
-        if (c.extension >= 11) return "11";
-        if (c.extension >= 9) return "9";
-        if (c.seventh != SeventhQuality::None || c.extension >= 7) return "7";
-        return "7";
+        if (!m_owner) return;
+        QMetaObject::invokeMethod(m_owner.data(),
+                                  "applyLookaheadResult",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(quint64, m_jobId),
+                                  Q_ARG(int, m_stepNow),
+                                  Q_ARG(QString, json),
+                                  Q_ARG(int, ms));
     }
-    // Half diminished
-    if (c.quality == ChordQuality::HalfDiminished) return "m7b5";
-    // Diminished
-    if (c.quality == ChordQuality::Diminished) {
-        if (c.seventh == SeventhQuality::Dim7) return "dim7";
-        return (c.extension >= 7) ? "dim7" : "dim";
-    }
-    // Minor
-    if (c.quality == ChordQuality::Minor) {
-        if (c.seventh == SeventhQuality::Major7) {
-            if (c.extension >= 13) return "minmaj13";
-            if (c.extension >= 11) return "minmaj11";
-            if (c.extension >= 9) return "minmaj9";
-            return "min_maj7";
-        }
-        if (c.extension >= 13) return "min13";
-        if (c.extension >= 11) return "min11";
-        if (c.extension >= 9) return "min9";
-        if (c.seventh != SeventhQuality::None || c.extension >= 7) return "min7";
-        return "min";
-    }
-    // Major
-    if (c.quality == ChordQuality::Major) {
-        bool hasSharp11 = false;
-        for (const auto& a : c.alterations) {
-            if (a.degree == 11 && a.delta > 0) hasSharp11 = true;
-        }
-        if (c.extension >= 13 && hasSharp11) return "maj13#11";
-        if (c.extension >= 13) return "maj13";
-        if (c.extension >= 11) return "maj11";
-        if (c.extension >= 9 && hasSharp11) return "maj9#11";
-        if (c.extension >= 9) return "maj9";
-        if (c.seventh == SeventhQuality::Major7 || c.extension >= 7) return "maj7";
-        if (c.extension >= 6) return "6";
-        return "maj";
-    }
-    // Sus
-    if (c.quality == ChordQuality::Sus2) return "sus2";
-    if (c.quality == ChordQuality::Sus4) {
-        if (c.extension >= 13) return "13sus4";
-        if (c.extension >= 9) return "9sus4";
-        if (c.seventh == SeventhQuality::Minor7 || c.extension >= 7) return "7sus4";
-        return "sus4";
-    }
-    // Aug
-    if (c.quality == ChordQuality::Augmented) {
-        if (c.seventh == SeventhQuality::Minor7 || c.extension >= 7) return "aug7";
-        return "aug";
-    }
-    // Power
-    if (c.quality == ChordQuality::Power5) return "5";
-    return {};
-}
 
-static const virtuoso::ontology::ChordDef* chordDefForSymbol(const virtuoso::ontology::OntologyRegistry& reg,
-                                                             const music::ChordSymbol& c) {
-    const QString key = ontologyChordKeyFor(c);
-    if (key.isEmpty()) return nullptr;
-    return reg.chord(key);
-}
-
-static QSet<int> pitchClassesForChordDef(int rootPc, const virtuoso::ontology::ChordDef& chord) {
-    QSet<int> pcs;
-    const int r = normalizePc(rootPc);
-    pcs.insert(r);
-    for (int iv : chord.intervals) pcs.insert(normalizePc(r + iv));
-    return pcs;
-}
-
-static int estimateMajorKeyPcGuess(const virtuoso::ontology::OntologyRegistry& reg,
-                                   const QVector<music::ChordSymbol>& chords,
-                                   int fallbackPc) {
-    double bestScore = -1.0;
-    int bestTonic = normalizePc(fallbackPc);
-    for (int tonic = 0; tonic < 12; ++tonic) {
-        double score = 0.0;
-        int used = 0;
-        for (const auto& c : chords) {
-            if (c.noChord || c.placeholder || c.rootPc < 0) continue;
-            const auto* def = chordDefForSymbol(reg, c);
-            if (!def) continue;
-            const auto h = virtuoso::theory::analyzeChordInMajorKey(tonic, c.rootPc, *def);
-            score += h.confidence;
-            used++;
-        }
-        score += 0.02 * double(used);
-        if (score > bestScore) { bestScore = score; bestTonic = tonic; }
-    }
-    return bestTonic;
-}
-
-static virtuoso::theory::KeyMode keyModeForScaleKey(const QString& k) {
-    // MVP: treat Ionian/HarmonicMajor as Major; Aeolian/HarmonicMinor/MelodicMinor as Minor.
-    // Modes like Dorian/Phrygian/Mixolydian are treated as Major for functional tagging (Stage 2.5 can improve).
-    const QString s = k.toLower();
-    if (s == "aeolian" || s == "harmonic_minor" || s == "melodic_minor") return virtuoso::theory::KeyMode::Minor;
-    return virtuoso::theory::KeyMode::Major;
-}
-
-static void estimateGlobalKeyByScale(const virtuoso::ontology::OntologyRegistry& reg,
-                                     const QVector<music::ChordSymbol>& chords,
-                                     int fallbackPc,
-                                     int* outTonicPc,
-                                     QString* outScaleKey,
-                                     QString* outScaleName,
-                                     virtuoso::theory::KeyMode* outMode) {
-    if (!outTonicPc || !outScaleKey || !outScaleName || !outMode) return;
-    *outTonicPc = normalizePc(fallbackPc);
-    outScaleKey->clear();
-    outScaleName->clear();
-    *outMode = virtuoso::theory::KeyMode::Major;
-    if (chords.isEmpty()) return;
-
-    QSet<int> pcs;
-    pcs.reserve(24);
-    for (const auto& c : chords) {
-        if (c.noChord || c.placeholder || c.rootPc < 0) continue;
-        const auto* def = chordDefForSymbol(reg, c);
-        if (!def) continue;
-        const auto chordPcs = pitchClassesForChordDef(c.rootPc, *def);
-        for (int pc : chordPcs) pcs.insert(pc);
-    }
-    if (pcs.isEmpty()) return;
-
-    const auto sug = virtuoso::theory::suggestScalesForPitchClasses(reg, pcs, 10);
-    if (sug.isEmpty()) return;
-    const auto& best = sug.first();
-    *outTonicPc = normalizePc(best.bestTranspose);
-    *outScaleKey = best.key;
-    *outScaleName = best.name;
-    *outMode = keyModeForScaleKey(best.key);
-}
-
-static QVector<playback::LocalKeyEstimate> estimateLocalKeysByBar(
-    const virtuoso::ontology::OntologyRegistry& reg,
-    const QVector<const chart::Bar*>& bars,
-    int windowBars,
-    int fallbackTonicPc,
-    const QString& fallbackScaleKey,
-    const QString& fallbackScaleName,
-    virtuoso::theory::KeyMode fallbackMode) {
-    QVector<playback::LocalKeyEstimate> out;
-    out.resize(bars.size());
-    if (bars.isEmpty()) return out;
-    windowBars = qMax(1, windowBars);
-
-    for (int i = 0; i < bars.size(); ++i) {
-        QSet<int> pcs;
-        pcs.reserve(24);
-        QVector<music::ChordSymbol> chords;
-        chords.reserve(windowBars * 2);
-
-        const int end = qMin(bars.size(), i + windowBars);
-        for (int b = i; b < end; ++b) {
-            const auto* bar = bars[b];
-            if (!bar) continue;
-            for (const auto& cell : bar->cells) {
-                const QString t = cell.chord.trimmed();
-                if (t.isEmpty()) continue;
-                music::ChordSymbol parsed;
-                if (!music::parseChordSymbol(t, parsed)) continue;
-                if (parsed.placeholder || parsed.noChord || parsed.rootPc < 0) continue;
-                chords.push_back(parsed);
-                const auto* def = chordDefForSymbol(reg, parsed);
-                if (!def) continue;
-                const auto chordPcs = pitchClassesForChordDef(parsed.rootPc, *def);
-                for (int pc : chordPcs) pcs.insert(pc);
-            }
-        }
-
-        playback::LocalKeyEstimate lk;
-        lk.tonicPc = fallbackTonicPc;
-        lk.scaleKey = fallbackScaleKey;
-        lk.scaleName = fallbackScaleName;
-        lk.mode = fallbackMode;
-        lk.score = 0.0;
-        lk.coverage = 0.0;
-
-        if (!pcs.isEmpty()) {
-            const auto sug = virtuoso::theory::suggestScalesForPitchClasses(reg, pcs, 6);
-            if (!sug.isEmpty()) {
-                const auto& best = sug.first();
-                lk.tonicPc = normalizePc(best.bestTranspose);
-                lk.scaleKey = best.key;
-                lk.scaleName = best.name;
-                lk.mode = keyModeForScaleKey(best.key);
-                lk.score = best.score;
-                lk.coverage = best.coverage;
-            }
-        }
-        out[i] = lk;
-    }
-    return out;
-}
-static QString chooseScaleUsedForChord(const virtuoso::ontology::OntologyRegistry& reg,
-                                       int keyPc,
-                                       virtuoso::theory::KeyMode keyMode,
-                                       const music::ChordSymbol& chordSym,
-                                       const virtuoso::ontology::ChordDef& chordDef,
-                                       QString* outRoman = nullptr,
-                                       QString* outFunction = nullptr) {
-    const QSet<int> pcs = pitchClassesForChordDef(chordSym.rootPc, chordDef);
-    const auto sugg = virtuoso::theory::suggestScalesForPitchClasses(reg, pcs, 12);
-    if (sugg.isEmpty()) return {};
-    const auto h = virtuoso::theory::analyzeChordInKey(keyPc, keyMode, chordSym.rootPc, chordDef);
-    if (outRoman) *outRoman = h.roman;
-    if (outFunction) *outFunction = h.function;
-
-    struct Sc { virtuoso::theory::ScaleSuggestion s; double score = 0.0; };
-    QVector<Sc> ranked;
-    ranked.reserve(sugg.size());
-    const QString chordKey = ontologyChordKeyFor(chordSym);
-    const QVector<QString> hints = virtuoso::theory::explicitHintScalesForContext(/*voicingKey*/QString(), chordKey);
-    for (const auto& s : sugg) {
-        double bonus = 0.0;
-        if (normalizePc(s.bestTranspose) == normalizePc(chordSym.rootPc)) bonus += 0.6;
-        const QString name = s.name.toLower();
-        if (h.function == "Dominant") {
-            if (name.contains("altered") || name.contains("lydian dominant") || name.contains("mixolydian") || name.contains("half-whole")) bonus += 0.35;
-        } else if (h.function == "Subdominant") {
-            if (name.contains("dorian") || name.contains("lydian") || name.contains("phrygian")) bonus += 0.25;
-        } else if (h.function == "Tonic") {
-            if (name.contains("ionian") || name.contains("major") || name.contains("lydian")) bonus += 0.25;
-        }
-        // Explicit hint nudges (UST/dominant language). Earlier hints get more bonus.
-        for (int i = 0; i < hints.size(); ++i) {
-            if (s.key == hints[i]) bonus += (0.45 - 0.08 * double(i));
-        }
-        ranked.push_back({s, s.score + bonus});
-    }
-    std::sort(ranked.begin(), ranked.end(), [](const Sc& a, const Sc& b) {
-        if (a.score != b.score) return a.score > b.score;
-        return a.s.name < b.s.name;
-    });
-    const auto& best = ranked.first().s;
-    return QString("%1 (%2)").arg(best.name).arg(pcName(best.bestTranspose));
-}
-
-static bool sameChordKey(const music::ChordSymbol& a, const music::ChordSymbol& b) {
-    return (a.rootPc == b.rootPc && a.bassPc == b.bassPc && a.quality == b.quality && a.seventh == b.seventh && a.extension == b.extension && a.alt == b.alt);
-}
-
-static virtuoso::groove::Rational durationWholeFromHoldMs(int holdMs, int bpm) {
-    // GrooveGrid::wholeNotesToMs: wholeMs = 240000 / bpm
-    // => whole = holdMs / wholeMs = holdMs * bpm / 240000
-    if (holdMs <= 0) return virtuoso::groove::Rational(1, 16);
-    if (bpm <= 0) bpm = 120;
-    return virtuoso::groove::Rational(qint64(holdMs) * qint64(bpm), qint64(240000));
-}
+private:
+    QPointer<VirtuosoBalladMvpPlaybackEngine> m_owner;
+    quint64 m_jobId = 0;
+    int m_stepNow = 0;
+    int m_horizonBars = 4;
+    LookaheadPlanner::Inputs m_inputs;
+    JazzBalladBassPlanner m_bass;
+    JazzBalladPianoPlanner m_piano;
+    BrushesBalladDrummer m_drummer;
+};
 
 } // namespace
 
@@ -390,18 +141,8 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
     li.sequence = &m_sequence;
     li.hasLastChord = m_harmony.hasLastChord();
     li.lastChord = m_harmony.lastChord();
-    li.ontology = &m_ontology;
     li.harmonyCtx = &m_harmony;
     li.keyWindowBars = 8;
-    li.hasKeyPcGuess = m_harmony.hasKeyPcGuess();
-    li.keyPcGuess = m_harmony.keyPcGuess();
-    li.keyScaleKey = m_harmony.keyScaleKey();
-    li.keyScaleName = m_harmony.keyScaleName();
-    li.keyMode = m_harmony.keyMode();
-    {
-        const auto& lks = m_harmony.localKeysByBar();
-        li.localKeysByBar = &lks;
-    }
     li.listener = &m_interaction.listener();
     li.vibe = &m_interaction.vibe();
     li.bassPlanner = &m_bassPlanner;
@@ -420,6 +161,7 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
     li.virtInteraction = m_virtInteraction;
     li.virtToneDark = m_virtToneDark;
     li.engineNowMs = m_engine.elapsedMs();
+    li.nowMs = QDateTime::currentMSecsSinceEpoch();
 
     const QString json = LookaheadPlanner::buildLookaheadPlanJson(li, stepNow, /*horizonBars=*/4);
     if (!json.trimmed().isEmpty()) emit lookaheadPlanJson(json);
@@ -501,6 +243,8 @@ void VirtuosoBalladMvpPlaybackEngine::play() {
     m_lastPlayheadStep = -1;
     m_lastEmittedCell = -1;
     m_nextScheduledStep = 0;
+    m_lastLookaheadStepEmitted = -1;
+    m_playStartWallMs = QDateTime::currentMSecsSinceEpoch();
     m_harmony.resetRuntimeState();
     m_bassPlanner.reset();
     m_pianoPlanner.reset();
@@ -585,6 +329,7 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
     const double beatMs = quarterMs * (4.0 / double(qMax(1, ts.den)));
 
     const qint64 elapsedMs = m_engine.elapsedMs();
+    const qint64 nowWallMs = (m_playStartWallMs > 0) ? (m_playStartWallMs + elapsedMs) : QDateTime::currentMSecsSinceEpoch();
     const int stepNow = int(double(elapsedMs) / beatMs);
 
     const int total = seqLen * qMax(1, m_repeats);
@@ -603,50 +348,11 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
         }
     }
 
-    // --- Lookahead plan (4 bars) for UI: emit a full fixed window as JSON array. ---
-    // This is *not* scheduling: it has no side-effects on engine timing or planner state.
-    {
-        LookaheadPlanner::Inputs li;
-        li.bpm = m_bpm;
-        li.ts = ts;
-        li.repeats = m_repeats;
-        li.model = &m_model;
-        li.sequence = &m_sequence;
-        li.hasLastChord = m_harmony.hasLastChord();
-        li.lastChord = m_harmony.lastChord();
-        li.ontology = &m_ontology;
-        li.harmonyCtx = &m_harmony;
-        li.keyWindowBars = 8;
-        li.hasKeyPcGuess = m_harmony.hasKeyPcGuess();
-        li.keyPcGuess = m_harmony.keyPcGuess();
-        li.keyScaleKey = m_harmony.keyScaleKey();
-        li.keyScaleName = m_harmony.keyScaleName();
-        li.keyMode = m_harmony.keyMode();
-        {
-            const auto& lks = m_harmony.localKeysByBar();
-            li.localKeysByBar = &lks;
-        }
-        li.listener = &m_interaction.listener();
-        li.vibe = &m_interaction.vibe();
-        li.bassPlanner = &m_bassPlanner;
-        li.pianoPlanner = &m_pianoPlanner;
-        li.drummer = &m_drummer;
-        li.chDrums = m_chDrums;
-        li.chBass = m_chBass;
-        li.chPiano = m_chPiano;
-        li.stylePresetKey = m_stylePresetKey;
-        li.agentEnergyMult = m_agentEnergyMult;
-        li.debugEnergyAuto = m_debugEnergyAuto;
-        li.debugEnergy = m_debugEnergy;
-        li.virtAuto = m_virtAuto;
-        li.virtHarmonicRisk = m_virtHarmonicRisk;
-        li.virtRhythmicComplexity = m_virtRhythmicComplexity;
-        li.virtInteraction = m_virtInteraction;
-        li.virtToneDark = m_virtToneDark;
-        li.engineNowMs = m_engine.elapsedMs();
-
-        const QString json = LookaheadPlanner::buildLookaheadPlanJson(li, stepNow, /*horizonBars=*/4);
-        if (!json.trimmed().isEmpty()) emit lookaheadPlanJson(json);
+    // --- Lookahead plan (4 bars) for UI ---
+    // Critical: only update on step changes (not every 10ms tick) and only if there are listeners.
+    if (stepNow != m_lastLookaheadStepEmitted && receivers(SIGNAL(lookaheadPlanJson(QString))) > 0) {
+        m_lastLookaheadStepEmitted = stepNow;
+        scheduleLookaheadAsync(stepNow, ts, nowWallMs, elapsedMs);
     }
 
     // Lookahead scheduling window (tight timing).
@@ -658,6 +364,76 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
         scheduleStep(m_nextScheduledStep, seqLen);
         m_nextScheduledStep++;
     }
+}
+
+void VirtuosoBalladMvpPlaybackEngine::scheduleLookaheadAsync(int stepNow,
+                                                            const virtuoso::groove::TimeSignature& ts,
+                                                            qint64 nowWallMs,
+                                                            qint64 engineNowMs) {
+    LookaheadPlanner::Inputs li;
+    li.bpm = m_bpm;
+    li.ts = ts;
+    li.repeats = m_repeats;
+    li.model = &m_model;
+    li.sequence = &m_sequence;
+    li.hasLastChord = m_harmony.hasLastChord();
+    li.lastChord = m_harmony.lastChord();
+    li.harmonyCtx = &m_harmony;
+    li.keyWindowBars = 8;
+
+    // Snapshot interaction on the UI thread (avoid worker touching shared state).
+    li.hasIntentSnapshot = true;
+    li.intentSnapshot = m_interaction.listener().compute(nowWallMs);
+    {
+        VibeStateMachine vibeSim = m_interaction.vibe();
+        li.hasVibeSnapshot = true;
+        li.vibeSnapshot = vibeSim.update(li.intentSnapshot, nowWallMs);
+    }
+    li.listener = nullptr;
+    li.vibe = nullptr;
+
+    // Channels + style context
+    li.chDrums = m_chDrums;
+    li.chBass = m_chBass;
+    li.chPiano = m_chPiano;
+    li.stylePresetKey = m_stylePresetKey;
+    li.agentEnergyMult = m_agentEnergyMult;
+    li.debugEnergyAuto = m_debugEnergyAuto;
+    li.debugEnergy = m_debugEnergy;
+    li.virtAuto = m_virtAuto;
+    li.virtHarmonicRisk = m_virtHarmonicRisk;
+    li.virtRhythmicComplexity = m_virtRhythmicComplexity;
+    li.virtInteraction = m_virtInteraction;
+    li.virtToneDark = m_virtToneDark;
+    li.engineNowMs = engineNowMs;
+    li.nowMs = nowWallMs;
+
+    // Coalesce: only latest job result is applied.
+    const quint64 jobId = ++m_lookaheadJobId;
+
+    // Copy planners into the runnable so background work never reads mutable live planner state.
+    auto* r = new LookaheadRunnable(QPointer<VirtuosoBalladMvpPlaybackEngine>(this),
+                                    jobId,
+                                    stepNow,
+                                    /*horizonBars=*/4,
+                                    li,
+                                    m_bassPlanner,
+                                    m_pianoPlanner,
+                                    m_drummer);
+    QThreadPool::globalInstance()->start(r);
+}
+
+void VirtuosoBalladMvpPlaybackEngine::applyLookaheadResult(quint64 jobId, int stepNow, const QString& json, int buildMs) {
+    // Drop stale results.
+    if (jobId != m_lookaheadJobId.load()) return;
+    if (!m_playing) return;
+    if (stepNow != m_lastLookaheadStepEmitted) return;
+    m_lastLookaheadBuildMs = buildMs;
+    // Lightweight instrumentation: warn if lookahead generation is unexpectedly expensive.
+    if (buildMs >= 25) {
+        qWarning().noquote() << "Virtuoso lookahead build slow:" << buildMs << "ms (step" << stepNow << ")";
+    }
+    if (!json.trimmed().isEmpty()) emit lookaheadPlanJson(json);
 }
 
 void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {

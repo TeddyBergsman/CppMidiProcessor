@@ -570,9 +570,21 @@
 			null
 		],
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/util/DeterminismPolicy.h",
+			"MU",
+			"KPZOHDUKAK/moc_DeterminismPolicy.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/util/StableHash.h",
 			"MU",
 			"KPZOHDUKAK/moc_StableHash.cpp",
+			null
+		],
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/util/StableRng.h",
+			"MU",
+			"KPZOHDUKAK/moc_StableRng.cpp",
 			null
 		],
 		[

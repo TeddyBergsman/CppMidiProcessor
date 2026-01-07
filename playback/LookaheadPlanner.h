@@ -6,16 +6,13 @@
 
 #include "chart/ChartModel.h"
 #include "music/ChordSymbol.h"
-#include "virtuoso/ontology/OntologyRegistry.h"
 #include "virtuoso/groove/GrooveGrid.h"
-#include "virtuoso/theory/FunctionalHarmony.h"
 #include "playback/HarmonyContext.h"
-#include "playback/HarmonyTypes.h"
+#include "playback/SemanticMidiAnalyzer.h"
+#include "playback/VibeStateMachine.h"
 
 namespace playback {
 
-class SemanticMidiAnalyzer;
-class VibeStateMachine;
 class JazzBalladBassPlanner;
 class JazzBalladPianoPlanner;
 class BrushesBalladDrummer;
@@ -36,19 +33,9 @@ public:
         bool hasLastChord = false;
         music::ChordSymbol lastChord;
 
-        // Ontology + harmony context
-        const virtuoso::ontology::OntologyRegistry* ontology = nullptr; // not owned
-        // Preferred: compute sliding-window key context via HarmonyContext.
+        // Harmony context (single source of truth).
         const HarmonyContext* harmonyCtx = nullptr; // not owned
         int keyWindowBars = 8;
-
-        // Legacy fallback key context (used if harmonyCtx is null)
-        bool hasKeyPcGuess = false;
-        int keyPcGuess = 0;
-        QString keyScaleKey;
-        QString keyScaleName;
-        virtuoso::theory::KeyMode keyMode = virtuoso::theory::KeyMode::Major;
-        const QVector<LocalKeyEstimate>* localKeysByBar = nullptr; // not owned
 
         // Runtime agents (not owned)
         SemanticMidiAnalyzer* listener = nullptr;
@@ -79,6 +66,16 @@ public:
 
         // Engine time domain (for TheoryEvent.engine_now_ms)
         qint64 engineNowMs = 0;
+
+        // Lookahead snapshot time domain: caller-provided timestamp used for listener/vibe sampling.
+        // This eliminates direct wall-clock reads inside planning code.
+        qint64 nowMs = 0;
+
+        // Optional precomputed interaction snapshots (preferred for background planning).
+        bool hasIntentSnapshot = false;
+        SemanticMidiAnalyzer::IntentState intentSnapshot{};
+        bool hasVibeSnapshot = false;
+        VibeStateMachine::Output vibeSnapshot{};
     };
 
     // Builds a compact JSON array of virtuoso::theory::TheoryEvent objects (next N bars).

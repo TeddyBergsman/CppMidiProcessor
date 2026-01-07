@@ -95,6 +95,7 @@ private:
     int m_liveBpm = 60;
     int m_liveTsNum = 4;
     int m_liveTsDen = 4;
+    QString m_lastPlanJson;
 
     // Current plan rendered on timeline (filtered by selected logic_tag).
     QVector<virtuoso::ui::GrooveTimelineWidget::LaneEvent> m_displayEvents;

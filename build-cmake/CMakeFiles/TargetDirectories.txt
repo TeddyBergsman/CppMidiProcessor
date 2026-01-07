@@ -28,6 +28,7 @@
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/ContinuousSubmit.dir
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/VirtuosoCore.dir
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/VirtuosoCoreTests.dir
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/VirtuosoPlaybackTests.dir
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/CppMidiProcessor.dir
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/test.dir
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/edit_cache.dir
@@ -36,5 +37,7 @@
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/VirtuosoCore_autogen.dir
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/VirtuosoCoreTests_autogen.dir
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/VirtuosoPlaybackTests_autogen_timestamp_deps.dir
+/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/VirtuosoPlaybackTests_autogen.dir
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/CppMidiProcessor_autogen_timestamp_deps.dir
 /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/CppMidiProcessor_autogen.dir

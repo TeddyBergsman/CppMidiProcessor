@@ -20,6 +20,8 @@ enable_testing()
 # --- VirtuosoCore (new library, Stage 1) ---
 add_library(VirtuosoCore STATIC
   virtuoso/util/StableHash.h
+  virtuoso/util/DeterminismPolicy.h
+  virtuoso/util/StableRng.h
   virtuoso/control/VirtuosityMatrix.h
   virtuoso/solver/CspSolver.h
   virtuoso/memory/MotivicMemory.h
@@ -67,6 +69,23 @@ add_executable(VirtuosoCoreTests
 )
 target_link_libraries(VirtuosoCoreTests PRIVATE VirtuosoCore Qt6::Core)
 add_test(NAME VirtuosoCoreTests COMMAND VirtuosoCoreTests)
+
+add_executable(VirtuosoPlaybackTests
+  playback/tests/VirtuosoPlaybackTests.cpp
+  playback/HarmonyContext.cpp
+  playback/InteractionContext.cpp
+  playback/LookaheadPlanner.cpp
+  playback/JazzBalladBassPlanner.cpp
+  playback/JazzBalladPianoPlanner.cpp
+  playback/BrushesBalladDrummer.cpp
+  playback/SemanticMidiAnalyzer.cpp
+  playback/VibeStateMachine.cpp
+  playback/BalladReferenceTuning.cpp
+  music/Pitch.cpp
+  music/ChordSymbol.cpp
+)
+target_link_libraries(VirtuosoPlaybackTests PRIVATE VirtuosoCore Qt6::Core)
+add_test(NAME VirtuosoPlaybackTests COMMAND VirtuosoPlaybackTests)
 
 
 # --- Define the Executable Target as a macOS App Bundle---

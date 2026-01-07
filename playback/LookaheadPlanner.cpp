@@ -6,202 +6,27 @@
 #include "playback/JazzBalladPianoPlanner.h"
 #include "playback/SemanticMidiAnalyzer.h"
 #include "playback/VibeStateMachine.h"
+#include "playback/InteractionContext.h"
 
 #include "virtuoso/groove/GrooveGrid.h"
-#include "virtuoso/theory/ScaleSuggester.h"
 #include "virtuoso/theory/TheoryEvent.h"
 #include "virtuoso/util/StableHash.h"
 
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QSet>
 #include <QtGlobal>
-#include <algorithm>
 
 namespace playback {
 namespace {
-
-static QVector<const chart::Bar*> flattenBarsFrom(const chart::ChartModel& model) {
-    QVector<const chart::Bar*> bars;
-    for (const auto& line : model.lines) {
-        for (const auto& bar : line.bars) bars.push_back(&bar);
-    }
-    return bars;
-}
-
-static const chart::Cell* cellForFlattenedIndex(const chart::ChartModel& model, int cellIndex) {
-    if (cellIndex < 0) return nullptr;
-    const QVector<const chart::Bar*> bars = flattenBarsFrom(model);
-    const int barIndex = cellIndex / 4;
-    const int cellInBar = cellIndex % 4;
-    if (barIndex < 0 || barIndex >= bars.size()) return nullptr;
-    const auto* bar = bars[barIndex];
-    if (!bar) return nullptr;
-    if (cellInBar < 0 || cellInBar >= bar->cells.size()) return nullptr;
-    return &bar->cells[cellInBar];
-}
-
-static int normalizePc(int pc) {
-    int v = pc % 12;
-    if (v < 0) v += 12;
-    return v;
-}
-
-static QString pcName(int pc) {
-    static const char* names[] = {"C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"};
-    return names[normalizePc(pc)];
-}
-
-static bool sameChordKey(const music::ChordSymbol& a, const music::ChordSymbol& b) {
-    return (a.rootPc == b.rootPc && a.bassPc == b.bassPc && a.quality == b.quality && a.seventh == b.seventh && a.extension == b.extension && a.alt == b.alt);
-}
-
-static QString ontologyChordKeyFor(const music::ChordSymbol& c) {
-    using music::ChordQuality;
-    using music::SeventhQuality;
-    if (c.noChord || c.placeholder) return {};
-    if (c.quality == ChordQuality::Dominant) {
-        if (c.alt) return "7alt";
-        bool hasB9 = false, hasSharp9 = false, hasB13 = false, hasSharp11 = false;
-        for (const auto& a : c.alterations) {
-            if (a.degree == 9 && a.delta < 0) hasB9 = true;
-            if (a.degree == 9 && a.delta > 0) hasSharp9 = true;
-            if (a.degree == 13 && a.delta < 0) hasB13 = true;
-            if (a.degree == 11 && a.delta > 0) hasSharp11 = true;
-        }
-        if (hasB9 && hasSharp9) return "7b9#9";
-        if (hasB9 && hasB13) return "7b9b13";
-        if (hasSharp9 && hasB13) return "7#9b13";
-        if (hasB9) return "7b9";
-        if (hasSharp9) return "7#9";
-        if (hasB13) return "7b13";
-        if (c.extension >= 13 && hasSharp11) return "13#11";
-        if (c.extension >= 13) return "13";
-        if (c.extension >= 11) return "11";
-        if (c.extension >= 9) return "9";
-        if (c.seventh != SeventhQuality::None || c.extension >= 7) return "7";
-        return "7";
-    }
-    if (c.quality == ChordQuality::HalfDiminished) return "m7b5";
-    if (c.quality == ChordQuality::Diminished) {
-        if (c.seventh == SeventhQuality::Dim7) return "dim7";
-        return (c.extension >= 7) ? "dim7" : "dim";
-    }
-    if (c.quality == ChordQuality::Minor) {
-        if (c.seventh == SeventhQuality::Major7) {
-            if (c.extension >= 13) return "minmaj13";
-            if (c.extension >= 11) return "minmaj11";
-            if (c.extension >= 9) return "minmaj9";
-            return "min_maj7";
-        }
-        if (c.extension >= 13) return "min13";
-        if (c.extension >= 11) return "min11";
-        if (c.extension >= 9) return "min9";
-        if (c.seventh != SeventhQuality::None || c.extension >= 7) return "min7";
-        return "min";
-    }
-    if (c.quality == ChordQuality::Major) {
-        bool hasSharp11 = false;
-        for (const auto& a : c.alterations) if (a.degree == 11 && a.delta > 0) hasSharp11 = true;
-        if (c.extension >= 13 && hasSharp11) return "maj13#11";
-        if (c.extension >= 13) return "maj13";
-        if (c.extension >= 11) return "maj11";
-        if (c.extension >= 9 && hasSharp11) return "maj9#11";
-        if (c.extension >= 9) return "maj9";
-        if (c.seventh == SeventhQuality::Major7 || c.extension >= 7) return "maj7";
-        if (c.extension >= 6) return "6";
-        return "maj";
-    }
-    if (c.quality == ChordQuality::Sus2) return "sus2";
-    if (c.quality == ChordQuality::Sus4) {
-        if (c.extension >= 13) return "13sus4";
-        if (c.extension >= 9) return "9sus4";
-        if (c.seventh == SeventhQuality::Minor7 || c.extension >= 7) return "7sus4";
-        return "sus4";
-    }
-    if (c.quality == ChordQuality::Augmented) {
-        if (c.seventh == SeventhQuality::Minor7 || c.extension >= 7) return "aug7";
-        return "aug";
-    }
-    if (c.quality == ChordQuality::Power5) return "5";
-    return {};
-}
-
-static const virtuoso::ontology::ChordDef* chordDefForSymbol(const virtuoso::ontology::OntologyRegistry& reg,
-                                                             const music::ChordSymbol& c) {
-    const QString key = ontologyChordKeyFor(c);
-    if (key.isEmpty()) return nullptr;
-    return reg.chord(key);
-}
-
-static QSet<int> pitchClassesForChordDef(int rootPc, const virtuoso::ontology::ChordDef& chord) {
-    QSet<int> pcs;
-    const int r = normalizePc(rootPc);
-    pcs.insert(r);
-    for (int iv : chord.intervals) pcs.insert(normalizePc(r + iv));
-    return pcs;
-}
-
-static QString chooseScaleUsedForChord(const virtuoso::ontology::OntologyRegistry& reg,
-                                       int keyPc,
-                                       virtuoso::theory::KeyMode keyMode,
-                                       const music::ChordSymbol& chordSym,
-                                       const virtuoso::ontology::ChordDef& chordDef,
-                                       QString* outRoman,
-                                       QString* outFunction) {
-    const QSet<int> pcs = pitchClassesForChordDef(chordSym.rootPc, chordDef);
-    const auto sugg = virtuoso::theory::suggestScalesForPitchClasses(reg, pcs, 12);
-    if (sugg.isEmpty()) return {};
-    const auto h = virtuoso::theory::analyzeChordInKey(keyPc, keyMode, chordSym.rootPc, chordDef);
-    if (outRoman) *outRoman = h.roman;
-    if (outFunction) *outFunction = h.function;
-
-    struct Sc { virtuoso::theory::ScaleSuggestion s; double score = 0.0; };
-    QVector<Sc> ranked;
-    ranked.reserve(sugg.size());
-    const QString chordKey = ontologyChordKeyFor(chordSym);
-    const QVector<QString> hints = virtuoso::theory::explicitHintScalesForContext(QString(), chordKey);
-    for (const auto& s : sugg) {
-        double bonus = 0.0;
-        if (normalizePc(s.bestTranspose) == normalizePc(chordSym.rootPc)) bonus += 0.6;
-        const QString name = s.name.toLower();
-        if (h.function == "Dominant") {
-            if (name.contains("altered") || name.contains("lydian dominant") || name.contains("mixolydian") || name.contains("half-whole")) bonus += 0.35;
-        } else if (h.function == "Subdominant") {
-            if (name.contains("dorian") || name.contains("lydian") || name.contains("phrygian")) bonus += 0.25;
-        } else if (h.function == "Tonic") {
-            if (name.contains("ionian") || name.contains("major") || name.contains("lydian")) bonus += 0.25;
-        }
-        for (int i = 0; i < hints.size(); ++i) {
-            if (s.key == hints[i]) bonus += (0.45 - 0.08 * double(i));
-        }
-        ranked.push_back({s, s.score + bonus});
-    }
-    std::sort(ranked.begin(), ranked.end(), [](const Sc& a, const Sc& b) {
-        if (a.score != b.score) return a.score > b.score;
-        return a.s.name < b.s.name;
-    });
-    const auto& best = ranked.first().s;
-    return QString("%1 (%2)").arg(best.name).arg(pcName(best.bestTranspose));
-}
-
-static QString intentsToString(const SemanticMidiAnalyzer::IntentState& i) {
-    QStringList out;
-    if (i.densityHigh) out << "DENSITY_HIGH";
-    if (i.registerHigh) out << "REGISTER_HIGH";
-    if (i.intensityPeak) out << "INTENSITY_PEAK";
-    if (i.playingOutside) out << "PLAYING_OUTSIDE";
-    if (i.silence) out << "SILENCE";
-    return out.join(",");
-}
 
 } // namespace
 
 QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, int horizonBars) {
     if (!in.model || !in.sequence || in.sequence->isEmpty()) return {};
-    if (!in.listener || !in.vibe || !in.bassPlanner || !in.pianoPlanner || !in.drummer) return {};
-    if (!in.ontology) return {};
+    if (!in.harmonyCtx) return {};
+    if ((!in.listener && !in.hasIntentSnapshot) || (!in.vibe && !in.hasVibeSnapshot)) return {};
+    if (!in.bassPlanner || !in.pianoPlanner || !in.drummer) return {};
 
     const QVector<int>& seq = *in.sequence;
     const int seqLen = seq.size();
@@ -214,14 +39,18 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
     const int horizonBeats = beatsPerBar * qMax(1, horizonBars);
     const int endStep = qMin(total, startStep + horizonBeats);
 
-    // Snapshot interaction state once for this lookahead block.
-    const qint64 nowMsWall = QDateTime::currentMSecsSinceEpoch();
-    const auto intent = in.listener->compute(nowMsWall);
-    const auto vibeEff = in.vibe->update(intent, nowMsWall);
+    // Snapshot interaction state once for this lookahead block (caller-controlled time).
+    const qint64 nowMs = (in.nowMs > 0) ? in.nowMs : QDateTime::currentMSecsSinceEpoch();
+    const auto intent = in.hasIntentSnapshot ? in.intentSnapshot : in.listener->compute(nowMs);
+    const auto vibeEff = in.hasVibeSnapshot ? in.vibeSnapshot : ([&]() {
+        // Lookahead must not mutate live vibe state.
+        VibeStateMachine vibeSim = *in.vibe;
+        return vibeSim.update(intent, nowMs);
+    })();
     const double baseEnergy = qBound(0.0, in.debugEnergyAuto ? vibeEff.energy : in.debugEnergy, 1.0);
     const QString vibeStr = in.debugEnergyAuto ? VibeStateMachine::vibeName(vibeEff.vibe)
                                                : (VibeStateMachine::vibeName(vibeEff.vibe) + " (manual)");
-    const QString intentStr = intentsToString(intent);
+    const QString intentStr = InteractionContext::intentsToString(intent);
     const bool userBusy = (intent.densityHigh || intent.intensityPeak || intent.registerHigh);
 
     // Clone planners so lookahead does not mutate live state.
@@ -233,16 +62,7 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
     bool simHasLast = in.hasLastChord;
 
     auto parseCellChordNoStateLocal = [&](int anyCellIndex, const music::ChordSymbol& fallback, bool* outIsExplicit = nullptr) -> music::ChordSymbol {
-        if (outIsExplicit) *outIsExplicit = false;
-        const chart::Cell* c = cellForFlattenedIndex(*in.model, anyCellIndex);
-        if (!c) return fallback;
-        const QString t = c->chord.trimmed();
-        if (t.isEmpty()) return fallback;
-        music::ChordSymbol parsed;
-        if (!music::parseChordSymbol(t, parsed)) return fallback;
-        if (parsed.placeholder) return fallback;
-        if (outIsExplicit) *outIsExplicit = true;
-        return parsed;
+        return in.harmonyCtx->parseCellChordNoState(*in.model, anyCellIndex, fallback, outIsExplicit);
     };
 
     QJsonArray arr;
@@ -293,7 +113,7 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
             const music::ChordSymbol parsed = parseCellChordNoStateLocal(cellIndex, chord, &explicitChord);
             if (explicitChord) chord = parsed;
             if (!simHasLast) chordIsNew = explicitChord;
-            else chordIsNew = explicitChord && !sameChordKey(chord, simLast);
+            else chordIsNew = explicitChord && !HarmonyContext::sameChordKey(chord, simLast);
             if (explicitChord) { simLast = chord; simHasLast = true; }
         }
         if (!simHasLast) continue;
@@ -311,7 +131,7 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
                 bool explicitNext = false;
                 const music::ChordSymbol cand = parseCellChordNoStateLocal(cellNext, chord, &explicitNext);
                 if (!explicitNext || cand.noChord) continue;
-                if (!sameChordKey(cand, chord)) {
+                if (!HarmonyContext::sameChordKey(cand, chord)) {
                     nextChord = cand;
                     haveNext = true;
                     beatsUntilChange = k;
@@ -346,21 +166,19 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
         const bool strongBeat = (beatInBar == 0 || beatInBar == 2);
         const bool structural = strongBeat || chordIsNew;
 
-        // Key context (sliding window preferred).
+        // Key context (sliding window).
         const int barIdx = cellIndex / 4;
-        const LocalKeyEstimate lk = (in.harmonyCtx)
-            ? in.harmonyCtx->estimateLocalKeyWindow(*in.model, barIdx, qMax(1, in.keyWindowBars))
-            : ((in.localKeysByBar && barIdx >= 0 && barIdx < in.localKeysByBar->size())
-                   ? (*in.localKeysByBar)[barIdx]
-                   : LocalKeyEstimate{in.keyPcGuess, in.keyScaleKey, in.keyScaleName, in.keyMode, 0.0, 0.0});
-        const int keyPc = in.hasKeyPcGuess ? lk.tonicPc : normalizePc(chord.rootPc);
-        const QString keyCenterStr = QString("%1 %2").arg(pcName(keyPc)).arg(lk.scaleName.isEmpty() ? QString("Ionian (Major)") : lk.scaleName);
+        const LocalKeyEstimate lk = in.harmonyCtx->estimateLocalKeyWindow(*in.model, barIdx, qMax(1, in.keyWindowBars));
+        const int keyPc = in.harmonyCtx->hasKeyPcGuess() ? lk.tonicPc : HarmonyContext::normalizePc(chord.rootPc);
+        const QString keyCenterStr = QString("%1 %2")
+                                         .arg(HarmonyContext::pcName(keyPc))
+                                         .arg(lk.scaleName.isEmpty() ? QString("Ionian (Major)") : lk.scaleName);
 
-        const auto* chordDef = chordDefForSymbol(*in.ontology, chord);
+        const auto* chordDef = in.harmonyCtx->chordDefForSymbol(chord);
         QString roman;
         QString func;
         const QString scaleUsed = (chordDef && chord.rootPc >= 0)
-            ? chooseScaleUsedForChord(*in.ontology, keyPc, lk.mode, chord, *chordDef, &roman, &func)
+            ? in.harmonyCtx->chooseScaleUsedForChord(keyPc, lk.mode, chord, *chordDef, &roman, &func)
             : QString();
 
         // Drums

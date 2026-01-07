@@ -1555,8 +1555,7 @@ CMakeFiles/CppMidiProcessor.dir/mainwindow.cpp.o: \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/QRandomGenerator \
-  /opt/homebrew/lib/QtCore.framework/Headers/qrandom.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableRng.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/control/VirtuosityMatrix.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoClock.h \

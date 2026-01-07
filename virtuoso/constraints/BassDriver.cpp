@@ -85,6 +85,8 @@ FeasibilityResult BassDriver::evaluateFeasibility(const PerformanceState& state,
                                 .arg(best.stringIndex)
                                 .arg(best.fret)
                                 .arg(best.cost, 0, 'f', 3));
+        r.stateUpdates.insert("lastFret", best.fret);
+        r.stateUpdates.insert("lastString", best.stringIndex);
         return r;
     }
 
@@ -182,6 +184,10 @@ FeasibilityResult BassDriver::evaluateFeasibility(const PerformanceState& state,
                                 .arg(path[i].cost, 0, 'f', 3));
     }
     r.reasons.push_back(QString("OK: gesture notes=%1 totalCost=%2").arg(notes.size()).arg(bestCost, 0, 'f', 3));
+    if (!path.isEmpty()) {
+        r.stateUpdates.insert("lastFret", path.last().fret);
+        r.stateUpdates.insert("lastString", path.last().stringIndex);
+    }
     return r;
 }
 

@@ -1,12 +1,12 @@
 #pragma once
 
 #include <QtGlobal>
-#include <QRandomGenerator>
 #include <QString>
 
 #include "virtuoso/groove/FeelTemplate.h"
 #include "virtuoso/groove/GrooveGrid.h"
 #include "virtuoso/groove/GrooveTemplate.h"
+#include "virtuoso/util/StableRng.h"
 
 namespace virtuoso::groove {
 
@@ -70,7 +70,7 @@ public:
         // Create a stable, instrument-specific RNG stream.
         const quint32 seed = (m_profile.humanizeSeed == 0u) ? 1u : m_profile.humanizeSeed;
         // Mix with a constant to reduce accidental collisions.
-        m_rng.seed(seed ^ 0xA5C3'91E5u);
+        m_rng.seed(quint64(seed ^ 0xA5C3'91E5u));
         m_currentBar = -1;
         m_currentPhrase = -1;
         m_driftMs = 0;
@@ -126,8 +126,8 @@ public:
         auto tri = [&](int maxAbs) -> int {
             if (maxAbs <= 0) return 0;
             // Two uniforms (0..maxAbs) summed minus maxAbs -> [-maxAbs..+maxAbs] with triangular distribution.
-            const int a = int(m_rng.bounded(maxAbs + 1));
-            const int b = int(m_rng.bounded(maxAbs + 1));
+            const int a = int(m_rng.bounded(quint32(maxAbs + 1)));
+            const int b = int(m_rng.bounded(quint32(maxAbs + 1)));
             return (a + b) - maxAbs;
         };
         const int jitterMax = int(llround(double(m_profile.microJitterMs) * tempoScale));
@@ -227,13 +227,12 @@ private:
                 m_currentPhrase = phraseIndex;
                 // Deterministic phrase RNG seeded by instrument seed + phrase index (independent of note count).
                 const quint32 baseSeed = (m_profile.humanizeSeed == 0u) ? 1u : m_profile.humanizeSeed;
-                QRandomGenerator phraseRng;
-                phraseRng.seed(baseSeed ^ 0x51ED'BEEFu ^ quint32(phraseIndex * 1315423911u));
+                virtuoso::util::StableRng phraseRng(quint64(baseSeed ^ 0x51ED'BEEFu) ^ quint64(quint32(phraseIndex * 1315423911u)));
 
                 auto triLocal = [&](int maxAbs) -> int {
                     if (maxAbs <= 0) return 0;
-                    const int a = int(phraseRng.bounded(maxAbs + 1));
-                    const int b = int(phraseRng.bounded(maxAbs + 1));
+                    const int a = int(phraseRng.bounded(quint32(maxAbs + 1)));
+                    const int b = int(phraseRng.bounded(quint32(maxAbs + 1)));
                     return (a + b) - maxAbs;
                 };
 
@@ -241,7 +240,7 @@ private:
                 m_phraseOffsetMs = qBound(-m_profile.phraseTimingMaxMs, pt, m_profile.phraseTimingMaxMs);
 
                 const double vMax = qBound(0.0, m_profile.phraseVelocityMax, 0.50);
-                const double u = double(phraseRng.generateDouble()); // 0..1
+                const double u = phraseRng.nextDouble01(); // 0..1
                 m_phraseVelMul = 1.0 + ((u * 2.0 - 1.0) * vMax);
                 if (m_phraseVelMul < 0.50) m_phraseVelMul = 0.50;
                 if (m_phraseVelMul > 1.50) m_phraseVelMul = 1.50;
@@ -253,8 +252,8 @@ private:
             }
             const int stepMax = qMax(1, int(llround(double(m_profile.driftMaxMs) * m_profile.driftRate)));
             // Center-weighted drift steps (reduces "random walk jitteriness").
-            const int a = int(m_rng.bounded(stepMax + 1));
-            const int b = int(m_rng.bounded(stepMax + 1));
+            const int a = int(m_rng.bounded(quint32(stepMax + 1)));
+            const int b = int(m_rng.bounded(quint32(stepMax + 1)));
             const int delta = (a + b) - stepMax;
             m_driftMs += delta;
             if (m_driftMs > m_profile.driftMaxMs) m_driftMs = m_profile.driftMaxMs;
@@ -266,7 +265,7 @@ private:
     FeelTemplate m_feel = FeelTemplate::straight();
     bool m_hasGrooveTemplate = false;
     GrooveTemplate m_grooveTemplate{};
-    QRandomGenerator m_rng;
+    virtuoso::util::StableRng m_rng;
     int m_currentBar = -1;
     int m_currentPhrase = -1;
     int m_driftMs = 0;

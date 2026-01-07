@@ -68,6 +68,7 @@ FeasibilityResult DrumDriver::evaluateFeasibility(const PerformanceState& state,
                             .arg(feet)
                             .arg(zone)
                             .arg(cost, 0, 'f', 3));
+    if (zone >= 0) r.stateUpdates.insert("lastDrumZone", zone);
     return r;
 }
 

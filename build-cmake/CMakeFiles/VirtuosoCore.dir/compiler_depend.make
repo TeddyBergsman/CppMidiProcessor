@@ -388,43 +388,9 @@ VirtuosoCore_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/MacOSX1
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__numeric/transform_exclusive_scan.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__numeric/transform_inclusive_scan.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__numeric/transform_reduce.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/bernoulli_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/binomial_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/cauchy_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/chi_squared_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/clamp_to_integral.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/default_random_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/discard_block_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/discrete_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/exponential_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/extreme_value_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/fisher_f_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/gamma_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/generate_canonical.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/geometric_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/independent_bits_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/is_seed_sequence.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/is_valid.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/knuth_b.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/linear_congruential_engine.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/log2.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/lognormal_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/mersenne_twister_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/negative_binomial_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/normal_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/piecewise_constant_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/piecewise_linear_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/poisson_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/random_device.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/ranlux.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/seed_seq.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/shuffle_order_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/student_t_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/subtract_with_carry_engine.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/uniform_int_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/uniform_real_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/weibull_distribution.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/access.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/concepts.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/container_compatible_range.h \
@@ -645,7 +611,6 @@ VirtuosoCore_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/MacOSX1
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/new \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/numeric \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/optional \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/random \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/ratio \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/set \
   /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/stdbool.h \
@@ -803,14 +768,15 @@ VirtuosoCore_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/MacOSX1
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/DeterminismPolicy.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableHash.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableRng.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QElapsedTimer \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QHash \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QJsonObject \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QObject \
-  /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QRandomGenerator \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QString \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QTimer \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QVector \
@@ -896,7 +862,6 @@ VirtuosoCore_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/MacOSX1
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qoverload.h \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qpair.h \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qprocessordetection.h \
-  /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qrandom.h \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qrefcount.h \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qregularexpression.h \
   /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qscopedpointer.h \
@@ -1685,43 +1650,9 @@ CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.o: Virtuos
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_exclusive_scan.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_inclusive_scan.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_reduce.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/bernoulli_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/binomial_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/cauchy_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/chi_squared_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/clamp_to_integral.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/default_random_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/discard_block_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/discrete_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/exponential_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/extreme_value_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/fisher_f_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/gamma_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/generate_canonical.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/geometric_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/independent_bits_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/is_seed_sequence.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/is_valid.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/knuth_b.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/linear_congruential_engine.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/log2.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/lognormal_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/mersenne_twister_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/negative_binomial_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/normal_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/piecewise_constant_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/piecewise_linear_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/poisson_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/random_device.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/ranlux.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/seed_seq.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/shuffle_order_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/student_t_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/subtract_with_carry_engine.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_int_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_real_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/weibull_distribution.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/access.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/concepts.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/container_compatible_range.h \
@@ -1942,7 +1873,6 @@ CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.o: Virtuos
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/new \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/numeric \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/optional \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/random \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/ratio \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/set \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/stdbool.h \
@@ -2129,6 +2059,7 @@ CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.o: Virtuos
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableRng.h \
   /opt/homebrew/include/QtCore/q17memory.h \
   /opt/homebrew/include/QtCore/q20algorithm.h \
   /opt/homebrew/include/QtCore/q20functional.h \
@@ -2271,7 +2202,6 @@ CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.o: Virtuos
   /opt/homebrew/lib/QtCore.framework/Headers/QHash \
   /opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
   /opt/homebrew/lib/QtCore.framework/Headers/QObject \
-  /opt/homebrew/lib/QtCore.framework/Headers/QRandomGenerator \
   /opt/homebrew/lib/QtCore.framework/Headers/QString \
   /opt/homebrew/lib/QtCore.framework/Headers/QTimer \
   /opt/homebrew/lib/QtCore.framework/Headers/QVector \
@@ -2281,7 +2211,6 @@ CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.o: Virtuos
   /opt/homebrew/lib/QtCore.framework/Headers/qhash.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qobject.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/qrandom.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qstring.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qtimer.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qvector.h
@@ -6288,43 +6217,9 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o: /Users/teddybe
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_exclusive_scan.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_inclusive_scan.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_reduce.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/bernoulli_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/binomial_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/cauchy_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/chi_squared_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/clamp_to_integral.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/default_random_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/discard_block_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/discrete_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/exponential_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/extreme_value_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/fisher_f_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/gamma_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/generate_canonical.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/geometric_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/independent_bits_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/is_seed_sequence.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/is_valid.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/knuth_b.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/linear_congruential_engine.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/log2.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/lognormal_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/mersenne_twister_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/negative_binomial_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/normal_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/piecewise_constant_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/piecewise_linear_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/poisson_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/random_device.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/ranlux.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/seed_seq.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/shuffle_order_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/student_t_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/subtract_with_carry_engine.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_int_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_real_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/weibull_distribution.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/access.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/concepts.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/container_compatible_range.h \
@@ -6545,7 +6440,6 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o: /Users/teddybe
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/new \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/numeric \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/optional \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/random \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/ratio \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/set \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/stdbool.h \
@@ -6729,6 +6623,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o: /Users/teddybe
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableRng.h \
   /opt/homebrew/include/QtCore/q17memory.h \
   /opt/homebrew/include/QtCore/q20functional.h \
   /opt/homebrew/include/QtCore/q20memory.h \
@@ -6867,7 +6762,6 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o: /Users/teddybe
   /opt/homebrew/lib/QtCore.framework/Headers/QHash \
   /opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
   /opt/homebrew/lib/QtCore.framework/Headers/QObject \
-  /opt/homebrew/lib/QtCore.framework/Headers/QRandomGenerator \
   /opt/homebrew/lib/QtCore.framework/Headers/QString \
   /opt/homebrew/lib/QtCore.framework/Headers/QTimer \
   /opt/homebrew/lib/QtCore.framework/Headers/QVector \
@@ -6877,7 +6771,6 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/engine/VirtuosoEngine.cpp.o: /Users/teddybe
   /opt/homebrew/lib/QtCore.framework/Headers/qhash.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qobject.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/qrandom.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qstring.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qtimer.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qvector.h
@@ -8220,43 +8113,9 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o: /Users/teddybe
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_exclusive_scan.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_inclusive_scan.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_reduce.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/bernoulli_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/binomial_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/cauchy_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/chi_squared_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/clamp_to_integral.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/default_random_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/discard_block_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/discrete_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/exponential_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/extreme_value_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/fisher_f_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/gamma_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/generate_canonical.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/geometric_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/independent_bits_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/is_seed_sequence.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/is_valid.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/knuth_b.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/linear_congruential_engine.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/log2.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/lognormal_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/mersenne_twister_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/negative_binomial_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/normal_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/piecewise_constant_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/piecewise_linear_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/poisson_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/random_device.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/ranlux.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/seed_seq.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/shuffle_order_engine.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/student_t_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/subtract_with_carry_engine.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_int_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_real_distribution.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/weibull_distribution.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/access.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/concepts.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/container_compatible_range.h \
@@ -8477,7 +8336,6 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o: /Users/teddybe
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/new \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/numeric \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/optional \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/random \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/ratio \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/set \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/stdbool.h \
@@ -8658,6 +8516,7 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o: /Users/teddybe
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/GrooveTemplate.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableRng.h \
   /opt/homebrew/include/QtCore/q17memory.h \
   /opt/homebrew/include/QtCore/q20functional.h \
   /opt/homebrew/include/QtCore/q20memory.h \
@@ -8789,14 +8648,12 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/groove/GrooveRegistry.cpp.o: /Users/teddybe
   /opt/homebrew/include/QtCore/qyieldcpu.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QHash \
   /opt/homebrew/lib/QtCore.framework/Headers/QJsonObject \
-  /opt/homebrew/lib/QtCore.framework/Headers/QRandomGenerator \
   /opt/homebrew/lib/QtCore.framework/Headers/QString \
   /opt/homebrew/lib/QtCore.framework/Headers/QVector \
   /opt/homebrew/lib/QtCore.framework/Headers/QtGlobal \
   /opt/homebrew/lib/QtCore.framework/Headers/qglobal.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qhash.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qjsonobject.h \
-  /opt/homebrew/lib/QtCore.framework/Headers/qrandom.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qstring.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qvector.h
 
@@ -14368,6 +14225,8 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/perm_options.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/path_iterator.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/file_time_type.h:
 
 /opt/homebrew/lib/QtCore.framework/Headers/qjsondocument.h:
@@ -14383,8 +14242,6 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 /opt/homebrew/lib/QtCore.framework/Headers/qtimer.h:
 
 /opt/homebrew/lib/QtCore.framework/Headers/qstring.h:
-
-/opt/homebrew/lib/QtCore.framework/Headers/qrandom.h:
 
 /opt/homebrew/lib/QtCore.framework/Headers/qobject.h:
 
@@ -14492,6 +14349,8 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 
 /opt/homebrew/include/QtCore/qhash.h:
 
+/opt/homebrew/include/QtCore/qglobalstatic.h:
+
 /opt/homebrew/include/QtCore/qfunctionpointer.h:
 
 /opt/homebrew/include/QtCore/qfunctionaltools_impl.h:
@@ -14503,6 +14362,8 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 /opt/homebrew/include/QtCore/qdeadlinetimer.h:
 
 /opt/homebrew/include/QtCore/qdatastream.h:
+
+/opt/homebrew/include/QtCore/qdarwinhelpers.h:
 
 /opt/homebrew/include/QtCore/qcontainertools_impl.h:
 
@@ -14651,6 +14512,8 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_pthread/_pthread_cond_t.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/__endian.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/string.h:
 
 /Library/Developer/CommandLineTools/usr/lib/clang/17/include/__stddef_offsetof.h:
 
@@ -14942,6 +14805,10 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/extent.h:
 
+/opt/homebrew/include/QtCore/qrefcount.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/enable_if.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/disjunction.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_symbol_aliasing.h:
@@ -15028,6 +14895,8 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/size.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/from_range.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/maybe_const.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/enable_borrowed_range.h:
@@ -15041,54 +14910,6 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/container_compatible_range.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/concepts.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_real_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/student_t_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/poisson_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/piecewise_linear_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/piecewise_constant_distribution.h:
-
-/opt/homebrew/include/QtCore/qrefcount.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/enable_if.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/normal_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/negative_binomial_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/mersenne_twister_engine.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/lognormal_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/linear_congruential_engine.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/knuth_b.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/generate_canonical.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/gamma_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/fisher_f_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/discrete_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/discard_block_engine.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/default_random_engine.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/clamp_to_integral.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/cauchy_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/binomial_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/bernoulli_distribution.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_exclusive_scan.h:
 
@@ -15160,8 +14981,6 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/allocator.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/random_device.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/allocation_guard.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/allocate_at_least.h:
@@ -15174,65 +14993,41 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/special_functions.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__system_error/system_error.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/functional:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/roots.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/remainder.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/modulo.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/min_max.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_trivially_lexicographically_comparable.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/inverse_trigonometric_functions.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/inverse_hyperbolic_functions.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/hypot.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/temporary_buffer.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/hyperbolic_functions.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/gamma.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_constant_evaluated.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/fdim.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/exponential_functions.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/copysign.h:
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qbytearraylist.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/abs.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/mismatch.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__locale_dir/locale_base_api/bsd_locale_defaults.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__locale:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__locale_dir/locale_base_api.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__system_error/error_code.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/unreachable_sentinel.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/size.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/reverse_iterator.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stdlib.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/chi_squared_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/reverse_access.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/add_lvalue_reference.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/readable_traits.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/wrap_iter.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/errno.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/prev.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/ostreambuf_iterator.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/ostream_iterator.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cctype:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/ranlux.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/next.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/sample.h:
 
@@ -15245,6 +15040,8 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/string.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/iterator.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/iter_swap.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/istream_iterator.h:
 
@@ -15279,6 +15076,8 @@ CMakeFiles/VirtuosoCore.dir/virtuoso/vocab/VocabularyRegistry.cpp.o: /Users/tedd
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/weak_result_type.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/unary_negate.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/reference_wrapper.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/ranges_operations.h:
 
@@ -15352,6 +15151,8 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__std_mbstate_t.h:
 
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableRng.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__concepts/invocable.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__concepts/convertible_to.h:
@@ -15371,8 +15172,6 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__concepts/common_reference_with.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/filesystem:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/shuffle_order_engine.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/bit_reference.h:
 
@@ -15442,6 +15241,8 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__atomic/aliases.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__assert:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/directory_options.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory_resource/polymorphic_allocator.h:
@@ -15507,6 +15308,8 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 /opt/homebrew/include/QtCore/qcompare_impl.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/ranges_copy_n.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/ranges_copy.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/push_heap.h:
 
@@ -15598,6 +15401,8 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/fill_n.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/size.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/fill.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qglobal.h:
@@ -15627,6 +15432,8 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qminmax.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_types/_wctrans_t.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_types/_uintmax_t.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_types/_uint8_t.h:
 
@@ -15690,8 +15497,6 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/qos.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/weibull_distribution.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/___wctype.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/includes.h:
@@ -15731,8 +15536,6 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 /opt/homebrew/share/cmake/Modules/Linker/AppleClang.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_integral.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/independent_bits_engine.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/high_resolution_clock.h:
 
@@ -15846,8 +15649,6 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 
 /opt/homebrew/lib/cmake/Qt6GuiPrivate/Qt6GuiPrivateConfigVersionImpl.cmake:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/piecewise_linear_distribution.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/convert_to_timespec.h:
 
 /opt/homebrew/lib/cmake/Qt6Widgets/Qt6WidgetsConfigVersionImpl.cmake:
@@ -15857,6 +15658,8 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/compare:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/equal_range.h:
+
+/opt/homebrew/lib/cmake/Qt6Widgets/Qt6QMacStylePluginConfig.cmake:
 
 /opt/homebrew/lib/cmake/Qt6Widgets/Qt6QMacStylePluginAdditionalTargetInfo.cmake:
 
@@ -15970,6 +15773,8 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6QMinimalIntegrationPluginTargets-release.cmake:
 
+/opt/homebrew/lib/cmake/Qt6Gui/Qt6QMinimalIntegrationPluginAdditionalTargetInfo.cmake:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/count.h:
 
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6QJpegPluginTargets-release.cmake:
@@ -15979,8 +15784,6 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityVersions.h:
 
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6QJpegPluginAdditionalTargetInfo.cmake:
-
-/opt/homebrew/lib/QtCore.framework/Headers/QRandomGenerator:
 
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6QJp2PluginTargets-release.cmake:
 
@@ -16092,6 +15895,8 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 
 /opt/homebrew/lib/cmake/Qt6CoreTools/Qt6CoreToolsTargets-release.cmake:
 
+/opt/homebrew/lib/cmake/Qt6CoreTools/Qt6CoreToolsConfigVersionImpl.cmake:
+
 /opt/homebrew/lib/cmake/Qt6CoreTools/Qt6CoreToolsConfigVersion.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/copy_cv.h:
@@ -16103,6 +15908,10 @@ VirtuosoCore_autogen/mocs_compilation.cpp:
 /opt/homebrew/lib/cmake/Qt6Core/Qt6QDarwinBluetoothPermissionPluginTargets-release.cmake:
 
 /opt/homebrew/lib/cmake/Qt6CorePrivate/Qt6CorePrivateVersionlessAliasTargets.cmake:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/remove_const.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/logarithms.h:
 
 /opt/homebrew/lib/cmake/Qt6CorePrivate/Qt6CorePrivateConfig.cmake:
 
@@ -16310,9 +16119,9 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoEngine.cpp:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/cmake/Qt6/QtPublicExternalProjectHelpers.cmake:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/make_32_64_or_128_bit.h:
-
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qvarlengtharray.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/make_32_64_or_128_bit.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/cmake/Qt6/QtPublicDependencyHelpers.cmake:
 
@@ -16330,13 +16139,15 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoEngine.cpp:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/cmake/Qt6/FindWrapVulkanHeaders.cmake:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/remove_const_ref.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/rounding_functions.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/type_identity.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/cmake/Qt6/FindWrapAtomic.cmake:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qxptype_traits.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/clamp_to_integral.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/istreambuf_iterator.h:
 
@@ -16526,8 +16337,6 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoEngine.cpp:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qlocale.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/exponential_distribution.h:
-
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qjsonvalue.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_fd_def.h:
@@ -16553,6 +16362,12 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoEngine.cpp:
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qhash.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qfunctionpointer.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__charconv/traits.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/binder2nd.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qfloat16.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qflags.h:
 
@@ -16618,19 +16433,23 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoEngine.cpp:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qbytearray.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/arm/types.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/unary_negate.h:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qbasicatomic.h:
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/IInstrumentDriver.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_unsigned.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qbasictimer.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qatomic_cxx11.h:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qassert.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/shared_ptr.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/for_each.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/stack.h:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/cmake/Qt6/QtPublicAndroidHelpers.cmake:
+/opt/homebrew/lib/cmake/Qt6CoreTools/Qt6CoreToolsDependencies.cmake:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qarraydataops.h:
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qatomic.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__atomic/memory_order.h:
 
@@ -16640,49 +16459,55 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoEngine.cpp:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qarraydata.h:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qabstracteventdispatcher.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/hypot.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/temporary_buffer.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/hyperbolic_functions.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/solver/CspSolver.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cstring:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/unwrap_iter.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q20type_traits.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q23utility.h:
 
-/opt/homebrew/include/QtCore/qobjectdefs_impl.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/pointer_to_unary_function.h:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q20utility.h:
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qyieldcpu.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__tuple/tuple_types.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_endian.h:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QtGlobal:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/complex.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/nat.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/_types.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QTimer:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/climits:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/add_const.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__bit/invert_if.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__numeric/reduce.h:
 
-/opt/homebrew/lib/cmake/Qt6Gui/Qt6QPdfPluginTargets-release.cmake:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/ranges_transform.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/uninitialized_algorithms.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/qos.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QHash:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__utility/convert_to_integral.h:
-
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h:
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QJsonObject:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.cpp:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/insert_iterator.h:
+/opt/homebrew/include/QtCore/qprocessordetection.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/functional.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__utility/empty.h:
 
-/opt/homebrew/lib/cmake/Qt6CorePrivate/Qt6CorePrivateTargets.cmake:
+/opt/homebrew/lib/cmake/Qt6Gui/Qt6QCocoaIntegrationPluginTargets.cmake:
 
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/conjunction.h:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qset.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_trivially_relocatable.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/concepts:
 
@@ -16691,12 +16516,6 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoEngine.cpp:
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6QMacHeifPluginAdditionalTargetInfo.cmake:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/ScaleSuggester.cpp:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/remove_const_ref.h:
-
-/opt/homebrew/lib/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateConfig.cmake:
-
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/NegativeHarmony.h:
 
 /opt/homebrew/include/QtCore/qlist.h:
 
@@ -16716,11 +16535,11 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoEngine.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/conjunction.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__system_error/error_category.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/dangling.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__utility/auto_cast.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__system_error/error_category.h:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/FunctionalHarmony.cpp:
 
@@ -16740,13 +16559,15 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoEngine.cpp:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__numeric/reduce.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/add_const.h:
-
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.cpp:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/fill.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/cstdio:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/segmented_iterator.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qiodevicebase.h:
 
@@ -16759,8 +16580,6 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoEngine.cpp:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__atomic/atomic.h:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/random:
 
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6GuiPlugins.cmake:
 
@@ -16790,8 +16609,6 @@ VirtuosoCore_autogen/moc_predefs.h:
 
 /Library/Developer/CommandLineTools/usr/lib/clang/17/include/__stdarg___gnuc_va_list.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/piecewise_constant_distribution.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/xlocale.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/data.h:
@@ -16804,7 +16621,23 @@ VirtuosoCore_autogen/moc_predefs.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/replace.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/uninitialized_algorithms.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QHash:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/qos.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/cdefs.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/is_sorted_until.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/sift_down.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/iomanip:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/find_end.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QObject:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qtdeprecationdefinitions.h:
 
@@ -16992,12 +16825,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/adjacent_find.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cstring:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q20type_traits.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/unwrap_iter.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__split_buffer:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__configuration/availability.h:
@@ -17034,6 +16861,12 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/utility:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_pointer.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/DeterminismPolicy.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/assert.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_dev_t.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_id_t.h:
@@ -17045,8 +16878,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_pthread/_pthread_condattr_t.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/typeinfo:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/extreme_value_distribution.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/string_view:
 
@@ -17114,14 +16945,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/locale:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/normal_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/roots.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__system_error/system_error.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/functional:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/ranges_construct_at.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/cwctype:
@@ -17162,15 +16985,23 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/ctime:
 
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qstringview.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/cstring:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/cstdlib:
 
+/opt/homebrew/lib/cmake/Qt6DBus/Qt6DBusConfig.cmake:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/bit_reference.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/is_valid.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/can_extract_key.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_void.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__iterator/iterator.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/segmented_iterator.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/fill.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/cstdio:
 
 /opt/homebrew/share/cmake/Modules/CTestTargets.cmake:
 
@@ -17210,8 +17041,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /opt/homebrew/include/QtCore/qfloat16.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/is_seed_sequence.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__math/remainder.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/streambuf.h:
@@ -17223,6 +17052,10 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qtformat_impl.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/arm/_types.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__bit/invert_if.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/climits:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q20memory.h:
 
@@ -17240,6 +17073,12 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__utility/exception_guard.h:
 
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qstringfwd.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__numeric/pstl.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/noexcept_move_assign_container.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/strip_signature.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/tuple.h:
@@ -17251,10 +17090,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/remove_volatile.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/remove_cvref.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/logarithms.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/remove_const.h:
 
 /opt/homebrew/share/cmake/Modules/Compiler/AppleClang-CXX.cmake:
 
@@ -17276,16 +17111,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/machine/_types.h:
 
-/opt/homebrew/lib/cmake/Qt6DBus/Qt6DBusConfig.cmake:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/bit_reference.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/is_valid.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/can_extract_key.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_void.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_unsigned_integer.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/string_view.h:
@@ -17293,10 +17118,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_signed_integer.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/cmake/Qt6/FindWrapOpenGL.cmake:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qbasictimer.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_unsigned.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__utility/integer_sequence.h:
 
@@ -17307,6 +17128,26 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_union.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_trivially_destructible.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/time.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/memory:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__iterator/front_insert_iterator.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/type_list.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/type_identity.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__concepts/constructible.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__iterator/size.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/arm/_types.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__system_error/errc.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_trivial.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_swappable.h:
 
@@ -17342,8 +17183,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_primary_template.h:
 
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/solver/CspSolver.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_pointer.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/set_difference.h:
@@ -17355,6 +17194,10 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__atomic/fence.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_nothrow_assignable.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_floating_point.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qarraydatapointer.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qlogging.h:
 
@@ -17382,10 +17225,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_function.h:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qarraydatapointer.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_floating_point.h:
-
 /opt/homebrew/include/QtCore/qbindingstorage.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_execution_policy.h:
@@ -17399,10 +17238,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/transform.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__numeric/adjacent_difference.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/fdim.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_constant_evaluated.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types/_fd_isset.h:
 
@@ -17432,8 +17267,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/appleapiopts.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/exponential_distribution.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_class.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_bounds.h:
@@ -17452,8 +17285,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_assignable.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/linear_congruential_engine.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/remove_all_extents.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_array.h:
@@ -17465,6 +17296,10 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types/_int8_t.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_arithmetic.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__utility/convert_to_integral.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h:
 
 /opt/homebrew/lib/QtCore.framework/Headers/QStringList:
 
@@ -17492,6 +17327,8 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/has_virtual_destructor.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/desugars_to.h:
+
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoEngine.cpp:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/cmake/Qt6/QtPublicSbomQtEntityHelpers.cmake:
@@ -17516,11 +17353,11 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/add_volatile.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/unary_negate.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/unwrap_iter.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/extreme_value_distribution.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__mutex/lock_guard.h:
 
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/IInstrumentDriver.h:
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q20functional.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/add_cv.h:
 
@@ -17546,29 +17383,15 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__tree:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/fisher_f_distribution.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__format/enable_insertable.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__thread/id.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/discrete_distribution.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/format_string.h:
 
 /opt/homebrew/lib/cmake/Qt6GuiPrivate/Qt6GuiPrivateTargets.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__system_error/error_condition.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__concepts/constructible.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_trivial.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__iterator/size.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/arm/_types.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__system_error/errc.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/format.h:
 
@@ -17586,141 +17409,27 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/enable_view.h:
 
-/opt/homebrew/share/cmake/Modules/CheckCXXCompilerFlag.cmake:
+/opt/homebrew/lib/cmake/Qt6DBusPrivate/Qt6DBusPrivateConfigVersion.cmake:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/ostream:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/minmax_element.h:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qversiontagging.h:
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableHash.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/decay.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/iota.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_u_char.h:
+/opt/homebrew/lib/cmake/Qt6Gui/Qt6QCocoaIntegrationPluginConfig.cmake:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qfloat16.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/_types/_locale_t.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__charconv/traits.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/binder2nd.h:
-
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.cpp:
-
-/opt/homebrew/lib/cmake/Qt6Gui/Qt6QJp2PluginAdditionalTargetInfo.cmake:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_timespec.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/concepts.h:
-
-/opt/homebrew/include/QtCore/qarraydatapointer.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/numeric:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/reference_wrapper.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/mutex:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/cstddef:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/uniform_int_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/seed_seq.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_pointer.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/assert.h:
-
-/opt/homebrew/include/QtCore/qdarwinhelpers.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/ranlux.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/random_device.h:
-
-/opt/homebrew/include/QtCore/qshareddata_impl.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/merge.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/remove_all_extents.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/poisson_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__assert:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_types/_uintmax_t.h:
-
-/opt/homebrew/include/QtCore/qglobalstatic.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/knuth_b.h:
-
-/opt/homebrew/lib/cmake/Qt6Xml/Qt6XmlVersionlessAliasTargets.cmake:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/find_segment_if.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ranges/from_range.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/independent_bits_engine.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/time.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/memory:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__iterator/front_insert_iterator.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/type_list.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/type_identity.h:
-
-/opt/homebrew/include/QtCore/qprocessordetection.h:
-
-/opt/homebrew/lib/cmake/Qt6Gui/Qt6QCocoaIntegrationPluginTargets.cmake:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__utility/empty.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/geometric_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__chrono/steady_clock.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_const.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_abstract.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/gamma_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__concepts/convertible_to.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/default_random_engine.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qstringview.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/cstring:
-
-/opt/homebrew/lib/cmake/Qt6CoreTools/Qt6CoreToolsConfigVersionImpl.cmake:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/binomial_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/desugars_to.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/ranges_copy.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/bernoulli_distribution.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/search.h:
 
 /opt/homebrew/lib/cmake/Qt6Core/Qt6QDarwinLocationPermissionPluginTargets-release.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__numeric/transform_exclusive_scan.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/pointer_to_unary_function.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qyieldcpu.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_endian.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/complex.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/nat.h:
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/function.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/noexcept_move_assign_container.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__numeric/pstl.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/format_arg.h:
 
@@ -17741,8 +17450,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__numeric/exclusive_scan.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/upper_bound.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qrandom.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/cmake/Qt6/QtPublicCMakeVersionHelpers.cmake:
 
@@ -17772,12 +17479,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__atomic/to_gcc_order.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/unwrap_iter.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q20functional.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__mutex/lock_guard.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/all_of.h:
 
 /opt/homebrew/lib/cmake/Qt6GuiPrivate/Qt6GuiPrivateDependencies.cmake:
@@ -17785,10 +17486,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/engine/VirtuosoScheduler.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__cstddef/nullptr_t.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/ranges_transform.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QJsonObject:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/in_out_result.h:
 
@@ -17826,18 +17523,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_trivially_copyable.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/iter_swap.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/chi_squared_distribution.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/stack.h:
-
-/opt/homebrew/lib/cmake/Qt6CoreTools/Qt6CoreToolsDependencies.cmake:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qatomic.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/shared_ptr.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__compare/ordering.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/nth_element.h:
@@ -17846,15 +17531,11 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/out_ptr.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/uniform_random_bit_generator.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/_xlocale.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__utility/in_place.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__tuple/ignore.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qstringfwd.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/inout_ptr.h:
 
@@ -17893,6 +17574,8 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/auto_ptr.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__concepts/derived_from.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/reverse_iterator.h:
 
 /opt/homebrew/share/cmake/Modules/Platform/Apple-Clang-CXX.cmake:
 
@@ -18016,11 +17699,19 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/boyer_moore_searcher.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/generate_n.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_const.h:
 
-/opt/homebrew/share/cmake/Modules/FindPackageHandleStandardArgs.cmake:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/ostream:
 
-/opt/homebrew/lib/cmake/Qt6Gui/Qt6QMinimalIntegrationPluginAdditionalTargetInfo.cmake:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/decay.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qversiontagging.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_abstract.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__concepts/convertible_to.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/modulo.h:
 
 /opt/homebrew/lib/cmake/Qt6Core/Qt6CoreAdditionalTargetInfo.cmake:
 
@@ -18070,6 +17761,10 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/subrange.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/invoke.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/traits.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__numeric/transform_inclusive_scan.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_types.h:
@@ -18108,10 +17803,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/byte.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__iterator/iterator_traits.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/cauchy_distribution.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/weak_result_type.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/sort_heap.h:
@@ -18128,8 +17819,6 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/perfect_forward.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/student_t_distribution.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/not_fn.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/iterator_operations.h:
@@ -18142,6 +17831,8 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/is_transparent.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/abs.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/rotate_copy.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/forward_list:
@@ -18152,27 +17843,9 @@ CMakeFiles/4.0.3/CMakeCCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/copy_if.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/traits.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/invoke.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__concepts/swappable.h:
 
-/opt/homebrew/lib/cmake/Qt6WidgetsTools/Qt6WidgetsToolsAdditionalTargetInfo.cmake:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/vector.h:
-
-VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_in_addr_t.h:
-
-/opt/homebrew/include/QtCore/qcontainerfwd.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qstringliteral.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/default_searcher.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/discard_block_engine.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__iterator/iterator_traits.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_fsfilcnt_t.h:
 
@@ -18180,19 +17853,15 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/binary_negate.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/rounding_functions.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/remove_const_ref.h:
-
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qtconfiginclude.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__math/special_functions.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/ostream_iterator.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/set:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/string.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/uniform_real_distribution.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/min_max.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/enable_insertable.h:
 
@@ -18223,6 +17892,12 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 /opt/homebrew/share/cmake/Modules/Internal/CMakeCXXLinkerInformation.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/binary_search.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__assertion_handler:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__locale_dir/locale_base_api.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/enable_borrowed_range.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/equal_range.h:
 
@@ -18280,9 +17955,17 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__configuration/platform.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/add_lvalue_reference.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/readable_traits.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__iterator/prev.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/search.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/generate_n.h:
+
+/opt/homebrew/share/cmake/Modules/FindPackageHandleStandardArgs.cmake:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__chrono/steady_clock.h:
 
 /opt/homebrew/lib/cmake/Qt6Core/Qt6CoreMacros.cmake:
 
@@ -18302,8 +17985,6 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/half_positive.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/generate_canonical.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__charconv/to_chars_integral.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__concepts/invocable.h:
@@ -18322,18 +18003,6 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/reverse.h:
 
-/opt/homebrew/lib/cmake/Qt6DBusPrivate/Qt6DBusPrivateConfigVersion.cmake:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/minmax_element.h:
-
-/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableHash.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/iota.h:
-
-/opt/homebrew/lib/cmake/Qt6Gui/Qt6QCocoaIntegrationPluginConfig.cmake:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/_types/_locale_t.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__atomic/atomic_sync.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/unary_function.h:
@@ -18348,7 +18017,9 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__compare/common_comparison_category.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/geometric_distribution.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/cstddef:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/mutex:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/xlocale/_wchar.h:
 
@@ -18358,13 +18029,29 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__chrono/high_resolution_clock.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/subtract_with_carry_engine.h:
+/opt/homebrew/share/cmake/Modules/CheckCXXCompilerFlag.cmake:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_u_char.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/raw_storage_iterator.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/count.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/inverse_hyperbolic_functions.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__exception/exception_ptr.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/empty.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__numeric/transform_reduce.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__chrono/duration.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__cstddef/size_t.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qstringmatcher.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__format/formatter_integral.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types/_u_int.h:
 
@@ -18372,7 +18059,9 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/iosfwd:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/negative_binomial_distribution.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__tuple/tuple_types.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QtGlobal:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__iterator/empty.h:
 
@@ -18395,6 +18084,10 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__bit/blsr.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__atomic/fence.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cctype:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/next.h:
 
 /Library/Developer/CommandLineTools/usr/lib/clang/17/include/__stdarg_va_arg.h:
 
@@ -18430,6 +18123,10 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__concepts/predicate.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stdlib.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/reverse_access.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/search_n.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/remove_copy_if.h:
@@ -18446,6 +18143,8 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/partition_point.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/unreachable_sentinel.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__atomic/atomic_base.h:
 
 /opt/homebrew/include/QtCore/qshareddata.h:
@@ -18454,24 +18153,6 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/istream.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/iomanip:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/find_end.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QObject:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/is_sorted_until.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/sift_down.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qstringmatcher.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__format/formatter_integral.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/enable_borrowed_range.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__assertion_handler:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/partition_copy.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types/_ucontext.h:
@@ -18479,10 +18160,6 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/set_intersection.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/array.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QRandomGenerator:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/seed_seq.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_enum.h:
 
@@ -18495,8 +18172,6 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__concepts/boolean_testable.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/find_if_not.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__cstddef/size_t.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/invoke.h:
 
@@ -18515,6 +18190,10 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 /opt/homebrew/lib/cmake/Qt6GuiTools/Qt6GuiToolsConfig.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/for_each_n.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/boyer_moore_searcher.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q17memory.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/xlocale.h:
 
@@ -18560,6 +18239,20 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/sort.h:
 
+/opt/homebrew/lib/cmake/Qt6WidgetsTools/Qt6WidgetsToolsAdditionalTargetInfo.cmake:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__fwd/vector.h:
+
+VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_in_addr_t.h:
+
+/opt/homebrew/include/QtCore/qcontainerfwd.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qstringliteral.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/default_searcher.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types/_sigset_t.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/desugars_to.h:
@@ -18582,8 +18275,6 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/simd_utils.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/shuffle_order_engine.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/utility:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/errno.h:
@@ -18597,6 +18288,8 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__compare/ordering.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__bit_reference:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__locale_dir/locale_base_api/bsd_locale_defaults.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/ranges_fill_n.h:
 
@@ -18628,7 +18321,11 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/replace_copy_if.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_fsblkcnt_t.h:
+/opt/homebrew/lib/cmake/Qt6Gui/Qt6QJp2PluginAdditionalTargetInfo.cmake:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_timespec.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/concepts.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__debug_utils/strict_weak_ordering_check.h:
 
@@ -18640,7 +18337,13 @@ VirtuosoCore_autogen/TK2HK7UQC3/moc_VirtuosoScheduler.cpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_destructible.h:
 
+/opt/homebrew/include/QtCore/qobjectdefs_impl.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q20utility.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/inplace_merge.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qabstracteventdispatcher.h:
 
 /opt/homebrew/share/cmake/Modules/Compiler/Clang.cmake:
 
@@ -18649,12 +18352,6 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/partial_sort.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__concepts/class_or_enum.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__locale:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qbytearraylist.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/mismatch.h:
 
 /opt/homebrew/lib/cmake/Qt6Core/Qt6QDarwinBluetoothPermissionPluginDependencies.cmake:
 
@@ -18670,6 +18367,12 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6QTuioTouchPluginTargets.cmake:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/remove_const_ref.h:
+
+/opt/homebrew/lib/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateConfig.cmake:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/NegativeHarmony.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_time.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/stack:
@@ -18681,6 +18384,8 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/min_element.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/make_heap.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QElapsedTimer:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__bit/rotate.h:
 
@@ -18712,21 +18417,21 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/ostream.h:
 
+/opt/homebrew/include/QtCore/qshareddata_impl.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/remove_all_extents.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/merge.h:
+
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qforeach.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory_resource/polymorphic_allocator.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/copy_move_common.h:
 
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/QElapsedTimer:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/pop_heap.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/data.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/wrap_iter.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__system_error/error_code.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/addressof.h:
 
@@ -18735,8 +18440,6 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__math/hypot.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__math/modulo.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/is_seed_sequence.h:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qstringconverter_base.h:
 
@@ -18754,11 +18457,23 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/is_permutation.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/copysign.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/push_heap.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternal.h:
 
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qassert.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__compare/synth_three_way.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/insert_iterator.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/functional.h:
+
+/opt/homebrew/lib/cmake/Qt6CorePrivate/Qt6CorePrivateTargets.cmake:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/theory/TheoryEvent.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/shuffle.h:
 
@@ -18770,19 +18485,11 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_object.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/conjunction.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_trivially_relocatable.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/partition.h:
 
 /opt/homebrew/share/cmake/Modules/CTest.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__concepts/boolean_testable.h:
-
-/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/q17memory.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/boyer_moore_searcher.h:
 
 /opt/homebrew/lib/cmake/Qt6Core/Qt6CoreConfigExtras.cmake:
 
@@ -18802,17 +18509,11 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qtimer.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__random/subtract_with_carry_engine.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/temp_value.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types/_u_int64_t.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__tuple/tuple_indices.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/reference_wrapper.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/mersenne_twister_engine.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_constructible.h:
 
@@ -18830,9 +18531,15 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/make_projected.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/version:
+/opt/homebrew/include/QtCore/qarraydatapointer.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/random:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/numeric:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/reference_wrapper.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/uniform_int_distribution.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/version:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__utility/no_destroy.h:
 
@@ -18862,6 +18569,10 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__tuple/find_index.h:
 
+/opt/homebrew/lib/cmake/Qt6Xml/Qt6XmlVersionlessAliasTargets.cmake:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/find_segment_if.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_char_like_type.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/pointer_traits.h:
@@ -18871,6 +18582,8 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_mb_cur_max.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/_time.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qset.h:
 
 /opt/homebrew/share/cmake/Modules/CMakeFindDependencyMacro.cmake:
 
@@ -18892,9 +18605,19 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/execution:
 
+/opt/homebrew/Cellar/qt/6.9.1/lib/cmake/Qt6/QtPublicAndroidHelpers.cmake:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/for_each.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/swap_ranges.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/set_symmetric_difference.h:
+
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/arm/types.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qbasicatomic.h:
+
+/opt/homebrew/Cellar/qt/6.9.1/lib/QtCore.framework/Versions/A/Headers/qarraydataops.h:
 
 /opt/homebrew/share/cmake/Modules/Platform/Linker/Apple-AppleClang.cmake:
 
@@ -18902,11 +18625,11 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__functional/operations.h:
 
+/opt/homebrew/lib/cmake/Qt6Gui/Qt6QPdfPluginTargets-release.cmake:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/arm/_endian.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_always_bitcastable.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/weibull_distribution.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__utility/forward.h:
 
@@ -18934,6 +18657,8 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/adjacent_find.h:
 
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/sys/_types/_fsblkcnt_t.h:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__memory/allocator.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/_bounds.h:
@@ -18950,18 +18675,6 @@ CMakeFiles/4.0.3/CMakeCXXCompiler.cmake:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/TargetConditionals.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/is_heap.h:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/for_each_segment.h:
 
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__exception/exception_ptr.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__ranges/empty.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/count.h:
-
-/opt/homebrew/lib/cmake/Qt6Widgets/Qt6QMacStylePluginConfig.cmake:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/path_iterator.h:
-
-/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__random/lognormal_distribution.h:
+/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__algorithm/is_heap.h:

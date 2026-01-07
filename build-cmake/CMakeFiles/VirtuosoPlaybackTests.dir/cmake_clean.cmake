@@ -1,0 +1,40 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/VirtuosoPlaybackTests_autogen.dir/AutogenUsed.txt"
+  "CMakeFiles/VirtuosoPlaybackTests_autogen.dir/ParseCache.txt"
+  "VirtuosoPlaybackTests_autogen"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.o.d"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/music/ChordSymbol.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/music/ChordSymbol.cpp.o.d"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/music/Pitch.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/music/Pitch.cpp.o.d"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/BalladReferenceTuning.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/BalladReferenceTuning.cpp.o.d"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/BrushesBalladDrummer.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/BrushesBalladDrummer.cpp.o.d"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/HarmonyContext.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/HarmonyContext.cpp.o.d"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/InteractionContext.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/InteractionContext.cpp.o.d"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/JazzBalladBassPlanner.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/JazzBalladBassPlanner.cpp.o.d"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/JazzBalladPianoPlanner.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/JazzBalladPianoPlanner.cpp.o.d"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/LookaheadPlanner.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/LookaheadPlanner.cpp.o.d"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/SemanticMidiAnalyzer.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/SemanticMidiAnalyzer.cpp.o.d"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/VibeStateMachine.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/VibeStateMachine.cpp.o.d"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/tests/VirtuosoPlaybackTests.cpp.o"
+  "CMakeFiles/VirtuosoPlaybackTests.dir/playback/tests/VirtuosoPlaybackTests.cpp.o.d"
+  "VirtuosoPlaybackTests"
+  "VirtuosoPlaybackTests.pdb"
+  "VirtuosoPlaybackTests_autogen/mocs_compilation.cpp"
+  "VirtuosoPlaybackTests_autogen/timestamp"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/VirtuosoPlaybackTests.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

@@ -894,6 +894,7 @@ CppMidiProcessor_autogen/timestamp: /Library/Developer/CommandLineTools/SDKs/Mac
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ui/GuitarFretboardWidget.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ui/PianoKeyboardWidget.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/ui/PianoKeyboardWidget.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableRng.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/VocabularyRegistry.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/voicecontroller.cpp \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/voicecontroller.h \
@@ -2685,6 +2686,8 @@ CMakeFiles/4.0.3/CMakeSystem.cmake:
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_allocator.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/remove_cv.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableRng.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/include/c++/v1/__type_traits/is_valid_expansion.h:
 

@@ -42,18 +42,6 @@ int JazzBalladBassPlanner::chooseApproachMidi(int nextRootMidi, int lastMidi) {
     return (dBelow <= dAbove) ? below : above;
 }
 
-int JazzBalladBassPlanner::parseFretFromReasonLine(const QString& s) {
-    // BassDriver emits: "OK: note=.. string=.. fret=.. cost=.."
-    const int idx = s.indexOf("fret=");
-    if (idx < 0) return -1;
-    const int start = idx + 5;
-    int end = start;
-    while (end < s.size() && s[end].isDigit()) end++;
-    bool ok = false;
-    const int fret = s.mid(start, end - start).toInt(&ok);
-    return ok ? fret : -1;
-}
-
 bool JazzBalladBassPlanner::feasibleOrRepair(int& midi) {
     midi = clampMidi(midi);
     // Try a few octave shifts to satisfy fret constraints.
@@ -62,14 +50,8 @@ bool JazzBalladBassPlanner::feasibleOrRepair(int& midi) {
         g.midiNotes = {midi};
         const auto r = m_driver.evaluateFeasibility(m_state, g);
         if (r.ok) {
-            // Update lastFret/lastString by parsing the OK message (prefer the last OK note line).
-            for (int i = r.reasons.size() - 1; i >= 0; --i) {
-                const QString& line = r.reasons[i];
-                const int f = parseFretFromReasonLine(line);
-                const int sIdx = parseStringFromReasonLine(line);
-                if (f >= 0) m_state.ints.insert("lastFret", f);
-                if (sIdx >= 0) m_state.ints.insert("lastString", sIdx);
-                if (f >= 0 || sIdx >= 0) break;
+            for (auto it = r.stateUpdates.begin(); it != r.stateUpdates.end(); ++it) {
+                m_state.ints.insert(it.key(), it.value());
             }
             m_lastMidi = midi;
             return true;
@@ -85,13 +67,8 @@ bool JazzBalladBassPlanner::feasibleOrRepair(int& midi) {
     g.midiNotes = {midi};
     const auto r2 = m_driver.evaluateFeasibility(m_state, g);
     if (r2.ok) {
-        for (int i = r2.reasons.size() - 1; i >= 0; --i) {
-            const QString& line = r2.reasons[i];
-            const int f = parseFretFromReasonLine(line);
-            const int sIdx = parseStringFromReasonLine(line);
-            if (f >= 0) m_state.ints.insert("lastFret", f);
-            if (sIdx >= 0) m_state.ints.insert("lastString", sIdx);
-            if (f >= 0 || sIdx >= 0) break;
+        for (auto it = r2.stateUpdates.begin(); it != r2.stateUpdates.end(); ++it) {
+            m_state.ints.insert(it.key(), it.value());
         }
         m_lastMidi = midi;
         return true;
@@ -99,12 +76,13 @@ bool JazzBalladBassPlanner::feasibleOrRepair(int& midi) {
     return false;
 }
 
-int JazzBalladBassPlanner::chooseApproachMidiWithConstraints(int nextRootMidi) const {
+int JazzBalladBassPlanner::chooseApproachMidiWithConstraints(int nextRootMidi, QString* outChoiceId) const {
     // Two candidates: chromatic below / above.
     QVector<virtuoso::solver::Candidate<int>> cands;
     cands.push_back({"below", nextRootMidi - 1});
     cands.push_back({"above", nextRootMidi + 1});
 
+    virtuoso::solver::DecisionTrace trace;
     const int bestIdx = virtuoso::solver::CspSolver::chooseMinCost(cands, [&](const auto& cand) {
         virtuoso::solver::EvalResult er;
         const int midi = clampMidi(cand.value);
@@ -124,10 +102,12 @@ int JazzBalladBassPlanner::chooseApproachMidiWithConstraints(int nextRootMidi) c
         er.cost = s;
         er.reasons = fr.reasons;
         return er;
-    });
+    }, &trace);
 
+    if (outChoiceId) *outChoiceId = (trace.chosenIndex >= 0) ? trace.chosenId : QString();
     if (bestIdx >= 0) return cands[bestIdx].value;
     // Fallback (should be rare): below.
+    if (outChoiceId) *outChoiceId = "below_fallback";
     return nextRootMidi - 1;
 }
 
@@ -437,7 +417,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             if (ph.action == BA::Rest) return out;
             if (ph.action == BA::ApproachToNext && nextChanges) {
                 const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi) : (nextRootMidi - 1);
+                QString appChoice;
+                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi, &appChoice) : (nextRootMidi - 1);
                 while (approachMidi < 40) approachMidi += 12;
                 while (approachMidi > 57) approachMidi -= 12;
                 int repaired = approachMidi;
@@ -451,7 +432,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                     n.durationWhole = Rational(qMax(1, ph.dur_num), qMax(1, ph.dur_den));
                     n.structural = false;
                     n.chord_context = c.chordText;
-                    n.logic_tag = QString("VocabPhrase:Bass:%1").arg(phraseId);
+                    n.logic_tag = QString("VocabPhrase:Bass:%1").arg(phraseId)
+                        + (appChoice.trimmed().isEmpty() ? QString() : (QString("|csp_app=") + appChoice));
                     n.target_note = ph.notes.isEmpty() ? phraseNotes : ph.notes;
                     out.push_back(n);
                     return out;
@@ -477,7 +459,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             if (vocabChoice.action == BA::Rest) return out;
             if (vocabChoice.action == BA::ApproachToNext && nextChanges) {
                 const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi) : (nextRootMidi - 1);
+                QString appChoice;
+                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi, &appChoice) : (nextRootMidi - 1);
                 while (approachMidi < 40) approachMidi += 12;
                 while (approachMidi > 57) approachMidi -= 12;
                 int repaired = approachMidi;
@@ -491,7 +474,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                     n.durationWhole = Rational(qMax(1, vocabChoice.dur_num), qMax(1, vocabChoice.dur_den));
                     n.structural = false;
                     n.chord_context = c.chordText;
-                    n.logic_tag = QString("Vocab:Bass:%1").arg(vocabChoice.id);
+                    n.logic_tag = QString("Vocab:Bass:%1").arg(vocabChoice.id)
+                        + (appChoice.trimmed().isEmpty() ? QString() : (QString("|csp_app=") + appChoice));
                     n.target_note = vocabChoice.notes.isEmpty()
                                         ? QString("Approach -> next root pc=%1").arg(nextRootPc)
                                         : vocabChoice.notes;
@@ -592,7 +576,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             if (best && best->rest) return out;
             if (best && best->approach && nextChanges) {
                 const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi) : (nextRootMidi - 1);
+                QString appChoice;
+                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi, &appChoice) : (nextRootMidi - 1);
                 while (approachMidi < 40) approachMidi += 12;
                 while (approachMidi > 57) approachMidi -= 12;
                 int repaired = approachMidi;
@@ -606,7 +591,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                     n.durationWhole = Rational(1, ts.den);
                     n.structural = false;
                     n.chord_context = c.chordText;
-                    n.logic_tag = "bass_solver_approach";
+                    n.logic_tag = QString("bass_solver_approach") + (appChoice.trimmed().isEmpty() ? QString() : (QString("|csp_app=") + appChoice));
                     n.target_note = QString("Approach -> next root pc=%1").arg(nextRootPc);
                     out.push_back(n);
                     return out;
@@ -625,7 +610,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             const auto& ph = phraseHits.first();
             if (ph.action == virtuoso::vocab::VocabularyRegistry::BassAction::PickupToNext) {
                 const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi) : (nextRootMidi - 1);
+                QString appChoice;
+                int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi, &appChoice) : (nextRootMidi - 1);
                 while (approachMidi < 40) approachMidi += 12;
                 while (approachMidi > 57) approachMidi -= 12;
                 int repaired = approachMidi;
@@ -640,7 +626,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                 n.durationWhole = Rational(qMax(1, ph.dur_num), qMax(1, ph.dur_den));
                 n.structural = false;
                 n.chord_context = c.chordText;
-                n.logic_tag = QString("VocabPhrase:Bass:%1").arg(phraseId);
+                n.logic_tag = QString("VocabPhrase:Bass:%1").arg(phraseId)
+                    + (appChoice.trimmed().isEmpty() ? QString() : (QString("|csp_app=") + appChoice));
                 n.target_note = ph.notes.isEmpty() ? phraseNotes : ph.notes;
                 out.push_back(n);
                 return out;
@@ -649,7 +636,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
 
         if (haveVocab && vocabChoice.action == virtuoso::vocab::VocabularyRegistry::BassAction::PickupToNext) {
             const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-            int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi) : (nextRootMidi - 1);
+            QString appChoice;
+            int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi, &appChoice) : (nextRootMidi - 1);
             while (approachMidi < 40) approachMidi += 12;
             while (approachMidi > 57) approachMidi -= 12;
             int repaired = approachMidi;
@@ -665,7 +653,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             n.durationWhole = Rational(qMax(1, vocabChoice.dur_num), qMax(1, vocabChoice.dur_den));
             n.structural = false;
             n.chord_context = c.chordText;
-            n.logic_tag = QString("Vocab:Bass:%1").arg(vocabChoice.id);
+            n.logic_tag = QString("Vocab:Bass:%1").arg(vocabChoice.id)
+                + (appChoice.trimmed().isEmpty() ? QString() : (QString("|csp_app=") + appChoice));
             n.target_note = vocabChoice.notes.isEmpty()
                                 ? QString("Pickup -> next root pc=%1").arg(nextRootPc)
                                 : vocabChoice.notes;
@@ -687,7 +676,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         if (int(hApp % 100u) >= int(llround(p * 100.0))) return out;
 
         const int nextRootMidi = pcToBassMidiInRange(nextRootPc, /*lo*/40, /*hi*/57);
-        int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi) : (nextRootMidi - 1);
+        QString appChoice;
+        int approachMidi = c.allowApproachFromAbove ? chooseApproachMidiWithConstraints(nextRootMidi, &appChoice) : (nextRootMidi - 1);
         while (approachMidi < 40) approachMidi += 12;
         while (approachMidi > 57) approachMidi -= 12;
         int repaired = approachMidi;
@@ -703,7 +693,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
         n.durationWhole = Rational(1, 8);
         n.structural = false;
         n.chord_context = c.chordText;
-        n.logic_tag = "two_feel_pickup";
+        n.logic_tag = QString("two_feel_pickup") + (appChoice.trimmed().isEmpty() ? QString() : (QString("|csp_app=") + appChoice));
         n.target_note = QString("Pickup -> next root pc=%1").arg(nextRootPc);
         out.push_back(n);
         return out;

@@ -313,12 +313,18 @@ void VirtuosoVocabularyWindow::highlightPatternId(const QString& id) {
 }
 
 void VirtuosoVocabularyWindow::ingestTheoryEventJson(const QString& json) {
+    // This is a full-plan replacement stream; drop duplicates to avoid UI churn.
+    if (!m_lastPlanJson.isEmpty() && json == m_lastPlanJson) return;
+    m_lastPlanJson = json;
+
     const QJsonDocument d = QJsonDocument::fromJson(json.toUtf8());
     if (!d.isArray()) return;
 
     // Lookahead plan: replace buffer with the entire next-4-bars plan.
     m_liveBuf.clear();
     const auto arr = d.array();
+    QStringList logLines;
+    logLines.reserve(arr.size());
     for (const auto& v : arr) {
         if (!v.isObject()) continue;
         const auto o = v.toObject();
@@ -349,18 +355,15 @@ void VirtuosoVocabularyWindow::ingestTheoryEventJson(const QString& json) {
             ev.engineNowMs = engineNowMs;
             m_liveBuf.push_back(ev);
         }
+        logLines.push_back(QString("%1  %2  %3").arg(grid, logic, target));
+    }
 
-        if (m_liveLog) {
-            const QString line = QString("%1  %2  %3").arg(grid, logic, target);
-            m_liveLog->append(line);
-            if (m_liveLog->document()->blockCount() > 200) {
-                QTextCursor c(m_liveLog->document());
-                c.movePosition(QTextCursor::Start);
-                c.select(QTextCursor::BlockUnderCursor);
-                c.removeSelectedText();
-                c.deleteChar();
-            }
-        }
+    if (m_liveLog) {
+        // Replace the log each time (cheap) instead of incremental appends (expensive).
+        const bool prev = m_liveLog->blockSignals(true);
+        m_liveLog->setPlainText(logLines.join("\n"));
+        m_liveLog->blockSignals(prev);
+        m_liveLog->moveCursor(QTextCursor::End);
     }
 
     refreshTagList();

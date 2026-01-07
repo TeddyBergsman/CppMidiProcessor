@@ -457,9 +457,13 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
             m_anchorVoicingKey = best->key;
             m_anchorVoicingName = best->name;
             m_anchorPcs = voicingPcsFor(best);
+            m_anchorCspTag = (trace.chosenIndex >= 0 && !trace.chosenId.trimmed().isEmpty())
+                ? QString("|csp_voicing=%1|csp_cost=%2").arg(trace.chosenId).arg(trace.chosenCost, 0, 'f', 3)
+                : QString();
         } else {
             m_anchorVoicingKey.clear();
             m_anchorVoicingName = "Shell (fallback)";
+            m_anchorCspTag.clear();
             // Absolute fallback: guides only.
             m_anchorPcs.clear();
             if (pc3 >= 0) m_anchorPcs.push_back((pc3 + 12) % 12);
@@ -1147,12 +1151,13 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
         n.chord_context = c.chordText;
             n.voicing_type = voicingType + (doRoll ? (doArp ? " + Arpeggiated" : " + RolledHands") : "");
             const QString ontTag = voicingKey.trimmed().isEmpty() ? QString() : (QString("|ont=") + voicingKey);
+            const QString cspTag = m_anchorCspTag.trimmed().isEmpty() ? QString() : m_anchorCspTag;
             QString artTag = "tenuto";
             if (art == CompArt::Stab) artTag = "stab";
             else if (art == CompArt::HalfPedalWash) artTag = "half_pedal";
             else if (art == CompArt::ReStrike) artTag = "restrike";
             else if (art == CompArt::Ghost) artTag = "ghost";
-            n.logic_tag = (hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag)) + "|art=" + artTag + ontTag;
+            n.logic_tag = (hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag)) + "|art=" + artTag + ontTag + cspTag;
             n.target_note = isTop ? "Comp (top voice)" : (isLow ? "Comp (LH anchor)" : "Comp (inner)");
         out.push_back(n);
     }
@@ -1275,7 +1280,8 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(cons
                             nte.voicing_type = voicingType + (wantTriad ? " + RH TriadGesture" : " + RH DyadGesture");
                             {
                                 const QString ontTag = voicingKey.trimmed().isEmpty() ? QString() : (QString("|ont=") + voicingKey);
-                                nte.logic_tag = (wantTriad ? "ballad_comp|rh_gesture|triad" : "ballad_comp|rh_gesture|dyad") + ontTag;
+                                const QString cspTag = m_anchorCspTag.trimmed().isEmpty() ? QString() : m_anchorCspTag;
+                                nte.logic_tag = (wantTriad ? "ballad_comp|rh_gesture|triad" : "ballad_comp|rh_gesture|dyad") + ontTag + cspTag;
                             }
                             nte.target_note = (i == gestureNotes.size() - 1) ? "RH gesture (top)" : "RH gesture";
                             out.push_back(nte);

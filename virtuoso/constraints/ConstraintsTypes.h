@@ -23,6 +23,10 @@ struct FeasibilityResult {
     bool ok = true;
     double cost = 0.0;           // lower is better
     QStringList reasons;         // explainable constraint outcomes
+
+    // Optional state updates the caller may apply after choosing this candidate.
+    // This avoids brittle parsing of reasons strings to maintain continuity state.
+    QHash<QString, int> stateUpdates;
 };
 
 } // namespace virtuoso::constraints

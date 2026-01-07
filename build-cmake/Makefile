@@ -517,6 +517,19 @@ VirtuosoCoreTests/fast:
 .PHONY : VirtuosoCoreTests/fast
 
 #=============================================================================
+# Target rules for targets named VirtuosoPlaybackTests
+
+# Build rule for target.
+VirtuosoPlaybackTests: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VirtuosoPlaybackTests
+.PHONY : VirtuosoPlaybackTests
+
+# fast build rule for target.
+VirtuosoPlaybackTests/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/build
+.PHONY : VirtuosoPlaybackTests/fast
+
+#=============================================================================
 # Target rules for targets named CppMidiProcessor
 
 # Build rule for target.
@@ -580,6 +593,32 @@ VirtuosoCoreTests_autogen: cmake_check_build_system
 VirtuosoCoreTests_autogen/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests_autogen.dir/build.make CMakeFiles/VirtuosoCoreTests_autogen.dir/build
 .PHONY : VirtuosoCoreTests_autogen/fast
+
+#=============================================================================
+# Target rules for targets named VirtuosoPlaybackTests_autogen_timestamp_deps
+
+# Build rule for target.
+VirtuosoPlaybackTests_autogen_timestamp_deps: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VirtuosoPlaybackTests_autogen_timestamp_deps
+.PHONY : VirtuosoPlaybackTests_autogen_timestamp_deps
+
+# fast build rule for target.
+VirtuosoPlaybackTests_autogen_timestamp_deps/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests_autogen_timestamp_deps.dir/build.make CMakeFiles/VirtuosoPlaybackTests_autogen_timestamp_deps.dir/build
+.PHONY : VirtuosoPlaybackTests_autogen_timestamp_deps/fast
+
+#=============================================================================
+# Target rules for targets named VirtuosoPlaybackTests_autogen
+
+# Build rule for target.
+VirtuosoPlaybackTests_autogen: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VirtuosoPlaybackTests_autogen
+.PHONY : VirtuosoPlaybackTests_autogen
+
+# fast build rule for target.
+VirtuosoPlaybackTests_autogen/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests_autogen.dir/build.make CMakeFiles/VirtuosoPlaybackTests_autogen.dir/build
+.PHONY : VirtuosoPlaybackTests_autogen/fast
 
 #=============================================================================
 # Target rules for targets named CppMidiProcessor_autogen_timestamp_deps
@@ -846,6 +885,30 @@ VirtuosoCore_autogen/mocs_compilation.s: VirtuosoCore_autogen/mocs_compilation.c
 VirtuosoCore_autogen/mocs_compilation.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.s
 .PHONY : VirtuosoCore_autogen/mocs_compilation.cpp.s
+
+VirtuosoPlaybackTests_autogen/mocs_compilation.o: VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.o
+.PHONY : VirtuosoPlaybackTests_autogen/mocs_compilation.o
+
+# target to build an object file
+VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.o
+.PHONY : VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.o
+
+VirtuosoPlaybackTests_autogen/mocs_compilation.i: VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.i
+.PHONY : VirtuosoPlaybackTests_autogen/mocs_compilation.i
+
+# target to preprocess a source file
+VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.i
+.PHONY : VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.i
+
+VirtuosoPlaybackTests_autogen/mocs_compilation.s: VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.s
+.PHONY : VirtuosoPlaybackTests_autogen/mocs_compilation.s
+
+# target to generate assembly for a file
+VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.s
+.PHONY : VirtuosoPlaybackTests_autogen/mocs_compilation.cpp.s
 
 VirtuosoPresetInspectorWindow.o: VirtuosoPresetInspectorWindow.cpp.o
 .PHONY : VirtuosoPresetInspectorWindow.o
@@ -1116,6 +1179,7 @@ music/ChordSymbol.o: music/ChordSymbol.cpp.o
 
 # target to build an object file
 music/ChordSymbol.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/music/ChordSymbol.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.o
 .PHONY : music/ChordSymbol.cpp.o
 
@@ -1124,6 +1188,7 @@ music/ChordSymbol.i: music/ChordSymbol.cpp.i
 
 # target to preprocess a source file
 music/ChordSymbol.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/music/ChordSymbol.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.i
 .PHONY : music/ChordSymbol.cpp.i
 
@@ -1132,6 +1197,7 @@ music/ChordSymbol.s: music/ChordSymbol.cpp.s
 
 # target to generate assembly for a file
 music/ChordSymbol.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/music/ChordSymbol.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/ChordSymbol.cpp.s
 .PHONY : music/ChordSymbol.cpp.s
 
@@ -1140,6 +1206,7 @@ music/Pitch.o: music/Pitch.cpp.o
 
 # target to build an object file
 music/Pitch.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/music/Pitch.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.o
 .PHONY : music/Pitch.cpp.o
 
@@ -1148,6 +1215,7 @@ music/Pitch.i: music/Pitch.cpp.i
 
 # target to preprocess a source file
 music/Pitch.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/music/Pitch.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.i
 .PHONY : music/Pitch.cpp.i
 
@@ -1156,6 +1224,7 @@ music/Pitch.s: music/Pitch.cpp.s
 
 # target to generate assembly for a file
 music/Pitch.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/music/Pitch.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/music/Pitch.cpp.s
 .PHONY : music/Pitch.cpp.s
 
@@ -1236,6 +1305,7 @@ playback/BalladReferenceTuning.o: playback/BalladReferenceTuning.cpp.o
 
 # target to build an object file
 playback/BalladReferenceTuning.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/BalladReferenceTuning.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.o
 .PHONY : playback/BalladReferenceTuning.cpp.o
 
@@ -1244,6 +1314,7 @@ playback/BalladReferenceTuning.i: playback/BalladReferenceTuning.cpp.i
 
 # target to preprocess a source file
 playback/BalladReferenceTuning.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/BalladReferenceTuning.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.i
 .PHONY : playback/BalladReferenceTuning.cpp.i
 
@@ -1252,6 +1323,7 @@ playback/BalladReferenceTuning.s: playback/BalladReferenceTuning.cpp.s
 
 # target to generate assembly for a file
 playback/BalladReferenceTuning.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/BalladReferenceTuning.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BalladReferenceTuning.cpp.s
 .PHONY : playback/BalladReferenceTuning.cpp.s
 
@@ -1260,6 +1332,7 @@ playback/BrushesBalladDrummer.o: playback/BrushesBalladDrummer.cpp.o
 
 # target to build an object file
 playback/BrushesBalladDrummer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/BrushesBalladDrummer.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.o
 .PHONY : playback/BrushesBalladDrummer.cpp.o
 
@@ -1268,6 +1341,7 @@ playback/BrushesBalladDrummer.i: playback/BrushesBalladDrummer.cpp.i
 
 # target to preprocess a source file
 playback/BrushesBalladDrummer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/BrushesBalladDrummer.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.i
 .PHONY : playback/BrushesBalladDrummer.cpp.i
 
@@ -1276,6 +1350,7 @@ playback/BrushesBalladDrummer.s: playback/BrushesBalladDrummer.cpp.s
 
 # target to generate assembly for a file
 playback/BrushesBalladDrummer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/BrushesBalladDrummer.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/BrushesBalladDrummer.cpp.s
 .PHONY : playback/BrushesBalladDrummer.cpp.s
 
@@ -1284,6 +1359,7 @@ playback/HarmonyContext.o: playback/HarmonyContext.cpp.o
 
 # target to build an object file
 playback/HarmonyContext.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/HarmonyContext.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.o
 .PHONY : playback/HarmonyContext.cpp.o
 
@@ -1292,6 +1368,7 @@ playback/HarmonyContext.i: playback/HarmonyContext.cpp.i
 
 # target to preprocess a source file
 playback/HarmonyContext.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/HarmonyContext.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.i
 .PHONY : playback/HarmonyContext.cpp.i
 
@@ -1300,6 +1377,7 @@ playback/HarmonyContext.s: playback/HarmonyContext.cpp.s
 
 # target to generate assembly for a file
 playback/HarmonyContext.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/HarmonyContext.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/HarmonyContext.cpp.s
 .PHONY : playback/HarmonyContext.cpp.s
 
@@ -1308,6 +1386,7 @@ playback/InteractionContext.o: playback/InteractionContext.cpp.o
 
 # target to build an object file
 playback/InteractionContext.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/InteractionContext.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.o
 .PHONY : playback/InteractionContext.cpp.o
 
@@ -1316,6 +1395,7 @@ playback/InteractionContext.i: playback/InteractionContext.cpp.i
 
 # target to preprocess a source file
 playback/InteractionContext.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/InteractionContext.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.i
 .PHONY : playback/InteractionContext.cpp.i
 
@@ -1324,6 +1404,7 @@ playback/InteractionContext.s: playback/InteractionContext.cpp.s
 
 # target to generate assembly for a file
 playback/InteractionContext.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/InteractionContext.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/InteractionContext.cpp.s
 .PHONY : playback/InteractionContext.cpp.s
 
@@ -1332,6 +1413,7 @@ playback/JazzBalladBassPlanner.o: playback/JazzBalladBassPlanner.cpp.o
 
 # target to build an object file
 playback/JazzBalladBassPlanner.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/JazzBalladBassPlanner.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o
 .PHONY : playback/JazzBalladBassPlanner.cpp.o
 
@@ -1340,6 +1422,7 @@ playback/JazzBalladBassPlanner.i: playback/JazzBalladBassPlanner.cpp.i
 
 # target to preprocess a source file
 playback/JazzBalladBassPlanner.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/JazzBalladBassPlanner.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.i
 .PHONY : playback/JazzBalladBassPlanner.cpp.i
 
@@ -1348,6 +1431,7 @@ playback/JazzBalladBassPlanner.s: playback/JazzBalladBassPlanner.cpp.s
 
 # target to generate assembly for a file
 playback/JazzBalladBassPlanner.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/JazzBalladBassPlanner.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.s
 .PHONY : playback/JazzBalladBassPlanner.cpp.s
 
@@ -1356,6 +1440,7 @@ playback/JazzBalladPianoPlanner.o: playback/JazzBalladPianoPlanner.cpp.o
 
 # target to build an object file
 playback/JazzBalladPianoPlanner.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/JazzBalladPianoPlanner.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.o
 .PHONY : playback/JazzBalladPianoPlanner.cpp.o
 
@@ -1364,6 +1449,7 @@ playback/JazzBalladPianoPlanner.i: playback/JazzBalladPianoPlanner.cpp.i
 
 # target to preprocess a source file
 playback/JazzBalladPianoPlanner.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/JazzBalladPianoPlanner.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.i
 .PHONY : playback/JazzBalladPianoPlanner.cpp.i
 
@@ -1372,6 +1458,7 @@ playback/JazzBalladPianoPlanner.s: playback/JazzBalladPianoPlanner.cpp.s
 
 # target to generate assembly for a file
 playback/JazzBalladPianoPlanner.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/JazzBalladPianoPlanner.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladPianoPlanner.cpp.s
 .PHONY : playback/JazzBalladPianoPlanner.cpp.s
 
@@ -1380,6 +1467,7 @@ playback/LookaheadPlanner.o: playback/LookaheadPlanner.cpp.o
 
 # target to build an object file
 playback/LookaheadPlanner.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/LookaheadPlanner.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.o
 .PHONY : playback/LookaheadPlanner.cpp.o
 
@@ -1388,6 +1476,7 @@ playback/LookaheadPlanner.i: playback/LookaheadPlanner.cpp.i
 
 # target to preprocess a source file
 playback/LookaheadPlanner.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/LookaheadPlanner.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.i
 .PHONY : playback/LookaheadPlanner.cpp.i
 
@@ -1396,6 +1485,7 @@ playback/LookaheadPlanner.s: playback/LookaheadPlanner.cpp.s
 
 # target to generate assembly for a file
 playback/LookaheadPlanner.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/LookaheadPlanner.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/LookaheadPlanner.cpp.s
 .PHONY : playback/LookaheadPlanner.cpp.s
 
@@ -1428,6 +1518,7 @@ playback/SemanticMidiAnalyzer.o: playback/SemanticMidiAnalyzer.cpp.o
 
 # target to build an object file
 playback/SemanticMidiAnalyzer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/SemanticMidiAnalyzer.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.o
 .PHONY : playback/SemanticMidiAnalyzer.cpp.o
 
@@ -1436,6 +1527,7 @@ playback/SemanticMidiAnalyzer.i: playback/SemanticMidiAnalyzer.cpp.i
 
 # target to preprocess a source file
 playback/SemanticMidiAnalyzer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/SemanticMidiAnalyzer.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.i
 .PHONY : playback/SemanticMidiAnalyzer.cpp.i
 
@@ -1444,6 +1536,7 @@ playback/SemanticMidiAnalyzer.s: playback/SemanticMidiAnalyzer.cpp.s
 
 # target to generate assembly for a file
 playback/SemanticMidiAnalyzer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/SemanticMidiAnalyzer.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/SemanticMidiAnalyzer.cpp.s
 .PHONY : playback/SemanticMidiAnalyzer.cpp.s
 
@@ -1476,6 +1569,7 @@ playback/VibeStateMachine.o: playback/VibeStateMachine.cpp.o
 
 # target to build an object file
 playback/VibeStateMachine.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/VibeStateMachine.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.o
 .PHONY : playback/VibeStateMachine.cpp.o
 
@@ -1484,6 +1578,7 @@ playback/VibeStateMachine.i: playback/VibeStateMachine.cpp.i
 
 # target to preprocess a source file
 playback/VibeStateMachine.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/VibeStateMachine.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.i
 .PHONY : playback/VibeStateMachine.cpp.i
 
@@ -1492,6 +1587,7 @@ playback/VibeStateMachine.s: playback/VibeStateMachine.cpp.s
 
 # target to generate assembly for a file
 playback/VibeStateMachine.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/VibeStateMachine.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/VibeStateMachine.cpp.s
 .PHONY : playback/VibeStateMachine.cpp.s
 
@@ -1518,6 +1614,30 @@ playback/VirtuosoBalladMvpPlaybackEngine.s: playback/VirtuosoBalladMvpPlaybackEn
 playback/VirtuosoBalladMvpPlaybackEngine.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CppMidiProcessor.dir/build.make CMakeFiles/CppMidiProcessor.dir/playback/VirtuosoBalladMvpPlaybackEngine.cpp.s
 .PHONY : playback/VirtuosoBalladMvpPlaybackEngine.cpp.s
+
+playback/tests/VirtuosoPlaybackTests.o: playback/tests/VirtuosoPlaybackTests.cpp.o
+.PHONY : playback/tests/VirtuosoPlaybackTests.o
+
+# target to build an object file
+playback/tests/VirtuosoPlaybackTests.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/tests/VirtuosoPlaybackTests.cpp.o
+.PHONY : playback/tests/VirtuosoPlaybackTests.cpp.o
+
+playback/tests/VirtuosoPlaybackTests.i: playback/tests/VirtuosoPlaybackTests.cpp.i
+.PHONY : playback/tests/VirtuosoPlaybackTests.i
+
+# target to preprocess a source file
+playback/tests/VirtuosoPlaybackTests.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/tests/VirtuosoPlaybackTests.cpp.i
+.PHONY : playback/tests/VirtuosoPlaybackTests.cpp.i
+
+playback/tests/VirtuosoPlaybackTests.s: playback/tests/VirtuosoPlaybackTests.cpp.s
+.PHONY : playback/tests/VirtuosoPlaybackTests.s
+
+# target to generate assembly for a file
+playback/tests/VirtuosoPlaybackTests.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/tests/VirtuosoPlaybackTests.cpp.s
+.PHONY : playback/tests/VirtuosoPlaybackTests.cpp.s
 
 virtuoso/constraints/BassDriver.o: virtuoso/constraints/BassDriver.cpp.o
 .PHONY : virtuoso/constraints/BassDriver.o
@@ -2018,9 +2138,12 @@ help:
 	@echo "... VirtuosoCoreTests_autogen_timestamp_deps"
 	@echo "... VirtuosoCore_autogen"
 	@echo "... VirtuosoCore_autogen_timestamp_deps"
+	@echo "... VirtuosoPlaybackTests_autogen"
+	@echo "... VirtuosoPlaybackTests_autogen_timestamp_deps"
 	@echo "... CppMidiProcessor"
 	@echo "... VirtuosoCore"
 	@echo "... VirtuosoCoreTests"
+	@echo "... VirtuosoPlaybackTests"
 	@echo "... CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.o"
 	@echo "... CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.i"
 	@echo "... CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.s"
@@ -2051,6 +2174,9 @@ help:
 	@echo "... VirtuosoCore_autogen/mocs_compilation.o"
 	@echo "... VirtuosoCore_autogen/mocs_compilation.i"
 	@echo "... VirtuosoCore_autogen/mocs_compilation.s"
+	@echo "... VirtuosoPlaybackTests_autogen/mocs_compilation.o"
+	@echo "... VirtuosoPlaybackTests_autogen/mocs_compilation.i"
+	@echo "... VirtuosoPlaybackTests_autogen/mocs_compilation.s"
 	@echo "... VirtuosoPresetInspectorWindow.o"
 	@echo "... VirtuosoPresetInspectorWindow.i"
 	@echo "... VirtuosoPresetInspectorWindow.s"
@@ -2135,6 +2261,9 @@ help:
 	@echo "... playback/VirtuosoBalladMvpPlaybackEngine.o"
 	@echo "... playback/VirtuosoBalladMvpPlaybackEngine.i"
 	@echo "... playback/VirtuosoBalladMvpPlaybackEngine.s"
+	@echo "... playback/tests/VirtuosoPlaybackTests.o"
+	@echo "... playback/tests/VirtuosoPlaybackTests.i"
+	@echo "... playback/tests/VirtuosoPlaybackTests.s"
 	@echo "... virtuoso/constraints/BassDriver.o"
 	@echo "... virtuoso/constraints/BassDriver.i"
 	@echo "... virtuoso/constraints/BassDriver.s"

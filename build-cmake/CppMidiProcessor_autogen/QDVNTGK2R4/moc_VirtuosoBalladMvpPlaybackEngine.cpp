@@ -54,6 +54,10 @@ template <> constexpr inline auto playback::VirtuosoBalladMvpPlaybackEngine::qt_
         "play",
         "stop",
         "emitLookaheadPlanOnce",
+        "applyLookaheadResult",
+        "jobId",
+        "stepNow",
+        "buildMs",
         "setDebugEnergyAuto",
         "on",
         "setDebugEnergy",
@@ -108,47 +112,51 @@ template <> constexpr inline auto playback::VirtuosoBalladMvpPlaybackEngine::qt_
         QtMocHelpers::SlotData<void()>(14, 2, QMC::AccessPublic, QMetaType::Void),
         // Slot 'emitLookaheadPlanOnce'
         QtMocHelpers::SlotData<void()>(15, 2, QMC::AccessPublic, QMetaType::Void),
+        // Slot 'applyLookaheadResult'
+        QtMocHelpers::SlotData<void(quint64, int, const QString &, int)>(16, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::ULongLong, 17 }, { QMetaType::Int, 18 }, { QMetaType::QString, 5 }, { QMetaType::Int, 19 },
+        }}),
         // Slot 'setDebugEnergyAuto'
-        QtMocHelpers::SlotData<void(bool)>(16, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Bool, 17 },
+        QtMocHelpers::SlotData<void(bool)>(20, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Bool, 21 },
         }}),
         // Slot 'setDebugEnergy'
-        QtMocHelpers::SlotData<void(double)>(18, 2, QMC::AccessPublic, QMetaType::Void, {{
+        QtMocHelpers::SlotData<void(double)>(22, 2, QMC::AccessPublic, QMetaType::Void, {{
             { QMetaType::Double, 11 },
         }}),
         // Slot 'setAgentEnergyMultiplier'
-        QtMocHelpers::SlotData<void(const QString &, double)>(19, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::QString, 20 }, { QMetaType::Double, 21 },
+        QtMocHelpers::SlotData<void(const QString &, double)>(23, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 24 }, { QMetaType::Double, 25 },
         }}),
         // Slot 'setVirtuosityAuto'
-        QtMocHelpers::SlotData<void(bool)>(22, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Bool, 17 },
+        QtMocHelpers::SlotData<void(bool)>(26, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Bool, 21 },
         }}),
         // Slot 'setVirtuosity'
-        QtMocHelpers::SlotData<void(double, double, double, double)>(23, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Double, 24 }, { QMetaType::Double, 25 }, { QMetaType::Double, 26 }, { QMetaType::Double, 27 },
+        QtMocHelpers::SlotData<void(double, double, double, double)>(27, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Double, 28 }, { QMetaType::Double, 29 }, { QMetaType::Double, 30 }, { QMetaType::Double, 31 },
         }}),
         // Slot 'onTick'
-        QtMocHelpers::SlotData<void()>(28, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(32, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onGuitarNoteOn'
-        QtMocHelpers::SlotData<void(int, int)>(29, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Int, 30 }, { QMetaType::Int, 31 },
+        QtMocHelpers::SlotData<void(int, int)>(33, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 34 }, { QMetaType::Int, 35 },
         }}),
         // Slot 'onGuitarNoteOff'
-        QtMocHelpers::SlotData<void(int)>(32, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Int, 30 },
-        }}),
-        // Slot 'onVoiceCc2Stream'
-        QtMocHelpers::SlotData<void(int)>(33, 2, QMC::AccessPrivate, QMetaType::Void, {{
+        QtMocHelpers::SlotData<void(int)>(36, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::Int, 34 },
         }}),
+        // Slot 'onVoiceCc2Stream'
+        QtMocHelpers::SlotData<void(int)>(37, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 38 },
+        }}),
         // Slot 'onVoiceNoteOn'
-        QtMocHelpers::SlotData<void(int, int)>(35, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Int, 30 }, { QMetaType::Int, 31 },
+        QtMocHelpers::SlotData<void(int, int)>(39, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 34 }, { QMetaType::Int, 35 },
         }}),
         // Slot 'onVoiceNoteOff'
-        QtMocHelpers::SlotData<void(int)>(36, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Int, 30 },
+        QtMocHelpers::SlotData<void(int)>(40, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 34 },
         }}),
     };
     QtMocHelpers::UintData qt_properties {
@@ -182,17 +190,18 @@ void playback::VirtuosoBalladMvpPlaybackEngine::qt_static_metacall(QObject *_o, 
         case 6: _t->play(); break;
         case 7: _t->stop(); break;
         case 8: _t->emitLookaheadPlanOnce(); break;
-        case 9: _t->setDebugEnergyAuto((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 10: _t->setDebugEnergy((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
-        case 11: _t->setAgentEnergyMultiplier((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
-        case 12: _t->setVirtuosityAuto((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 13: _t->setVirtuosity((*reinterpret_cast< std::add_pointer_t<double>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[4]))); break;
-        case 14: _t->onTick(); break;
-        case 15: _t->onGuitarNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
-        case 16: _t->onGuitarNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 17: _t->onVoiceCc2Stream((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 18: _t->onVoiceNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
-        case 19: _t->onVoiceNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 9: _t->applyLookaheadResult((*reinterpret_cast< std::add_pointer_t<quint64>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<QString>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[4]))); break;
+        case 10: _t->setDebugEnergyAuto((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 11: _t->setDebugEnergy((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
+        case 12: _t->setAgentEnergyMultiplier((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2]))); break;
+        case 13: _t->setVirtuosityAuto((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 14: _t->setVirtuosity((*reinterpret_cast< std::add_pointer_t<double>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<double>>(_a[4]))); break;
+        case 15: _t->onTick(); break;
+        case 16: _t->onGuitarNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
+        case 17: _t->onGuitarNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 18: _t->onVoiceCc2Stream((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 19: _t->onVoiceNoteOn((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
+        case 20: _t->onVoiceNoteOff((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
         default: ;
         }
     }
@@ -231,14 +240,14 @@ int playback::VirtuosoBalladMvpPlaybackEngine::qt_metacall(QMetaObject::Call _c,
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 20)
+        if (_id < 21)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 20;
+        _id -= 21;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 20)
+        if (_id < 21)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 20;
+        _id -= 21;
     }
     return _id;
 }

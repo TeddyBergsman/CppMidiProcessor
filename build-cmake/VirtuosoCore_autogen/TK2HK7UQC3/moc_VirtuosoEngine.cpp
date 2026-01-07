@@ -61,6 +61,10 @@ template <> constexpr inline auto virtuoso::engine::VirtuosoEngine::qt_create_me
         "startPos",
         "structural",
         "logicTag",
+        "scheduleKeySwitch",
+        "keyswitchMidi",
+        "leadMs",
+        "holdMs",
         "humanizeIntent",
         "groove::HumanizedEvent",
         "scheduleHumanizedIntentNote",
@@ -118,26 +122,50 @@ template <> constexpr inline auto virtuoso::engine::VirtuosoEngine::qt_create_me
             { QMetaType::QString, 18 }, { QMetaType::Int, 3 }, { QMetaType::Int, 8 }, { QMetaType::Int, 9 },
             { 0x80000000 | 19, 20 },
         }}),
+        // Slot 'scheduleKeySwitch'
+        QtMocHelpers::SlotData<void(const QString &, int, int, const groove::GridPos &, bool, int, int, const QString &)>(23, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 18 }, { QMetaType::Int, 3 }, { QMetaType::Int, 24 }, { 0x80000000 | 19, 20 },
+            { QMetaType::Bool, 21 }, { QMetaType::Int, 25 }, { QMetaType::Int, 26 }, { QMetaType::QString, 22 },
+        }}),
+        // Slot 'scheduleKeySwitch'
+        QtMocHelpers::SlotData<void(const QString &, int, int, const groove::GridPos &, bool, int, int)>(23, 2, QMC::AccessPublic | QMC::MethodCloned, QMetaType::Void, {{
+            { QMetaType::QString, 18 }, { QMetaType::Int, 3 }, { QMetaType::Int, 24 }, { 0x80000000 | 19, 20 },
+            { QMetaType::Bool, 21 }, { QMetaType::Int, 25 }, { QMetaType::Int, 26 },
+        }}),
+        // Slot 'scheduleKeySwitch'
+        QtMocHelpers::SlotData<void(const QString &, int, int, const groove::GridPos &, bool, int)>(23, 2, QMC::AccessPublic | QMC::MethodCloned, QMetaType::Void, {{
+            { QMetaType::QString, 18 }, { QMetaType::Int, 3 }, { QMetaType::Int, 24 }, { 0x80000000 | 19, 20 },
+            { QMetaType::Bool, 21 }, { QMetaType::Int, 25 },
+        }}),
+        // Slot 'scheduleKeySwitch'
+        QtMocHelpers::SlotData<void(const QString &, int, int, const groove::GridPos &, bool)>(23, 2, QMC::AccessPublic | QMC::MethodCloned, QMetaType::Void, {{
+            { QMetaType::QString, 18 }, { QMetaType::Int, 3 }, { QMetaType::Int, 24 }, { 0x80000000 | 19, 20 },
+            { QMetaType::Bool, 21 },
+        }}),
+        // Slot 'scheduleKeySwitch'
+        QtMocHelpers::SlotData<void(const QString &, int, int, const groove::GridPos &)>(23, 2, QMC::AccessPublic | QMC::MethodCloned, QMetaType::Void, {{
+            { QMetaType::QString, 18 }, { QMetaType::Int, 3 }, { QMetaType::Int, 24 }, { 0x80000000 | 19, 20 },
+        }}),
         // Slot 'humanizeIntent'
-        QtMocHelpers::SlotData<groove::HumanizedEvent(const AgentIntentNote &)>(23, 2, QMC::AccessPublic, 0x80000000 | 24, {{
+        QtMocHelpers::SlotData<groove::HumanizedEvent(const AgentIntentNote &)>(27, 2, QMC::AccessPublic, 0x80000000 | 28, {{
             { 0x80000000 | 16, 4 },
         }}),
         // Slot 'scheduleHumanizedIntentNote'
-        QtMocHelpers::SlotData<void(const AgentIntentNote &, const groove::HumanizedEvent &, const QString &)>(25, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { 0x80000000 | 16, 4 }, { 0x80000000 | 24, 26 }, { QMetaType::QString, 27 },
+        QtMocHelpers::SlotData<void(const AgentIntentNote &, const groove::HumanizedEvent &, const QString &)>(29, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { 0x80000000 | 16, 4 }, { 0x80000000 | 28, 30 }, { QMetaType::QString, 31 },
         }}),
         // Slot 'scheduleHumanizedIntentNote'
-        QtMocHelpers::SlotData<void(const AgentIntentNote &, const groove::HumanizedEvent &)>(25, 2, QMC::AccessPublic | QMC::MethodCloned, QMetaType::Void, {{
-            { 0x80000000 | 16, 4 }, { 0x80000000 | 24, 26 },
+        QtMocHelpers::SlotData<void(const AgentIntentNote &, const groove::HumanizedEvent &)>(29, 2, QMC::AccessPublic | QMC::MethodCloned, QMetaType::Void, {{
+            { 0x80000000 | 16, 4 }, { 0x80000000 | 28, 30 },
         }}),
         // Slot 'scheduleHumanizedNote'
-        QtMocHelpers::SlotData<void(const QString &, int, int, const virtuoso::groove::HumanizedEvent &, const QString &)>(28, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::QString, 18 }, { QMetaType::Int, 3 }, { QMetaType::Int, 4 }, { 0x80000000 | 29, 26 },
+        QtMocHelpers::SlotData<void(const QString &, int, int, const virtuoso::groove::HumanizedEvent &, const QString &)>(32, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QString, 18 }, { QMetaType::Int, 3 }, { QMetaType::Int, 4 }, { 0x80000000 | 33, 30 },
             { QMetaType::QString, 22 },
         }}),
         // Slot 'scheduleHumanizedNote'
-        QtMocHelpers::SlotData<void(const QString &, int, int, const virtuoso::groove::HumanizedEvent &)>(28, 2, QMC::AccessPublic | QMC::MethodCloned, QMetaType::Void, {{
-            { QMetaType::QString, 18 }, { QMetaType::Int, 3 }, { QMetaType::Int, 4 }, { 0x80000000 | 29, 26 },
+        QtMocHelpers::SlotData<void(const QString &, int, int, const virtuoso::groove::HumanizedEvent &)>(32, 2, QMC::AccessPublic | QMC::MethodCloned, QMetaType::Void, {{
+            { QMetaType::QString, 18 }, { QMetaType::Int, 3 }, { QMetaType::Int, 4 }, { 0x80000000 | 33, 30 },
         }}),
     };
     QtMocHelpers::UintData qt_properties {
@@ -174,12 +202,17 @@ void virtuoso::engine::VirtuosoEngine::qt_static_metacall(QObject *_o, QMetaObje
         case 9: _t->scheduleCC((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[4])),(*reinterpret_cast< std::add_pointer_t<groove::GridPos>>(_a[5])),(*reinterpret_cast< std::add_pointer_t<bool>>(_a[6])),(*reinterpret_cast< std::add_pointer_t<QString>>(_a[7]))); break;
         case 10: _t->scheduleCC((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[4])),(*reinterpret_cast< std::add_pointer_t<groove::GridPos>>(_a[5])),(*reinterpret_cast< std::add_pointer_t<bool>>(_a[6]))); break;
         case 11: _t->scheduleCC((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[4])),(*reinterpret_cast< std::add_pointer_t<groove::GridPos>>(_a[5]))); break;
-        case 12: { groove::HumanizedEvent _r = _t->humanizeIntent((*reinterpret_cast< std::add_pointer_t<AgentIntentNote>>(_a[1])));
+        case 12: _t->scheduleKeySwitch((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<groove::GridPos>>(_a[4])),(*reinterpret_cast< std::add_pointer_t<bool>>(_a[5])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[6])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[7])),(*reinterpret_cast< std::add_pointer_t<QString>>(_a[8]))); break;
+        case 13: _t->scheduleKeySwitch((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<groove::GridPos>>(_a[4])),(*reinterpret_cast< std::add_pointer_t<bool>>(_a[5])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[6])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[7]))); break;
+        case 14: _t->scheduleKeySwitch((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<groove::GridPos>>(_a[4])),(*reinterpret_cast< std::add_pointer_t<bool>>(_a[5])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[6]))); break;
+        case 15: _t->scheduleKeySwitch((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<groove::GridPos>>(_a[4])),(*reinterpret_cast< std::add_pointer_t<bool>>(_a[5]))); break;
+        case 16: _t->scheduleKeySwitch((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<groove::GridPos>>(_a[4]))); break;
+        case 17: { groove::HumanizedEvent _r = _t->humanizeIntent((*reinterpret_cast< std::add_pointer_t<AgentIntentNote>>(_a[1])));
             if (_a[0]) *reinterpret_cast< groove::HumanizedEvent*>(_a[0]) = std::move(_r); }  break;
-        case 13: _t->scheduleHumanizedIntentNote((*reinterpret_cast< std::add_pointer_t<AgentIntentNote>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<groove::HumanizedEvent>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<QString>>(_a[3]))); break;
-        case 14: _t->scheduleHumanizedIntentNote((*reinterpret_cast< std::add_pointer_t<AgentIntentNote>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<groove::HumanizedEvent>>(_a[2]))); break;
-        case 15: _t->scheduleHumanizedNote((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<virtuoso::groove::HumanizedEvent>>(_a[4])),(*reinterpret_cast< std::add_pointer_t<QString>>(_a[5]))); break;
-        case 16: _t->scheduleHumanizedNote((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<virtuoso::groove::HumanizedEvent>>(_a[4]))); break;
+        case 18: _t->scheduleHumanizedIntentNote((*reinterpret_cast< std::add_pointer_t<AgentIntentNote>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<groove::HumanizedEvent>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<QString>>(_a[3]))); break;
+        case 19: _t->scheduleHumanizedIntentNote((*reinterpret_cast< std::add_pointer_t<AgentIntentNote>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<groove::HumanizedEvent>>(_a[2]))); break;
+        case 20: _t->scheduleHumanizedNote((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<virtuoso::groove::HumanizedEvent>>(_a[4])),(*reinterpret_cast< std::add_pointer_t<QString>>(_a[5]))); break;
+        case 21: _t->scheduleHumanizedNote((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[3])),(*reinterpret_cast< std::add_pointer_t<virtuoso::groove::HumanizedEvent>>(_a[4]))); break;
         default: ;
         }
     }
@@ -218,14 +251,14 @@ int virtuoso::engine::VirtuosoEngine::qt_metacall(QMetaObject::Call _c, int _id,
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 17)
+        if (_id < 22)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 17;
+        _id -= 22;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 17)
+        if (_id < 22)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 17;
+        _id -= 22;
     }
     return _id;
 }

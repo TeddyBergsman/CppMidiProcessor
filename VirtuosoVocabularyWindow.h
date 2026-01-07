@@ -80,6 +80,12 @@ private:
     // Auto-mode: if we receive planned events recently, we enter Live mode and disable audition.
     bool m_liveMode = false;
     QTimer* m_liveDecayTimer = nullptr;
+    QTimer* m_livePlayheadTimer = nullptr;
+
+    // Live playhead tracking (engine clock domain -> wall clock smoothing)
+    qint64 m_lastEngineNowMs = 0;
+    qint64 m_lastEngineWallMs = 0;
+    qint64 m_liveBaseMs = 0;
 
     // Live buffer (from Theory stream)
     struct LiveEv {

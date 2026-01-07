@@ -1027,12 +1027,12 @@ CMakeFiles/VirtuosoCore.dir/all: CMakeFiles/VirtuosoCore_autogen_timestamp_deps.
 CMakeFiles/VirtuosoCore.dir/all: CMakeFiles/VirtuosoCore_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61 "Built target VirtuosoCore"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62 "Built target VirtuosoCore"
 .PHONY : CMakeFiles/VirtuosoCore.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VirtuosoCore.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 18
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 19
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VirtuosoCore.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 0
 .PHONY : CMakeFiles/VirtuosoCore.dir/rule
@@ -1044,7 +1044,7 @@ VirtuosoCore: CMakeFiles/VirtuosoCore.dir/rule
 # codegen rule for target.
 CMakeFiles/VirtuosoCore.dir/codegen: CMakeFiles/VirtuosoCore_autogen_timestamp_deps.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61 "Finished codegen for target VirtuosoCore"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62 "Finished codegen for target VirtuosoCore"
 .PHONY : CMakeFiles/VirtuosoCore.dir/codegen
 
 # clean rule for target.
@@ -1056,17 +1056,17 @@ CMakeFiles/VirtuosoCore.dir/clean:
 # Target rules for target CMakeFiles/VirtuosoCoreTests.dir
 
 # All Build rule for target.
+CMakeFiles/VirtuosoCoreTests.dir/all: CMakeFiles/VirtuosoCore.dir/all
 CMakeFiles/VirtuosoCoreTests.dir/all: CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir/all
 CMakeFiles/VirtuosoCoreTests.dir/all: CMakeFiles/VirtuosoCoreTests_autogen.dir/all
-CMakeFiles/VirtuosoCoreTests.dir/all: CMakeFiles/VirtuosoCore.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests.dir/build.make CMakeFiles/VirtuosoCoreTests.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests.dir/build.make CMakeFiles/VirtuosoCoreTests.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=62,63,64,65 "Built target VirtuosoCoreTests"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=63,64,65,66 "Built target VirtuosoCoreTests"
 .PHONY : CMakeFiles/VirtuosoCoreTests.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VirtuosoCoreTests.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 23
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 24
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VirtuosoCoreTests.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 0
 .PHONY : CMakeFiles/VirtuosoCoreTests.dir/rule
@@ -1078,7 +1078,7 @@ VirtuosoCoreTests: CMakeFiles/VirtuosoCoreTests.dir/rule
 # codegen rule for target.
 CMakeFiles/VirtuosoCoreTests.dir/codegen: CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests.dir/build.make CMakeFiles/VirtuosoCoreTests.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=62,63,64,65 "Finished codegen for target VirtuosoCoreTests"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=63,64,65,66 "Finished codegen for target VirtuosoCoreTests"
 .PHONY : CMakeFiles/VirtuosoCoreTests.dir/codegen
 
 # clean rule for target.
@@ -1095,12 +1095,12 @@ CMakeFiles/VirtuosoPlaybackTests.dir/all: CMakeFiles/VirtuosoPlaybackTests_autog
 CMakeFiles/VirtuosoPlaybackTests.dir/all: CMakeFiles/VirtuosoPlaybackTests_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=68,69,70,71,72,73,74,75,76,77,78,79,80,81,82 "Built target VirtuosoPlaybackTests"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=69,70,71,72,73,74,75,76,77,78,79,80,81,82,83 "Built target VirtuosoPlaybackTests"
 .PHONY : CMakeFiles/VirtuosoPlaybackTests.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VirtuosoPlaybackTests.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 34
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VirtuosoPlaybackTests.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 0
 .PHONY : CMakeFiles/VirtuosoPlaybackTests.dir/rule
@@ -1112,7 +1112,7 @@ VirtuosoPlaybackTests: CMakeFiles/VirtuosoPlaybackTests.dir/rule
 # codegen rule for target.
 CMakeFiles/VirtuosoPlaybackTests.dir/codegen: CMakeFiles/VirtuosoPlaybackTests_autogen_timestamp_deps.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=68,69,70,71,72,73,74,75,76,77,78,79,80,81,82 "Finished codegen for target VirtuosoPlaybackTests"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=69,70,71,72,73,74,75,76,77,78,79,80,81,82,83 "Finished codegen for target VirtuosoPlaybackTests"
 .PHONY : CMakeFiles/VirtuosoPlaybackTests.dir/codegen
 
 # clean rule for target.
@@ -1134,7 +1134,7 @@ CMakeFiles/CppMidiProcessor.dir/all: CMakeFiles/CppMidiProcessor_autogen.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/CppMidiProcessor.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 62
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 63
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/CppMidiProcessor.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 0
 .PHONY : CMakeFiles/CppMidiProcessor.dir/rule
@@ -1193,7 +1193,7 @@ CMakeFiles/VirtuosoCore_autogen_timestamp_deps.dir/clean:
 CMakeFiles/VirtuosoCore_autogen.dir/all: CMakeFiles/VirtuosoCore_autogen_timestamp_deps.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore_autogen.dir/build.make CMakeFiles/VirtuosoCore_autogen.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore_autogen.dir/build.make CMakeFiles/VirtuosoCore_autogen.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=67 "Built target VirtuosoCore_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=68 "Built target VirtuosoCore_autogen"
 .PHONY : CMakeFiles/VirtuosoCore_autogen.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1210,7 +1210,7 @@ VirtuosoCore_autogen: CMakeFiles/VirtuosoCore_autogen.dir/rule
 # codegen rule for target.
 CMakeFiles/VirtuosoCore_autogen.dir/codegen: CMakeFiles/VirtuosoCore_autogen_timestamp_deps.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore_autogen.dir/build.make CMakeFiles/VirtuosoCore_autogen.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=67 "Finished codegen for target VirtuosoCore_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=68 "Finished codegen for target VirtuosoCore_autogen"
 .PHONY : CMakeFiles/VirtuosoCore_autogen.dir/codegen
 
 # clean rule for target.
@@ -1230,7 +1230,7 @@ CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir/all: CMakeFiles/Virtuoso
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 18
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 19
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 0
 .PHONY : CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir/rule
@@ -1257,12 +1257,12 @@ CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir/clean:
 CMakeFiles/VirtuosoCoreTests_autogen.dir/all: CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests_autogen.dir/build.make CMakeFiles/VirtuosoCoreTests_autogen.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests_autogen.dir/build.make CMakeFiles/VirtuosoCoreTests_autogen.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=66 "Built target VirtuosoCoreTests_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=67 "Built target VirtuosoCoreTests_autogen"
 .PHONY : CMakeFiles/VirtuosoCoreTests_autogen.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VirtuosoCoreTests_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 19
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 20
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VirtuosoCoreTests_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 0
 .PHONY : CMakeFiles/VirtuosoCoreTests_autogen.dir/rule
@@ -1274,7 +1274,7 @@ VirtuosoCoreTests_autogen: CMakeFiles/VirtuosoCoreTests_autogen.dir/rule
 # codegen rule for target.
 CMakeFiles/VirtuosoCoreTests_autogen.dir/codegen: CMakeFiles/VirtuosoCoreTests_autogen_timestamp_deps.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCoreTests_autogen.dir/build.make CMakeFiles/VirtuosoCoreTests_autogen.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=66 "Finished codegen for target VirtuosoCoreTests_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=67 "Finished codegen for target VirtuosoCoreTests_autogen"
 .PHONY : CMakeFiles/VirtuosoCoreTests_autogen.dir/codegen
 
 # clean rule for target.
@@ -1294,7 +1294,7 @@ CMakeFiles/VirtuosoPlaybackTests_autogen_timestamp_deps.dir/all: CMakeFiles/Virt
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VirtuosoPlaybackTests_autogen_timestamp_deps.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 18
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 19
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VirtuosoPlaybackTests_autogen_timestamp_deps.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 0
 .PHONY : CMakeFiles/VirtuosoPlaybackTests_autogen_timestamp_deps.dir/rule
@@ -1321,12 +1321,12 @@ CMakeFiles/VirtuosoPlaybackTests_autogen_timestamp_deps.dir/clean:
 CMakeFiles/VirtuosoPlaybackTests_autogen.dir/all: CMakeFiles/VirtuosoPlaybackTests_autogen_timestamp_deps.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests_autogen.dir/build.make CMakeFiles/VirtuosoPlaybackTests_autogen.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests_autogen.dir/build.make CMakeFiles/VirtuosoPlaybackTests_autogen.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=83 "Built target VirtuosoPlaybackTests_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=84 "Built target VirtuosoPlaybackTests_autogen"
 .PHONY : CMakeFiles/VirtuosoPlaybackTests_autogen.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/VirtuosoPlaybackTests_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 19
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 20
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VirtuosoPlaybackTests_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 0
 .PHONY : CMakeFiles/VirtuosoPlaybackTests_autogen.dir/rule
@@ -1338,7 +1338,7 @@ VirtuosoPlaybackTests_autogen: CMakeFiles/VirtuosoPlaybackTests_autogen.dir/rule
 # codegen rule for target.
 CMakeFiles/VirtuosoPlaybackTests_autogen.dir/codegen: CMakeFiles/VirtuosoPlaybackTests_autogen_timestamp_deps.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests_autogen.dir/build.make CMakeFiles/VirtuosoPlaybackTests_autogen.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=83 "Finished codegen for target VirtuosoPlaybackTests_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=84 "Finished codegen for target VirtuosoPlaybackTests_autogen"
 .PHONY : CMakeFiles/VirtuosoPlaybackTests_autogen.dir/codegen
 
 # clean rule for target.
@@ -1358,7 +1358,7 @@ CMakeFiles/CppMidiProcessor_autogen_timestamp_deps.dir/all: CMakeFiles/VirtuosoC
 
 # Build rule for subdir invocation for target.
 CMakeFiles/CppMidiProcessor_autogen_timestamp_deps.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 18
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 19
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/CppMidiProcessor_autogen_timestamp_deps.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 0
 .PHONY : CMakeFiles/CppMidiProcessor_autogen_timestamp_deps.dir/rule
@@ -1390,7 +1390,7 @@ CMakeFiles/CppMidiProcessor_autogen.dir/all: CMakeFiles/CppMidiProcessor_autogen
 
 # Build rule for subdir invocation for target.
 CMakeFiles/CppMidiProcessor_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 19
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 20
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/CppMidiProcessor_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" 0
 .PHONY : CMakeFiles/CppMidiProcessor_autogen.dir/rule

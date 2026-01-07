@@ -2,5 +2,6 @@
 <qresource prefix="/">
     <file>preset.xml</file>
     <file>virtuoso/vocab/cool_jazz_vocabulary.json</file>
+    <file>virtuoso/bass/AmpleBassUprightMapping.json</file>
 </qresource>
 </RCC>

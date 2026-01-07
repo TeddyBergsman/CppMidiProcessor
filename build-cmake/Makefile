@@ -1639,6 +1639,30 @@ playback/tests/VirtuosoPlaybackTests.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoPlaybackTests.dir/build.make CMakeFiles/VirtuosoPlaybackTests.dir/playback/tests/VirtuosoPlaybackTests.cpp.s
 .PHONY : playback/tests/VirtuosoPlaybackTests.cpp.s
 
+virtuoso/bass/AmpleBassUprightMapping.o: virtuoso/bass/AmpleBassUprightMapping.cpp.o
+.PHONY : virtuoso/bass/AmpleBassUprightMapping.o
+
+# target to build an object file
+virtuoso/bass/AmpleBassUprightMapping.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/bass/AmpleBassUprightMapping.cpp.o
+.PHONY : virtuoso/bass/AmpleBassUprightMapping.cpp.o
+
+virtuoso/bass/AmpleBassUprightMapping.i: virtuoso/bass/AmpleBassUprightMapping.cpp.i
+.PHONY : virtuoso/bass/AmpleBassUprightMapping.i
+
+# target to preprocess a source file
+virtuoso/bass/AmpleBassUprightMapping.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/bass/AmpleBassUprightMapping.cpp.i
+.PHONY : virtuoso/bass/AmpleBassUprightMapping.cpp.i
+
+virtuoso/bass/AmpleBassUprightMapping.s: virtuoso/bass/AmpleBassUprightMapping.cpp.s
+.PHONY : virtuoso/bass/AmpleBassUprightMapping.s
+
+# target to generate assembly for a file
+virtuoso/bass/AmpleBassUprightMapping.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VirtuosoCore.dir/build.make CMakeFiles/VirtuosoCore.dir/virtuoso/bass/AmpleBassUprightMapping.cpp.s
+.PHONY : virtuoso/bass/AmpleBassUprightMapping.cpp.s
+
 virtuoso/constraints/BassDriver.o: virtuoso/constraints/BassDriver.cpp.o
 .PHONY : virtuoso/constraints/BassDriver.o
 
@@ -2264,6 +2288,9 @@ help:
 	@echo "... playback/tests/VirtuosoPlaybackTests.o"
 	@echo "... playback/tests/VirtuosoPlaybackTests.i"
 	@echo "... playback/tests/VirtuosoPlaybackTests.s"
+	@echo "... virtuoso/bass/AmpleBassUprightMapping.o"
+	@echo "... virtuoso/bass/AmpleBassUprightMapping.i"
+	@echo "... virtuoso/bass/AmpleBassUprightMapping.s"
 	@echo "... virtuoso/constraints/BassDriver.o"
 	@echo "... virtuoso/constraints/BassDriver.i"
 	@echo "... virtuoso/constraints/BassDriver.s"

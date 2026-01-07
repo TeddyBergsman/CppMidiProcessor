@@ -11,6 +11,7 @@
 #include "virtuoso/groove/GrooveTemplate.h"
 #include "virtuoso/groove/TimingHumanizer.h"
 #include "virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h"
+#include "virtuoso/bass/AmpleBassUprightMapping.h"
 
 #include <QCoreApplication>
 #include <QJsonDocument>
@@ -134,6 +135,21 @@ static void testBassConstraints() {
     g3.midiNotes = {55 + 12}; // G2 open is 55; 67 requires fret 12 on G string
     auto r3 = bass.evaluateFeasibility(s, g3);
     expect(!r3.ok, "Bass: excessive fret shift rejected");
+}
+
+static void testAmpleBassUprightMapping() {
+    using namespace virtuoso::bass::ample_upright;
+    // Keyswitch conversions under our C2==48 convention.
+    expectEq(kKeyswitch_SustainAccent_C0, 24, "Ample Upright: C0 keyswitch midi");
+    expectEq(kKeyswitch_NaturalHarmonic_Cs0, 25, "Ample Upright: C#0 keyswitch midi");
+    expectEq(kKeyswitch_PalmMute_D0, 26, "Ample Upright: D0 keyswitch midi");
+    expectEq(kKeyswitch_SlideInOut_Ds0, 27, "Ample Upright: D#0 keyswitch midi");
+    expectEq(kKeyswitch_LegatoSlide_E0, 28, "Ample Upright: E0 keyswitch midi");
+    expectEq(kKeyswitch_HammerPull_F0, 29, "Ample Upright: F0 keyswitch midi");
+
+    // A couple FX notes from the manual screenshot.
+    expectEq(kFx_Breath_Fs5, 90, "Ample Upright: Breath F#5 midi");
+    expectEq(kFx_Scratch_F5, 89, "Ample Upright: Scratch F5 midi");
 }
 
 static void testTheoryStream() {

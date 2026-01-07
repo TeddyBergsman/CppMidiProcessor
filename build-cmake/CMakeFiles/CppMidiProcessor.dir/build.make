@@ -80,6 +80,7 @@ CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp: /Users/teddybergsman/Docu
 CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp: CMakeFiles/CppMidiProcessor_autogen.dir/AutoRcc_resources_EWIEGA46WW_Info.json
 CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/preset.xml
 CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/vocab/cool_jazz_vocabulary.json
+CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp: /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/bass/AmpleBassUprightMapping.json
 CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp: /opt/homebrew/share/qt/libexec/rcc
 CppMidiProcessor_autogen/EWIEGA46WW/qrc_resources.cpp: /opt/homebrew/share/qt/libexec/rcc
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --blue --bold --progress-dir="/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_2) "Automatic RCC for resources.qrc"

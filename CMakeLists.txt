@@ -19,6 +19,8 @@ enable_testing()
 
 # --- VirtuosoCore (new library, Stage 1) ---
 add_library(VirtuosoCore STATIC
+  virtuoso/bass/AmpleBassUprightMapping.h
+  virtuoso/bass/AmpleBassUprightMapping.cpp
   virtuoso/util/StableHash.h
   virtuoso/util/DeterminismPolicy.h
   virtuoso/util/StableRng.h

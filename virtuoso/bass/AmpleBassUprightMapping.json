@@ -1,0 +1,31 @@
+{
+  "vendor": "Ample Sound",
+  "product": "Ample Bass Upright",
+  "format": "keyswitch+fx",
+  "noteNameConvention": "C2 == MIDI 48 (+12 vs common C2==36 naming)",
+  "keyswitches": [
+    { "abbr": "Sus", "fullName": "Sustain & Accent", "noteName": "C0",  "midi": 24, "notes": "vel<=125 sustain; vel>=126 accent" },
+    { "abbr": "NH",  "fullName": "Natural Harmonic", "noteName": "C#0", "midi": 25 },
+    { "abbr": "PM",  "fullName": "Palm Mute",       "noteName": "D0",  "midi": 26 },
+    { "abbr": "SIO", "fullName": "Slide In & Slide Out", "noteName": "D#0", "midi": 27, "notes": "press then play note => slide in; press while note playing => slide out; auto reverts to sustain" },
+    { "abbr": "LS",  "fullName": "Legato Slide (Poly Legato)", "noteName": "E0", "midi": 28, "notes": "press then play overlapping notes => slide; high vel changes position; auto reverts to previous articulation" },
+    { "abbr": "HP",  "fullName": "Hammer-On & Pull-Off (Poly Legato)", "noteName": "F0", "midi": 29, "notes": "press then play overlapping notes => HP; high vel changes position; auto reverts to previous articulation" }
+  ],
+  "fxSounds": [
+    { "noteName": "F#4", "midi": 78, "fx": "Hit Rim (Mute)" },
+    { "noteName": "G4",  "midi": 79, "fx": "Hit Top (Palm Mute)" },
+    { "noteName": "G#4", "midi": 80, "fx": "Hit Top (Finger Mute)" },
+    { "noteName": "A4",  "midi": 81, "fx": "Hit Top (Open)" },
+    { "noteName": "A#4", "midi": 82, "fx": "Hit Rim (Open)" },
+    { "noteName": "F5",  "midi": 89, "fx": "Scratch" },
+    { "noteName": "F#5", "midi": 90, "fx": "Breath" },
+    { "noteName": "G5",  "midi": 91, "fx": "Single String Slap" },
+    { "noteName": "G#5", "midi": 92, "fx": "Left-Hand Slap Noise" },
+    { "noteName": "A5",  "midi": 93, "fx": "Right-Hand Slap Noise" },
+    { "noteName": "A#5", "midi": 94, "fx": "Fx Slide Turn 4" },
+    { "noteName": "B5",  "midi": 95, "fx": "Fx Slide Turn 3" },
+    { "noteName": "C6",  "midi": 96, "fx": "Fx Slide Down 4" },
+    { "noteName": "C#6", "midi": 97, "fx": "Fx Slide Down 3" }
+  ]
+}
+

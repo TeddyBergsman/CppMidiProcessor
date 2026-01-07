@@ -134,6 +134,33 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
         arr.push_back(te.toJsonObject());
     };
 
+    auto emitKeyswitchAsJson = [&](const QString& agent,
+                                   int channel,
+                                   int note,
+                                   const virtuoso::groove::GridPos& pos,
+                                   const QString& logicTag) {
+        virtuoso::theory::TheoryEvent te;
+        te.event_kind = "keyswitch";
+        te.agent = agent;
+        te.timestamp = "";
+        te.logic_tag = logicTag;
+        te.dynamic_marking = "1";
+        te.grid_pos = virtuoso::groove::GrooveGrid::toString(pos, in.ts);
+        te.channel = channel;
+        te.note = note;
+        te.tempo_bpm = in.bpm;
+        te.ts_num = in.ts.num;
+        te.ts_den = in.ts.den;
+        te.engine_now_ms = in.engineNowMs;
+        const qint64 on = virtuoso::groove::GrooveGrid::posToMs(pos, in.ts, in.bpm);
+        te.on_ms = on;
+        te.off_ms = on + 24;
+        te.vibe_state = vibeStr;
+        te.user_intents = intentStr;
+        te.user_outside_ratio = intent.outsideRatio;
+        arr.push_back(te.toJsonObject());
+    };
+
     for (int step = startStep; step < endStep; ++step) {
         const int playbackBarIndex = step / beatsPerBar;
         const int beatInBar = step % beatsPerBar;
@@ -277,7 +304,11 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
                 bc.toneDark = in.virtToneDark;
             }
 
-            auto bnotes = bassSim.planBeat(bc, in.chBass, in.ts);
+            const auto bplan = bassSim.planBeatWithActions(bc, in.chBass, in.ts);
+            for (const auto& ks : bplan.keyswitches) {
+                emitKeyswitchAsJson("Bass", in.chBass, ks.midi, ks.startPos, ks.logic_tag);
+            }
+            auto bnotes = bplan.notes;
             for (auto& n : bnotes) {
                 n.key_center = keyCenterStr;
                 if (!roman.isEmpty()) n.roman = roman;

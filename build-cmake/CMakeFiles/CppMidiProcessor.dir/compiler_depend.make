@@ -30535,6 +30535,7 @@ CMakeFiles/CppMidiProcessor.dir/playback/JazzBalladBassPlanner.cpp.o: /Users/ted
   /Library/Developer/CommandLineTools/usr/lib/clang/17/include/stdint.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/music/ChordSymbol.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/playback/JazzBalladBassPlanner.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/bass/AmpleBassUprightMapping.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/ConstraintsTypes.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/constraints/IInstrumentDriver.h \
@@ -41430,6 +41431,8 @@ CMakeFiles/CppMidiProcessor.dir/voicecontroller.cpp.o: /Users/teddybergsman/Docu
 /opt/homebrew/lib/QtCore.framework/Headers/QPointer:
 
 /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/solver/CspSolver.h:
+
+/Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/bass/AmpleBassUprightMapping.h:
 
 /opt/homebrew/lib/QtCore.framework/Headers/qstringbuilder.h:
 

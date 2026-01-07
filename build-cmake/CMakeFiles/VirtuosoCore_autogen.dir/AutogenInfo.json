@@ -438,6 +438,12 @@
 	"HEADERS" : 
 	[
 		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/bass/AmpleBassUprightMapping.h",
+			"MU",
+			"Z532MUJ67I/moc_AmpleBassUprightMapping.cpp",
+			null
+		],
+		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.h",
 			"MU",
 			"HZZHNJULOI/moc_BassDriver.cpp",
@@ -650,6 +656,11 @@
 	"SETTINGS_FILE" : "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/VirtuosoCore_autogen.dir/AutogenUsed.txt",
 	"SOURCES" : 
 	[
+		[
+			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/bass/AmpleBassUprightMapping.cpp",
+			"MU",
+			null
+		],
 		[
 			"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.cpp",
 			"MU",

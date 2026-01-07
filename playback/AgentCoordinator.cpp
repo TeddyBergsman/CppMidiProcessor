@@ -354,7 +354,11 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         if (bc.registerCenterMidi >= 55) {
             bc.skipBeat3ProbStable = qMax(0.0, bc.skipBeat3ProbStable - 0.08);
         }
-        auto bassIntents = in.bassPlanner->planBeat(bc, in.chBass, ts);
+        const auto bassPlan = in.bassPlanner->planBeatWithActions(bc, in.chBass, ts);
+        for (const auto& ks : bassPlan.keyswitches) {
+            in.engine->scheduleKeySwitch("Bass", in.chBass, ks.midi, ks.startPos, /*structural=*/true, /*leadMs=*/18, /*holdMs=*/28, ks.logic_tag);
+        }
+        auto bassIntents = bassPlan.notes;
         int bassSum = 0;
         int bassN = 0;
         for (auto& n : bassIntents) {

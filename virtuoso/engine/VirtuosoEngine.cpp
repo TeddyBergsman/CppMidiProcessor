@@ -204,6 +204,67 @@ void VirtuosoEngine::scheduleCC(const QString& agent,
     m_sched.schedule(tj);
 }
 
+void VirtuosoEngine::scheduleKeySwitch(const QString& agent,
+                                       int channel,
+                                       int keyswitchMidi,
+                                       const groove::GridPos& startPos,
+                                       bool structural,
+                                       int leadMs,
+                                       int holdMs,
+                                       const QString& logicTag) {
+    if (!m_clock.isRunning()) return;
+    if (channel < 1 || channel > 16) return;
+    if (keyswitchMidi < 0 || keyswitchMidi > 127) return;
+
+    const qint64 baseOn = virtuoso::groove::GrooveGrid::posToMs(startPos, m_ts, m_bpm);
+    const int lead = qMax(0, leadMs);
+    const qint64 on = qMax<qint64>(0, baseOn - lead);
+    const qint64 off = on + qMax<qint64>(1, qMax(6, holdMs));
+
+    VirtuosoScheduler::ScheduledEvent evOn;
+    evOn.dueMs = on;
+    evOn.kind = VirtuosoScheduler::Kind::NoteOn;
+    evOn.channel = channel;
+    evOn.note = keyswitchMidi;
+    evOn.velocity = 1; // keyswitch velocity generally irrelevant
+    m_sched.schedule(evOn);
+
+    VirtuosoScheduler::ScheduledEvent evOff;
+    evOff.dueMs = off;
+    evOff.kind = VirtuosoScheduler::Kind::NoteOff;
+    evOff.channel = channel;
+    evOff.note = keyswitchMidi;
+    m_sched.schedule(evOff);
+
+    virtuoso::theory::TheoryEvent te;
+    te.event_kind = "keyswitch";
+    te.agent = agent;
+    te.timestamp = virtuoso::groove::GrooveGrid::toString(startPos, m_ts);
+    te.logic_tag = logicTag;
+    te.dynamic_marking = "1";
+    te.grid_pos = virtuoso::groove::GrooveGrid::toString(startPos, m_ts);
+    te.timing_offset_ms = int(on - baseOn);
+    te.velocity_adjustment = 0;
+    te.humanize_seed = 0u;
+    te.channel = channel;
+    te.note = keyswitchMidi;
+    te.on_ms = on;
+    te.off_ms = off;
+    te.tempo_bpm = m_bpm;
+    te.ts_num = m_ts.num;
+    te.ts_den = m_ts.den;
+    te.engine_now_ms = m_clock.elapsedMs();
+    emit plannedTheoryEventJson(te.toJsonString(true));
+
+    VirtuosoScheduler::ScheduledEvent tj;
+    tj.dueMs = on;
+    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+    tj.theoryJson = te.toJsonString(true);
+    m_sched.schedule(tj);
+
+    Q_UNUSED(structural);
+}
+
 groove::HumanizedEvent VirtuosoEngine::humanizeIntent(const AgentIntentNote& note) {
     groove::HumanizedEvent empty;
     if (!m_clock.isRunning()) return empty;

@@ -23,6 +23,22 @@
 
 #include "midiprocessor.h"
 
+namespace {
+static QString shortArtLabel(const QString& logic) {
+    // Prefer compact labels for the Articulation lane.
+    const QString t = logic.trimmed();
+    if (t.endsWith(":Sus")) return "Sus";
+    if (t.endsWith(":PM")) return "PM";
+    if (t.endsWith(":SIO")) return "SIO";
+    if (t.endsWith(":LS")) return "LS";
+    if (t.endsWith(":HP")) return "HP";
+    // Fallback: last token after ':'
+    const int idx = t.lastIndexOf(':');
+    if (idx >= 0 && idx + 1 < t.size()) return t.mid(idx + 1);
+    return t;
+}
+} // namespace
+
 VirtuosoVocabularyWindow::VirtuosoVocabularyWindow(MidiProcessor* midi,
                                                    Instrument instrument,
                                                    QWidget* parent)
@@ -144,7 +160,23 @@ void VirtuosoVocabularyWindow::buildUi() {
     connect(m_liveDecayTimer, &QTimer::timeout, this, [this]() {
         m_liveMode = false;
         if (m_auditionBtn) m_auditionBtn->setEnabled(true);
+        if (m_livePlayheadTimer) m_livePlayheadTimer->stop();
+        if (m_timeline) m_timeline->setPlayheadMs(-1);
         rebuildTimelineFromLivePlan();
+    });
+
+    // Live playhead timer: smooth playhead movement between plan refreshes.
+    m_livePlayheadTimer = new QTimer(this);
+    m_livePlayheadTimer->setInterval(33); // ~30fps
+    connect(m_livePlayheadTimer, &QTimer::timeout, this, [this]() {
+        if (!m_liveMode) return;
+        if (!m_timeline) return;
+        if (m_auditionTimer && m_auditionTimer->isActive()) return; // audition owns playhead
+        if (m_lastEngineWallMs <= 0) return;
+        const qint64 nowWall = QDateTime::currentMSecsSinceEpoch();
+        const qint64 engineNowEst = m_lastEngineNowMs + qMax<qint64>(0, nowWall - m_lastEngineWallMs);
+        const qint64 play = engineNowEst - m_liveBaseMs;
+        m_timeline->setPlayheadMs(play);
     });
 
     // Connections
@@ -193,6 +225,7 @@ void VirtuosoVocabularyWindow::rebuildTimelineFromLivePlan() {
         qint64 baseMs = std::numeric_limits<qint64>::max();
         for (const auto& e : m_liveBuf) baseMs = qMin(baseMs, e.onMs);
         if (baseMs == std::numeric_limits<qint64>::max()) baseMs = 0;
+        m_liveBaseMs = baseMs;
 
         const QString sel = m_list && m_list->currentItem() ? m_list->currentItem()->text() : QString("All");
         const bool filter = (!sel.isEmpty() && sel != "All");
@@ -255,6 +288,7 @@ void VirtuosoVocabularyWindow::rebuildTimelineFromLivePlan() {
         for (const auto& e : m_liveBuf) {
             if (filter && e.logic != sel) continue;
             if (e.kind == "cc") continue; // CC visualized separately (pedal intervals)
+            if (e.kind == "keyswitch") continue; // keyswitch visualized on Articulation lane
             virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
             ev.lane = lane;
             ev.note = e.note;
@@ -266,6 +300,22 @@ void VirtuosoVocabularyWindow::rebuildTimelineFromLivePlan() {
         }
 
         for (const auto& pev : pedalEvents) m_displayEvents.push_back(pev);
+
+        // Bass articulation visualization: draw keyswitch notes on an Articulation lane.
+        if (m_instrument == Instrument::Bass) {
+            for (const auto& e : m_liveBuf) {
+                if (e.kind != "keyswitch") continue;
+                if (filter && e.logic != sel) continue;
+                virtuoso::ui::GrooveTimelineWidget::LaneEvent ev;
+                ev.lane = "Articulation";
+                ev.note = 0;
+                ev.velocity = 100;
+                ev.onMs = qMax<qint64>(0, e.onMs - baseMs);
+                ev.offMs = qMax<qint64>(ev.onMs + 8, e.offMs - baseMs);
+                ev.label = shortArtLabel(e.logic);
+                m_displayEvents.push_back(ev);
+            }
+        }
     }
 
     m_timeline->setTempoAndSignature(m_liveBpm, m_liveTsNum, m_liveTsDen);
@@ -273,11 +323,13 @@ void VirtuosoVocabularyWindow::rebuildTimelineFromLivePlan() {
     m_timeline->setSubdivision(4);
     if (m_instrument == Instrument::Piano) {
         m_timeline->setLanes(QStringList() << lane << "Pedal");
+    } else if (m_instrument == Instrument::Bass) {
+        m_timeline->setLanes(QStringList() << lane << "Articulation");
     } else {
         m_timeline->setLanes(QStringList() << lane);
     }
     m_timeline->setEvents(m_displayEvents);
-    m_timeline->setPlayheadMs(-1);
+    if (!m_liveMode) m_timeline->setPlayheadMs(-1);
 
     if (m_detailTable) {
         m_detailTable->setRowCount(0);
@@ -388,6 +440,7 @@ void VirtuosoVocabularyWindow::ingestTheoryEventJson(const QString& json) {
     const auto arr = d.array();
     QStringList logLines;
     logLines.reserve(arr.size());
+    qint64 bestEngineNow = 0;
     for (const auto& v : arr) {
         if (!v.isObject()) continue;
         const auto o = v.toObject();
@@ -407,15 +460,17 @@ void VirtuosoVocabularyWindow::ingestTheoryEventJson(const QString& json) {
         const int tsNum = o.value("ts_num").toInt(0);
         const int tsDen = o.value("ts_den").toInt(0);
         const qint64 engineNowMs = qint64(o.value("engine_now_ms").toDouble(0.0));
+        if (engineNowMs > bestEngineNow) bestEngineNow = engineNowMs;
         if (bpm > 0) m_liveBpm = bpm;
         if (tsNum > 0) m_liveTsNum = tsNum;
         if (tsDen > 0) m_liveTsDen = tsDen;
         const bool isCc = (kind == "cc") || (cc >= 0);
-        if (onMs > 0 && (isCc || offMs > onMs)) {
+        const bool isKeyswitch = (kind == "keyswitch");
+        if (onMs > 0 && (isCc || isKeyswitch || offMs > onMs)) {
             LiveEv ev;
             ev.onMs = onMs;
-            ev.offMs = isCc ? onMs : offMs;
-            ev.kind = isCc ? "cc" : "note";
+            ev.offMs = isCc ? onMs : (isKeyswitch ? offMs : offMs);
+            ev.kind = isCc ? "cc" : (isKeyswitch ? "keyswitch" : "note");
             ev.note = note;
             ev.velocity = vel;
             ev.cc = cc;
@@ -427,9 +482,17 @@ void VirtuosoVocabularyWindow::ingestTheoryEventJson(const QString& json) {
         }
         if (isCc && cc == 64) {
             logLines.push_back(QString("%1  %2  sustain=%3").arg(grid, logic, QString::number(ccValue)));
+        } else if (isKeyswitch) {
+            logLines.push_back(QString("%1  %2  keyswitch_note=%3").arg(grid, logic, QString::number(note)));
         } else {
             logLines.push_back(QString("%1  %2  %3").arg(grid, logic, target));
         }
+    }
+
+    // Update smooth playhead anchor.
+    if (bestEngineNow > 0) {
+        m_lastEngineNowMs = bestEngineNow;
+        m_lastEngineWallMs = QDateTime::currentMSecsSinceEpoch();
     }
 
     if (m_liveLog) {
@@ -448,5 +511,6 @@ void VirtuosoVocabularyWindow::ingestTheoryEventJson(const QString& json) {
     if (m_auditionTimer && m_auditionTimer->isActive()) stopAuditionNow();
     if (m_auditionBtn) m_auditionBtn->setEnabled(false);
     if (m_liveDecayTimer) m_liveDecayTimer->start(1600);
+    if (m_livePlayheadTimer && !m_livePlayheadTimer->isActive()) m_livePlayheadTimer->start();
 }
 

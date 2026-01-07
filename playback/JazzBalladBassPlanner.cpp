@@ -1,5 +1,6 @@
 #include "playback/JazzBalladBassPlanner.h"
 
+#include "virtuoso/bass/AmpleBassUprightMapping.h"
 #include "virtuoso/util/StableHash.h"
 #include "virtuoso/solver/CspSolver.h"
 
@@ -18,6 +19,9 @@ void JazzBalladBassPlanner::reset() {
     m_lastMidi = -1;
     m_walkPosBlockStartBar = -1;
     m_walkPosMidi = -1;
+    m_artInit = false;
+    m_art = Articulation::Sustain;
+    m_lastArtBar = -1;
 }
 
 int JazzBalladBassPlanner::pcToBassMidiInRange(int pc, int lo, int hi) {
@@ -767,8 +771,130 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     else if (haveVocab) n.logic_tag = QString("Vocab:Bass:%1").arg(vocabChoice.id);
     else n.logic_tag = doWalk ? "walk" : ((c.beatInBar == 0) ? "two_feel_root" : "two_feel_fifth");
     n.target_note = logic;
+
+    // Embodiment helper: make notes slightly legato so there is overlap for HP/LegatoSlide techniques.
+    // This does not force legato articulation by itself; it just creates the overlap required by Ample's legato modes.
+    // Avoid overlap across chord boundaries and in very dense situations.
+    {
+        const bool userBusy2 = (c.userDensityHigh || c.userIntensityPeak);
+        const bool boundarySoon = c.hasNextChord && (c.nextChord.rootPc >= 0) && (c.nextChord.rootPc != c.chord.rootPc) && (c.beatInBar >= 2);
+        const bool allow = !userBusy2 && !boundarySoon && (c.rhythmicComplexity >= 0.25);
+        if (allow) {
+            // Add a tiny overlap (~1/64 whole note = 1/16 beat in 4/4). This is subtle but enough for overlap detection.
+            n.durationWhole = n.durationWhole + Rational(1, 64);
+        }
+    }
+
     out.push_back(n);
     return out;
+}
+
+JazzBalladBassPlanner::BeatPlan JazzBalladBassPlanner::planBeatWithActions(const Context& c,
+                                                                           int midiChannel,
+                                                                           const virtuoso::groove::TimeSignature& ts) {
+    BeatPlan plan;
+    const int prevMidi = m_lastMidi;
+    plan.notes = planBeat(c, midiChannel, ts);
+    if (plan.notes.isEmpty()) return plan;
+
+    using namespace virtuoso::bass::ample_upright;
+    const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+
+    // Choose a stable articulation per bar to avoid constant switching.
+    const int bar = qMax(0, c.playbackBarIndex);
+    if (bar != m_lastArtBar) {
+        m_lastArtBar = bar;
+        const quint32 h = virtuoso::util::StableHash::fnv1a32(QString("ab_upr_art|%1|%2|%3")
+                                                                  .arg(c.chordText)
+                                                                  .arg(bar)
+                                                                  .arg(c.determinismSeed)
+                                                                  .toUtf8());
+        const double e = qBound(0.0, c.energy, 1.0);
+        const double pmBase = qBound(0.0, 0.10 + 0.70 * (e <= 0.22 ? 1.0 : 0.0) + 0.45 * (userBusy ? 1.0 : 0.0), 0.95);
+        const int pPm = qBound(0, int(llround(pmBase * 100.0)), 95);
+        m_art = (int(h % 100u) < pPm) ? Articulation::PalmMute : Articulation::Sustain;
+    }
+
+    // Initialize articulation deterministically at the very start.
+    if (!m_artInit && c.playbackBarIndex == 0 && c.beatInBar == 0) {
+        KeySwitchIntent ks;
+        ks.midi = kKeyswitch_SustainAccent_C0;
+        ks.startPos = plan.notes.first().startPos;
+        ks.logic_tag = "Bass:keyswitch:Sus";
+        plan.keyswitches.push_back(ks);
+        m_artInit = true;
+        m_art = Articulation::Sustain;
+    }
+
+    // Apply chosen articulation (Sustain vs Palm Mute).
+    {
+        KeySwitchIntent ks;
+        if (m_art == Articulation::PalmMute) {
+            ks.midi = kKeyswitch_PalmMute_D0;
+            ks.logic_tag = "Bass:keyswitch:PM";
+        } else {
+            ks.midi = kKeyswitch_SustainAccent_C0;
+            ks.logic_tag = "Bass:keyswitch:Sus";
+        }
+        ks.startPos = plan.notes.first().startPos;
+        plan.keyswitches.push_back(ks);
+    }
+
+    // Tasteful accents via velocity (Ample: vel>=126 means Accentuation while in Sustain&Accent).
+    for (auto& n : plan.notes) {
+        const bool accentMoment = (!userBusy) && (n.structural || c.phraseEndBar || c.cadence01 >= 0.70) && (c.energy >= 0.45);
+        if (accentMoment) {
+            n.baseVelocity = qBound(1, qMax(n.baseVelocity, 126), 127);
+            n.logic_tag = n.logic_tag.isEmpty() ? "ample:accent" : (n.logic_tag + "|ample:accent");
+        }
+    }
+
+    // Slide In (D#0): on approach/pickup notes, press keyswitch before the note.
+    for (const auto& n : plan.notes) {
+        const QString t = n.logic_tag.toLower();
+        const bool isApproach = t.contains("approach") || t.contains("pickup");
+        if (!isApproach) continue;
+        KeySwitchIntent ks;
+        ks.midi = kKeyswitch_SlideInOut_Ds0;
+        ks.startPos = n.startPos;
+        ks.logic_tag = "Bass:keyswitch:SIO";
+        plan.keyswitches.push_back(ks);
+    }
+
+    // HP / Legato Slide: if we have a previous note and the interval is small,
+    // press the appropriate keyswitch before the destination note.
+    // This is the "human" glue: stepwise motion becomes connected rather than re-plucked.
+    if (!userBusy && prevMidi >= 0 && !plan.notes.isEmpty()) {
+        const int cur = plan.notes.first().note;
+        const int d = qAbs(cur - prevMidi);
+        const bool chordStable = !c.chordIsNew && !(c.hasNextChord && c.nextChord.rootPc >= 0 && c.nextChord.rootPc != c.chord.rootPc);
+        if (chordStable && d >= 1 && d <= 7) {
+            KeySwitchIntent ks;
+            if (d <= 2) {
+                ks.midi = kKeyswitch_HammerPull_F0;
+                ks.logic_tag = "Bass:keyswitch:HP";
+                // HP wants a fairly clear destination; keep velocity <=125 (avoid sustain accent semantics).
+                auto& n = plan.notes.first();
+                n.baseVelocity = qBound(1, qMax(n.baseVelocity, 78), 125);
+                n.logic_tag = n.logic_tag.isEmpty() ? "ample:hp" : (n.logic_tag + "|ample:hp");
+            } else {
+                ks.midi = kKeyswitch_LegatoSlide_E0;
+                ks.logic_tag = "Bass:keyswitch:LS";
+                auto& n = plan.notes.first();
+                // Slide smoother: velocity controls slide speed. Higher velocity => faster slide.
+                const int bump = qBound(0, 8 + 4 * (d - 2), 28);
+                n.baseVelocity = qBound(1, qMax(n.baseVelocity, 70 + bump), 125);
+                n.logic_tag = n.logic_tag.isEmpty() ? "ample:legato_slide" : (n.logic_tag + "|ample:legato_slide");
+            }
+            ks.startPos = plan.notes.first().startPos;
+            plan.keyswitches.push_back(ks);
+        }
+    }
+
+    // Track previous-midi for next decision.
+    m_prevMidiBeforeLast = prevMidi;
+
+    return plan;
 }
 
 } // namespace playback

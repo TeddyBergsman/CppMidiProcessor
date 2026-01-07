@@ -10,6 +10,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "" "VirtuosoCore_autogen/timestamp" "custom" "VirtuosoCore_autogen/deps"
   "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/VirtuosoCore_autogen/mocs_compilation.cpp" "CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.o" "gcc" "CMakeFiles/VirtuosoCore.dir/VirtuosoCore_autogen/mocs_compilation.cpp.o.d"
+  "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/bass/AmpleBassUprightMapping.cpp" "CMakeFiles/VirtuosoCore.dir/virtuoso/bass/AmpleBassUprightMapping.cpp.o" "gcc" "CMakeFiles/VirtuosoCore.dir/virtuoso/bass/AmpleBassUprightMapping.cpp.o.d"
   "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.cpp" "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.o" "gcc" "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/BassDriver.cpp.o.d"
   "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/DrumDriver.cpp" "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o" "gcc" "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/DrumDriver.cpp.o.d"
   "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/PianoDriver.cpp" "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/PianoDriver.cpp.o" "gcc" "CMakeFiles/VirtuosoCore.dir/virtuoso/constraints/PianoDriver.cpp.o.d"

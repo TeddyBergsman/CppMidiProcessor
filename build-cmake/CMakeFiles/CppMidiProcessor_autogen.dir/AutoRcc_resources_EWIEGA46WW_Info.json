@@ -10,7 +10,8 @@
 	"INPUTS" : 
 	[
 		"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/preset.xml",
-		"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/vocab/cool_jazz_vocabulary.json"
+		"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/vocab/cool_jazz_vocabulary.json",
+		"/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/bass/AmpleBassUprightMapping.json"
 	],
 	"LOCK_FILE" : "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/CppMidiProcessor_autogen.dir/AutoRcc_resources_EWIEGA46WW_Lock.lock",
 	"MULTI_CONFIG" : false,

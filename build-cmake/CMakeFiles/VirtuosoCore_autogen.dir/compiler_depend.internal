@@ -734,6 +734,8 @@
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/CMakeFiles/4.0.3/CMakeSystem.cmake
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/VirtuosoCore_autogen/moc_predefs.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/resources.qrc
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/bass/AmpleBassUprightMapping.cpp
+ /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/bass/AmpleBassUprightMapping.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.cpp
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/BassDriver.h
  /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/virtuoso/constraints/ConstraintsTypes.h

@@ -75,6 +75,17 @@ public slots:
                     bool structural = false,
                     const QString& logicTag = QString());
 
+    // Schedule a keyswitch note for sample-library articulations.
+    // This is scheduled with a small lead so the articulation reliably applies to the note on the beat.
+    void scheduleKeySwitch(const QString& agent,
+                           int channel,
+                           int keyswitchMidi,
+                           const groove::GridPos& startPos,
+                           bool structural = true,
+                           int leadMs = 16,
+                           int holdMs = 28,
+                           const QString& logicTag = QString());
+
     // Humanize an intent using the engine's per-agent humanizer stream.
     // IMPORTANT: This advances the agent's RNG/drift state (same as scheduleNote()).
     groove::HumanizedEvent humanizeIntent(const AgentIntentNote& note);

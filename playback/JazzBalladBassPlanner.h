@@ -14,6 +14,17 @@ namespace playback {
 // State: lastFret (via PerformanceState) + last chosen midi note.
 class JazzBalladBassPlanner {
 public:
+    struct KeySwitchIntent {
+        int midi = -1;
+        virtuoso::groove::GridPos startPos;
+        QString logic_tag;
+    };
+
+    struct BeatPlan {
+        QVector<virtuoso::engine::AgentIntentNote> notes;
+        QVector<KeySwitchIntent> keyswitches;
+    };
+
     struct Context {
         int bpm = 60;
         int playbackBarIndex = 0; // timeline bar (not chart bar index)
@@ -71,6 +82,10 @@ public:
                                                         int midiChannel,
                                                         const virtuoso::groove::TimeSignature& ts);
 
+    BeatPlan planBeatWithActions(const Context& c,
+                                 int midiChannel,
+                                 const virtuoso::groove::TimeSignature& ts);
+
 private:
     static int pcToBassMidiInRange(int pc, int lo, int hi);
     static int clampMidi(int m) { return (m < 0) ? 0 : (m > 127 ? 127 : m); }
@@ -85,6 +100,15 @@ private:
     int m_walkPosBlockStartBar = -1; // 2-bar block anchor for register/position
     int m_walkPosMidi = -1;
     const virtuoso::vocab::VocabularyRegistry* m_vocab = nullptr; // not owned
+
+    // Embodiment: Ample Upright articulation state (keyswitch lanes).
+    enum class Articulation { Sustain, PalmMute };
+    bool m_artInit = false;
+    Articulation m_art = Articulation::Sustain;
+    int m_lastArtBar = -1;
+
+    // For legato-technique decisions (HP/LegatoSlide): previous note context.
+    int m_prevMidiBeforeLast = -1;
 };
 
 } // namespace playback

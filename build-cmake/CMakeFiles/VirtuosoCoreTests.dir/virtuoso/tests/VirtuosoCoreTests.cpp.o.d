@@ -968,6 +968,7 @@ CMakeFiles/VirtuosoCoreTests.dir/virtuoso/tests/VirtuosoCoreTests.cpp.o: \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/groove/TimingHumanizer.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/util/StableRng.h \
   /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/drums/FluffyAudioJazzDrumsBrushesMapping.h \
+  /Users/teddybergsman/Documents/Cursor\ Projects/CppMidiProcessor/virtuoso/bass/AmpleBassUprightMapping.h \
   /opt/homebrew/lib/QtCore.framework/Headers/QCoreApplication \
   /opt/homebrew/lib/QtCore.framework/Headers/qcoreapplication.h \
   /opt/homebrew/include/QtCore/qcoreevent.h \

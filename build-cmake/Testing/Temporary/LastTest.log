@@ -1,10 +1,10 @@
-Start testing: Jan 07 15:58 CET
+Start testing: Jan 07 16:33 CET
 ----------------------------------------------------------
 1/2 Testing: VirtuosoCoreTests
 1/2 Test: VirtuosoCoreTests
 Command: "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/VirtuosoCoreTests"
 Directory: /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake
-"VirtuosoCoreTests" start time: Jan 07 15:58 CET
+"VirtuosoCoreTests" start time: Jan 07 16:33 CET
 Output:
 ----------------------------------------------------------
 VirtuosoCoreTests: PASS
@@ -12,7 +12,7 @@ VirtuosoCoreTests: PASS
 Test time =   0.01 sec
 ----------------------------------------------------------
 Test Passed.
-"VirtuosoCoreTests" end time: Jan 07 15:58 CET
+"VirtuosoCoreTests" end time: Jan 07 16:33 CET
 "VirtuosoCoreTests" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -20,16 +20,16 @@ Test Passed.
 2/2 Test: VirtuosoPlaybackTests
 Command: "/Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake/VirtuosoPlaybackTests"
 Directory: /Users/teddybergsman/Documents/Cursor Projects/CppMidiProcessor/build-cmake
-"VirtuosoPlaybackTests" start time: Jan 07 15:58 CET
+"VirtuosoPlaybackTests" start time: Jan 07 16:33 CET
 Output:
 ----------------------------------------------------------
 VirtuosoPlaybackTests OK
 <end of output>
-Test time =   0.25 sec
+Test time =   0.23 sec
 ----------------------------------------------------------
 Test Passed.
-"VirtuosoPlaybackTests" end time: Jan 07 15:58 CET
+"VirtuosoPlaybackTests" end time: Jan 07 16:33 CET
 "VirtuosoPlaybackTests" time elapsed: 00:00:00
 ----------------------------------------------------------
 
-End testing: Jan 07 15:58 CET
+End testing: Jan 07 16:33 CET

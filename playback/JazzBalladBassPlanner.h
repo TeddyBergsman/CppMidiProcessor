@@ -14,6 +14,22 @@ namespace playback {
 // State: lastFret (via PerformanceState) + last chosen midi note.
 class JazzBalladBassPlanner {
 public:
+    struct PlannerState {
+        virtuoso::constraints::PerformanceState perf;
+        int lastMidi = -1;
+        int walkPosBlockStartBar = -1;
+        int walkPosMidi = -1;
+
+        // Articulation latch state (store as ints to keep this POD-ish).
+        bool artInit = false;
+        int art = 0; // 0=Sustain, 1=PalmMute
+        int lastArtBar = -1;
+        bool haveSentArt = false;
+        int sentArt = 0; // 0=Sustain, 1=PalmMute
+
+        int prevMidiBeforeLast = -1;
+    };
+
     struct KeySwitchIntent {
         int midi = -1;
         virtuoso::groove::GridPos startPos;
@@ -80,6 +96,9 @@ public:
     void reset();
 
     void setVocabulary(const virtuoso::vocab::VocabularyRegistry* vocab) { m_vocab = vocab; }
+
+    PlannerState snapshotState() const;
+    void restoreState(const PlannerState& s);
 
     // Returns 0..N intent notes to schedule at this beat.
     QVector<virtuoso::engine::AgentIntentNote> planBeat(const Context& c,

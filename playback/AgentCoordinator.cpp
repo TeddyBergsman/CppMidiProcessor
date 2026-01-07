@@ -88,6 +88,34 @@ static RegisterTargets chooseJointRegisterTargets(int desiredBassCenter,
     return best;
 }
 
+struct NoteStats {
+    int count = 0;
+    int minMidi = 127;
+    int maxMidi = 0;
+    double meanMidi = 0.0;
+};
+
+static NoteStats statsForNotes(const QVector<virtuoso::engine::AgentIntentNote>& notes) {
+    NoteStats s;
+    if (notes.isEmpty()) {
+        s.minMidi = 127;
+        s.maxMidi = 0;
+        s.meanMidi = 0.0;
+        s.count = 0;
+        return s;
+    }
+    qint64 sum = 0;
+    s.count = notes.size();
+    for (const auto& n : notes) {
+        const int m = qBound(0, n.note, 127);
+        s.minMidi = qMin(s.minMidi, m);
+        s.maxMidi = qMax(s.maxMidi, m);
+        sum += m;
+    }
+    s.meanMidi = double(sum) / double(qMax(1, s.count));
+    return s;
+}
+
 } // namespace
 
 void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
@@ -349,181 +377,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         bc.skipBeat3ProbStable = qMax(0.0, bc.skipBeat3ProbStable - 0.12);
     }
 
-    if (allowBass) {
-        const double quarterMsB = 60000.0 / double(qMax(1, in.bpm));
-        const double beatMsB = quarterMsB * (4.0 / double(qMax(1, ts.den)));
-        const qint64 sixteenthMsB = qMax<qint64>(20, qint64(llround(beatMsB / 4.0)));
-        const qint64 eighthMsB = qMax<qint64>(30, qint64(llround(beatMsB / 2.0)));
-        // For Ample LS/HP, the keyswitch often must be pressed *before the previous note*,
-        // not merely before the destination note. We approximate that by leading by:
-        // - 2 beats for two-feel (beat0->beat2 connections)
-        // - 1 beat for walking (adjacent beats)
-        auto leadForLegato = [&](const QString& bassLogicTag, int beatInBarLocal) -> qint64 {
-            const bool isWalk = bassLogicTag.contains("walk", Qt::CaseInsensitive);
-            if (isWalk) return eighthMsB; // 1/8 lead is enough for adjacent-beat walking
-            const int leadBeats = (beatInBarLocal == 0 || beatInBarLocal == 2) ? 2 : 1;
-            return qMax<qint64>(eighthMsB, qint64(llround(double(leadBeats) * beatMsB)));
-        };
-        const qint64 legatoHoldMsB = qMax<qint64>(60, eighthMsB); // hold at least an 8th
-        const qint64 restoreDelayMsB = qMax<qint64>(80, qint64(llround(beatMsB * 2.0))); // restore after ~2 beats
-
-        // If bass is intentionally climbing this phrase, avoid thinning the groove too much.
-        if (bc.registerCenterMidi >= 55) {
-            bc.skipBeat3ProbStable = qMax(0.0, bc.skipBeat3ProbStable - 0.08);
-        }
-        const auto bassPlan = in.bassPlanner->planBeatWithActions(bc, in.chBass, ts);
-        // NOTE: some sample libraries require keyswitch to be held, not tapped.
-        // Holding prevents "articulation release" from cutting the currently sounding note.
-        const int desiredArtMidi = bassPlan.desiredArtKeyswitchMidi;
-        bool haveLegatoKs = false;
-        int legatoMidi = -1;
-        QString legatoTag;
-        bool haveNhKs = false;
-        int nhMidi = -1;
-        QString nhTag;
-        bool haveSioOutKs = false;
-        int sioMidi = -1;
-        QString sioTag;
-        for (const auto& ks : bassPlan.keyswitches) {
-            const bool isArt = ks.logic_tag.endsWith(":Sus") || ks.logic_tag.endsWith(":PM");
-            const bool isLegato = ks.logic_tag.endsWith(":LS") || ks.logic_tag.endsWith(":HP");
-            const bool isNh = ks.logic_tag.endsWith(":NH");
-            const bool isSioOut = ks.logic_tag.endsWith(":SIO_OUT");
-            if (isLegato && ks.midi >= 0) {
-                haveLegatoKs = true;
-                legatoMidi = ks.midi;
-                legatoTag = ks.logic_tag;
-                continue; // schedule relative to humanized note-on below
-            }
-            if (isNh && ks.midi >= 0) {
-                haveNhKs = true;
-                nhMidi = ks.midi;
-                nhTag = ks.logic_tag;
-                continue; // schedule relative to humanized note-on below
-            }
-            if (isSioOut && ks.midi >= 0) {
-                haveSioOutKs = true;
-                sioMidi = ks.midi;
-                sioTag = ks.logic_tag;
-                continue; // schedule relative to the note duration below
-            }
-            const int lead = qBound(0, ks.leadMs, 30);
-            const int hold = isArt ? 0 : qBound(24, ks.holdMs, 400); // latch Sus/PM
-            if (ks.midi >= 0) {
-                in.engine->scheduleKeySwitch("Bass", in.chBass, ks.midi, ks.startPos,
-                                             /*structural=*/true,
-                                             /*leadMs=*/lead,
-                                             /*holdMs=*/hold,
-                                             ks.logic_tag);
-            }
-        }
-        auto bassIntents = bassPlan.notes;
-        int bassSum = 0;
-        int bassN = 0;
-        for (auto& n : bassIntents) {
-            if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
-            n.key_center = keyCenterStr;
-            if (!roman.isEmpty()) n.roman = roman;
-            if (!func.isEmpty()) n.chord_function = func;
-            n.vibe_state = vibeStr;
-            n.user_intents = intentStr;
-            n.user_outside_ratio = intent.outsideRatio;
-            n.has_virtuosity = true;
-            n.virtuosity.harmonicRisk = bc.harmonicRisk;
-            n.virtuosity.rhythmicComplexity = bc.rhythmicComplexity;
-            n.virtuosity.interaction = bc.interaction;
-            n.virtuosity.toneDark = bc.toneDark;
-            const double e = qBound(0.0, baseEnergy, 1.0);
-            n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.90 + 0.25 * e))), 127);
-            if (in.kickLocksBass && beatInBar == 0 && haveKickHe) {
-                auto bhe = in.engine->humanizeIntent(n);
-                if (bhe.offMs > bhe.onMs) {
-                    const qint64 delta = kickHe.onMs - bhe.onMs;
-                    if (qAbs(delta) <= qMax<qint64>(0, in.kickLockMaxMs)) {
-                        bhe.onMs += delta;
-                        bhe.offMs += delta;
-                        bhe.timing_offset_ms += int(delta);
-                        // Schedule LS/HP relative to the actual (locked) onset.
-                        if (haveLegatoKs && legatoMidi >= 0) {
-                            const qint64 legLead = leadForLegato(n.logic_tag, beatInBar);
-                            in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, legatoMidi,
-                                                             qMax<qint64>(0, bhe.onMs - legLead),
-                                                             /*holdMs=*/int(qBound<qint64>(qint64(60), legatoHoldMsB, qint64(900))),
-                                                             legatoTag);
-                            if (desiredArtMidi >= 0) {
-                                in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, desiredArtMidi,
-                                                                 bhe.onMs + restoreDelayMsB,
-                                                                 /*holdMs=*/60,
-                                                                 QString("Bass:keyswitch:restore"));
-                            }
-                        }
-                        const QString tag = n.logic_tag.isEmpty() ? "GrooveLock:Kick" : (n.logic_tag + "|GrooveLock:Kick");
-                        in.engine->scheduleHumanizedIntentNote(n, bhe, tag);
-                        continue;
-                    }
-                }
-            }
-            // Humanize explicitly so we can align LS/HP keyswitch to the true note-on time.
-            auto he = in.engine->humanizeIntent(n);
-            if (he.offMs > he.onMs) {
-                if (haveLegatoKs && legatoMidi >= 0) {
-                        const qint64 legLead = leadForLegato(n.logic_tag, beatInBar);
-                    in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, legatoMidi,
-                                                     qMax<qint64>(0, he.onMs - legLead),
-                                                     /*holdMs=*/int(qBound<qint64>(qint64(60), legatoHoldMsB, qint64(900))),
-                                                     legatoTag);
-                    if (desiredArtMidi >= 0) {
-                        in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, desiredArtMidi,
-                                                         he.onMs + restoreDelayMsB,
-                                                         /*holdMs=*/60,
-                                                         QString("Bass:keyswitch:restore"));
-                    }
-                }
-                if (haveNhKs && nhMidi >= 0) {
-                    // NH is a short pre-trigger (16th) and restore quickly.
-                    in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, nhMidi,
-                                                     qMax<qint64>(0, he.onMs - sixteenthMsB),
-                                                     /*holdMs=*/int(qBound<qint64>(qint64(40), sixteenthMsB, qint64(240))),
-                                                     nhTag);
-                    if (desiredArtMidi >= 0) {
-                        in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, desiredArtMidi,
-                                                         he.onMs + qMax<qint64>(60, sixteenthMsB),
-                                                         /*holdMs=*/60,
-                                                         QString("Bass:keyswitch:restore"));
-                    }
-                }
-                if (haveSioOutKs && sioMidi >= 0) {
-                    // Press SIO during the note to request a slide-out. Use ~3/4 through the note.
-                    const qint64 dur = qMax<qint64>(1, he.offMs - he.onMs);
-                    const qint64 t = he.onMs + qint64(llround(double(dur) * 0.72));
-                    in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, sioMidi,
-                                                     t,
-                                                     /*holdMs=*/int(qBound<qint64>(qint64(60), sixteenthMsB, qint64(260))),
-                                                     sioTag);
-                    if (desiredArtMidi >= 0) {
-                        in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, desiredArtMidi,
-                                                         t + qMax<qint64>(80, sixteenthMsB),
-                                                         /*holdMs=*/60,
-                                                         QString("Bass:keyswitch:restore"));
-                    }
-                }
-                in.engine->scheduleHumanizedIntentNote(n, he);
-            }
-            if (in.motivicMemory) in.motivicMemory->push(n);
-            bassSum += n.note;
-            bassN++;
-        }
-        for (auto fx : bassPlan.fxNotes) {
-            // FX notes bypass BassDriver constraints by design.
-            fx.vibe_state = vibeStr;
-            fx.user_intents = intentStr;
-            fx.user_outside_ratio = intent.outsideRatio;
-            in.engine->scheduleNote(fx);
-        }
-        if (in.story && bassN > 0) {
-            in.story->lastBassCenterMidi = clampBassCenterMidi(int(llround(double(bassSum) / double(bassN))));
-        }
-    }
+    // NOTE: Bass is scheduled after we build both Bass+Piano contexts (joint optimizer).
 
     // Piano
     JazzBalladPianoPlanner::Context pc;
@@ -637,9 +491,313 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         pc.harmonicRisk *= 0.45;
         pc.cadence01 *= 0.55;
     }
-    const auto pianoPlan = in.pianoPlanner->planBeatWithActions(pc, in.chPiano, ts);
+
+    // --- Joint beat optimizer (Bass + Piano) ---
+    JazzBalladBassPlanner::Context bcChosen = bc;
+    JazzBalladPianoPlanner::Context pcChosen = pc;
+    QString bassChoiceId = "base";
+    QString pianoChoiceId = "base";
+
+    if (allowBass) {
+        JazzBalladBassPlanner::Context bcSparse = bc;
+        JazzBalladBassPlanner::Context bcRich = bc;
+        // Sparse = more air / fewer approaches; Rich = more motion.
+        bcSparse.rhythmicComplexity *= 0.55;
+        bcSparse.approachProbBeat3 *= 0.55;
+        bcSparse.skipBeat3ProbStable = qMin(0.98, bcSparse.skipBeat3ProbStable + 0.18);
+        bcSparse.harmonicRisk *= 0.70;
+        bcRich.rhythmicComplexity = qMin(1.0, bcRich.rhythmicComplexity + 0.18);
+        bcRich.approachProbBeat3 = qMin(1.0, bcRich.approachProbBeat3 + 0.20);
+        bcRich.skipBeat3ProbStable = qMax(0.0, bcRich.skipBeat3ProbStable - 0.12);
+
+        JazzBalladPianoPlanner::Context pcSparse = pc;
+        JazzBalladPianoPlanner::Context pcRich = pc;
+        pcSparse.preferShells = true;
+        pcSparse.skipBeat2ProbStable = qMin(0.995, pcSparse.skipBeat2ProbStable + 0.18);
+        pcSparse.addSecondColorProb *= 0.45;
+        pcSparse.sparkleProbBeat4 *= 0.45;
+        pcRich.skipBeat2ProbStable = qMax(0.0, pcRich.skipBeat2ProbStable - 0.18);
+        pcRich.addSecondColorProb = qMin(0.85, pcRich.addSecondColorProb + 0.18);
+        pcRich.sparkleProbBeat4 = qMin(0.85, pcRich.sparkleProbBeat4 + 0.18);
+        if (pcRich.harmonicRisk >= 0.55 && !userBusy) pcRich.preferShells = false;
+
+        const auto bassSnap = in.bassPlanner->snapshotState();
+        const auto pianoSnap = in.pianoPlanner->snapshotState();
+
+        struct BassCand { QString id; JazzBalladBassPlanner::Context ctx; JazzBalladBassPlanner::BeatPlan plan; NoteStats st; };
+        struct PianoCand { QString id; JazzBalladPianoPlanner::Context ctx; JazzBalladPianoPlanner::BeatPlan plan; NoteStats st; };
+
+        auto planBass = [&](const QString& id, const JazzBalladBassPlanner::Context& ctx) -> BassCand {
+            in.bassPlanner->restoreState(bassSnap);
+            BassCand c{ id, ctx, in.bassPlanner->planBeatWithActions(ctx, in.chBass, ts), {} };
+            c.st = statsForNotes(c.plan.notes);
+            return c;
+        };
+        auto planPiano = [&](const QString& id, const JazzBalladPianoPlanner::Context& ctx) -> PianoCand {
+            in.pianoPlanner->restoreState(pianoSnap);
+            PianoCand c{ id, ctx, in.pianoPlanner->planBeatWithActions(ctx, in.chPiano, ts), {} };
+            c.st = statsForNotes(c.plan.notes);
+            return c;
+        };
+
+        QVector<BassCand> bCands;
+        bCands.reserve(2);
+        bCands.push_back(planBass("sparse", bcSparse));
+        bCands.push_back(planBass("rich", bcRich));
+
+        QVector<PianoCand> pCands;
+        pCands.reserve(2);
+        pCands.push_back(planPiano("sparse", pcSparse));
+        pCands.push_back(planPiano("rich", pcRich));
+
+        // Restore to live state before committing to the chosen plan.
+        in.bassPlanner->restoreState(bassSnap);
+        in.pianoPlanner->restoreState(pianoSnap);
+
+        const int prevBassCenter = in.story ? clampBassCenterMidi(in.story->lastBassCenterMidi) : regs.bassCenterMidi;
+        const int prevPianoCenter = in.story ? clampPianoCenterMidi(in.story->lastPianoCenterMidi) : regs.pianoCenterMidi;
+
+        auto comboCost = [&](const NoteStats& bs, const NoteStats& ps) -> double {
+            double cost = 0.0;
+
+            // 1) Physical/spectral spacing (avoid mud).
+            if (bs.count > 0 && ps.count > 0) {
+                const int bassHi = bs.maxMidi;
+                const int pianoLo = ps.minMidi;
+                const int spacingMin = 7;
+                if (pianoLo < bassHi + spacingMin) {
+                    const int overlap = (bassHi + spacingMin) - pianoLo;
+                    cost += 10.0 + 0.75 * double(overlap);
+                }
+            }
+
+            // 2) Voice-leading continuity (story).
+            if (bs.count > 0) cost += 0.06 * double(qAbs(int(llround(bs.meanMidi)) - prevBassCenter));
+            if (ps.count > 0) cost += 0.05 * double(qAbs(int(llround(ps.meanMidi)) - prevPianoCenter));
+
+            // 3) Interaction / density targeting.
+            const int totalNotes = bs.count + ps.count;
+            const double rc = qBound(0.0, 0.5 * (bc.rhythmicComplexity + pc.rhythmicComplexity), 1.0);
+            double target = 2.0 + 4.5 * rc;
+            // When user is silent, "interaction" means we should fill space.
+            if (intent.silence) target += qBound(0.0, pc.interaction, 1.0) * 2.0;
+            // When user is busy, reduce density aggressively.
+            if (userBusy) target -= 2.5;
+            target = qBound(0.0, target, 10.0);
+            cost += 0.55 * qAbs(double(totalNotes) - target);
+            if (userBusy) cost += 0.45 * double(qMax(0, totalNotes - 3));
+
+            // 4) Cadence support: avoid "nothing happens" on strong cadences.
+            if (cadence01 >= 0.80 && beatInBar == 0) {
+                if (totalNotes == 0) cost += 6.0;
+                else cost -= 0.30 * double(qMin(4, totalNotes));
+            }
+
+            return qMax(0.0, cost);
+        };
+
+        double bestCost = 1e18;
+        int bestBi = 0;
+        int bestPi = 0;
+        for (int bi = 0; bi < bCands.size(); ++bi) {
+            for (int pi = 0; pi < pCands.size(); ++pi) {
+                const double c = comboCost(bCands[bi].st, pCands[pi].st);
+                if (c < bestCost) {
+                    bestCost = c;
+                    bestBi = bi;
+                    bestPi = pi;
+                }
+            }
+        }
+
+        bcChosen = bCands[bestBi].ctx;
+        pcChosen = pCands[bestPi].ctx;
+        bassChoiceId = bCands[bestBi].id;
+        pianoChoiceId = pCands[bestPi].id;
+    }
+
+    const QString jointTag = QString("joint=%1+%2").arg(bassChoiceId, pianoChoiceId);
+
+    // --- Schedule Bass (chosen) ---
+    if (allowBass) {
+        const double quarterMsB = 60000.0 / double(qMax(1, in.bpm));
+        const double beatMsB = quarterMsB * (4.0 / double(qMax(1, ts.den)));
+        const qint64 sixteenthMsB = qMax<qint64>(20, qint64(llround(beatMsB / 4.0)));
+        const qint64 eighthMsB = qMax<qint64>(30, qint64(llround(beatMsB / 2.0)));
+        auto leadForLegato = [&](const QString& bassLogicTag, int beatInBarLocal) -> qint64 {
+            const bool isWalk = bassLogicTag.contains("walk", Qt::CaseInsensitive);
+            if (isWalk) return eighthMsB;
+            const int leadBeats = (beatInBarLocal == 0 || beatInBarLocal == 2) ? 2 : 1;
+            return qMax<qint64>(eighthMsB, qint64(llround(double(leadBeats) * beatMsB)));
+        };
+        const qint64 legatoHoldMsB = qMax<qint64>(60, eighthMsB);
+        const qint64 restoreDelayMsB = qMax<qint64>(80, qint64(llround(beatMsB * 2.0)));
+
+        if (bcChosen.registerCenterMidi >= 55) {
+            bcChosen.skipBeat3ProbStable = qMax(0.0, bcChosen.skipBeat3ProbStable - 0.08);
+        }
+
+        const auto bassPlan = in.bassPlanner->planBeatWithActions(bcChosen, in.chBass, ts);
+        const int desiredArtMidi = bassPlan.desiredArtKeyswitchMidi;
+
+        bool haveLegatoKs = false;
+        int legatoMidi = -1;
+        QString legatoTag;
+        bool haveNhKs = false;
+        int nhMidi = -1;
+        QString nhTag;
+        bool haveSioOutKs = false;
+        int sioMidi = -1;
+        QString sioTag;
+
+        for (const auto& ks : bassPlan.keyswitches) {
+            const bool isArt = ks.logic_tag.endsWith(":Sus") || ks.logic_tag.endsWith(":PM");
+            const bool isLegato = ks.logic_tag.endsWith(":LS") || ks.logic_tag.endsWith(":HP");
+            const bool isNh = ks.logic_tag.endsWith(":NH");
+            const bool isSioOut = ks.logic_tag.endsWith(":SIO_OUT");
+            if (isLegato && ks.midi >= 0) {
+                haveLegatoKs = true;
+                legatoMidi = ks.midi;
+                legatoTag = ks.logic_tag;
+                continue;
+            }
+            if (isNh && ks.midi >= 0) {
+                haveNhKs = true;
+                nhMidi = ks.midi;
+                nhTag = ks.logic_tag;
+                continue;
+            }
+            if (isSioOut && ks.midi >= 0) {
+                haveSioOutKs = true;
+                sioMidi = ks.midi;
+                sioTag = ks.logic_tag;
+                continue;
+            }
+            const int lead = qBound(0, ks.leadMs, 30);
+            const int hold = isArt ? 0 : qBound(24, ks.holdMs, 400); // latch Sus/PM
+            if (ks.midi >= 0) {
+                const QString tag = ks.logic_tag.isEmpty() ? jointTag : (ks.logic_tag + "|" + jointTag);
+                in.engine->scheduleKeySwitch("Bass", in.chBass, ks.midi, ks.startPos,
+                                             /*structural=*/true,
+                                             /*leadMs=*/lead,
+                                             /*holdMs=*/hold,
+                                             tag);
+            }
+        }
+
+        auto bassIntents = bassPlan.notes;
+        int bassSum = 0;
+        int bassN = 0;
+        for (auto& n : bassIntents) {
+            if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
+            n.key_center = keyCenterStr;
+            if (!roman.isEmpty()) n.roman = roman;
+            if (!func.isEmpty()) n.chord_function = func;
+            n.vibe_state = vibeStr;
+            n.user_intents = intentStr;
+            n.user_outside_ratio = intent.outsideRatio;
+            n.has_virtuosity = true;
+            n.virtuosity.harmonicRisk = bcChosen.harmonicRisk;
+            n.virtuosity.rhythmicComplexity = bcChosen.rhythmicComplexity;
+            n.virtuosity.interaction = bcChosen.interaction;
+            n.virtuosity.toneDark = bcChosen.toneDark;
+            n.logic_tag = n.logic_tag.isEmpty() ? jointTag : (n.logic_tag + "|" + jointTag);
+            const double e = qBound(0.0, baseEnergy, 1.0);
+            n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.90 + 0.25 * e))), 127);
+
+            if (in.kickLocksBass && beatInBar == 0 && haveKickHe) {
+                auto bhe = in.engine->humanizeIntent(n);
+                if (bhe.offMs > bhe.onMs) {
+                    const qint64 delta = kickHe.onMs - bhe.onMs;
+                    if (qAbs(delta) <= qMax<qint64>(0, in.kickLockMaxMs)) {
+                        bhe.onMs += delta;
+                        bhe.offMs += delta;
+                        bhe.timing_offset_ms += int(delta);
+                        if (haveLegatoKs && legatoMidi >= 0) {
+                            const qint64 legLead = leadForLegato(n.logic_tag, beatInBar);
+                            in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, legatoMidi,
+                                                             qMax<qint64>(0, bhe.onMs - legLead),
+                                                             /*holdMs=*/int(qBound<qint64>(qint64(60), legatoHoldMsB, qint64(900))),
+                                                             legatoTag + "|" + jointTag);
+                            if (desiredArtMidi >= 0) {
+                                in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, desiredArtMidi,
+                                                                 bhe.onMs + restoreDelayMsB,
+                                                                 /*holdMs=*/60,
+                                                                 QString("Bass:keyswitch:restore|%1").arg(jointTag));
+                            }
+                        }
+                        const QString tag = n.logic_tag.isEmpty() ? "GrooveLock:Kick" : (n.logic_tag + "|GrooveLock:Kick");
+                        in.engine->scheduleHumanizedIntentNote(n, bhe, tag);
+                        continue;
+                    }
+                }
+            }
+
+            auto he = in.engine->humanizeIntent(n);
+            if (he.offMs > he.onMs) {
+                if (haveLegatoKs && legatoMidi >= 0) {
+                    const qint64 legLead = leadForLegato(n.logic_tag, beatInBar);
+                    in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, legatoMidi,
+                                                     qMax<qint64>(0, he.onMs - legLead),
+                                                     /*holdMs=*/int(qBound<qint64>(qint64(60), legatoHoldMsB, qint64(900))),
+                                                     legatoTag + "|" + jointTag);
+                    if (desiredArtMidi >= 0) {
+                        in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, desiredArtMidi,
+                                                         he.onMs + restoreDelayMsB,
+                                                         /*holdMs=*/60,
+                                                         QString("Bass:keyswitch:restore|%1").arg(jointTag));
+                    }
+                }
+                if (haveNhKs && nhMidi >= 0) {
+                    in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, nhMidi,
+                                                     qMax<qint64>(0, he.onMs - sixteenthMsB),
+                                                     /*holdMs=*/int(qBound<qint64>(qint64(40), sixteenthMsB, qint64(240))),
+                                                     nhTag + "|" + jointTag);
+                    if (desiredArtMidi >= 0) {
+                        in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, desiredArtMidi,
+                                                         he.onMs + qMax<qint64>(60, sixteenthMsB),
+                                                         /*holdMs=*/60,
+                                                         QString("Bass:keyswitch:restore|%1").arg(jointTag));
+                    }
+                }
+                if (haveSioOutKs && sioMidi >= 0) {
+                    const qint64 dur = qMax<qint64>(1, he.offMs - he.onMs);
+                    const qint64 t = he.onMs + qint64(llround(double(dur) * 0.72));
+                    in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, sioMidi,
+                                                     t,
+                                                     /*holdMs=*/int(qBound<qint64>(qint64(60), sixteenthMsB, qint64(260))),
+                                                     sioTag + "|" + jointTag);
+                    if (desiredArtMidi >= 0) {
+                        in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, desiredArtMidi,
+                                                         t + qMax<qint64>(80, sixteenthMsB),
+                                                         /*holdMs=*/60,
+                                                         QString("Bass:keyswitch:restore|%1").arg(jointTag));
+                    }
+                }
+                in.engine->scheduleHumanizedIntentNote(n, he);
+            }
+
+            if (in.motivicMemory) in.motivicMemory->push(n);
+            bassSum += n.note;
+            bassN++;
+        }
+        for (auto fx : bassPlan.fxNotes) {
+            fx.vibe_state = vibeStr;
+            fx.user_intents = intentStr;
+            fx.user_outside_ratio = intent.outsideRatio;
+            fx.logic_tag = fx.logic_tag.isEmpty() ? jointTag : (fx.logic_tag + "|" + jointTag);
+            in.engine->scheduleNote(fx);
+        }
+        if (in.story && bassN > 0) {
+            in.story->lastBassCenterMidi = clampBassCenterMidi(int(llround(double(bassSum) / double(bassN))));
+        }
+    }
+
+    // --- Schedule Piano (chosen) ---
+    const auto pianoPlan = in.pianoPlanner->planBeatWithActions(pcChosen, in.chPiano, ts);
     for (const auto& ci : pianoPlan.ccs) {
-        in.engine->scheduleCC("Piano", in.chPiano, ci.cc, ci.value, ci.startPos, ci.structural, ci.logic_tag);
+        const QString tag = ci.logic_tag.isEmpty() ? jointTag : (ci.logic_tag + "|" + jointTag);
+        in.engine->scheduleCC("Piano", in.chPiano, ci.cc, ci.value, ci.startPos, ci.structural, tag);
     }
     auto pianoIntents = pianoPlan.notes;
     int pianoSum = 0;
@@ -653,10 +811,11 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         n.user_intents = intentStr;
         n.user_outside_ratio = intent.outsideRatio;
         n.has_virtuosity = true;
-        n.virtuosity.harmonicRisk = pc.harmonicRisk;
-        n.virtuosity.rhythmicComplexity = pc.rhythmicComplexity;
-        n.virtuosity.interaction = pc.interaction;
-        n.virtuosity.toneDark = pc.toneDark;
+        n.virtuosity.harmonicRisk = pcChosen.harmonicRisk;
+        n.virtuosity.rhythmicComplexity = pcChosen.rhythmicComplexity;
+        n.virtuosity.interaction = pcChosen.interaction;
+        n.virtuosity.toneDark = pcChosen.toneDark;
+        n.logic_tag = n.logic_tag.isEmpty() ? jointTag : (n.logic_tag + "|" + jointTag);
         const double e = qBound(0.0, vibeEff.energy, 1.0);
         n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.82 + 0.40 * e))), 127);
         in.engine->scheduleNote(n);

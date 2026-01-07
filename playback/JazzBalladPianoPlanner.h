@@ -66,6 +66,42 @@ public:
         QString tag;
     };
 
+    struct PlannerState {
+        QVector<int> lastVoicing;
+        virtuoso::constraints::PerformanceState perf;
+
+        int lastRhythmBar = -1;
+        QVector<CompHit> barHits;
+        int lastTopMidi = -1;
+        QVector<TopHit> barTopHits;
+
+        int phraseGuideStartBar = -1;
+        int phraseGuideBars = 4;
+        QVector<int> phraseGuidePcByBar;
+
+        int lastUpperBar = -1;
+        QVector<int> lastUpperPcs;
+
+        int motifBlockStartBar = -1;
+        QVector<TopTemplateHit> motifA;
+        QVector<TopTemplateHit> motifB;
+        QVector<TopTemplateHit> motifC;
+        QVector<TopTemplateHit> motifD;
+        int phraseMotifStartBar = -1;
+
+        int anchorBlockStartBar = -1;
+        QString anchorChordText;
+        QString anchorVoicingKey;
+        QString anchorVoicingName;
+        QString anchorCspTag;
+        QVector<int> anchorPcs;
+        QVector<int> anchorLhPcs;
+        QVector<int> anchorRhPcs;
+
+        int lastArpBar = -1;
+        int lastArpStyle = -1;
+    };
+
     struct Context {
         int bpm = 60;
         int playbackBarIndex = 0;
@@ -125,6 +161,9 @@ public:
     JazzBalladPianoPlanner();
 
     void reset();
+
+    PlannerState snapshotState() const;
+    void restoreState(const PlannerState& s);
 
     // Deprecated (kept for compatibility): pianist is fully procedural.
     void setVocabulary(const void*) {}

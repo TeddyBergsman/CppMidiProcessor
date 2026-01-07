@@ -44,6 +44,68 @@ void JazzBalladPianoPlanner::reset() {
     m_lastUpperPcs.clear();
 }
 
+JazzBalladPianoPlanner::PlannerState JazzBalladPianoPlanner::snapshotState() const {
+    PlannerState s;
+    s.lastVoicing = m_lastVoicing;
+    s.perf = m_state;
+    s.lastRhythmBar = m_lastRhythmBar;
+    s.barHits = m_barHits;
+    s.lastTopMidi = m_lastTopMidi;
+    s.barTopHits = m_barTopHits;
+    s.phraseGuideStartBar = m_phraseGuideStartBar;
+    s.phraseGuideBars = m_phraseGuideBars;
+    s.phraseGuidePcByBar = m_phraseGuidePcByBar;
+    s.lastUpperBar = m_lastUpperBar;
+    s.lastUpperPcs = m_lastUpperPcs;
+    s.motifBlockStartBar = m_motifBlockStartBar;
+    s.motifA = m_motifA;
+    s.motifB = m_motifB;
+    s.motifC = m_motifC;
+    s.motifD = m_motifD;
+    s.phraseMotifStartBar = m_phraseMotifStartBar;
+    s.anchorBlockStartBar = m_anchorBlockStartBar;
+    s.anchorChordText = m_anchorChordText;
+    s.anchorVoicingKey = m_anchorVoicingKey;
+    s.anchorVoicingName = m_anchorVoicingName;
+    s.anchorCspTag = m_anchorCspTag;
+    s.anchorPcs = m_anchorPcs;
+    s.anchorLhPcs = m_anchorLhPcs;
+    s.anchorRhPcs = m_anchorRhPcs;
+    s.lastArpBar = m_lastArpBar;
+    s.lastArpStyle = m_lastArpStyle;
+    return s;
+}
+
+void JazzBalladPianoPlanner::restoreState(const PlannerState& s) {
+    m_lastVoicing = s.lastVoicing;
+    m_state = s.perf;
+    m_lastRhythmBar = s.lastRhythmBar;
+    m_barHits = s.barHits;
+    m_lastTopMidi = s.lastTopMidi;
+    m_barTopHits = s.barTopHits;
+    m_phraseGuideStartBar = s.phraseGuideStartBar;
+    m_phraseGuideBars = s.phraseGuideBars;
+    m_phraseGuidePcByBar = s.phraseGuidePcByBar;
+    m_lastUpperBar = s.lastUpperBar;
+    m_lastUpperPcs = s.lastUpperPcs;
+    m_motifBlockStartBar = s.motifBlockStartBar;
+    m_motifA = s.motifA;
+    m_motifB = s.motifB;
+    m_motifC = s.motifC;
+    m_motifD = s.motifD;
+    m_phraseMotifStartBar = s.phraseMotifStartBar;
+    m_anchorBlockStartBar = s.anchorBlockStartBar;
+    m_anchorChordText = s.anchorChordText;
+    m_anchorVoicingKey = s.anchorVoicingKey;
+    m_anchorVoicingName = s.anchorVoicingName;
+    m_anchorCspTag = s.anchorCspTag;
+    m_anchorPcs = s.anchorPcs;
+    m_anchorLhPcs = s.anchorLhPcs;
+    m_anchorRhPcs = s.anchorRhPcs;
+    m_lastArpBar = s.lastArpBar;
+    m_lastArpStyle = s.lastArpStyle;
+}
+
 int JazzBalladPianoPlanner::thirdIntervalForQuality(music::ChordQuality q) {
     switch (q) {
         case music::ChordQuality::Minor:

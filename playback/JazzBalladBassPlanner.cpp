@@ -26,6 +26,34 @@ void JazzBalladBassPlanner::reset() {
     m_sentArt = Articulation::Sustain;
 }
 
+JazzBalladBassPlanner::PlannerState JazzBalladBassPlanner::snapshotState() const {
+    PlannerState s;
+    s.perf = m_state;
+    s.lastMidi = m_lastMidi;
+    s.walkPosBlockStartBar = m_walkPosBlockStartBar;
+    s.walkPosMidi = m_walkPosMidi;
+    s.artInit = m_artInit;
+    s.art = (m_art == Articulation::PalmMute) ? 1 : 0;
+    s.lastArtBar = m_lastArtBar;
+    s.haveSentArt = m_haveSentArt;
+    s.sentArt = (m_sentArt == Articulation::PalmMute) ? 1 : 0;
+    s.prevMidiBeforeLast = m_prevMidiBeforeLast;
+    return s;
+}
+
+void JazzBalladBassPlanner::restoreState(const PlannerState& s) {
+    m_state = s.perf;
+    m_lastMidi = s.lastMidi;
+    m_walkPosBlockStartBar = s.walkPosBlockStartBar;
+    m_walkPosMidi = s.walkPosMidi;
+    m_artInit = s.artInit;
+    m_art = (s.art != 0) ? Articulation::PalmMute : Articulation::Sustain;
+    m_lastArtBar = s.lastArtBar;
+    m_haveSentArt = s.haveSentArt;
+    m_sentArt = (s.sentArt != 0) ? Articulation::PalmMute : Articulation::Sustain;
+    m_prevMidiBeforeLast = s.prevMidiBeforeLast;
+}
+
 int JazzBalladBassPlanner::pcToBassMidiInRange(int pc, int lo, int hi) {
     if (pc < 0) pc = 0;
     // Start at C2-ish and fold into range.

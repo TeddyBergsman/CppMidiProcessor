@@ -878,7 +878,8 @@ JazzBalladBassPlanner::BeatPlan JazzBalladBassPlanner::planBeatWithActions(const
         const bool okContext = !c.chordIsNew && !avoidForPickupToNext;
         if (okContext && d >= 1 && d <= 7) {
             KeySwitchIntent ks;
-            if (d <= 2) {
+            // Use HP frequently for small/medium intervals; LS for larger slides.
+            if (d <= 3) {
                 ks.midi = kKeyswitch_HammerPull_F0;
                 ks.logic_tag = "Bass:keyswitch:HP";
                 // HP wants a fairly clear destination; keep velocity <=125 (avoid sustain accent semantics).
@@ -898,6 +899,57 @@ JazzBalladBassPlanner::BeatPlan JazzBalladBassPlanner::planBeatWithActions(const
             ks.leadMs = 10;
             ks.holdMs = 90;
             plan.keyswitches.push_back(ks);
+        }
+    }
+
+    // Natural Harmonic (NH): occasional special color on meaningful, isolated target notes.
+    // We only request it when cadence is strong and the bass is in a higher register,
+    // and we always restore to sustain after.
+    if (!userBusy && !plan.notes.isEmpty()) {
+        const auto& n0 = plan.notes.first();
+        const bool meaningful = (n0.structural || c.phraseEndBar || c.cadence01 >= 0.80);
+        const bool highEnough = (n0.note >= 60); // harmonics read best higher
+        if (meaningful && highEnough && c.harmonicRisk >= 0.35) {
+            const quint32 hNh = virtuoso::util::StableHash::fnv1a32(QString("ab_upr_nh|%1|%2|%3")
+                                                                        .arg(c.chordText)
+                                                                        .arg(c.playbackBarIndex)
+                                                                        .arg(c.determinismSeed)
+                                                                        .toUtf8());
+            const int p = qBound(0, int(llround(8.0 + 22.0 * qBound(0.0, c.cadence01, 1.0))), 35);
+            if (int(hNh % 100u) < p) {
+                KeySwitchIntent ks;
+                ks.midi = kKeyswitch_NaturalHarmonic_Cs0;
+                ks.startPos = n0.startPos;
+                ks.logic_tag = "Bass:keyswitch:NH";
+                ks.leadMs = 10;
+                ks.holdMs = 90;
+                plan.keyswitches.push_back(ks);
+            }
+        }
+    }
+
+    // Slide In/Out (SIO): use as intentional "slide out" gesture on sustained cadence notes.
+    // (Slide-in is too context-sensitive with overlaps; we add it later with explicit silence windows.)
+    if (!userBusy && !plan.notes.isEmpty()) {
+        const auto& n0 = plan.notes.first();
+        const bool cadence = (c.phraseEndBar || c.cadence01 >= 0.70);
+        const bool sustained = (n0.durationWhole.num * 1.0 / n0.durationWhole.den) >= (1.0 / double(qMax(1, ts.den))); // at least ~1 beat
+        if (cadence && sustained && c.rhythmicComplexity >= 0.25) {
+            const quint32 hSio = virtuoso::util::StableHash::fnv1a32(QString("ab_upr_sio_out|%1|%2|%3")
+                                                                         .arg(c.chordText)
+                                                                         .arg(c.playbackBarIndex)
+                                                                         .arg(c.determinismSeed)
+                                                                         .toUtf8());
+            const int p = qBound(0, int(llround(10.0 + 28.0 * qBound(0.0, c.cadence01, 1.0))), 55);
+            if (int(hSio % 100u) < p) {
+                KeySwitchIntent ks;
+                ks.midi = kKeyswitch_SlideInOut_Ds0;
+                ks.startPos = n0.startPos;
+                ks.logic_tag = "Bass:keyswitch:SIO_OUT";
+                ks.leadMs = 0;
+                ks.holdMs = 90;
+                plan.keyswitches.push_back(ks);
+            }
         }
     }
 

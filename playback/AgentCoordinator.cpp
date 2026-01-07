@@ -378,14 +378,34 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         bool haveLegatoKs = false;
         int legatoMidi = -1;
         QString legatoTag;
+        bool haveNhKs = false;
+        int nhMidi = -1;
+        QString nhTag;
+        bool haveSioOutKs = false;
+        int sioMidi = -1;
+        QString sioTag;
         for (const auto& ks : bassPlan.keyswitches) {
             const bool isArt = ks.logic_tag.endsWith(":Sus") || ks.logic_tag.endsWith(":PM");
             const bool isLegato = ks.logic_tag.endsWith(":LS") || ks.logic_tag.endsWith(":HP");
+            const bool isNh = ks.logic_tag.endsWith(":NH");
+            const bool isSioOut = ks.logic_tag.endsWith(":SIO_OUT");
             if (isLegato && ks.midi >= 0) {
                 haveLegatoKs = true;
                 legatoMidi = ks.midi;
                 legatoTag = ks.logic_tag;
                 continue; // schedule relative to humanized note-on below
+            }
+            if (isNh && ks.midi >= 0) {
+                haveNhKs = true;
+                nhMidi = ks.midi;
+                nhTag = ks.logic_tag;
+                continue; // schedule relative to humanized note-on below
+            }
+            if (isSioOut && ks.midi >= 0) {
+                haveSioOutKs = true;
+                sioMidi = ks.midi;
+                sioTag = ks.logic_tag;
+                continue; // schedule relative to the note duration below
             }
             const int lead = qBound(0, ks.leadMs, 30);
             const int hold = isArt ? 0 : qBound(24, ks.holdMs, 400); // latch Sus/PM
@@ -455,6 +475,34 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                     if (desiredArtMidi >= 0) {
                         in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, desiredArtMidi,
                                                          he.onMs + restoreDelayMsB,
+                                                         /*holdMs=*/60,
+                                                         QString("Bass:keyswitch:restore"));
+                    }
+                }
+                if (haveNhKs && nhMidi >= 0) {
+                    // NH is a short pre-trigger (16th) and restore quickly.
+                    in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, nhMidi,
+                                                     qMax<qint64>(0, he.onMs - sixteenthMsB),
+                                                     /*holdMs=*/int(qBound<qint64>(qint64(40), sixteenthMsB, qint64(240))),
+                                                     nhTag);
+                    if (desiredArtMidi >= 0) {
+                        in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, desiredArtMidi,
+                                                         he.onMs + qMax<qint64>(60, sixteenthMsB),
+                                                         /*holdMs=*/60,
+                                                         QString("Bass:keyswitch:restore"));
+                    }
+                }
+                if (haveSioOutKs && sioMidi >= 0) {
+                    // Press SIO during the note to request a slide-out. Use ~3/4 through the note.
+                    const qint64 dur = qMax<qint64>(1, he.offMs - he.onMs);
+                    const qint64 t = he.onMs + qint64(llround(double(dur) * 0.72));
+                    in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, sioMidi,
+                                                     t,
+                                                     /*holdMs=*/int(qBound<qint64>(qint64(60), sixteenthMsB, qint64(260))),
+                                                     sioTag);
+                    if (desiredArtMidi >= 0) {
+                        in.engine->scheduleKeySwitchAtMs("Bass", in.chBass, desiredArtMidi,
+                                                         t + qMax<qint64>(80, sixteenthMsB),
                                                          /*holdMs=*/60,
                                                          QString("Bass:keyswitch:restore"));
                     }

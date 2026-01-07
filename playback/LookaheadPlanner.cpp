@@ -167,6 +167,12 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
             // so visualize these keyswitches with a larger lead.
             on = qMax<qint64>(0, baseOn - qint64(llround(beatMs * 2.0)));
             off = baseOn + sixteenthMs;
+        } else if (logicTag.endsWith(":NH")) {
+            on = qMax<qint64>(0, baseOn - sixteenthMs);
+            off = baseOn + 24;
+        } else if (logicTag.endsWith(":SIO_OUT")) {
+            on = baseOn + qint64(llround(beatMs * 0.75));
+            off = on + 24;
         } else if (logicTag.endsWith(":Sus") || logicTag.endsWith(":PM") || logicTag.contains("PM_Ghost")) {
             on = qMax<qint64>(0, baseOn - sixteenthMs);
             off = baseOn + 24;

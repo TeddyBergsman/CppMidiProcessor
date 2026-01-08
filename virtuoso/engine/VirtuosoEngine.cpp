@@ -53,6 +53,8 @@ void VirtuosoEngine::setInstrumentGrooveProfile(const QString& agent, const groo
 void VirtuosoEngine::start() {
     m_sched.clear();
     m_clock.start();
+    m_gridBaseInitialized = false;
+    m_gridBaseMs = 0;
     for (auto it = m_humanizers.begin(); it != m_humanizers.end(); ++it) {
         it.value().reset();
         it.value().setFeelTemplate(m_feel);
@@ -82,14 +84,29 @@ groove::TimingHumanizer& VirtuosoEngine::humanizerFor(const QString& agent) {
     return m_humanizers[agent];
 }
 
+qint64 VirtuosoEngine::ensureGridBaseMs() {
+    if (!m_clock.isRunning()) return 0;
+    if (m_gridBaseInitialized) return m_gridBaseMs;
+    // Guard ensures the first downbeat is in the future relative to scheduling,
+    // preventing a compressed first interval where beat 2 feels early.
+    const qint64 now = m_clock.elapsedMs();
+    const qint64 guardMs = 35;
+    m_gridBaseMs = qMax<qint64>(0, now + guardMs);
+    m_gridBaseInitialized = true;
+    return m_gridBaseMs;
+}
+
 void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
     if (!m_clock.isRunning()) return;
     if (note.channel < 1 || note.channel > 16) return;
     if (note.note < 0 || note.note > 127) return;
     if (note.baseVelocity < 1 || note.baseVelocity > 127) return;
 
+    const qint64 baseMs = ensureGridBaseMs();
     auto& h = humanizerFor(note.agent);
-    const auto he = h.humanizeNote(note.startPos, m_ts, m_bpm, note.baseVelocity, note.durationWhole, note.structural);
+    auto he = h.humanizeNote(note.startPos, m_ts, m_bpm, note.baseVelocity, note.durationWhole, note.structural);
+    he.onMs += baseMs;
+    he.offMs += baseMs;
     const quint32 id = nextNoteId();
 
     VirtuosoScheduler::ScheduledEvent on;
@@ -164,7 +181,7 @@ void VirtuosoEngine::scheduleCC(const QString& agent,
 
     // CC timing should be "decisive" and must not arrive after notes that depend on it
     // (especially sustain pedal). So we schedule CCs grid-aligned with a tiny lead.
-    const qint64 baseOn = virtuoso::groove::GrooveGrid::posToMs(startPos, m_ts, m_bpm);
+    const qint64 baseOn = virtuoso::groove::GrooveGrid::posToMs(startPos, m_ts, m_bpm) + ensureGridBaseMs();
     const int leadMs = structural ? 12 : 8;
     const qint64 on = qMax<qint64>(0, baseOn - qMax(0, leadMs));
 
@@ -219,7 +236,7 @@ void VirtuosoEngine::scheduleKeySwitch(const QString& agent,
     if (channel < 1 || channel > 16) return;
     if (keyswitchMidi < 0 || keyswitchMidi > 127) return;
 
-    const qint64 baseOn = virtuoso::groove::GrooveGrid::posToMs(startPos, m_ts, m_bpm);
+    const qint64 baseOn = virtuoso::groove::GrooveGrid::posToMs(startPos, m_ts, m_bpm) + ensureGridBaseMs();
     const int lead = qMax(0, leadMs);
     const qint64 on = qMax<qint64>(0, baseOn - lead);
     const bool latch = (holdMs <= 0);
@@ -341,7 +358,11 @@ groove::HumanizedEvent VirtuosoEngine::humanizeIntent(const AgentIntentNote& not
     if (note.baseVelocity < 1 || note.baseVelocity > 127) return empty;
 
     auto& h = humanizerFor(note.agent);
-    return h.humanizeNote(note.startPos, m_ts, m_bpm, note.baseVelocity, note.durationWhole, note.structural);
+    auto he = h.humanizeNote(note.startPos, m_ts, m_bpm, note.baseVelocity, note.durationWhole, note.structural);
+    const qint64 baseMs = ensureGridBaseMs();
+    he.onMs += baseMs;
+    he.offMs += baseMs;
+    return he;
 }
 
 void VirtuosoEngine::scheduleHumanizedIntentNote(const AgentIntentNote& note,
@@ -466,6 +487,17 @@ void VirtuosoEngine::scheduleHumanizedNote(const QString& agent,
     tj.dueMs = he.onMs;
     tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
     tj.theoryJson = te.toJsonString(true);
+    m_sched.schedule(tj);
+}
+
+void VirtuosoEngine::scheduleTheoryJsonAtGridPos(const QString& json, const groove::GridPos& startPos, int leadMs) {
+    if (!m_clock.isRunning()) return;
+    const qint64 baseOn = virtuoso::groove::GrooveGrid::posToMs(startPos, m_ts, m_bpm) + ensureGridBaseMs();
+    const qint64 on = qMax<qint64>(0, baseOn - qMax(0, leadMs));
+    VirtuosoScheduler::ScheduledEvent tj;
+    tj.dueMs = on;
+    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+    tj.theoryJson = json;
     m_sched.schedule(tj);
 }
 

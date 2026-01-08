@@ -238,6 +238,10 @@ void VirtuosoBalladMvpPlaybackEngine::play() {
 
     applyPresetToEngine();
     m_engine.start();
+    // Grid base is anchored slightly in the future at the moment we first schedule grid events.
+    // IMPORTANT: do not pre-initialize it here, because scheduling may begin a bit later (first tick),
+    // and pre-initializing would make beat 1 land "in the past", compressing beat 2 (too early).
+    m_engineGridBaseMs = 0;
 
     m_playing = true;
     m_lastPlayheadStep = -1;
@@ -330,8 +334,16 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
     const double beatMs = quarterMs * (4.0 / double(qMax(1, ts.den)));
 
     const qint64 elapsedMs = m_engine.elapsedMs();
+    // Latch engine grid base once it becomes known (after first scheduling).
+    if (m_engineGridBaseMs <= 0) {
+        const qint64 b = m_engine.gridBaseMs();
+        if (b > 0) m_engineGridBaseMs = b;
+    }
+    const qint64 baseMs = qMax<qint64>(0, m_engineGridBaseMs);
+    // Until base is established, keep UI playhead at song time 0 (prevents first-bar drift).
+    const qint64 songMs = (baseMs > 0) ? qMax<qint64>(0, elapsedMs - baseMs) : 0;
     const qint64 nowWallMs = (m_playStartWallMs > 0) ? (m_playStartWallMs + elapsedMs) : QDateTime::currentMSecsSinceEpoch();
-    const int stepNow = int(double(elapsedMs) / beatMs);
+    const int stepNow = int(double(songMs) / beatMs);
 
     const int total = seqLen * qMax(1, m_repeats);
     if (stepNow >= total) {
@@ -360,7 +372,7 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
     // We need to schedule far enough ahead for sample-library articulations that must be pressed
     // before the "previous note" (e.g. Ample Upright Legato Slide).
     constexpr int kLookaheadMs = 2600;
-    const int scheduleUntil = int(double(elapsedMs + kLookaheadMs) / beatMs);
+    const int scheduleUntil = int(double(songMs + kLookaheadMs) / beatMs);
     const int maxStepToSchedule = std::min(total - 1, scheduleUntil);
 
     while (m_nextScheduledStep <= maxStepToSchedule) {

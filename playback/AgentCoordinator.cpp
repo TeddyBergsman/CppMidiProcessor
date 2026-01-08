@@ -796,7 +796,8 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             const auto poolPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
             root.insert("grid_pos", virtuoso::groove::GrooveGrid::toString(poolPos, ts));
             // Anchor to engine-clock time so UIs can sync to transport (not to UI click time).
-            root.insert("on_ms", qint64(virtuoso::groove::GrooveGrid::posToMs(poolPos, ts, in.bpm)));
+            const qint64 baseMs = (in.engine ? in.engine->gridBaseMsEnsure() : 0);
+            root.insert("on_ms", qint64(virtuoso::groove::GrooveGrid::posToMs(poolPos, ts, in.bpm) + baseMs));
             root.insert("chord_context", chordText);
             root.insert("scale_used", scaleUsed);
             root.insert("scale_key", scaleKey);
@@ -1225,7 +1226,8 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         root.insert("chord_is_new", chordIsNew);
         const auto poolPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
         root.insert("grid_pos", virtuoso::groove::GrooveGrid::toString(poolPos, ts));
-        root.insert("on_ms", qint64(virtuoso::groove::GrooveGrid::posToMs(poolPos, ts, in.bpm)));
+        const qint64 baseMs = (in.engine ? in.engine->gridBaseMsEnsure() : 0);
+        root.insert("on_ms", qint64(virtuoso::groove::GrooveGrid::posToMs(poolPos, ts, in.bpm) + baseMs));
         root.insert("chord_context", chordText);
         root.insert("scale_used", scaleUsed);
         root.insert("scale_key", scaleKey);

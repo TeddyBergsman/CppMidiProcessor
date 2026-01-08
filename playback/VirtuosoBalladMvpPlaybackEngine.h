@@ -125,6 +125,7 @@ private:
     int m_nextScheduledStep = 0;
     int m_lastLookaheadStepEmitted = -1;
     qint64 m_playStartWallMs = 0;
+    qint64 m_engineGridBaseMs = 0;
     std::atomic<quint64> m_lookaheadJobId{0};
     int m_lastLookaheadBuildMs = -1;
 

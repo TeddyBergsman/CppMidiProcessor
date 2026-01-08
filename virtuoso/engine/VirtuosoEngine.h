@@ -60,6 +60,11 @@ public:
     bool isRunning() const { return m_clock.isRunning(); }
     qint64 elapsedMs() const { return m_clock.elapsedMs(); }
     QString currentGrooveTemplateKey() const { return m_hasGrooveTemplate ? m_grooveTemplate.key : m_feel.key; }
+    // Engine-clock base for grid scheduling (ms). After playback starts, the "song grid zero"
+    // is anchored slightly in the future so beat 1 isn't accidentally scheduled in the past.
+    // UIs should subtract this from elapsedMs() when computing "song time".
+    qint64 gridBaseMs() const { return m_gridBaseInitialized ? m_gridBaseMs : 0; }
+    qint64 gridBaseMsEnsure() { return ensureGridBaseMs(); }
 
 public slots:
     void start();
@@ -116,16 +121,7 @@ public slots:
 
     // Schedule an arbitrary TheoryEvent JSON payload at a grid position (engine clock domain).
     // This lets UIs receive "candidate pool" / introspection payloads in real-time sync with transport.
-    void scheduleTheoryJsonAtGridPos(const QString& json, const groove::GridPos& startPos, int leadMs = 0) {
-        if (!m_clock.isRunning()) return;
-        const qint64 baseOn = virtuoso::groove::GrooveGrid::posToMs(startPos, m_ts, m_bpm);
-        const qint64 on = qMax<qint64>(0, baseOn - qMax(0, leadMs));
-        VirtuosoScheduler::ScheduledEvent tj;
-        tj.dueMs = on;
-        tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
-        tj.theoryJson = json;
-        m_sched.schedule(tj);
-    }
+    void scheduleTheoryJsonAtGridPos(const QString& json, const groove::GridPos& startPos, int leadMs = 0);
 
 signals:
     // MIDI-like outputs (connectable to MidiProcessor::sendVirtual*)
@@ -144,6 +140,7 @@ signals:
 private:
     groove::TimingHumanizer& humanizerFor(const QString& agent);
     quint32 nextNoteId() { return ++m_noteId; }
+    qint64 ensureGridBaseMs();
 
     int m_bpm = 120;
     groove::TimeSignature m_ts{};
@@ -157,6 +154,11 @@ private:
     QHash<QString, groove::InstrumentGrooveProfile> m_profiles;
     QHash<QString, groove::TimingHumanizer> m_humanizers;
     quint32 m_noteId = 0;
+
+    // Grid-scheduled events (posToMs) need a stable base so "beat 1" isn't accidentally in the past.
+    // Otherwise, if scheduling takes time at playback start, beat 2 can feel early relative to beat 1.
+    bool m_gridBaseInitialized = false;
+    qint64 m_gridBaseMs = 0;
 };
 
 } // namespace virtuoso::engine

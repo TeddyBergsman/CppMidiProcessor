@@ -83,7 +83,9 @@ WeightNegotiator::Output WeightNegotiator::negotiate(const Inputs& in, State& st
         aw.w.tension *= (idx == 0 ? aTension[0] : (idx == 1 ? aTension[1] : aTension[2])) * 3.0;
         aw.w.interactivity *= (idx == 0 ? aInteract[0] : (idx == 1 ? aInteract[1] : aInteract[2])) * 3.0;
         aw.w.variability *= (idx == 0 ? aVar[0] : (idx == 1 ? aVar[1] : aVar[2])) * 3.0;
-        aw.w.warmth *= (idx == 0 ? aWarm[0] : (idx == 1 ? aWarm[1] : aWarm[2])) * 3.0;
+        // Warmth is a timbral/voicing axis; it should map 1:1 with the global intent so the slider is intuitive.
+        // (Scaling by allocation shares caused early saturation: e.g. global 0.6 -> piano clamps to 1.0.)
+        aw.w.warmth = out.global.warmth;
         aw.w.clamp01();
         return aw;
     };

@@ -216,7 +216,9 @@ public:
         velMul *= phraseVelMul;
 
         int vel = int(llround(double(baseVelocity) * velMul));
-        int velJ = tri(m_profile.velocityJitter);
+        // Emotion: allow a touch more velocity "life" in addition to timing freedom.
+        const int velJitterMax = int(llround(double(m_profile.velocityJitter) * (0.70 + 1.00 * emo)));
+        int velJ = tri(velJitterMax);
         if (structural) velJ = 0;
         vel += velJ;
         if (vel < 1) vel = 1;

@@ -17,15 +17,46 @@
 
 namespace playback {
 
-// Deterministic ballad piano comp planner:
-// - Rootless A/B + shells
-// - Simple voice-leading via "nearest pitch class to previous voicing" heuristic
-// - Constraint-gated by PianoDriver (polyphony + span)
+/**
+ * JazzBalladPianoPlanner - "Bill Evans" Profile (Enhanced)
+ *
+ * A deterministic piano comping planner for jazz ballad style, implementing the
+ * Virtuoso framework's Constraint Satisfaction Architecture.
+ *
+ * Key behaviors (per product spec):
+ * - Voicing: Rootless Type A (3-5-7-9) & Type B (7-9-3-5), Shells (3-7) for sparse moments
+ * - Extensions: Always extend to 9ths/13ths, Upper Structure Triads on dominants
+ * - Density: Sparse by default, reacting to user activity
+ * - Voice Leading: Minimal motion (nearest pitch-class to previous voicing)
+ * - Pedaling: Half-pedal default, repedal on chord changes
+ * - Interaction: Shells when user active, fills when user silent
+ *
+ * ENHANCED FEATURES:
+ * - Phrase-level vocabulary patterns (rhythm cells from VocabularyRegistry)
+ * - Full 10-weight integration with semantic mappings
+ * - Microtime anticipation/delay for human feel
+ * - Bass/piano register coordination (avoid collision)
+ * - Gesture support (rolls/arps at cadences)
+ */
 class JazzBalladPianoPlanner {
 public:
+    // State for snapshot/restore (used by phrase planner and lookahead)
+    struct PlannerState {
+        QVector<int> lastVoicingMidi;    // last realized MIDI notes
+        int lastTopMidi = -1;            // for RH continuity
+        QString lastVoicingKey;          // ontology key of last voicing used
+
+        // Phrase-level state for vocabulary coherence
+        QString currentPhraseId;         // current phrase pattern ID
+        int phraseStartBar = -1;         // bar where phrase pattern started
+
+        // Constraints state (needed by JointCandidateModel for feasibility evaluation)
+        virtuoso::constraints::PerformanceState perf;
+    };
+
     struct CcIntent {
         int cc = 64;
-        int value = 0; // 0..127
+        int value = 0;
         virtuoso::groove::GridPos startPos;
         bool structural = false;
         QString logic_tag;
@@ -35,95 +66,11 @@ public:
         QVector<virtuoso::engine::AgentIntentNote> notes;
         QVector<CcIntent> ccs;
         virtuoso::piano::PianoPerformancePlan performance;
-        // Ontology-first: explicit keys (no string scraping).
-        QString chosenVoicingKey; // ontology voicing key (e.g. "piano_rootless_A")
-        QString chosenScaleKey;   // ontology scale key (e.g. "altered")
-        QString chosenScaleName;  // ontology scale name (e.g. "Altered")
-        // Motivic explainability (shared memory transforms).
-        QString motifSourceAgent;  // e.g. "Piano"
-        QString motifTransform;    // e.g. "mem:sequence"
-    };
-
-    struct CompHit {
-        int beatInBar = 0;     // 0-based
-        int sub = 0;           // sub-index within count
-        int count = 1;         // subdivision count (2=eighths, 4=sixteenths, 3=triplets)
-        virtuoso::groove::Rational dur{1, 4};
-        int velDelta = 0;
-        QString density = "guide"; // "guide" or "full"
-        QString rhythmTag;         // e.g. "charleston", "push4", "delay2"
-    };
-
-    struct TopHit {
-        int beatInBar = 0;     // 0-based
-        int sub = 0;           // sub-index within count
-        int count = 1;         // subdivision count
-        virtuoso::groove::Rational dur{1, 8};
-        int velDelta = -10;
-        int pc = -1;           // 0..11
-        bool resolve = false;  // true if this is the resolution note of a motif
-        QString tag;           // e.g. "neighbor_resolve", "enclosure"
-    };
-
-    struct TopTemplateHit {
-        int beatInBar = 0;
-        int sub = 0;
-        int count = 1;
-        virtuoso::groove::Rational dur{1, 8};
-        int velDelta = -10;
-        int degree = 9;      // preferred degree (1,3,5,7,9,11,13)
-        int neighborDir = 0; // -1/+1 when this is a neighbor/enclosure tone; 0 for direct tones
-        bool resolve = false;
-        QString tag;
-    };
-
-    struct PlannerState {
-        QVector<int> lastVoicing;
-        virtuoso::constraints::PerformanceState perf;
-
-        int lastRhythmBar = -1;
-        QVector<CompHit> barHits;
-        int lastTopMidi = -1;
-        QVector<TopHit> barTopHits;
-
-        int phraseGuideStartBar = -1;
-        int phraseGuideBars = 4;
-        QVector<int> phraseGuidePcByBar;
-
-        int lastUpperBar = -1;
-        QVector<int> lastUpperPcs;
-
-        int motifBlockStartBar = -1;
-        QVector<TopTemplateHit> motifA;
-        QVector<TopTemplateHit> motifB;
-        QVector<TopTemplateHit> motifC;
-        QVector<TopTemplateHit> motifD;
-        int phraseMotifStartBar = -1;
-
-        QString lastMotifSourceAgent;
-        QString lastMotifTransform;
-
-        int anchorBlockStartBar = -1;
-        QString anchorChordText;
-        QString anchorVoicingKey;
-        QString anchorVoicingName;
-        QString anchorCspTag;
-        QVector<int> anchorPcs;
-        QVector<int> anchorLhPcs;
-        QVector<int> anchorRhPcs;
-
-        int lastArpBar = -1;
-        int lastArpStyle = -1;
-
-        // Data-driven library selections (auditable).
-        int compPhraseStartBar = -1;
-        QString compPhraseAnchorChordText;
-        QString compPhraseAnchorFunction;
-        QString compPhraseId;
-        QVector<QString> compBeatIdsByBeat;
-        int topLinePhraseStartBar = -1;
-        QString topLinePhraseId;
-        QString pedalStrategyId;
+        QString chosenVoicingKey;   // ontology voicing key
+        QString chosenScaleKey;     // ontology scale key
+        QString chosenScaleName;    // scale display name
+        QString motifSourceAgent;
+        QString motifTransform;
     };
 
     struct Context {
@@ -135,64 +82,65 @@ public:
         QString chordText;
         quint32 determinismSeed = 1;
 
-        // Reference tuning knobs (Chet Baker – My Funny Valentine: sparse, airy, gentle).
-        // Ranges are MIDI note numbers.
-        int lhLo = 50, lhHi = 66;      // guide tones
-        int rhLo = 67, rhHi = 84;      // main color tones
-        int sparkleLo = 84, sparkleHi = 96; // optional top sparkle
+        // Register windows (MIDI note numbers)
+        int lhLo = 48, lhHi = 64;       // left hand (guide tones / shells)
+        int rhLo = 65, rhHi = 84;       // right hand (color tones)
+        int sparkleLo = 84, sparkleHi = 96; // optional high sparkle
 
-        double skipBeat2ProbStable = 0.45;   // if chord is stable, often skip beat 2
-        double addSecondColorProb = 0.25;    // add a second color tone sometimes
-        double sparkleProbBeat4 = 0.18;      // occasional high sparkle on beat 4
-        bool preferShells = true;            // favor shells over thicker rootless
+        // Probability knobs (defaults for Bill Evans ballad profile)
+        double skipBeat2ProbStable = 0.45;
+        double addSecondColorProb = 0.25;
+        double sparkleProbBeat4 = 0.18;
+        bool preferShells = true;
 
-        // Listening MVP (optional): comping space + interaction.
+        // User interaction state
         bool userDensityHigh = false;
         bool userIntensityPeak = false;
         bool userRegisterHigh = false;
         bool userSilence = false;
+        bool userBusy = false;
 
-        // Macro dynamics / debug forcing
+        // Macro dynamics
         bool forceClimax = false;
-        double energy = 0.25; // 0..1
+        double energy = 0.25;           // 0..1
 
-        // Phrase model (lightweight, deterministic): 4-bar phrases by default.
+        // Phrase context
         int phraseBars = 4;
-        int barInPhrase = 0;     // 0..phraseBars-1
+        int barInPhrase = 0;
         bool phraseEndBar = false;
-        double cadence01 = 0.0;  // 0..1 (stronger at phrase end / turnarounds)
+        double cadence01 = 0.0;
 
-        // Key context (optional; used to keep RH line and colors tonal).
+        // Key context
         bool hasKey = false;
-        int keyTonicPc = 0; // 0..11
+        int keyTonicPc = 0;
         virtuoso::theory::KeyMode keyMode = virtuoso::theory::KeyMode::Major;
 
-        // Lookahead for anticipations (optional).
+        // Lookahead
         music::ChordSymbol nextChord;
         bool hasNextChord = false;
         bool nextChanges = false;
-        // If we know the next harmony boundary *within the current bar* (or at the barline),
-        // this tells how many beats away it is (1..beatsRemaining). Used to prevent ringing across changes.
         int beatsUntilChordChange = 0;
 
-        // Global weights v2 (0..1) negotiated for this agent, plus any local shaping.
+        // Performance weights (negotiated) - ALL 10 weights
         virtuoso::control::PerformanceWeightsV2 weights{};
 
-        // Optional Stage 2 context (for smarter choices / vocab filtering).
-        QString chordFunction; // "Tonic" | "Subdominant" | "Dominant" | "Other"
-        QString roman;
+        // Functional harmony context
+        QString chordFunction;  // "Tonic" | "Subdominant" | "Dominant" | "Other"
+        QString roman;          // e.g. "V7", "iiø7"
+
+        // *** NEW: Bass coordination ***
+        int bassRegisterHi = 55;        // highest note bass might play (for spacing)
+        double bassActivity = 0.5;      // how active bass is this beat (0..1)
+        bool bassPlayingThisBeat = false;
     };
 
     JazzBalladPianoPlanner();
 
     void reset();
-
     PlannerState snapshotState() const;
     void restoreState(const PlannerState& s);
 
     void setVocabulary(const virtuoso::vocab::VocabularyRegistry* vocab) { m_vocab = vocab; }
-
-    // Ontology registry is the single source of truth for voicing choices.
     void setOntology(const virtuoso::ontology::OntologyRegistry* ont) { m_ont = ont; }
     void setMotivicMemory(const virtuoso::memory::MotivicMemory* mem) { m_mem = mem; }
 
@@ -205,89 +153,133 @@ public:
                                  const virtuoso::groove::TimeSignature& ts);
 
 private:
-    static int thirdIntervalForQuality(music::ChordQuality q);
-    static int fifthIntervalForQuality(music::ChordQuality q);
-    static int seventhIntervalFor(const music::ChordSymbol& c);
+    // ============= Voicing Generation =============
+
+    // Core voicing types from ontology
+    enum class VoicingType {
+        RootlessA,      // 3-5-7-9
+        RootlessB,      // 7-9-3-5
+        Shell,          // 3-7
+        GuideTones,     // 3-7 (same as shell but explicit)
+        Quartal,        // stacked 4ths
+        UST             // Upper Structure Triad
+    };
+
+    enum class VoicingDensity {
+        Guide,  // minimal: shells only
+        Full    // extended: shells + colors
+    };
+
+    struct Voicing {
+        VoicingType type = VoicingType::Shell;
+        VoicingDensity density = VoicingDensity::Full;
+        QVector<int> pcs;           // pitch classes (0..11)
+        QVector<int> midiNotes;     // realized MIDI notes
+        QString ontologyKey;
+        double cost = 0.0;          // voice-leading cost
+    };
+
+    // Generate candidate voicings for a chord
+    QVector<Voicing> generateVoicingCandidates(const Context& c, VoicingDensity density) const;
+
+    // Realize pitch classes to MIDI notes within register
+    QVector<int> realizePcsToMidi(const QVector<int>& pcs, int lo, int hi,
+                                  const QVector<int>& prevVoicing) const;
+
+    // Voice-leading cost (sum of semitone distances, penalize parallel motion)
+    double voiceLeadingCost(const QVector<int>& prev, const QVector<int>& next) const;
+
+    // Check feasibility with PianoDriver constraints
+    bool isFeasible(const QVector<int>& midiNotes) const;
+
+    // Repair voicing to satisfy constraints
+    QVector<int> repairVoicing(QVector<int> midi) const;
+
+    // ============= Chord/Scale Helpers =============
 
     static int pcForDegree(const music::ChordSymbol& c, int degree);
+    static int thirdInterval(music::ChordQuality q);
+    static int fifthInterval(music::ChordQuality q);
+    static int seventhInterval(const music::ChordSymbol& c);
+
+    // Nearest MIDI note for a pitch class within bounds
     static int nearestMidiForPc(int pc, int around, int lo, int hi);
-    static int bestNearestToPrev(int pc, const QVector<int>& prev, int lo, int hi);
 
-    static void sortUnique(QVector<int>& v);
-    static QVector<int> makeRootlessA(const music::ChordSymbol& c);
-    static QVector<int> makeRootlessB(const music::ChordSymbol& c);
-    static QVector<int> makeShell(const music::ChordSymbol& c);
+    // ============= Vocabulary-Driven Rhythm =============
 
-    bool feasible(const QVector<int>& midiNotes) const;
-    QVector<int> repairToFeasible(QVector<int> midiNotes) const;
+    // Query vocabulary for this beat's rhythm pattern
+    struct VocabRhythmHit {
+        int sub = 0;
+        int count = 1;
+        int durNum = 1;
+        int durDen = 4;
+        int velDelta = 0;
+        VoicingDensity density = VoicingDensity::Full;
+    };
 
-    void ensureBarRhythmPlanned(const Context& c);
-    QVector<CompHit> chooseBarCompRhythm(const Context& c);
-    QVector<TopHit> chooseBarTopLine(const Context& c);
-    void ensureMotifBlockPlanned(const Context& c);
-    void buildMotifBlockTemplates(const Context& c);
-    QVector<TopHit> realizeTopTemplate(const Context& c, const QVector<TopTemplateHit>& tmpl) const;
-    void ensurePhraseGuideLinePlanned(const Context& c);
-    int chooseGuidePcForChord(const music::ChordSymbol& chord, int prevGuidePc, bool preferResolve) const;
+    // Check if vocabulary is loaded
+    bool hasVocabularyLoaded() const;
+
+    // Get rhythm hits from vocabulary (if available)
+    QVector<VocabRhythmHit> queryVocabularyHits(const Context& c) const;
+
+    // Fallback: should we play on this beat? (deterministic from context)
+    bool shouldPlayBeatFallback(const Context& c, quint32 hash) const;
+
+    // ============= Weight Integration =============
+
+    // Map all 10 weights to concrete piano decisions
+    struct WeightMappings {
+        // From weights
+        double playProbMod = 1.0;      // density/rhythm -> attack probability
+        double velocityMod = 1.0;      // intensity -> velocity scaling
+        double durationMod = 1.0;      // warmth -> duration scaling
+        double registerShiftMod = 0.0; // warmth -> register down (semitones)
+        double voicingFullnessMod = 1.0; // dynamism -> prefer fuller voicings
+        double creativityMod = 0.0;    // creativity -> prefer UST/alterations
+        double tensionMod = 0.0;       // tension -> add upper extensions
+        double interactivityMod = 1.0; // interactivity -> response to user
+        double variabilityMod = 1.0;   // variability -> voicing variety
+        double rubatoPushMs = 0;       // emotion -> timing offset
+    };
+
+    WeightMappings computeWeightMappings(const Context& c) const;
+
+    // ============= Microtime / Humanization =============
+
+    // Compute timing offset (push/pull) in milliseconds
+    int computeTimingOffsetMs(const Context& c, quint32 hash) const;
+
+    // Apply timing offset to a GridPos
+    virtuoso::groove::GridPos applyTimingOffset(const virtuoso::groove::GridPos& pos,
+                                                int offsetMs, int bpm,
+                                                const virtuoso::groove::TimeSignature& ts) const;
+
+    // ============= Pedal Logic =============
+
+    // Generate pedal CC events for this beat
+    QVector<CcIntent> planPedal(const Context& c,
+                                const virtuoso::groove::TimeSignature& ts) const;
+
+    // ============= Gesture Support =============
+
+    // Choose and apply gesture (roll/arp) if appropriate
+    void applyGesture(const Context& c, QVector<virtuoso::engine::AgentIntentNote>& notes,
+                      const virtuoso::groove::TimeSignature& ts) const;
+
+    // ============= Register Coordination =============
+
+    // Adjust register to avoid bass collision
+    void adjustRegisterForBass(Context& c) const;
+
+    // ============= State =============
 
     virtuoso::constraints::PianoDriver m_driver;
-    QVector<int> m_lastVoicing;
-    virtuoso::constraints::PerformanceState m_state;
+    PlannerState m_state;
 
-    int m_lastRhythmBar = -1;
-    QVector<CompHit> m_barHits;
-    int m_lastTopMidi = -1; // right-hand top-line continuity
-    QVector<TopHit> m_barTopHits;
-
-    // Phrase-spanning guide-tone line (3rds/7ths) for "tonal + intentional" RH.
-    int m_phraseGuideStartBar = -1;
-    int m_phraseGuideBars = 4;
-    QVector<int> m_phraseGuidePcByBar; // size=m_phraseGuideBars, values 0..11
-
-    // Upper-structure memory (for resolutions).
-    int m_lastUpperBar = -1;
-    QVector<int> m_lastUpperPcs; // 0..11 (size 2-3)
-
-    // Last "memory motif" usage for explainability.
-    QString m_lastMotifSourceAgent;
-    QString m_lastMotifTransform;
-
-    // Data-driven vocab selections (for auditability / continuity).
-    int m_compPhraseStartBar = -1;
-    QString m_compPhraseAnchorChordText;
-    QString m_compPhraseAnchorFunction;
-    QString m_compPhraseId;
-    QVector<QString> m_compBeatIdsByBeat;
-    int m_topLinePhraseStartBar = -1;
-    QString m_topLinePhraseId;
-    QVector<virtuoso::vocab::VocabularyRegistry::PianoTopLineHit> m_topLinePhraseHits;
-    QString m_pedalStrategyId;
-
-    int m_motifBlockStartBar = -1; // even bar index of current 2-bar block
-    QVector<TopTemplateHit> m_motifA;
-    QVector<TopTemplateHit> m_motifB;
-    QVector<TopTemplateHit> m_motifC;
-    QVector<TopTemplateHit> m_motifD;
-    int m_phraseMotifStartBar = -1; // multiple of 4 (phrase start)
-
-    // Coherence: keep a stable "hand position" pitch-class set across a 2-bar block.
-    int m_anchorBlockStartBar = -1;
-    QString m_anchorChordText;
-    QString m_anchorVoicingKey;
-    QString m_anchorVoicingName;
-    QString m_anchorCspTag; // explainable CSP choice summary for the anchor
-    QVector<int> m_anchorPcs; // pitch classes 0..11
-    QVector<int> m_anchorLhPcs; // explicit LH shell pcs
-    QVector<int> m_anchorRhPcs; // explicit RH color pcs
-
-    // Arpeggiation anti-repeat (deterministic).
-    int m_lastArpBar = -1;
-    int m_lastArpStyle = -1;
-
-    const virtuoso::ontology::OntologyRegistry* m_ont = nullptr; // not owned
-    const virtuoso::memory::MotivicMemory* m_mem = nullptr;      // not owned
-    const virtuoso::vocab::VocabularyRegistry* m_vocab = nullptr; // not owned
+    const virtuoso::ontology::OntologyRegistry* m_ont = nullptr;
+    const virtuoso::memory::MotivicMemory* m_mem = nullptr;
+    const virtuoso::vocab::VocabularyRegistry* m_vocab = nullptr;
 };
 
 } // namespace playback
-

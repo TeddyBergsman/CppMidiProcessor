@@ -646,13 +646,20 @@ VocabularyRegistry::PianoPhraseChoice VocabularyRegistry::choosePianoPhrase(cons
     QVector<PianoPhrasePattern> cands;
     cands.reserve(16);
     for (const auto& p : m_pianoPhrases) {
-        if (p.phraseBars != pb) continue;
+        // Allow modular matching: pattern's phraseBars should evenly divide query's phraseBars.
+        // E.g., 4-bar patterns work within 4-bar or 8-bar phrases.
+        const int patternBars = qMax(1, p.phraseBars);
+        if (pb % patternBars != 0) continue;
         if (!energyMatches(e, p.minEnergy, p.maxEnergy)) continue;
         if (!p.allowWhenUserSilence && q.userSilence) continue;
         if (!functionMatches(p.chordFunctions, q.chordFunction)) continue;
         cands.push_back(p);
     }
-    const int phraseIndex = (q.playbackBarIndex >= 0) ? (q.playbackBarIndex / pb) : 0;
+
+    // For modular matching, use the sub-phrase index based on playback bar.
+    // This ensures deterministic selection even when 4-bar patterns are used in 8-bar phrases.
+    const int subPhraseLen = cands.isEmpty() ? pb : qMax(1, cands.first().phraseBars);
+    const int phraseIndex = (q.playbackBarIndex >= 0) ? (q.playbackBarIndex / subPhraseLen) : 0;
     const quint32 h = fnv1a32(QString("%1|piano_phrase|%2|%3|%4|%5")
                                   .arg(q.chordText)
                                   .arg(phraseIndex)
@@ -680,12 +687,15 @@ VocabularyRegistry::BassPhraseChoice VocabularyRegistry::chooseBassPhrase(const 
     QVector<BassPhrasePattern> cands;
     cands.reserve(16);
     for (const auto& p : m_bassPhrases) {
-        if (p.phraseBars != pb) continue;
+        // Allow modular matching: pattern's phraseBars should evenly divide query's phraseBars.
+        const int patternBars = qMax(1, p.phraseBars);
+        if (pb % patternBars != 0) continue;
         if (!energyMatches(e, p.minEnergy, p.maxEnergy)) continue;
         if (p.forbidWhenUserDenseOrPeak && q.userDenseOrPeak) continue;
         cands.push_back(p);
     }
-    const int phraseIndex = (q.playbackBarIndex >= 0) ? (q.playbackBarIndex / pb) : 0;
+    const int subPhraseLen = cands.isEmpty() ? pb : qMax(1, cands.first().phraseBars);
+    const int phraseIndex = (q.playbackBarIndex >= 0) ? (q.playbackBarIndex / subPhraseLen) : 0;
     const quint32 h = fnv1a32(QString("%1|bass_phrase|%2|%3|%4|%5")
                                   .arg(q.chordText)
                                   .arg(phraseIndex)
@@ -713,12 +723,15 @@ VocabularyRegistry::DrumsPhraseChoice VocabularyRegistry::chooseDrumsPhrase(cons
     QVector<DrumsPhrasePattern> cands;
     cands.reserve(16);
     for (const auto& p : m_drumsPhrases) {
-        if (p.phraseBars != pb) continue;
+        // Allow modular matching: pattern's phraseBars should evenly divide query's phraseBars.
+        const int patternBars = qMax(1, p.phraseBars);
+        if (pb % patternBars != 0) continue;
         if (!energyMatches(e, p.minEnergy, p.maxEnergy)) continue;
         if (p.intensityPeakOnly && !q.intensityPeak) continue;
         cands.push_back(p);
     }
-    const int phraseIndex = (q.playbackBarIndex >= 0) ? (q.playbackBarIndex / pb) : 0;
+    const int subPhraseLen = cands.isEmpty() ? pb : qMax(1, cands.first().phraseBars);
+    const int phraseIndex = (q.playbackBarIndex >= 0) ? (q.playbackBarIndex / subPhraseLen) : 0;
     const quint32 h = fnv1a32(QString("drums_phrase|%1|%2|%3")
                                   .arg(phraseIndex)
                                   .arg(int(q.intensityPeak))
@@ -854,6 +867,7 @@ QVector<VocabularyRegistry::PianoHit> VocabularyRegistry::pianoPhraseHitsForBeat
     for (const auto& h : ch.hits) {
         if (h.barOffset == barInPhrase && h.beatInBar == q.beatInBar) out.push_back(h.hit);
     }
+
     return out;
 }
 

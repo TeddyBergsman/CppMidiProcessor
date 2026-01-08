@@ -50,8 +50,25 @@ QString HarmonyContext::pcName(int pc) {
 }
 
 bool HarmonyContext::sameChordKey(const music::ChordSymbol& a, const music::ChordSymbol& b) {
-    return (a.rootPc == b.rootPc && a.bassPc == b.bassPc && a.quality == b.quality && a.seventh == b.seventh &&
-            a.extension == b.extension && a.alt == b.alt);
+    if (!(a.rootPc == b.rootPc && a.bassPc == b.bassPc && a.quality == b.quality && a.seventh == b.seventh &&
+          a.extension == b.extension && a.alt == b.alt)) {
+        return false;
+    }
+    // Alterations materially change harmony (e.g. C7 -> C7b9) and must count as a "new chord".
+    if (a.alterations.size() != b.alterations.size()) return false;
+    auto norm = [](const music::Alteration& x) {
+        // degree, delta, add are the semantic identity.
+        return std::tuple<int, int, bool>(x.degree, x.delta, x.add);
+    };
+    QVector<std::tuple<int, int, bool>> aa;
+    QVector<std::tuple<int, int, bool>> bb;
+    aa.reserve(a.alterations.size());
+    bb.reserve(b.alterations.size());
+    for (const auto& x : a.alterations) aa.push_back(norm(x));
+    for (const auto& x : b.alterations) bb.push_back(norm(x));
+    std::sort(aa.begin(), aa.end());
+    std::sort(bb.begin(), bb.end());
+    return aa == bb;
 }
 
 QString HarmonyContext::ontologyChordKeyFor(const music::ChordSymbol& c) {

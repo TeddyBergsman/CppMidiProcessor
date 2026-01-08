@@ -1,69 +1,268 @@
 {
-  "version": 1,
+  "version": 2,
   "style": "cool_jazz",
-  "notes": "MVP vocabulary pack: cool jazz ballad language. Piano vocab intentionally reset to a minimal 'tasteful basics' set (shells/rootless + 8th/16th rhythm cells) before reintroducing complexity.",
+  "notes": "Comprehensive jazz ballad vocabulary: Bill Evans/Russ Freeman language. Rich rhythmic cells with anticipations, syncopations, and phrase-aware patterns.",
 
   "piano_phrases": [
     {
-      "id": "P_BASIC_4BAR_2_4_SHELLS",
+      "id": "P_EVANS_SPARSE_2_4",
+      "phraseBars": 4,
+      "minEnergy": 0.0,
+      "maxEnergy": 0.55,
+      "weight": 3.5,
+      "allowWhenUserSilence": true,
+      "notes": "Classic Evans sparse: shells on 2&4 only, breathing room.",
+      "hits": [
+        { "bar": 0, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 1, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 1, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 2, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 3, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" }
+      ]
+    },
+    {
+      "id": "P_EVANS_ANTICIPATE_4",
+      "phraseBars": 4,
+      "minEnergy": 0.0,
+      "maxEnergy": 0.85,
+      "weight": 5.0,
+      "allowWhenUserSilence": true,
+      "notes": "Signature Evans: anticipate beat 4 by 8th note (and-of-3), creates forward motion.",
+      "hits": [
+        { "bar": 0, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -3, "density": "guide" },
+        { "bar": 0, "beat": 2, "sub": 1, "count": 2, "dur_num": 3, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 1, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -3, "density": "guide" },
+        { "bar": 1, "beat": 2, "sub": 1, "count": 2, "dur_num": 3, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 2, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -3, "density": "guide" },
+        { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 3, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -3, "density": "guide" },
+        { "bar": 3, "beat": 2, "sub": 1, "count": 2, "dur_num": 3, "dur_den": 8, "vel_delta": 2, "density": "full" }
+      ]
+    },
+    {
+      "id": "P_CHARLESTON_SWING",
+      "phraseBars": 4,
+      "minEnergy": 0.0,
+      "maxEnergy": 0.85,
+      "weight": 4.0,
+      "allowWhenUserSilence": true,
+      "notes": "Charleston rhythm: 1 + and-of-2, classic swing comping cell.",
+      "hits": [
+        { "bar": 0, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
+        { "bar": 0, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" },
+        { "bar": 1, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
+        { "bar": 1, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 2, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
+        { "bar": 2, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" },
+        { "bar": 3, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
+        { "bar": 3, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" }
+      ]
+    },
+    {
+      "id": "P_SYNCOPATED_FILL",
+      "phraseBars": 4,
+      "minEnergy": 0.15,
+      "maxEnergy": 1.0,
+      "weight": 3.5,
+      "allowWhenUserSilence": true,
+      "notes": "Syncopated fill pattern: offbeats and anticipations for active comping.",
+      "hits": [
+        { "bar": 0, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "full" },
+        { "bar": 0, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "guide" },
+        { "bar": 0, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" },
+        { "bar": 1, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 1, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 2, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "full" },
+        { "bar": 2, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -2, "density": "guide" },
+        { "bar": 3, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "full" },
+        { "bar": 3, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" },
+        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": 2, "density": "full" }
+      ]
+    },
+    {
+      "id": "P_VERY_SPARSE",
+      "phraseBars": 4,
+      "minEnergy": 0.0,
+      "maxEnergy": 0.40,
+      "weight": 2.0,
+      "allowWhenUserSilence": true,
+      "notes": "Very sparse: only beat 4, maximum space for soloist.",
+      "hits": [
+        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -8, "density": "guide" },
+        { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -6, "density": "guide" },
+        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" }
+      ]
+    },
+    {
+      "id": "P_16TH_ANTICIPATIONS",
+      "phraseBars": 4,
+      "minEnergy": 0.25,
+      "maxEnergy": 1.0,
+      "weight": 3.5,
+      "allowWhenUserSilence": true,
+      "notes": "16th note anticipations: hits arrive a 16th early for urgent feel.",
+      "hits": [
+        { "bar": 0, "beat": 0, "sub": 3, "count": 4, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "guide" },
+        { "bar": 0, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 0, "beat": 2, "sub": 3, "count": 4, "dur_num": 3, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 1, "beat": 0, "sub": 3, "count": 4, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "guide" },
+        { "bar": 1, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 1, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" },
+        { "bar": 2, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 2, "beat": 2, "sub": 3, "count": 4, "dur_num": 3, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 3, "beat": 0, "sub": 3, "count": 4, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "guide" },
+        { "bar": 3, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" },
+        { "bar": 3, "beat": 2, "sub": 3, "count": 4, "dur_num": 1, "dur_den": 4, "vel_delta": 2, "density": "full" }
+      ]
+    },
+    {
+      "id": "P_OFFBEAT_GROOVE",
+      "phraseBars": 4,
+      "minEnergy": 0.0,
+      "maxEnergy": 0.90,
+      "weight": 4.5,
+      "allowWhenUserSilence": true,
+      "notes": "Offbeat groove: emphasis on upbeats, creates swing feel.",
+      "hits": [
+        { "bar": 0, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 0, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" },
+        { "bar": 1, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 1, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 2, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 2, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" },
+        { "bar": 3, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 3, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" },
+        { "bar": 3, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": 2, "density": "full" }
+      ]
+    },
+    {
+      "id": "P_DOUBLE_TIME_FEEL",
+      "phraseBars": 4,
+      "minEnergy": 0.50,
+      "maxEnergy": 1.0,
+      "weight": 2.5,
+      "allowWhenUserSilence": true,
+      "notes": "Double-time feel: 8th note cells create urgency in climax moments.",
+      "hits": [
+        { "bar": 0, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "guide" },
+        { "bar": 0, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
+        { "bar": 0, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -2, "density": "full" },
+        { "bar": 0, "beat": 2, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "guide" },
+        { "bar": 0, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" },
+        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 1, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 1, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 2, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "guide" },
+        { "bar": 2, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
+        { "bar": 2, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -2, "density": "full" },
+        { "bar": 2, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" },
+        { "bar": 3, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 3, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "guide" },
+        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": 2, "density": "full" }
+      ]
+    },
+    {
+      "id": "P_CADENCE_BUILD",
       "phraseBars": 4,
       "minEnergy": 0.0,
       "maxEnergy": 1.0,
-      "weight": 4.0,
-      "allowWhenUserSilence": false,
+      "weight": 3.0,
+      "allowWhenUserSilence": true,
+      "functions": ["Dominant"],
+      "notes": "Cadence build: sparse early bars, fuller at phrase end.",
       "hits": [
-        { "bar": 0, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
-        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
-
-        { "bar": 1, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
-        { "bar": 1, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
-
-        { "bar": 2, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
-        { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
-
-        { "bar": 3, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
-        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
-        { "bar": 3, "beat": 3, "sub": 3, "count": 4, "dur_num": 1, "dur_den": 16, "vel_delta": -16, "density": "guide" }
-      ],
-      "notes": "Tasteful baseline: shells on 2&4 (guide tones), with a tiny late 16th breath at phrase end."
+        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -8, "density": "guide" },
+        { "bar": 1, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -6, "density": "guide" },
+        { "bar": 1, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 2, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "full" },
+        { "bar": 2, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 3, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -2, "density": "full" },
+        { "bar": 3, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 3, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": 2, "density": "full" },
+        { "bar": 3, "beat": 2, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 3, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": 4, "density": "full" },
+        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 6, "density": "full" }
+      ]
     },
     {
-      "id": "P_BASIC_4BAR_CHARLESTON",
-      "phraseBars": 4,
-      "minEnergy": 0.20,
-      "maxEnergy": 0.90,
-      "weight": 2.0,
-      "allowWhenUserSilence": false,
-      "hits": [
-        { "bar": 0, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -12, "density": "guide" },
-        { "bar": 0, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
-
-        { "bar": 1, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -12, "density": "guide" },
-        { "bar": 1, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
-
-        { "bar": 2, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -12, "density": "guide" },
-        { "bar": 2, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
-
-        { "bar": 3, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -12, "density": "guide" },
-        { "bar": 3, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
-        { "bar": 3, "beat": 3, "sub": 3, "count": 4, "dur_num": 1, "dur_den": 16, "vel_delta": -18, "density": "guide" }
-      ],
-      "notes": "Charleston cell baseline (1 + and-of-2), all shells; tiny late 16th breath at phrase end."
-    },
-    {
-      "id": "P_BASIC_4BAR_ONLY_4",
+      "id": "P_LAID_BACK_POCKET",
       "phraseBars": 4,
       "minEnergy": 0.0,
-      "maxEnergy": 0.75,
-      "weight": 2.2,
+      "maxEnergy": 0.70,
+      "weight": 4.0,
       "allowWhenUserSilence": true,
+      "notes": "Laid-back pocket: delayed attacks create relaxed groove.",
       "hits": [
-        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -6, "density": "guide" },
-        { "bar": 1, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -6, "density": "guide" },
-        { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -6, "density": "guide" },
-        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -6, "density": "guide" }
-      ],
-      "notes": "Very sparse phrase: comp only on beat 4 each bar."
+        { "bar": 0, "beat": 1, "sub": 1, "count": 4, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 0, "beat": 3, "sub": 1, "count": 4, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 1, "beat": 1, "sub": 1, "count": 4, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 1, "beat": 3, "sub": 1, "count": 4, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 2, "beat": 1, "sub": 1, "count": 4, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 2, "beat": 3, "sub": 1, "count": 4, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 3, "beat": 1, "sub": 1, "count": 4, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "density": "guide" },
+        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" }
+      ]
+    },
+    {
+      "id": "P_RUSS_FREEMAN_BOUNCE",
+      "phraseBars": 4,
+      "minEnergy": 0.0,
+      "maxEnergy": 0.85,
+      "weight": 3.5,
+      "allowWhenUserSilence": true,
+      "notes": "Russ Freeman bouncy: short staccato hits with space.",
+      "hits": [
+        { "bar": 0, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" },
+        { "bar": 0, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "full" },
+        { "bar": 0, "beat": 2, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" },
+        { "bar": 0, "beat": 3, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -2, "density": "full" },
+        { "bar": 1, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "full" },
+        { "bar": 1, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -2, "density": "guide" },
+        { "bar": 2, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" },
+        { "bar": 2, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "full" },
+        { "bar": 2, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 3, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" },
+        { "bar": 3, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -2, "density": "full" },
+        { "bar": 3, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": 2, "density": "full" }
+      ]
+    },
+    {
+      "id": "P_FILLS_ACTIVE",
+      "phraseBars": 4,
+      "minEnergy": 0.40,
+      "maxEnergy": 1.0,
+      "weight": 2.0,
+      "allowWhenUserSilence": true,
+      "notes": "Active fills: when soloist is silent, piano fills with more activity.",
+      "hits": [
+        { "bar": 0, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "full" },
+        { "bar": 0, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -2, "density": "full" },
+        { "bar": 0, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" },
+        { "bar": 0, "beat": 2, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "full" },
+        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 1, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" },
+        { "bar": 1, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 1, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "guide" },
+        { "bar": 1, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 2, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "full" },
+        { "bar": 2, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
+        { "bar": 2, "beat": 2, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "full" },
+        { "bar": 2, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" },
+        { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 3, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "full" },
+        { "bar": 3, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -2, "density": "full" },
+        { "bar": 3, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 3, "beat": 2, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -2, "density": "full" },
+        { "bar": 3, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": 0, "density": "full" },
+        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": 4, "density": "full" }
+      ]
     }
   ],
 
@@ -72,97 +271,346 @@
       "id": "TL_NONE",
       "phraseBars": 4,
       "minEnergy": 0.0,
-      "maxEnergy": 1.0,
-      "weight": 9.0,
-      "allowWhenUserSilence": true,
+      "maxEnergy": 0.50,
+      "weight": 5.0,
+      "allowWhenUserSilence": false,
       "hits": [],
-      "notes": "No top-line (default while rebuilding basics)."
+      "notes": "No top-line when soloist is active."
+    },
+    {
+      "id": "TL_PHRASE_END_ANSWER",
+      "phraseBars": 4,
+      "minEnergy": 0.20,
+      "maxEnergy": 1.0,
+      "weight": 3.0,
+      "allowWhenUserSilence": true,
+      "notes": "Melodic answer at phrase end.",
+      "hits": [
+        { "bar": 3, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "degree": 9, "neighborDir": 0, "tag": "answer" },
+        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -4, "degree": 7, "neighborDir": 0, "tag": "resolve" }
+      ]
+    },
+    {
+      "id": "TL_FILL_BAR_2",
+      "phraseBars": 4,
+      "minEnergy": 0.30,
+      "maxEnergy": 1.0,
+      "weight": 2.5,
+      "allowWhenUserSilence": true,
+      "notes": "Subtle fill in bar 2 when space allows.",
+      "hits": [
+        { "bar": 1, "beat": 3, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -10, "degree": 5, "neighborDir": 1, "tag": "neighbor" },
+        { "bar": 2, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "degree": 5, "neighborDir": 0, "resolve": true, "tag": "resolve" }
+      ]
     }
   ],
 
   "piano_gestures": [
-    { "id": "G_NONE", "minEnergy": 0.0, "maxEnergy": 1.0, "weight": 6.0, "kind": "none", "style": "", "spreadMs": 0, "notes": "No roll/arp (default while rebuilding basics)." },
-    { "id": "G_ROLL_UP_SMALL", "minEnergy": 0.20, "maxEnergy": 1.0, "weight": 0.8, "cadenceOnly": true, "allowWhenUserSilence": true, "minNoteCount": 3, "maxNoteCount": 6, "maxBpm": 130, "kind": "roll", "style": "up", "spreadMs": 30, "notes": "Small upward roll, cadence-only." }
+    { "id": "G_NONE", "minEnergy": 0.0, "maxEnergy": 0.60, "weight": 5.0, "kind": "none", "style": "", "spreadMs": 0, "notes": "No gesture, clean attack." },
+    { "id": "G_ROLL_UP_SOFT", "minEnergy": 0.15, "maxEnergy": 0.70, "weight": 2.0, "chordIsNewOnly": true, "minNoteCount": 3, "maxNoteCount": 5, "maxBpm": 90, "kind": "roll", "style": "up", "spreadMs": 25, "notes": "Soft upward roll on chord arrival." },
+    { "id": "G_ROLL_UP_MEDIUM", "minEnergy": 0.35, "maxEnergy": 1.0, "weight": 2.5, "cadenceOnly": true, "minNoteCount": 3, "maxNoteCount": 6, "maxBpm": 120, "kind": "roll", "style": "up", "spreadMs": 35, "notes": "Medium upward roll at cadences." },
+    { "id": "G_ROLL_DOWN", "minEnergy": 0.40, "maxEnergy": 1.0, "weight": 1.5, "cadenceOnly": true, "minNoteCount": 4, "maxNoteCount": 6, "maxBpm": 100, "kind": "roll", "style": "down", "spreadMs": 40, "notes": "Downward roll for dramatic effect." },
+    { "id": "G_BROKEN_INSIDE_OUT", "minEnergy": 0.25, "maxEnergy": 0.80, "weight": 1.8, "chordIsNewOnly": true, "minNoteCount": 3, "maxNoteCount": 4, "maxBpm": 80, "kind": "broken", "style": "inside_out", "spreadMs": 45, "notes": "Broken chord from middle outward." },
+    { "id": "G_GRACE_NOTE", "minEnergy": 0.20, "maxEnergy": 1.0, "weight": 2.0, "minNoteCount": 2, "maxNoteCount": 6, "maxBpm": 150, "kind": "grace", "style": "crush", "spreadMs": 15, "notes": "Quick grace note crush into chord." }
   ],
 
   "piano_pedals": [
-    { "id": "P_HALF_DEFAULT", "minEnergy": 0.0, "maxEnergy": 1.0, "weight": 4.0, "defaultState": "half", "repedalOnNewChord": true, "repedalProbPct": 60, "clearBeforeChange": true, "clearSub": 3, "clearCount": 4, "notes": "Half pedal default, repedal on new chords, late clear before changes." },
-    { "id": "P_DRY_UP", "minEnergy": 0.0, "maxEnergy": 0.70, "weight": 1.0, "defaultState": "up", "repedalOnNewChord": false, "clearBeforeChange": true, "clearSub": 3, "clearCount": 4, "notes": "Dry touch: pedal up (clarity, less smear)." }
+    { "id": "P_HALF_WARM", "minEnergy": 0.0, "maxEnergy": 0.70, "weight": 4.0, "defaultState": "half", "repedalOnNewChord": true, "repedalProbPct": 75, "clearBeforeChange": true, "clearSub": 3, "clearCount": 4, "notes": "Half pedal default, warm sustain." },
+    { "id": "P_HALF_QUICK", "minEnergy": 0.40, "maxEnergy": 1.0, "weight": 3.0, "defaultState": "half", "repedalOnNewChord": true, "repedalProbPct": 90, "clearBeforeChange": true, "clearSub": 2, "clearCount": 4, "notes": "Quick repedal for faster changes." },
+    { "id": "P_DRY_STACCATO", "minEnergy": 0.30, "maxEnergy": 0.85, "weight": 1.5, "defaultState": "up", "repedalOnNewChord": false, "clearBeforeChange": true, "clearSub": 3, "clearCount": 4, "notes": "Dry touch for staccato articulation." },
+    { "id": "P_FULL_LUSH", "minEnergy": 0.0, "maxEnergy": 0.50, "weight": 1.0, "defaultState": "down", "repedalOnNewChord": true, "repedalProbPct": 60, "clearBeforeChange": true, "clearSub": 3, "clearCount": 4, "notes": "Full pedal for lush ballad moments." }
   ],
 
   "bass_phrases": [
     {
-      "id": "CHET_4BAR_ROOTS_AND_SPACE",
+      "id": "BP_TWO_FEEL_SPACIOUS",
       "phraseBars": 4,
       "minEnergy": 0.0,
-      "maxEnergy": 0.75,
-      "weight": 2.4,
+      "maxEnergy": 0.60,
+      "weight": 3.0,
       "forbidWhenUserDenseOrPeak": true,
+      "notes": "Spacious two-feel: roots with plenty of air.",
       "hits": [
         { "bar": 0, "beat": 0, "action": "root", "dur_num": 2, "dur_den": 4, "vel_delta": 0, "notes": "Root (hold)" },
-        { "bar": 0, "beat": 2, "action": "rest", "notes": "Space" },
-
         { "bar": 1, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 2, "vel_delta": 0, "notes": "Root" },
-        { "bar": 1, "beat": 2, "action": "fifth", "dur_num": 1, "dur_den": 2, "vel_delta": 0, "notes": "Fifth" },
-
+        { "bar": 1, "beat": 2, "action": "fifth", "dur_num": 1, "dur_den": 2, "vel_delta": -2, "notes": "Fifth" },
         { "bar": 2, "beat": 0, "action": "root", "dur_num": 2, "dur_den": 4, "vel_delta": 0, "notes": "Root (hold)" },
-        { "bar": 2, "beat": 2, "action": "third", "dur_num": 1, "dur_den": 2, "vel_delta": -4, "notes": "Third (soft)" },
-
         { "bar": 3, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 2, "vel_delta": 0, "notes": "Root" },
-        { "bar": 3, "beat": 3, "action": "pickup_to_next", "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "notes": "Pickup" }
-      ],
-      "notes": "4-bar bass phrase: roots + space, occasional fifth/third, phrase-end pickup."
+        { "bar": 3, "beat": 3, "action": "pickup_to_next", "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "notes": "Pickup" }
+      ]
+    },
+    {
+      "id": "BP_TWO_FEEL_CLASSIC",
+      "phraseBars": 4,
+      "minEnergy": 0.20,
+      "maxEnergy": 0.80,
+      "weight": 3.5,
+      "forbidWhenUserDenseOrPeak": false,
+      "notes": "Classic two-feel: 1 and 3 with approach patterns.",
+      "hits": [
+        { "bar": 0, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 2, "vel_delta": 0, "notes": "Root" },
+        { "bar": 0, "beat": 2, "action": "fifth", "dur_num": 1, "dur_den": 2, "vel_delta": 0, "notes": "Fifth" },
+        { "bar": 1, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 2, "vel_delta": 0, "notes": "Root" },
+        { "bar": 1, "beat": 2, "action": "third", "dur_num": 1, "dur_den": 2, "vel_delta": -2, "notes": "Third" },
+        { "bar": 2, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 2, "vel_delta": 0, "notes": "Root" },
+        { "bar": 2, "beat": 2, "action": "fifth", "dur_num": 1, "dur_den": 4, "vel_delta": 0, "notes": "Fifth" },
+        { "bar": 2, "beat": 3, "action": "approach_to_next", "dur_num": 1, "dur_den": 4, "vel_delta": -2, "notes": "Approach" },
+        { "bar": 3, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 2, "vel_delta": 0, "notes": "Root" },
+        { "bar": 3, "beat": 2, "action": "fifth", "dur_num": 1, "dur_den": 4, "vel_delta": 0, "notes": "Fifth" },
+        { "bar": 3, "beat": 3, "action": "pickup_to_next", "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "notes": "Pickup" }
+      ]
+    },
+    {
+      "id": "BP_MELODIC_MOTION",
+      "phraseBars": 4,
+      "minEnergy": 0.35,
+      "maxEnergy": 1.0,
+      "weight": 2.5,
+      "forbidWhenUserDenseOrPeak": false,
+      "notes": "Melodic motion: uses 3rds and 6ths for color.",
+      "hits": [
+        { "bar": 0, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 2, "vel_delta": 0, "notes": "Root" },
+        { "bar": 0, "beat": 2, "action": "third", "dur_num": 1, "dur_den": 2, "vel_delta": -2, "notes": "Third" },
+        { "bar": 1, "beat": 0, "action": "fifth", "dur_num": 1, "dur_den": 2, "vel_delta": 0, "notes": "Fifth" },
+        { "bar": 1, "beat": 2, "action": "root", "dur_num": 1, "dur_den": 4, "vel_delta": 0, "notes": "Root" },
+        { "bar": 1, "beat": 3, "action": "third", "dur_num": 1, "dur_den": 4, "vel_delta": -4, "notes": "Third" },
+        { "bar": 2, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 2, "vel_delta": 0, "notes": "Root" },
+        { "bar": 2, "beat": 2, "action": "fifth", "dur_num": 1, "dur_den": 2, "vel_delta": 0, "notes": "Fifth" },
+        { "bar": 3, "beat": 0, "action": "third", "dur_num": 1, "dur_den": 4, "vel_delta": -2, "notes": "Third" },
+        { "bar": 3, "beat": 1, "action": "root", "dur_num": 1, "dur_den": 4, "vel_delta": 0, "notes": "Root" },
+        { "bar": 3, "beat": 2, "action": "approach_to_next", "dur_num": 1, "dur_den": 4, "vel_delta": -2, "notes": "Approach" },
+        { "bar": 3, "beat": 3, "action": "pickup_to_next", "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "notes": "Pickup" }
+      ]
+    },
+    {
+      "id": "BP_PEDAL_TONIC",
+      "phraseBars": 4,
+      "minEnergy": 0.0,
+      "maxEnergy": 0.50,
+      "weight": 2.0,
+      "forbidWhenUserDenseOrPeak": true,
+      "notes": "Pedal tone: sustained root creates foundation.",
+      "hits": [
+        { "bar": 0, "beat": 0, "action": "root", "dur_num": 3, "dur_den": 2, "vel_delta": 0, "notes": "Sustained root" },
+        { "bar": 2, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 1, "vel_delta": 0, "notes": "Long root" },
+        { "bar": 3, "beat": 3, "action": "pickup_to_next", "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "notes": "Pickup" }
+      ]
+    },
+    {
+      "id": "BP_ACTIVE_WALKING",
+      "phraseBars": 4,
+      "minEnergy": 0.55,
+      "maxEnergy": 1.0,
+      "weight": 2.0,
+      "forbidWhenUserDenseOrPeak": false,
+      "notes": "Active: quasi-walking feel with more quarter notes.",
+      "hits": [
+        { "bar": 0, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 4, "vel_delta": 0, "notes": "Root" },
+        { "bar": 0, "beat": 1, "action": "third", "dur_num": 1, "dur_den": 4, "vel_delta": -4, "notes": "Third" },
+        { "bar": 0, "beat": 2, "action": "fifth", "dur_num": 1, "dur_den": 4, "vel_delta": -2, "notes": "Fifth" },
+        { "bar": 0, "beat": 3, "action": "approach_to_next", "dur_num": 1, "dur_den": 4, "vel_delta": -4, "notes": "Approach" },
+        { "bar": 1, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 4, "vel_delta": 0, "notes": "Root" },
+        { "bar": 1, "beat": 2, "action": "fifth", "dur_num": 1, "dur_den": 4, "vel_delta": -2, "notes": "Fifth" },
+        { "bar": 1, "beat": 3, "action": "third", "dur_num": 1, "dur_den": 4, "vel_delta": -4, "notes": "Third" },
+        { "bar": 2, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 4, "vel_delta": 0, "notes": "Root" },
+        { "bar": 2, "beat": 1, "action": "fifth", "dur_num": 1, "dur_den": 4, "vel_delta": -2, "notes": "Fifth" },
+        { "bar": 2, "beat": 2, "action": "third", "dur_num": 1, "dur_den": 4, "vel_delta": -4, "notes": "Third" },
+        { "bar": 2, "beat": 3, "action": "approach_to_next", "dur_num": 1, "dur_den": 4, "vel_delta": -4, "notes": "Approach" },
+        { "bar": 3, "beat": 0, "action": "root", "dur_num": 1, "dur_den": 4, "vel_delta": 0, "notes": "Root" },
+        { "bar": 3, "beat": 1, "action": "third", "dur_num": 1, "dur_den": 4, "vel_delta": -2, "notes": "Third" },
+        { "bar": 3, "beat": 2, "action": "fifth", "dur_num": 1, "dur_den": 4, "vel_delta": -2, "notes": "Fifth" },
+        { "bar": 3, "beat": 3, "action": "pickup_to_next", "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "notes": "Pickup" }
+      ]
     }
   ],
 
-  "drums_phrases": [],
+  "drums_phrases": [
+    {
+      "id": "DP_BRUSH_BASIC",
+      "phraseBars": 4,
+      "minEnergy": 0.0,
+      "maxEnergy": 0.60,
+      "weight": 4.0,
+      "intensityPeakOnly": false,
+      "notes": "Basic brush pattern: swishes on 2&4, minimal.",
+      "hits": [
+        { "bar": 0, "beat": 1, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 0, "beat": 3, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -2 } },
+        { "bar": 1, "beat": 1, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 1, "beat": 3, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -2 } },
+        { "bar": 2, "beat": 1, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 2, "beat": 3, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -2 } },
+        { "bar": 3, "beat": 1, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 3, "beat": 3, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 2 } }
+      ]
+    },
+    {
+      "id": "DP_BRUSH_FILLS",
+      "phraseBars": 4,
+      "minEnergy": 0.30,
+      "maxEnergy": 1.0,
+      "weight": 3.0,
+      "intensityPeakOnly": false,
+      "notes": "Brush with phrase-end pickup and fills.",
+      "hits": [
+        { "bar": 0, "beat": 1, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 0, "beat": 3, "hit": { "articulation": "brush_short", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -4 } },
+        { "bar": 1, "beat": 1, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 1, "beat": 3, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -2 } },
+        { "bar": 2, "beat": 1, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 2, "beat": 3, "hit": { "articulation": "brush_short", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -2 } },
+        { "bar": 2, "beat": 3, "hit": { "articulation": "brush_short", "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -6 } },
+        { "bar": 3, "beat": 1, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 3, "beat": 2, "hit": { "articulation": "brush_short", "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -4 } },
+        { "bar": 3, "beat": 3, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 2 } },
+        { "bar": 3, "beat": 3, "hit": { "articulation": "brush_short", "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -2 } }
+      ]
+    },
+    {
+      "id": "DP_RIDE_BUILD",
+      "phraseBars": 4,
+      "minEnergy": 0.45,
+      "maxEnergy": 1.0,
+      "weight": 2.5,
+      "intensityPeakOnly": false,
+      "notes": "Build with ride: adds cymbal shimmer in latter bars.",
+      "hits": [
+        { "bar": 0, "beat": 1, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -2 } },
+        { "bar": 0, "beat": 3, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -4 } },
+        { "bar": 1, "beat": 1, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 1, "beat": 3, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -2 } },
+        { "bar": 2, "beat": 1, "hit": { "articulation": "ride_hit", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -4 } },
+        { "bar": 2, "beat": 1, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 2, "beat": 3, "hit": { "articulation": "ride_hit", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -2 } },
+        { "bar": 2, "beat": 3, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 3, "beat": 0, "hit": { "articulation": "ride_hit", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -2 } },
+        { "bar": 3, "beat": 1, "hit": { "articulation": "ride_hit", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 3, "beat": 1, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 2 } },
+        { "bar": 3, "beat": 2, "hit": { "articulation": "ride_hit", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } },
+        { "bar": 3, "beat": 3, "hit": { "articulation": "ride_hit", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 2 } },
+        { "bar": 3, "beat": 3, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 4 } }
+      ]
+    },
+    {
+      "id": "DP_SPARSE_TEXTURE",
+      "phraseBars": 4,
+      "minEnergy": 0.0,
+      "maxEnergy": 0.45,
+      "weight": 3.0,
+      "intensityPeakOnly": false,
+      "notes": "Very sparse: occasional swish for color.",
+      "hits": [
+        { "bar": 0, "beat": 3, "hit": { "articulation": "brush_short", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -6 } },
+        { "bar": 1, "beat": 3, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -4 } },
+        { "bar": 3, "beat": 1, "hit": { "articulation": "brush_short", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -2 } },
+        { "bar": 3, "beat": 3, "hit": { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 } }
+      ]
+    }
+  ],
 
   "piano": [
     {
-      "id": "EVANS_SHELL_2",
+      "id": "EVANS_ANTICIPATE_8TH",
+      "beats": [2],
+      "minEnergy": 0.25,
+      "maxEnergy": 1.0,
+      "weight": 3.5,
+      "notes": "Anticipate beat 3: hit on and-of-2.",
+      "hits": [
+        { "sub": 1, "count": 2, "dur_num": 3, "dur_den": 8, "vel_delta": 0, "density": "full" }
+      ]
+    },
+    {
+      "id": "EVANS_ANTICIPATE_16TH",
+      "beats": [3],
+      "minEnergy": 0.35,
+      "maxEnergy": 1.0,
+      "weight": 2.5,
+      "notes": "Anticipate beat 4: hit on last 16th of beat 3.",
+      "hits": [
+        { "sub": 3, "count": 4, "dur_num": 1, "dur_den": 4, "vel_delta": 2, "density": "full" }
+      ]
+    },
+    {
+      "id": "SHELL_BEAT_2",
       "beats": [1],
       "minEnergy": 0.0,
       "maxEnergy": 1.0,
-      "weight": 4.0,
+      "weight": 3.0,
       "stableOnly": true,
+      "notes": "Shell on beat 2.",
       "hits": [
-        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" }
-      ],
-      "notes": "Sparse Bill Evans-ish shell on beat 2 (guide tones only)."
+        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" }
+      ]
     },
     {
-      "id": "EVANS_SHELL_4",
+      "id": "SHELL_BEAT_4",
       "beats": [3],
       "minEnergy": 0.0,
       "maxEnergy": 1.0,
-      "weight": 4.0,
+      "weight": 3.0,
       "stableOnly": true,
+      "notes": "Shell on beat 4.",
       "hits": [
         { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" }
-      ],
-      "notes": "Sparse Bill Evans-ish shell on beat 4 (guide tones only)."
+      ]
     },
     {
-      "id": "EVANS_FULL_2",
+      "id": "FULL_BEAT_2",
       "beats": [1],
-      "minEnergy": 0.25,
+      "minEnergy": 0.30,
       "maxEnergy": 1.0,
       "weight": 2.5,
+      "notes": "Full voicing on beat 2.",
       "hits": [
         { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" }
-      ],
-      "notes": "Beat 2 full voicing (shell + 1-2 colors)."
+      ]
     },
     {
-      "id": "EVANS_FULL_4",
+      "id": "FULL_BEAT_4",
       "beats": [3],
-      "minEnergy": 0.25,
+      "minEnergy": 0.30,
       "maxEnergy": 1.0,
       "weight": 2.5,
+      "notes": "Full voicing on beat 4.",
       "hits": [
-        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" }
-      ],
-      "notes": "Beat 4 full voicing (shell + 1-2 colors)."
+        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 2, "density": "full" }
+      ]
+    },
+    {
+      "id": "UPBEAT_AND_OF_1",
+      "beats": [0],
+      "minEnergy": 0.35,
+      "maxEnergy": 1.0,
+      "weight": 2.0,
+      "chordIsNewOnly": true,
+      "notes": "Upbeat: and-of-1 for forward motion.",
+      "hits": [
+        { "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "guide" }
+      ]
+    },
+    {
+      "id": "DOUBLE_HIT_2_AND",
+      "beats": [1],
+      "minEnergy": 0.40,
+      "maxEnergy": 1.0,
+      "weight": 2.0,
+      "notes": "Double hit: beat 2 + and-of-2.",
+      "hits": [
+        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -2, "density": "guide" },
+        { "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -6, "density": "guide" }
+      ]
+    },
+    {
+      "id": "STACCATO_8TH",
+      "beats": [1, 3],
+      "minEnergy": 0.30,
+      "maxEnergy": 0.80,
+      "weight": 2.0,
+      "notes": "Staccato 8th note for bouncy feel.",
+      "hits": [
+        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "guide" }
+      ]
     }
   ],
 
@@ -171,71 +619,71 @@
       "id": "TWO_FEEL_ROOT_LONG",
       "beats": [0],
       "minEnergy": 0.0,
-      "maxEnergy": 0.85,
-      "weight": 1.8,
+      "maxEnergy": 0.70,
+      "weight": 2.5,
       "stableOnly": true,
       "action": "root",
       "dur_num": 2,
       "dur_den": 4,
       "vel_delta": 0,
-      "notes": "Chet-ish long root on beat 1 (space)."
+      "notes": "Long root on beat 1."
     },
     {
-      "id": "TWO_FEEL_ROOT_SHORT",
+      "id": "TWO_FEEL_ROOT_HALF",
       "beats": [0],
       "minEnergy": 0.25,
       "maxEnergy": 1.0,
-      "weight": 2.2,
+      "weight": 3.0,
       "action": "root",
       "dur_num": 1,
       "dur_den": 2,
       "vel_delta": 0,
-      "notes": "Beat 1 root (2 beats long)."
+      "notes": "Half note root on beat 1."
     },
     {
       "id": "TWO_FEEL_FIFTH",
       "beats": [2],
       "minEnergy": 0.0,
       "maxEnergy": 1.0,
-      "weight": 2.8,
+      "weight": 3.0,
       "action": "fifth",
       "dur_num": 1,
       "dur_den": 2,
       "vel_delta": 0,
-      "notes": "Beat 3 fifth (foundation)."
+      "notes": "Fifth on beat 3."
     },
     {
-      "id": "TWO_FEEL_THIRD_SOFT",
+      "id": "TWO_FEEL_THIRD",
       "beats": [2],
       "minEnergy": 0.0,
-      "maxEnergy": 0.75,
-      "weight": 1.1,
+      "maxEnergy": 0.70,
+      "weight": 1.5,
       "action": "third",
       "dur_num": 1,
       "dur_den": 2,
-      "vel_delta": -4,
-      "notes": "Occasional beat 3 third (cool-jazz warmth)."
+      "vel_delta": -2,
+      "notes": "Third on beat 3 for color."
     },
     {
-      "id": "APPROACH_TO_NEXT",
+      "id": "APPROACH_CHROMATIC",
       "beats": [2],
-      "minEnergy": 0.35,
+      "minEnergy": 0.30,
       "maxEnergy": 1.0,
-      "weight": 1.6,
+      "weight": 2.0,
       "nextChangesOnly": true,
       "forbidWhenUserDenseOrPeak": true,
       "action": "approach_to_next",
       "dur_num": 1,
       "dur_den": 4,
       "vel_delta": -2,
-      "notes": "Half-step approach on beat 3 into next bar."
+      "notes": "Chromatic approach on beat 3."
     },
     {
       "id": "PICKUP_AND_OF_4",
       "beats": [3],
-      "minEnergy": 0.30,
+      "minEnergy": 0.25,
       "maxEnergy": 1.0,
-      "weight": 1.2,
+      "weight": 1.8,
       "nextChangesOnly": true,
       "forbidWhenUserDenseOrPeak": true,
       "action": "pickup_to_next",
@@ -243,21 +691,54 @@
       "count": 2,
       "dur_num": 1,
       "dur_den": 8,
-      "vel_delta": -6,
-      "notes": "Upbeat pickup on and-of-4 into the next bar."
+      "vel_delta": -4,
+      "notes": "Upbeat pickup on and-of-4."
     },
     {
-      "id": "REST_BEAT_3",
+      "id": "REST_SPACE",
       "beats": [2],
       "minEnergy": 0.0,
-      "maxEnergy": 0.60,
-      "weight": 0.8,
+      "maxEnergy": 0.50,
+      "weight": 1.0,
       "stableOnly": true,
       "action": "rest",
-      "notes": "Chet space: omit beat 3 when harmony is stable."
+      "notes": "Rest for space and air."
     }
   ],
 
-  "drums": []
+  "drums": [
+    {
+      "id": "SWISH_2_4",
+      "beats": [1, 3],
+      "minEnergy": 0.0,
+      "maxEnergy": 1.0,
+      "weight": 4.0,
+      "notes": "Brush swish on 2&4.",
+      "hits": [
+        { "articulation": "snare_swish", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": 0 }
+      ]
+    },
+    {
+      "id": "RIDE_HIT_BEAT",
+      "beats": [0, 2],
+      "minEnergy": 0.45,
+      "maxEnergy": 1.0,
+      "weight": 2.0,
+      "notes": "Ride hit on 1&3 for shimmer.",
+      "hits": [
+        { "articulation": "ride_hit", "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -4 }
+      ]
+    },
+    {
+      "id": "BRUSH_SHORT_OFFBEAT",
+      "beats": [1, 3],
+      "minEnergy": 0.30,
+      "maxEnergy": 0.85,
+      "weight": 1.5,
+      "notes": "Short brush on upbeat.",
+      "hits": [
+        { "articulation": "brush_short", "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -6 }
+      ]
+    }
+  ]
 }
-

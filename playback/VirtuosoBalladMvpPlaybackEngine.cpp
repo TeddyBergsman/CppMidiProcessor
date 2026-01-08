@@ -652,7 +652,35 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     ni.cadence = false;
     ni.phraseEnd = false;
     ni.sectionLabel = sec;
-    ai.negotiated = WeightNegotiator::negotiate(ni, m_weightNegState, /*alpha=*/0.22);
+    // Negotiation smoothing (same for Auto + Manual):
+    // Keep continuity when weights are stable, but respond quickly when weights jump (e.g. user drags sliders).
+    auto maxAbsDiff = [&](const virtuoso::control::PerformanceWeightsV2& a,
+                          const virtuoso::control::PerformanceWeightsV2& b) -> double {
+        auto d = [&](double x, double y) { return qAbs(x - y); };
+        double m = 0.0;
+        m = qMax(m, d(a.density, b.density));
+        m = qMax(m, d(a.rhythm, b.rhythm));
+        m = qMax(m, d(a.intensity, b.intensity));
+        m = qMax(m, d(a.dynamism, b.dynamism));
+        m = qMax(m, d(a.emotion, b.emotion));
+        m = qMax(m, d(a.creativity, b.creativity));
+        m = qMax(m, d(a.tension, b.tension));
+        m = qMax(m, d(a.interactivity, b.interactivity));
+        m = qMax(m, d(a.variability, b.variability));
+        m = qMax(m, d(a.warmth, b.warmth));
+        return m;
+    };
+    const double baseAlpha = 0.22;
+    double alpha = baseAlpha;
+    if (m_hasPrevWeightsV2ForNegotiation) {
+        const double diff = qBound(0.0, maxAbsDiff(gw, m_prevWeightsV2ForNegotiation), 1.0);
+        // diff >= 0.25 -> essentially immediate; smaller diffs -> partially smoothed.
+        const double t = qBound(0.0, diff / 0.25, 1.0);
+        alpha = baseAlpha + (1.0 - baseAlpha) * t;
+    }
+    m_prevWeightsV2ForNegotiation = gw;
+    m_hasPrevWeightsV2ForNegotiation = true;
+    ai.negotiated = WeightNegotiator::negotiate(ni, m_weightNegState, /*alpha=*/alpha);
 
     ai.debugEnergyAuto = m_debugEnergyAuto;
     ai.debugEnergy = m_debugEnergy;

@@ -21,6 +21,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QtGlobal>
 
 namespace {
@@ -502,6 +503,120 @@ static void testCandidatePoolIncludesWeightsV2() {
     expect(o.value("negotiated_v2").isObject(), "negotiated_v2 is object");
 }
 
+// Test that the real vocabulary file parses correctly
+static void testRealVocabularyParsing() {
+    using namespace virtuoso::vocab;
+    
+    VocabularyRegistry vocab;
+    QString err;
+    
+    // Load the real vocabulary file from filesystem
+    QFile f("../virtuoso/vocab/cool_jazz_vocabulary.json");
+    if (!f.open(QIODevice::ReadOnly)) {
+        qDebug() << "[TEST] Could not open vocabulary file for test (not an error if running in different directory)";
+        return;  // Not a test failure - file might not be accessible from test directory
+    }
+    
+    const bool ok = vocab.loadFromJsonBytes(f.readAll(), &err);
+    expect(ok, "Real vocab: JSON parses successfully");
+    if (!ok) {
+        qDebug() << "[TEST] Real vocab parse error:" << err;
+        return;
+    }
+    
+    // Verify we have patterns loaded
+    const auto pianoPatterns = vocab.pianoPatterns();
+    const auto pianoPhrases = vocab.pianoPhrasePatterns();
+    expect(pianoPhrases.size() >= 10, "Real vocab: at least 10 piano phrases loaded");
+    expect(pianoPatterns.size() >= 5, "Real vocab: at least 5 piano beat patterns loaded");
+    
+    // Test that phrases match with 8-bar query (modular matching)
+    VocabularyRegistry::PianoPhraseQuery q;
+    q.ts = {4, 4};
+    q.phraseBars = 8;
+    q.energy = 0.5;
+    q.userSilence = false;
+    q.determinismSeed = 42;
+    q.playbackBarIndex = 0;
+    q.beatInBar = 1;
+    
+    QString phraseId;
+    auto hits = vocab.pianoPhraseHitsForBeat(q, &phraseId);
+    expect(!phraseId.isEmpty(), "Real vocab: phrase matched with 8-bar query");
+    expect(hits.size() >= 1, "Real vocab: 8-bar query returns at least 1 hit on beat 1");
+}
+
+// Test that 4-bar vocabulary patterns work with 8-bar phrase queries (modular matching)
+static void testVocabularyModularMatching() {
+    using namespace virtuoso::vocab;
+    
+    VocabularyRegistry vocab;
+    QString err;
+    // Create a 4-bar pattern
+    const QByteArray js = QByteArray(R"JSON({
+        "version": 1,
+        "piano": [],
+        "piano_phrases": [ { 
+            "id": "TEST_4BAR", 
+            "phraseBars": 4, 
+            "minEnergy": 0.0, 
+            "maxEnergy": 1.0, 
+            "weight": 1.0,
+            "allowWhenUserSilence": true,
+            "hits": [ 
+                { "bar": 0, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
+                { "bar": 1, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
+                { "bar": 2, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
+                { "bar": 3, "beat": 2, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" }
+            ],
+            "notes": "test 4-bar pattern"
+        } ],
+        "piano_topline": [],
+        "piano_gestures": [],
+        "piano_pedals": [],
+        "bass": [],
+        "drums": []
+    })JSON");
+    const bool ok = vocab.loadFromJsonBytes(js, &err);
+    expect(ok, "Modular matching: load vocab JSON");
+    if (!ok) return;
+    
+    // Query with 8-bar phrase (should modularly match 4-bar pattern)
+    VocabularyRegistry::PianoPhraseQuery q;
+    q.ts = {4, 4};
+    q.phraseBars = 8;  // 8-bar phrase
+    q.energy = 0.5;
+    q.userSilence = false;
+    q.determinismSeed = 42;
+    
+    // Test bar 0, beat 1 (should match bar 0 of pattern)
+    q.playbackBarIndex = 0;
+    q.beatInBar = 1;
+    QString phraseId;
+    auto hits = vocab.pianoPhraseHitsForBeat(q, &phraseId);
+    expect(!phraseId.isEmpty(), "Modular matching: phrase ID returned for 8-bar query");
+    expect(phraseId == "TEST_4BAR", "Modular matching: correct pattern matched");
+    expect(hits.size() == 1, "Modular matching: bar 0 beat 1 has 1 hit");
+    
+    // Test bar 4, beat 1 (should wrap to bar 0 of pattern due to modular matching)
+    q.playbackBarIndex = 4;
+    q.beatInBar = 1;
+    hits = vocab.pianoPhraseHitsForBeat(q, &phraseId);
+    expect(hits.size() == 1, "Modular matching: bar 4 beat 1 wraps to bar 0 of pattern");
+    
+    // Test bar 5, beat 3 (should wrap to bar 1 of pattern)
+    q.playbackBarIndex = 5;
+    q.beatInBar = 3;
+    hits = vocab.pianoPhraseHitsForBeat(q, &phraseId);
+    expect(hits.size() == 1, "Modular matching: bar 5 beat 3 wraps to bar 1 of pattern");
+    
+    // Test bar 0, beat 0 (no hit at beat 0 in pattern)
+    q.playbackBarIndex = 0;
+    q.beatInBar = 0;
+    hits = vocab.pianoPhraseHitsForBeat(q, &phraseId);
+    expect(hits.size() == 0, "Modular matching: bar 0 beat 0 has no hits");
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     testLookaheadPlannerJsonDeterminism();
@@ -511,6 +626,8 @@ int main(int argc, char** argv) {
     testAutoWeightsV2DeterminismAndBounds();
     testWeightNegotiatorDeterminismAndBounds();
     testCandidatePoolIncludesWeightsV2();
+    testRealVocabularyParsing();
+    testVocabularyModularMatching();
     if (g_failures > 0) {
         qWarning() << "VirtuosoPlaybackTests failures:" << g_failures;
         return 1;

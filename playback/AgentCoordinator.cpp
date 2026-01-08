@@ -46,6 +46,96 @@ static QString representativeVoicingType(const QVector<virtuoso::engine::AgentIn
     return best;
 }
 
+static int normalizePcLocal(int pc) {
+    int v = pc % 12;
+    if (v < 0) v += 12;
+    return v;
+}
+
+static QVector<int> chordPitchClassesForDebug(const music::ChordSymbol& chord, bool basicOnly) {
+    // Debug helper (kept local so playback tests don't need extra link deps).
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return {};
+    QVector<int> intervals;
+    intervals.reserve(12);
+    auto add = [&](int iv) { intervals.push_back(iv); };
+
+    // Root always.
+    add(0);
+
+    // Third
+    switch (chord.quality) {
+        case music::ChordQuality::Minor:
+        case music::ChordQuality::HalfDiminished:
+        case music::ChordQuality::Diminished: add(3); break;
+        case music::ChordQuality::Sus2: add(2); break;
+        case music::ChordQuality::Sus4: add(5); break;
+        case music::ChordQuality::Power5: break;
+        default: add(4); break;
+    }
+
+    // Fifth
+    switch (chord.quality) {
+        case music::ChordQuality::HalfDiminished:
+        case music::ChordQuality::Diminished: add(6); break;
+        case music::ChordQuality::Augmented: add(8); break;
+        case music::ChordQuality::Power5:
+        default: add(7); break;
+    }
+
+    // 6th / 7th
+    const bool hasSev = (chord.seventh != music::SeventhQuality::None) || (chord.extension >= 7);
+    const bool hasSix = (chord.extension >= 6 && !hasSev);
+    if (!basicOnly) {
+        if (chord.extension >= 6) add(9);
+    } else {
+        if (hasSix) add(9);
+    }
+    if (hasSev) {
+        int sev = 0;
+        if (chord.seventh == music::SeventhQuality::Major7) sev = 11;
+        else if (chord.seventh == music::SeventhQuality::Minor7) sev = 10;
+        else if (chord.seventh == music::SeventhQuality::Dim7) sev = 9;
+        if (sev != 0) add(sev);
+    }
+
+    if (!basicOnly) {
+        if (chord.extension >= 9) add(14);
+        if (chord.extension >= 11) add(17);
+        if (chord.extension >= 13) add(21);
+
+        // Alt flag: minimal set.
+        if (chord.alt && hasSev) {
+            add(13); // b9
+            add(15); // #9
+            add(6);  // b5/#11
+            add(8);  // #5/b13
+        }
+        // Alterations/adds
+        auto baseForDegree = [&](int deg) -> int {
+            switch (deg) {
+                case 5: return 7;
+                case 9: return 14;
+                case 11: return 17;
+                case 13: return 21;
+                default: return 0;
+            }
+        };
+        for (const auto& a : chord.alterations) {
+            if (a.degree == 0) continue;
+            const int base = baseForDegree(a.degree);
+            if (base == 0) continue;
+            add(base + a.delta);
+        }
+    }
+
+    QVector<int> pcs;
+    pcs.reserve(intervals.size());
+    for (int iv : intervals) pcs.push_back(normalizePcLocal(chord.rootPc + iv));
+    std::sort(pcs.begin(), pcs.end());
+    pcs.erase(std::unique(pcs.begin(), pcs.end()), pcs.end());
+    return pcs;
+}
+
 struct RegisterTargets {
     int bassCenterMidi = 45;
     int pianoCenterMidi = 72;
@@ -201,6 +291,8 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     }
 
     // Debug UI status (emitted once per beat step).
+    // Build a prefix now, append instrument-specific diagnostics later once contexts are computed.
+    QString debugPrefix;
     if (in.owner) {
         const QString w2 = QString("W2 d=%1 r=%2 i=%3 dyn=%4 emo=%5 cre=%6 ten=%7 int=%8 var=%9 warm=%10")
                                .arg(in.weightsV2.density, 0, 'f', 2)
@@ -213,20 +305,22 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                                .arg(in.weightsV2.interactivity, 0, 'f', 2)
                                .arg(in.weightsV2.variability, 0, 'f', 2)
                                .arg(in.weightsV2.warmth, 0, 'f', 2);
-        const QString status = QString("Preset=%1  Vibe=%2  energy=%3  %4  intents=%5  nps=%6  reg=%7  gVel=%8  cc2=%9  vNote=%10  silenceMs=%11  outside=%12")
-                                   .arg(in.stylePresetKey)
-                                   .arg(vibeStr)
-                                   .arg(baseEnergy, 0, 'f', 2)
-                                   .arg(in.weightsV2Auto ? (w2 + " (Auto)") : (w2 + " (Manual)"))
-                                   .arg(intentStr.isEmpty() ? "-" : intentStr)
-                                   .arg(intent.notesPerSec, 0, 'f', 2)
-                                   .arg(intent.registerCenterMidi)
-                                   .arg(intent.lastGuitarVelocity)
-                                   .arg(intent.lastCc2)
-                                   .arg(intent.lastVoiceMidi)
-                                   .arg(intent.msSinceLastActivity == std::numeric_limits<qint64>::max() ? -1 : intent.msSinceLastActivity)
-                                   .arg(intent.outsideRatio, 0, 'f', 2);
-        QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, status));
+        debugPrefix = QString("Preset=%1  Vibe=%2  energy=%3  %4  intents=%5  nps=%6  reg=%7  gVel=%8  cc2=%9  vNote=%10  silenceMs=%11  outside=%12")
+                          .arg(in.stylePresetKey)
+                          .arg(vibeStr)
+                          .arg(baseEnergy, 0, 'f', 2)
+                          .arg(in.weightsV2Auto ? (w2 + " (Auto)") : (w2 + " (Manual)"))
+                          .arg(intentStr.isEmpty() ? "-" : intentStr)
+                          .arg(intent.notesPerSec, 0, 'f', 2)
+                          .arg(intent.registerCenterMidi)
+                          .arg(intent.lastGuitarVelocity)
+                          .arg(intent.lastCc2)
+                          .arg(intent.lastVoiceMidi)
+                          .arg(intent.msSinceLastActivity == std::numeric_limits<qint64>::max() ? -1 : intent.msSinceLastActivity)
+                          .arg(intent.outsideRatio, 0, 'f', 2);
+
+        // Always emit a baseline status immediately, even if we later overwrite with more details.
+        QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, debugPrefix));
         QMetaObject::invokeMethod(in.owner, "debugEnergy", Qt::DirectConnection, Q_ARG(double, baseEnergy), Q_ARG(bool, in.debugEnergyAuto));
     }
 
@@ -483,12 +577,24 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     bc.roman = roman;
     const double progress01 = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
     {
-        // Local shaping (still v2 axes, no legacy mapping):
-        bc.weights.density = qBound(0.0, bc.weights.density + 0.35 * bc.energy + 0.15 * progress01, 1.0);
-        bc.weights.rhythm = qBound(0.0, bc.weights.rhythm + 0.45 * bc.energy + 0.20 * progress01, 1.0);
-        bc.weights.interactivity = qBound(0.0, bc.weights.interactivity + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.10 * bc.energy, 1.0);
-        bc.weights.warmth = qBound(0.0, bc.weights.warmth + 0.15 * (1.0 - bc.energy), 1.0);
-        bc.weights.creativity = qBound(0.0, bc.weights.creativity + 0.20 * bc.energy + 0.10 * progress01, 1.0);
+        // Local shaping (v2 axes):
+        // Keep density/rhythm as direct intent axes; do NOT auto-boost them here or sliders lose meaning.
+        bc.weights.density = qBound(0.0, bc.weights.density, 1.0);
+        bc.weights.rhythm = qBound(0.0, bc.weights.rhythm, 1.0);
+        bc.weights.interactivity = qBound(0.0, bc.weights.interactivity, 1.0);
+        // Keep warmth as a direct user/auto intent axis (no hidden boosting).
+        bc.weights.warmth = qBound(0.0, bc.weights.warmth, 1.0);
+        // IMPORTANT: do not inject creativity when the slider is at 0 (user expects literal harmony).
+        const double baseC = qBound(0.0, bc.weights.creativity, 1.0);
+        bc.weights.creativity = qBound(0.0, baseC + (0.20 * bc.energy + 0.10 * progress01) * baseC, 1.0);
+    }
+    // Interactivity: make "react to user" audible by driving *space*.
+    // High interactivity => more space when user is busy, more fill when user is silent.
+    {
+        const double it = qBound(0.0, bc.weights.interactivity, 1.0);
+        if (userBusy) bc.weights.density *= (1.0 - 0.55 * it);
+        if (intent.silence) bc.weights.density = qMin(1.0, bc.weights.density + 0.25 * it);
+        bc.weights.density = qBound(0.0, bc.weights.density, 1.0);
     }
     if (intent.densityHigh || intent.intensityPeak) {
         bc.approachProbBeat3 *= 0.35;
@@ -564,12 +670,22 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     }
     const double progress01p = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
     {
-        // Local shaping (still v2 axes, no legacy mapping):
-        pc.weights.density = qBound(0.0, pc.weights.density + 0.40 * pc.energy + 0.20 * progress01p, 1.0);
-        pc.weights.rhythm = qBound(0.0, pc.weights.rhythm + 0.55 * pc.energy + 0.15 * progress01p, 1.0);
-        pc.weights.interactivity = qBound(0.0, pc.weights.interactivity + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.15 * pc.energy, 1.0);
-        pc.weights.warmth = qBound(0.0, pc.weights.warmth + 0.20 * (1.0 - pc.energy) + 0.10 * (intent.registerHigh ? 1.0 : 0.0), 1.0);
-        pc.weights.creativity = qBound(0.0, pc.weights.creativity + 0.30 * pc.energy + 0.15 * progress01p, 1.0);
+        // Local shaping (v2 axes):
+        // Keep density/rhythm as direct intent axes; do NOT auto-boost them here or sliders lose meaning.
+        pc.weights.density = qBound(0.0, pc.weights.density, 1.0);
+        pc.weights.rhythm = qBound(0.0, pc.weights.rhythm, 1.0);
+        pc.weights.interactivity = qBound(0.0, pc.weights.interactivity, 1.0);
+        // Keep warmth as a direct user/auto intent axis (no hidden boosting).
+        pc.weights.warmth = qBound(0.0, pc.weights.warmth, 1.0);
+        // IMPORTANT: do not inject creativity when the slider is at 0 (user expects literal harmony).
+        const double baseC = qBound(0.0, pc.weights.creativity, 1.0);
+        pc.weights.creativity = qBound(0.0, baseC + (0.30 * pc.energy + 0.15 * progress01p) * baseC, 1.0);
+    }
+    {
+        const double it = qBound(0.0, pc.weights.interactivity, 1.0);
+        if (userBusy) pc.weights.density *= (1.0 - 0.60 * it);
+        if (intent.silence) pc.weights.density = qMin(1.0, pc.weights.density + 0.30 * it);
+        pc.weights.density = qBound(0.0, pc.weights.density, 1.0);
     }
     if (intent.registerHigh) {
         pc.rhHi = qMax(pc.rhLo + 4, pc.rhHi - 6);
@@ -595,6 +711,29 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         clampPair(pc.rhLo, pc.rhHi, 8);
         clampPair(pc.sparkleLo, pc.sparkleHi, 8);
     }
+
+    // Warmth: make the pianist *audibly* darker/brighter by shifting the actual register windows.
+    // (Shifting only "centers" often can't move notes if the window is narrow.)
+    int pianoWarmShiftSemis = 0;
+    {
+        const double w = qBound(0.0, pc.weights.warmth, 1.0);
+        // warmth=1 -> shift down, warmth=0 -> shift up
+        const int sh = qBound(-12, int(llround((0.50 - w) * 24.0)), 12); // +/- 12 semitones
+        pianoWarmShiftSemis = sh;
+        auto clampPair = [](int& lo, int& hi, int minSpan) {
+            lo = qBound(0, lo, 127);
+            hi = qBound(0, hi, 127);
+            if (hi < lo + minSpan) hi = qMin(127, lo + minSpan);
+        };
+        pc.lhLo += sh; pc.lhHi += sh;
+        pc.rhLo += sh; pc.rhHi += sh;
+        pc.sparkleLo += sh; pc.sparkleHi += sh;
+        clampPair(pc.lhLo, pc.lhHi, 4);
+        clampPair(pc.rhLo, pc.rhHi, 8);
+        clampPair(pc.sparkleLo, pc.sparkleHi, 8);
+    }
+
+    // (Debug status emitted later once the chosen piano candidate is known.)
     if (intent.densityHigh || intent.intensityPeak) {
         pc.skipBeat2ProbStable = qMin(0.95, pc.skipBeat2ProbStable + 0.25);
         pc.preferShells = true;
@@ -637,7 +776,11 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     virtuoso::solver::CostBreakdown jointBd{};
     bool haveJointBd = false;
     bool emittedCandidatePool = false;
-    const bool usePlannedBeat = (plannedStep != nullptr && plannedStep->stepIndex == stepIndex);
+    // IMPORTANT:
+    // The phrase planner produces a "macro" choice (sparse/base/rich + wet/dry), but using cached planned note-events
+    // makes the system unresponsive to live weight changes (Warmth/Creativity/Tension/etc.).
+    // So we only treat the plan as a preferred *choice id*, and we always (re)generate the actual notes per beat.
+    const bool usePlannedBeat = false;
 
     // Drums candidates (stateless planner): build contexts once, reuse in optimizer.
     BrushesBalladDrummer::Context dcBase;
@@ -664,6 +807,10 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         // Weights v2: Density influences how "present" the drummer is (without overriding Energy).
         const double dDens = qBound(0.0, in.negotiated.drums.w.density, 1.0);
         dcBase.energy = qBound(0.0, dcBase.energy * (0.70 + 0.60 * dDens), 1.0);
+        // Interactivity: when user is busy and interactivity is high, the drummer lays out a bit.
+        const double dIt = qBound(0.0, in.negotiated.drums.w.interactivity, 1.0);
+        if (userBusy) dcBase.energy = qBound(0.0, dcBase.energy * (1.0 - 0.35 * dIt), 1.0);
+        if (intent.silence) dcBase.energy = qBound(0.0, dcBase.energy * (0.95 + 0.18 * dIt), 1.0);
         if (userBusy) dcBase.energy = qMin(dcBase.energy, 0.55);
         dcBase.intensityPeak = intent.intensityPeak;
 
@@ -679,8 +826,19 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         // Tension: stronger cadence setups lean wetter/more gestural.
         const double dTen = qBound(0.0, in.negotiated.drums.w.tension, 1.0);
         dcWet.gestureBias = 0.85 + 0.40 * (dTen - 0.5);
-        dcWet.allowRide = true;
-        dcWet.allowPhraseGestures = true;
+        // Warmth/rhythm/creativity: make these sliders affect drummer texture audibly.
+        const double dWarm = qBound(0.0, in.negotiated.drums.w.warmth, 1.0);
+        const double dRhy = qBound(0.0, in.negotiated.drums.w.rhythm, 1.0);
+        const double dCre = qBound(0.0, in.negotiated.drums.w.creativity, 1.0);
+        // Warmth high => stay brushes longer (less ride). Warmth low + rhythm high => earlier ride.
+        dcWet.allowRide = (dRhy >= 0.35) && (dWarm <= 0.80);
+        // Creativity increases willingness to do phrase gestures; low creativity keeps it tighter.
+        dcWet.allowPhraseGestures = (dCre >= 0.35);
+        // Gesture bias: rhythm + creativity push toward more gestures; warmth pulls back slightly.
+        dcWet.gestureBias = qBound(-1.0, dcWet.gestureBias + 0.35 * (dRhy - 0.5) + 0.35 * (dCre - 0.5) - 0.25 * (dWarm - 0.5), 1.0);
+        // Variability: higher variability allows more frequent phrase gestures (less "same loop").
+        const double dVar = qBound(0.0, in.negotiated.drums.w.variability, 1.0);
+        if (dVar >= 0.75) dcWet.allowPhraseGestures = true;
         dcWet.intensityPeak = intent.intensityPeak || (cadence01 >= 0.70);
 
         // Shared motivic memory (drums): if the recent drum rhythm is already dense,
@@ -699,16 +857,14 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         drumPlanWet = in.drummer->planBeat(dcWet);
     }
 
-    if (usePlannedBeat) {
-        bassChoiceId = plannedBassId.isEmpty() ? plannedStep->bassId : plannedBassId;
-        pianoChoiceId = plannedPianoId.isEmpty() ? plannedStep->pianoId : plannedPianoId;
-        drumChoiceId = plannedDrumsId.isEmpty() ? plannedStep->drumsId : plannedDrumsId;
-        if (allowDrums) {
-            const QString jt = QString("joint=%1+%2+%3|%4")
-                                   .arg(bassChoiceId, pianoChoiceId, drumChoiceId, plannedCostTag.isEmpty() ? QString("planned") : plannedCostTag);
-            scheduleDrums(plannedStep->drumsNotes, jt);
-        }
-    } else if (allowBass) {
+    if (plannedStep != nullptr && plannedStep->stepIndex == stepIndex) {
+        // Keep the phrase planner's preferred choice IDs, but regenerate actual notes below.
+        plannedBassId = plannedBassId.isEmpty() ? plannedStep->bassId : plannedBassId;
+        plannedPianoId = plannedPianoId.isEmpty() ? plannedStep->pianoId : plannedPianoId;
+        plannedDrumsId = plannedDrumsId.isEmpty() ? plannedStep->drumsId : plannedDrumsId;
+    }
+
+    if (allowBass) {
         JazzBalladBassPlanner::Context bcSparse = bc;
         JazzBalladBassPlanner::Context bcBase = bc;
         JazzBalladBassPlanner::Context bcRich = bc;
@@ -882,6 +1038,12 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                 o.insert("stats", noteStatsJson(c.st));
                 o.insert("energy", c.ctx.energy);
                 o.insert("weights_v2", c.ctx.weights.toJson());
+                o.insert("lh_lo", c.ctx.lhLo);
+                o.insert("lh_hi", c.ctx.lhHi);
+                o.insert("rh_lo", c.ctx.rhLo);
+                o.insert("rh_hi", c.ctx.rhHi);
+                o.insert("sparkle_lo", c.ctx.sparkleLo);
+                o.insert("sparkle_hi", c.ctx.sparkleHi);
                 o.insert("pianist_cost", c.pianistFeasibilityCost);
                 o.insert("pedal_cost", c.pedalClarityCost);
                 o.insert("topline_cost", c.topLineContinuityCost);
@@ -1010,6 +1172,22 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         bassChoiceId = bCands[bestBi].id;
         pianoChoiceId = pCands[bestPi].id;
         drumChoiceId = dCands[bestDi].id;
+
+        // Debug: show applied piano warmth + resulting register + actual chosen note center.
+        if (in.owner && !debugPrefix.trimmed().isEmpty()) {
+            const double w = qBound(0.0, pcChosen.weights.warmth, 1.0);
+            const int sh = qBound(-12, int(llround((0.50 - w) * 24.0)), 12);
+            const auto& st = pCands[bestPi].st;
+            const QString p = QString("  PnoWarm=%1 sh=%2 lh=[%3,%4] rh=[%5,%6] mean=%7 n=%8 choice=%9")
+                                  .arg(w, 0, 'f', 2)
+                                  .arg(sh)
+                                  .arg(pcChosen.lhLo).arg(pcChosen.lhHi)
+                                  .arg(pcChosen.rhLo).arg(pcChosen.rhHi)
+                                  .arg(st.meanMidi, 0, 'f', 1)
+                                  .arg(st.count)
+                                  .arg(pianoChoiceId);
+            QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, debugPrefix + p));
+        }
         if (!plannedCostTag.isEmpty()) {
             // Prefer phrase-planner cost tag when available (it reflects horizon reasoning).
             bestBd = virtuoso::solver::CostBreakdown{};
@@ -1255,6 +1433,107 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         if (in.motivicMemory) in.motivicMemory->push(n);
         pianoSum += n.note;
         pianoN++;
+    }
+    // Always show piano-applied warmth + resulting register + played-note center (works even on planned beats).
+    if (in.owner && !debugPrefix.trimmed().isEmpty()) {
+        double mean = 0.0;
+        int mn = 127;
+        int mx = 0;
+        QVector<int> uniq;
+        uniq.reserve(8);
+        QSet<int> playedPcs;
+        if (pianoN > 0) {
+            mean = double(pianoSum) / double(pianoN);
+            for (const auto& nn : pianoPlan.notes) {
+                const int m = qBound(0, nn.note, 127);
+                mn = qMin(mn, m);
+                mx = qMax(mx, m);
+                if (!uniq.contains(m) && uniq.size() < 10) uniq.push_back(m);
+                playedPcs.insert(m % 12);
+            }
+        }
+        std::sort(uniq.begin(), uniq.end());
+        QString notesStr;
+        if (!uniq.isEmpty()) {
+            QStringList parts;
+            for (int m : uniq) parts.push_back(QString::number(m));
+            notesStr = parts.join(",");
+        }
+        const double w = qBound(0.0, pcChosen.weights.warmth, 1.0);
+        const int sh = qBound(-12, int(llround((0.50 - w) * 24.0)), 12);
+        const QString s = QString("  PnoWarm=%1 sh=%2 lh=[%3,%4] rh=[%5,%6] mean=%7 lo=%8 hi=%9 n=%10 choice=%11 notes=%12")
+                              .arg(w, 0, 'f', 2)
+                              .arg(sh)
+                              .arg(pcChosen.lhLo).arg(pcChosen.lhHi)
+                              .arg(pcChosen.rhLo).arg(pcChosen.rhHi)
+                              .arg(mean, 0, 'f', 1)
+                              .arg(pianoN > 0 ? mn : -1)
+                              .arg(pianoN > 0 ? mx : -1)
+                              .arg(pianoN)
+                              .arg(pianoChoiceId);
+        const QString s2 = s.arg(notesStr.isEmpty() ? QString("-") : notesStr);
+
+        auto pcsToStr = [](const QVector<int>& pcs) -> QString {
+            if (pcs.isEmpty()) return "-";
+            QStringList parts;
+            for (int pc : pcs) parts.push_back(QString::number((pc % 12 + 12) % 12));
+            return parts.join(",");
+        };
+        QVector<int> playedPcsVec = playedPcs.values().toVector();
+        std::sort(playedPcsVec.begin(), playedPcsVec.end());
+        QVector<int> chordPcs = chordPitchClassesForDebug(chord, /*basicOnly=*/false);
+        QVector<int> basicPcs = chordPitchClassesForDebug(chord, /*basicOnly=*/true);
+        std::sort(chordPcs.begin(), chordPcs.end());
+        std::sort(basicPcs.begin(), basicPcs.end());
+
+        auto qualStr = [&](music::ChordQuality q) -> QString {
+            switch (q) {
+                case music::ChordQuality::Major: return "Maj";
+                case music::ChordQuality::Minor: return "Min";
+                case music::ChordQuality::Dominant: return "Dom";
+                case music::ChordQuality::HalfDiminished: return "m7b5";
+                case music::ChordQuality::Diminished: return "Dim";
+                case music::ChordQuality::Augmented: return "Aug";
+                case music::ChordQuality::Sus2: return "Sus2";
+                case music::ChordQuality::Sus4: return "Sus4";
+                case music::ChordQuality::Power5: return "5";
+                default: return "Unk";
+            }
+        };
+        auto sevStr = [&](music::SeventhQuality s) -> QString {
+            switch (s) {
+                case music::SeventhQuality::Major7: return "Maj7";
+                case music::SeventhQuality::Minor7: return "m7";
+                case music::SeventhQuality::Dim7: return "dim7";
+                default: return "-";
+            }
+        };
+        QStringList al;
+        for (const auto& a : chord.alterations) {
+            if (a.degree == 0) continue;
+            const QString acc = (a.delta < 0) ? "b" : (a.delta > 0 ? "#" : "");
+            const QString add = a.add ? "add" : "";
+            al.push_back(QString("%1%2%3").arg(add, acc).arg(a.degree));
+        }
+        const QString altStr = al.isEmpty() ? "-" : al.join(",");
+
+        const QString s3 = QString("%1  bar=%2 beat=%3 new=%4  chord=%5  sym[root=%6 bass=%7 q=%8 sev=%9 ext=%10 alt=%11 alts=%12]  pcsPlayed=%13  pcsChord=%14  pcsBasic=%15")
+                               .arg(debugPrefix + s2)
+                               .arg(playbackBarIndex)
+                               .arg(beatInBar)
+                               .arg(chordIsNew ? "1" : "0")
+                               .arg(chordText)
+                               .arg(chord.rootPc)
+                               .arg(chord.bassPc)
+                               .arg(qualStr(chord.quality))
+                               .arg(sevStr(chord.seventh))
+                               .arg(chord.extension)
+                               .arg(chord.alt ? "1" : "0")
+                               .arg(altStr)
+                               .arg(pcsToStr(playedPcsVec))
+                               .arg(pcsToStr(chordPcs))
+                               .arg(pcsToStr(basicPcs));
+        QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, s3));
     }
     if (in.story && pianoN > 0) {
         in.story->lastPianoCenterMidi = clampPianoCenterMidi(int(llround(double(pianoSum) / double(pianoN))));

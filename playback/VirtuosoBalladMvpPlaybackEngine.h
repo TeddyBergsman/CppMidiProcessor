@@ -199,6 +199,8 @@ private:
     bool m_weightsV2Auto = true;
     virtuoso::control::PerformanceWeightsV2 m_weightsV2Manual{};
     playback::WeightNegotiator::State m_weightNegState{};
+    bool m_hasPrevWeightsV2ForNegotiation = false;
+    virtuoso::control::PerformanceWeightsV2 m_prevWeightsV2ForNegotiation{};
 
     // Track whether drums were enabled last tick (for stopping loops when drums are disabled by energy layering).
     bool m_drumsEnabledLast = false;

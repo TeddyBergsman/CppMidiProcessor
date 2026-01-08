@@ -162,15 +162,25 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
     const bool climaxWalk = c.forceClimax && (c.energy >= 0.75);
     // Phrase cadence + Virt: allow walking texture later in the song, and at cadence moments.
-    const bool solverWalk = (!userBusy && ((progress01 >= 0.35 && rhythm >= 0.85) || (c.cadence01 >= 0.80 && rhythm >= 0.70)));
+    // Also: very high density should be allowed to produce a walking feel (more motion), even at moderate rhythm.
+    const bool solverWalk = (!userBusy && ((progress01 >= 0.40 && rhythm >= 0.78)
+                                          || (c.cadence01 >= 0.70 && rhythm >= 0.62)
+                                          || (density >= 0.78 && rhythm >= 0.70)
+                                          || (density >= 0.86 && rhythm >= 0.55)));
     const bool doWalk = climaxWalk || solverWalk;
 
     // Two-feel foundation on beats 1 and 3, plus optional pickup on beat 4 when approaching.
+    // At very high density, allow 4-to-the-bar (still simple).
     // In Climax / later-song high-complexity: switch to a light walking feel to make the change audible.
     if (doWalk) {
         if (!(c.beatInBar >= 0 && c.beatInBar <= 3)) return out;
     } else {
-        if (!(c.beatInBar == 0 || c.beatInBar == 2 || c.beatInBar == 3)) return out;
+        const bool allowFour = (!userBusy) && (density >= 0.80);
+        if (allowFour) {
+            if (!(c.beatInBar >= 0 && c.beatInBar <= 3)) return out;
+        } else {
+            if (!(c.beatInBar == 0 || c.beatInBar == 2 || c.beatInBar == 3)) return out;
+        }
     }
 
     const int rootPc = (c.chord.bassPc >= 0) ? c.chord.bassPc : c.chord.rootPc;
@@ -836,6 +846,19 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     }
 
     out.push_back(n);
+
+    // At very high density, add an upbeat motion note to make the slider clearly audible.
+    // Keep it quiet and short so it reads as "walk feel" rather than a second bass hit.
+    const bool addUpbeat = (!userBusy) && (density >= 0.90) && (rhythm >= 0.60) && (c.beatInBar >= 0 && c.beatInBar <= 3);
+    if (addUpbeat) {
+        auto up = n;
+        up.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, /*sub*/1, /*count*/2, ts);
+        up.durationWhole = Rational(1, 16);
+        up.structural = false;
+        up.baseVelocity = qBound(1, up.baseVelocity - 14, 127);
+        up.logic_tag = up.logic_tag.isEmpty() ? "Bass:upbeat" : (up.logic_tag + "|Bass:upbeat");
+        out.push_back(up);
+    }
     return out;
 }
 

@@ -99,7 +99,11 @@ static void decideSeventh(const QString& sRaw, int ext, ChordSymbol& out) {
     }
 
     // If any 7/9/11/13 present, default to minor seventh unless specified above.
-    if (ext >= 7) out.seventh = SeventhQuality::Minor7;
+    // BUT: do not infer a 7th for add-chords (Cadd9, C(add11), etc.) or 6/9 chords.
+    if (ext >= 7) {
+        const bool isAddChord = sRaw.contains("add", Qt::CaseInsensitive);
+        if (!isAddChord) out.seventh = SeventhQuality::Minor7;
+    }
 }
 
 } // namespace
@@ -123,6 +127,29 @@ QString normalizeChordText(QString chordText) {
 
     // Common whitespace noise
     s.replace(QRegularExpression("\\s+"), "");
+
+    // iReal often embeds passing/sub chords in parentheses, e.g. "Dø7(C-Δ7/B)".
+    // For our current harmony model, we treat the *main* chord as the portion outside parentheses.
+    // (The embedded chord can be handled later as an explicit sub-beat harmony model.)
+    while (true) {
+        const int l = s.indexOf('(');
+        if (l < 0) break;
+        const int r = s.indexOf(')', l + 1);
+        if (r < 0) { s = s.left(l); break; }
+        s.remove(l, (r - l) + 1);
+    }
+    while (true) {
+        const int l = s.indexOf('[');
+        if (l < 0) break;
+        const int r = s.indexOf(']', l + 1);
+        if (r < 0) { s = s.left(l); break; }
+        s.remove(l, (r - l) + 1);
+    }
+    // Clean any stray unmatched brackets.
+    s.remove(')');
+    s.remove('(');
+    s.remove(']');
+    s.remove('[');
     return s;
 }
 
@@ -141,12 +168,19 @@ bool parseChordSymbol(const QString& chordText, ChordSymbol& out) {
     }
 
     // Split slash bass if present.
+    // IMPORTANT: only treat '/' as a slash-bass delimiter if the RHS parses as a pitch class.
+    // This avoids mis-parsing common chord spellings like "6/9" as an inversion.
     QString pre = s;
     QString slashBass;
     const int slashIdx = s.indexOf('/');
     if (slashIdx >= 0) {
-        pre = s.left(slashIdx);
-        slashBass = s.mid(slashIdx + 1);
+        const QString rhs = s.mid(slashIdx + 1);
+        int bassPc = -1;
+        if (parsePitchClass(rhs, bassPc)) {
+            pre = s.left(slashIdx);
+            slashBass = rhs;
+            out.bassPc = bassPc;
+        }
     }
 
     QString head = pre;
@@ -158,11 +192,7 @@ bool parseChordSymbol(const QString& chordText, ChordSymbol& out) {
     const bool hadMajMarker = head.contains("maj", Qt::CaseInsensitive) || head.contains("M7");
     const bool hadMinorMarker = head.startsWith("m", Qt::CaseInsensitive) || head.startsWith("min", Qt::CaseInsensitive) || head.startsWith("-");
 
-    // Slash bass (optional)
-    if (!slashBass.isEmpty()) {
-        int bassPc = -1;
-        if (parsePitchClass(slashBass, bassPc)) out.bassPc = bassPc;
-    }
+    // (Slash bass already handled above)
 
     // Quality markers and common aliases.
     // Half-diminished / diminished symbols appear right after root in iReal-pretty rendering.
@@ -203,6 +233,30 @@ bool parseChordSymbol(const QString& chordText, ChordSymbol& out) {
 
     // Extensions / sevenths
     out.extension = parseHighestExtension(tailRaw);
+
+    // Special-case 6/9 and 69: treat as a 6-chord with an added 9 (no implied 7).
+    // We preserve the 9 as an "add" alteration so downstream voicing code can include it literally.
+    {
+        static const QRegularExpression reSixNine(R"((?i)(6/9|69|6\(9\)))");
+        const bool sixNine = reSixNine.match(tailRaw).hasMatch();
+        if (sixNine) {
+            out.extension = 6;
+            out.seventh = SeventhQuality::None;
+            bool haveAdd9 = false;
+            for (const auto& a : out.alterations) {
+                if (a.add && a.degree == 9 && a.delta == 0) { haveAdd9 = true; break; }
+            }
+            if (!haveAdd9) {
+                Alteration a;
+                a.add = true;
+                a.degree = 9;
+                a.delta = 0;
+                out.alterations.push_back(a);
+            }
+        }
+    }
+
+    // Decide 7th. Do NOT infer a 7th for add-chords (add9/add11/add13) unless explicitly present.
     decideSeventh(tailRaw, out.extension, out);
 
     // If the symbol looks like a plain "C7" (no explicit maj/min and has 7), treat as dominant.

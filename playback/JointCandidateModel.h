@@ -7,7 +7,7 @@
 #include "playback/JazzBalladBassPlanner.h"
 #include "playback/JazzBalladPianoPlanner.h"
 #include "music/ChordSymbol.h"
-#include "virtuoso/control/VirtuosityMatrix.h"
+#include "virtuoso/control/PerformanceWeightsV2.h"
 #include "virtuoso/solver/BeatCostModel.h"
 
 namespace playback {
@@ -88,7 +88,7 @@ public:
         int prevBassCenterMidi = 45;
         int prevPianoCenterMidi = 72;
 
-        virtuoso::control::VirtuosityMatrix virtAvg{};
+        virtuoso::control::PerformanceWeightsV2 weightsAvg{};
         virtuoso::solver::CostWeights weights{};
 
         // Transition penalties (phrase planner can set these; beat planner can leave defaults).

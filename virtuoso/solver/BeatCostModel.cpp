@@ -47,10 +47,11 @@ QString CostBreakdown::shortTag(const CostWeights& w) const {
         .arg(interactionFactor, 0, 'f', 2);
 }
 
-CostWeights weightsFromVirtuosity(const virtuoso::control::VirtuosityMatrix& v) {
-    const double hr = qBound(0.0, v.harmonicRisk, 1.0);
-    const double rc = qBound(0.0, v.rhythmicComplexity, 1.0);
-    const double it = qBound(0.0, v.interaction, 1.0);
+CostWeights weightsFromWeightsV2(const virtuoso::control::PerformanceWeightsV2& w2) {
+    const double hr = qBound(0.0, w2.creativity, 1.0);
+    // Rhythmism is more meaningful when density is non-zero.
+    const double rc = qBound(0.0, w2.rhythm * (0.70 + 0.60 * qBound(0.0, w2.density, 1.0)), 1.0);
+    const double it = qBound(0.0, w2.interactivity, 1.0);
 
     CostWeights w;
     // Higher harmonicRisk means we tolerate "outside" more (lower harmony penalty weight).

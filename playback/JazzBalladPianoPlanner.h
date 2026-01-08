@@ -12,6 +12,7 @@
 #include "virtuoso/memory/MotivicMemory.h"
 #include "virtuoso/constraints/ConstraintsTypes.h"
 #include "virtuoso/piano/PianoPerformancePlan.h"
+#include "virtuoso/control/PerformanceWeightsV2.h"
 #include "virtuoso/vocab/VocabularyRegistry.h"
 
 namespace playback {
@@ -174,11 +175,8 @@ public:
         // this tells how many beats away it is (1..beatsRemaining). Used to prevent ringing across changes.
         int beatsUntilChordChange = 0;
 
-        // Stage 3 solver weights (Virtuosity Matrix-style, 0..1).
-        double harmonicRisk = 0.20;        // 0=triads/shells, 1=more tensions/UST-ish
-        double rhythmicComplexity = 0.25;  // 0=simpler placement, 1=more motion
-        double interaction = 0.50;         // 0=backing track, 1=conversational
-        double toneDark = 0.60;            // 0=bright/open, 1=dark/warm (bias register + density)
+        // Global weights v2 (0..1) negotiated for this agent, plus any local shaping.
+        virtuoso::control::PerformanceWeightsV2 weights{};
 
         // Optional Stage 2 context (for smarter choices / vocab filtering).
         QString chordFunction; // "Tonic" | "Subdominant" | "Dominant" | "Other"

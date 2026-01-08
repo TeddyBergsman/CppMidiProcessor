@@ -154,10 +154,15 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     using virtuoso::groove::Rational;
 
     const double progress01 = qBound(0.0, double(qMax(0, c.playbackBarIndex)) / 24.0, 1.0);
+    const double rhythm = qBound(0.0, c.weights.rhythm, 1.0);
+    const double creativity = qBound(0.0, c.weights.creativity, 1.0);
+    const double interact = qBound(0.0, c.weights.interactivity, 1.0);
+    const double density = qBound(0.0, c.weights.density, 1.0);
+    const double tension = qBound(0.0, c.weights.tension, 1.0);
     const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
     const bool climaxWalk = c.forceClimax && (c.energy >= 0.75);
     // Phrase cadence + Virt: allow walking texture later in the song, and at cadence moments.
-    const bool solverWalk = (!userBusy && ((progress01 >= 0.35 && c.rhythmicComplexity >= 0.85) || (c.cadence01 >= 0.80 && c.rhythmicComplexity >= 0.70)));
+    const bool solverWalk = (!userBusy && ((progress01 >= 0.35 && rhythm >= 0.85) || (c.cadence01 >= 0.80 && rhythm >= 0.70)));
     const bool doWalk = climaxWalk || solverWalk;
 
     // Two-feel foundation on beats 1 and 3, plus optional pickup on beat 4 when approaching.
@@ -282,7 +287,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                                                                       .arg(c.playbackBarIndex)
                                                                       .arg(c.determinismSeed)
                                                                       .toUtf8());
-            const int step = (spicy && c.harmonicRisk >= 0.55 && int(h % 100u) < 35) ? 2 : 1;
+            const int step = (spicy && creativity >= 0.55 && int(h % 100u) < 35) ? 2 : 1;
             const int below = targetMidi - step;
             const int above = targetMidi + step;
             const int dBelow = (m_lastMidi >= 0) ? qAbs(below - m_lastMidi) : qAbs(step);
@@ -304,7 +309,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             cands.push_back({"third", pc3, false});
             cands.push_back({"fifth", pc5, false});
             cands.push_back({"root", rootPc, false});
-            if (c.harmonicRisk >= 0.65 && (c.chordFunction == "Tonic" || c.chordFunction == "Subdominant")) cands.push_back({"sixth", pc6, false});
+            if (creativity >= 0.65 && (c.chordFunction == "Tonic" || c.chordFunction == "Subdominant")) cands.push_back({"sixth", pc6, false});
             if (!userBusy && (c.chordFunction == "Dominant" || c.cadence01 >= 0.55)) {
                 // A tiny chromatic passing tone is very idiomatic in walking lines.
                 cands.push_back({"pass_up", (rootPc + 1) % 12, true});
@@ -318,7 +323,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                 // Dominant function: prefer 3rd.
                 if (c.chordFunction == "Dominant" && k.id == "third") s -= 0.25;
                 // Passing tones only when we want motion.
-                if (k.passing) s += (c.rhythmicComplexity >= 0.65 ? 0.10 : 0.60);
+                if (k.passing) s += (rhythm >= 0.65 ? 0.10 : 0.60);
                 // Avoid sitting on root too much.
                 if (k.id == "root") s += 0.10;
                 // Deterministic tiny tiebreak.
@@ -341,7 +346,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             cands.reserve(4);
             cands.push_back({"fifth", pc5});
             cands.push_back({"third", pc3});
-            if (c.harmonicRisk >= 0.60) cands.push_back({"sixth", pc6});
+            if (creativity >= 0.60) cands.push_back({"sixth", pc6});
             if (wantMove && nextRootPc >= 0) cands.push_back({"nextRoot", nextRootPc});
             const int last = m_lastMidi;
             auto score = [&](const Cand& k) -> double {
@@ -369,7 +374,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                 // Enclosure option (dominants/cadence): two 8ths on beat 4 -> and-of-4.
                 const bool wantEnclosure = !userBusy && c.allowApproachFromAbove &&
                                            (c.chordFunction == "Dominant" || c.cadence01 >= 0.75) &&
-                                           (c.rhythmicComplexity >= 0.70);
+                                           (rhythm >= 0.70);
                 const quint32 he = virtuoso::util::StableHash::fnv1a32(QString("bwalk_enc|%1|%2|%3")
                                                                            .arg(c.chordText)
                                                                            .arg(c.playbackBarIndex)
@@ -548,15 +553,17 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                                                                                 .arg(c.playbackBarIndex)
                                                                                 .arg(c.determinismSeed)
                                                                                 .toUtf8());
-                // If interaction is low or user is busy, omit more; otherwise omit less as song progresses.
+                // If interactivity is low or user is busy, omit more; otherwise omit less as song progresses.
                 const double omit = qBound(0.0,
                                            c.skipBeat3ProbStable
-                                               + 0.20 * (c.interaction < 0.35 ? 1.0 : 0.0)
+                                               + 0.20 * (interact < 0.35 ? 1.0 : 0.0)
                                                + 0.15 * (userBusy ? 1.0 : 0.0)
                                                - 0.20 * progress01
-                                               - 0.25 * c.rhythmicComplexity,
+                                               - 0.25 * rhythm,
                                            0.95);
-                const int p = qBound(0, int(llround(omit * 100.0)), 100);
+                // Density pushes toward fewer rests.
+                const double omit2 = qBound(0.0, omit - 0.35 * density, 0.95);
+                const int p = qBound(0, int(llround(omit2 * 100.0)), 100);
                 if (p > 0 && int(hStable % 100u) < p) return out;
             }
 
@@ -576,22 +583,25 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
             cands.push_back({"fifth", pc5, false, false});
             cands.push_back({"third", pc3, false, false});
             cands.push_back({"root", rootPc, false, false});
-            if (c.harmonicRisk >= 0.70 && (c.chordFunction == "Tonic" || c.chordFunction == "Subdominant")) cands.push_back({"sixth", pc6, false, false});
+            if (creativity >= 0.70 && (c.chordFunction == "Tonic" || c.chordFunction == "Subdominant")) cands.push_back({"sixth", pc6, false, false});
             if (nextChanges) cands.push_back({"approach", rootPc, false, true});
-            if (!c.userSilence && (userBusy || c.interaction < 0.35)) cands.push_back({"rest", rootPc, true, false});
+            if (!c.userSilence && (userBusy || interact < 0.35)) cands.push_back({"rest", rootPc, true, false});
+            if (!c.userSilence && density < 0.28) cands.push_back({"rest", rootPc, true, false});
 
             auto score = [&](const Cand& k) -> double {
                 double s = 0.0;
                 if (k.rest) {
                     // Rest is good when user is busy / interaction low; otherwise we want support.
                     s += (c.userSilence ? 1.0 : 0.2);
-                    s += (c.interaction < 0.35 ? 0.0 : 0.7);
+                    s += (interact < 0.35 ? 0.0 : 0.7);
                     return s;
                 }
                 if (k.approach) {
-                    // Prefer approaches on dominant function and later in song / higher rhythmicComplexity.
-                    double want = (nextChanges ? 1.0 : 0.0) * (0.18 + 0.70 * c.rhythmicComplexity + 0.25 * progress01);
+                    // Prefer approaches on dominant function and later in song / higher rhythm.
+                    double want = (nextChanges ? 1.0 : 0.0) * (0.18 + 0.70 * rhythm + 0.25 * progress01);
                     if (c.chordFunction == "Dominant") want = qMin(1.0, want + 0.15);
+                    // Tension: more approaches near cadences/turnarounds.
+                    want = qMin(1.0, want + 0.22 * tension * qBound(0.0, c.cadence01, 1.0));
                     s += (1.0 - want) * 0.9;
                 }
                 // Stability: prefer 5th/3rd.
@@ -712,7 +722,12 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
                                                                      .toUtf8());
         // Make Virt rhythmicComplexity audibly affect pickup frequency.
         // (Higher complexity => more pickups/approaches; darker tone does not affect bass much here.)
-        const double baseP = qBound(0.0, (c.approachProbBeat3 * 0.45) * (0.35 + 0.95 * qBound(0.0, c.rhythmicComplexity, 1.0)), 1.0);
+        const double baseP = qBound(0.0,
+                                    (c.approachProbBeat3 * 0.45)
+                                        * (0.35 + 0.95 * rhythm)
+                                        * (0.55 + 0.65 * density)
+                                        * (0.75 + 0.55 * tension),
+                                    1.0);
         const double p = phraseEnd ? qMin(1.0, baseP + 0.18) : baseP;
         if (int(hApp % 100u) >= int(llround(p * 100.0))) return out;
 
@@ -748,9 +763,14 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     n.agent = "Bass";
     n.channel = midiChannel;
     n.note = repaired;
+    const double dyn = qBound(0.0, c.weights.dynamism, 1.0);
+    // Dynamism: slightly stronger accent contrast at phrase/cadence moments.
     const int baseVel = doWalk ? 58 : ((c.beatInBar == 0) ? 56 : 50);
     const int phraseVelDelta = havePhraseHits ? phraseHits.first().vel_delta : 0;
-    n.baseVelocity = qBound(1, baseVel + (havePhraseHits ? phraseVelDelta : (haveVocab ? vocabChoice.vel_delta : 0)), 127);
+    int v = baseVel + (havePhraseHits ? phraseVelDelta : (haveVocab ? vocabChoice.vel_delta : 0));
+    const bool shapeMoment = (!userBusy) && ((c.beatInBar == 0) || c.phraseEndBar || c.cadence01 >= 0.70);
+    if (shapeMoment) v += int(llround(4.0 + 10.0 * dyn * qBound(0.0, c.cadence01, 1.0)));
+    n.baseVelocity = qBound(1, v, 127);
     if (c.beatInBar == 0) {
         n.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 1, ts);
         if (havePhraseHits && phraseHits.first().action == virtuoso::vocab::VocabularyRegistry::BassAction::Root) {
@@ -808,7 +828,7 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladBassPlanner::planBeat(const
     {
         const bool userBusy2 = (c.userDensityHigh || c.userIntensityPeak);
         const bool boundarySoon = c.hasNextChord && (c.nextChord.rootPc >= 0) && (c.nextChord.rootPc != c.chord.rootPc) && (c.beatInBar >= 2);
-        const bool allow = !userBusy2 && !boundarySoon && (c.rhythmicComplexity >= 0.25);
+        const bool allow = !userBusy2 && !boundarySoon && (rhythm >= 0.25);
         if (allow) {
             // Add a tiny overlap (~1/64 whole note = 1/16 beat in 4/4). This is subtle but enough for overlap detection.
             n.durationWhole = n.durationWhole + Rational(1, 64);
@@ -937,7 +957,7 @@ JazzBalladBassPlanner::BeatPlan JazzBalladBassPlanner::planBeatWithActions(const
         const auto& n0 = plan.notes.first();
         const bool meaningful = (n0.structural || c.phraseEndBar || c.cadence01 >= 0.80);
         const bool highEnough = (n0.note >= 60); // harmonics read best higher
-        if (meaningful && highEnough && c.harmonicRisk >= 0.35) {
+        if (meaningful && highEnough && qBound(0.0, c.weights.creativity, 1.0) >= 0.35) {
             const quint32 hNh = virtuoso::util::StableHash::fnv1a32(QString("ab_upr_nh|%1|%2|%3")
                                                                         .arg(c.chordText)
                                                                         .arg(c.playbackBarIndex)
@@ -962,7 +982,7 @@ JazzBalladBassPlanner::BeatPlan JazzBalladBassPlanner::planBeatWithActions(const
         const auto& n0 = plan.notes.first();
         const bool cadence = (c.phraseEndBar || c.cadence01 >= 0.70);
         const bool sustained = (n0.durationWhole.num * 1.0 / n0.durationWhole.den) >= (1.0 / double(qMax(1, ts.den))); // at least ~1 beat
-        if (cadence && sustained && c.rhythmicComplexity >= 0.25) {
+        if (cadence && sustained && qBound(0.0, c.weights.rhythm, 1.0) >= 0.25) {
             const quint32 hSio = virtuoso::util::StableHash::fnv1a32(QString("ab_upr_sio_out|%1|%2|%3")
                                                                          .arg(c.chordText)
                                                                          .arg(c.playbackBarIndex)

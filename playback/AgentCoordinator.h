@@ -36,13 +36,6 @@ public:
         QString stylePresetKey;
         QHash<QString, double> agentEnergyMult;
 
-        // Virtuosity controls
-        bool virtAuto = true;
-        double virtHarmonicRisk = 0.20;
-        double virtRhythmicComplexity = 0.25;
-        double virtInteraction = 0.50;
-        double virtToneDark = 0.60;
-
         // Weights v2 (new global control surface).
         bool weightsV2Auto = true;
         virtuoso::control::PerformanceWeightsV2 weightsV2{};

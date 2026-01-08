@@ -42,6 +42,10 @@ struct StoryState final {
     // Energy tracking for instant replanning when user changes energy.
     double lastPlannedEnergy01 = -1.0;
 
+    // Weights v2 tracking for instant replanning when user tweaks sliders (Manual mode).
+    bool hasLastPlannedWeightsV2 = false;
+    virtuoso::control::PerformanceWeightsV2 lastPlannedWeightsV2{};
+
     // Piano library continuity (auditable IDs).
     QString lastPianoCompPhraseId;
     QString lastPianoTopLinePhraseId;
@@ -76,6 +80,8 @@ struct StoryState final {
         lastPianoCenterMidi = 72;
         responseUntilBar = -1;
         lastPlannedEnergy01 = -1.0;
+        hasLastPlannedWeightsV2 = false;
+        lastPlannedWeightsV2 = virtuoso::control::PerformanceWeightsV2{};
         lastPianoCompPhraseId.clear();
         lastPianoTopLinePhraseId.clear();
         lastPianoPedalId.clear();

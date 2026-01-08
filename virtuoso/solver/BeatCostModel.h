@@ -5,7 +5,7 @@
 #include <QVector>
 
 #include "music/ChordSymbol.h"
-#include "virtuoso/control/VirtuosityMatrix.h"
+#include "virtuoso/control/PerformanceWeightsV2.h"
 #include "virtuoso/engine/VirtuosoEngine.h"
 #include "virtuoso/groove/GrooveGrid.h"
 
@@ -35,7 +35,7 @@ struct CostBreakdown {
     QString shortTag(const CostWeights& w) const;
 };
 
-CostWeights weightsFromVirtuosity(const virtuoso::control::VirtuosityMatrix& v);
+CostWeights weightsFromWeightsV2(const virtuoso::control::PerformanceWeightsV2& w);
 
 // Shared harmonic "allowed pitch class" set for a chord symbol (used for stability scoring).
 QSet<int> allowedPitchClassesForChord(const music::ChordSymbol& c);

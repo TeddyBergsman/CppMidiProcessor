@@ -2,7 +2,6 @@
 
 #include "virtuoso/util/StableHash.h"
 #include "virtuoso/solver/CspSolver.h"
-#include "virtuoso/memory/MotifTransform.h"
 #include "virtuoso/piano/PianoPerformanceModel.h"
 
 #include <QtGlobal>
@@ -325,6 +324,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
 
     // Pedal planning (CC64) — keep simple and fully auditable.
     {
+        const double tension = qBound(0.0, c.weights.tension, 1.0);
         const bool phraseLandmark = c.chordIsNew || (c.cadence01 >= 0.55) || c.phraseEndBar;
         const bool chordBoundarySoon = c.nextChanges && (c.beatsUntilChordChange <= 1);
         const bool considerPedalNow = (c.beatInBar == 0) || phraseLandmark || chordBoundarySoon;
@@ -343,7 +343,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
                 pq.nextChanges = c.nextChanges;
                 pq.beatsUntilChordChange = c.beatsUntilChordChange;
                 pq.energy = qBound(0.0, c.energy, 1.0);
-                pq.toneDark = qBound(0.0, c.toneDark, 1.0);
+                pq.toneDark = qBound(0.0, c.weights.warmth, 1.0);
                 pq.determinismSeed = c.determinismSeed;
                 pedalChoice = m_vocab->choosePianoPedal(pq);
                 m_pedalStrategyId = pedalChoice.id;
@@ -373,7 +373,9 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
                                                                            .arg(c.chordText)
                                                                            .arg(c.determinismSeed)
                                                                            .toUtf8());
-                const int repProb = qBound(0, pedalChoice.repedalProbPct, 100);
+                int repProb = qBound(0, pedalChoice.repedalProbPct, 100);
+                // Tension: slightly more likely to repedal for crisp chord definition.
+                repProb = qBound(0, repProb + int(llround(18.0 * tension)), 100);
                 if (int(hp % 100u) < repProb) {
                     CcIntent lift;
                     lift.cc = 64;
@@ -406,9 +408,11 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
 
             // Clear before imminent harmony change (late in beat).
             const bool chordBoundarySoon = c.nextChanges && (c.beatsUntilChordChange <= 1);
-            const bool doClear = pedalChoice.clearBeforeChange;
-            const int clearSub = qMax(0, pedalChoice.clearSub);
+            const bool doClear = pedalChoice.clearBeforeChange || (tension >= 0.70);
+            int clearSub = qMax(0, pedalChoice.clearSub);
             const int clearCount = qMax(1, pedalChoice.clearCount);
+            // Tension: clear a touch earlier for tighter harmonic definition (still grid-aligned).
+            if (tension >= 0.70) clearSub = qMin(clearSub, 2);
             if (doClear && chordBoundarySoon && sustainNow && (c.beatsUntilChordChange == 1)) {
                 CcIntent ci;
                 ci.cc = 64;
@@ -471,10 +475,15 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
     // We select a VoicingDef from the ontology and realize it into LH/RH pitch-class sets.
     // This replaces procedural chord-tone set generation.
     const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
-    const bool wantShell = c.preferShells || userBusy || !chordHas7 || (c.harmonicRisk < 0.35);
-    const bool wantRootless = chordHas7 && !wantShell && (c.harmonicRisk >= 0.35);
-    const bool wantQuartal = chordHas7 && !wantShell && (c.harmonicRisk >= 0.60) && !c.toneDark;
-    const bool wantUst = dominant && (c.harmonicRisk >= 0.70);
+    const double creativity = qBound(0.0, c.weights.creativity, 1.0);
+    const double warmth = qBound(0.0, c.weights.warmth, 1.0);
+    const double rhythm = qBound(0.0, c.weights.rhythm, 1.0);
+    const double interact = qBound(0.0, c.weights.interactivity, 1.0);
+
+    const bool wantShell = c.preferShells || userBusy || !chordHas7 || (creativity < 0.35);
+    const bool wantRootless = chordHas7 && !wantShell && (creativity >= 0.35);
+    const bool wantQuartal = chordHas7 && !wantShell && (creativity >= 0.60) && (warmth < 0.50);
+    const bool wantUst = dominant && (creativity >= 0.70);
 
     auto voicingPcsFor = [&](const virtuoso::ontology::VoicingDef* v) -> QVector<int> {
         QVector<int> outPcs;
@@ -562,13 +571,13 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
             }
             // Thickness target.
             const int n = pcsAll.size();
-            const double target = 2.0 + 2.0 * qBound(0.0, c.harmonicRisk, 1.0) + 1.0 * progress01;
+            const double target = 2.0 + 2.0 * creativity + 1.0 * progress01;
             s += 0.55 * qAbs(double(n) - target);
 
             // Harmonic stability rules.
-            if (pcsAll.contains((pc1 + 12) % 12) && c.toneDark > 0.55) s += 0.7;
+            if (pcsAll.contains((pc1 + 12) % 12) && warmth > 0.55) s += 0.7;
             if (v->tags.contains("ust") && !dominant) s += 0.9;
-            if (v->tags.contains("quartal") && c.toneDark > 0.70) s += 0.8;
+            if (v->tags.contains("quartal") && warmth > 0.70) s += 0.8;
             if (!c.userSilence && userBusy) s += 0.35 * qMax(0, n - 2);
 
             // Shared motivic memory + counterpoint heuristic (lightweight):
@@ -916,8 +925,13 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
     // voicingType chosen by solver (above)
     const int baseVel0 = climaxDense ? (c.chordIsNew ? 64 : 58) : (c.chordIsNew ? 50 : 44);
     const double phrasePos01_dyn = (c.phraseBars > 1) ? (double(qBound(0, c.barInPhrase, c.phraseBars - 1)) / double(c.phraseBars - 1)) : 0.0;
-    const double phraseArc = 0.90 + 0.08 * qSin(3.1415926535 * phrasePos01_dyn); // gentle arc
-    const double cadenceBoost = 1.0 + 0.22 * qBound(0.0, c.cadence01, 1.0);
+    const double dyn = qBound(0.0, c.weights.dynamism, 1.0);
+    // Dynamism: stronger phrase-level contrast/shape (still deterministic).
+    // Centered arc peaking mid-phrase, then relaxing.
+    const double arc = qSin(3.1415926535 * phrasePos01_dyn); // 0..1..0
+    const double arcAmp = 0.06 + 0.18 * dyn;                // 0.06..0.24
+    const double phraseArc = 1.0 + (arc - 0.5) * arcAmp;    // ~0.88..1.12 typical
+    const double cadenceBoost = 1.0 + (0.18 + 0.18 * dyn) * qBound(0.0, c.cadence01, 1.0);
     const double energyBoost = 0.92 + 0.28 * qBound(0.0, c.energy, 1.0);
     const double silenceBoost = c.userSilence ? 1.08 : 1.0;
     const int baseVel = qBound(18, int(llround(double(baseVel0) * phraseArc * cadenceBoost * energyBoost * silenceBoost)), 100);
@@ -1041,7 +1055,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
         // - Reduce overuse (esp. after adding strong touch/phrase behavior)
         // - Increase pattern variety
         // - Add deterministic anti-repeat across bars
-        const double rc = qBound(0.0, c.rhythmicComplexity, 1.0);
+        const double rc = rhythm;
         // Gesture selection (data-driven, auditable).
         virtuoso::vocab::VocabularyRegistry::PianoGestureChoice gch;
         if (m_vocab && m_vocab->isLoaded()) {
@@ -1071,8 +1085,13 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
         // - Rolls can happen on arrivals/cadences, not as constant texture.
         // - Arps are reserved for cadences/phrase ends.
         const bool gestureChosen = (gKind == "roll" || gKind == "arp");
+        const double tension = qBound(0.0, c.weights.tension, 1.0);
         const bool nearChange = c.hasNextChord && c.nextChanges && (c.beatsUntilChordChange <= 1);
-        bool allowGestureNow = !userBusy && gestureChosen && !nearChange;
+        bool allowGestureNow = !userBusy && gestureChosen;
+        // Normally avoid gestures right before a change; with high tension, allow only very small rolls.
+        if (nearChange) {
+            allowGestureNow = allowGestureNow && (tension >= 0.75) && (gKind == "roll") && (gSpreadMs <= 36);
+        }
         if (allowGestureNow) {
             // Require musical reason.
             if (gKind == "arp") allowGestureNow = cadence || c.phraseEndBar;
@@ -1160,7 +1179,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
         CompArt art = CompArt::Tenuto;
         if (userBusy) art = CompArt::Stab;
         else if ((cadence || arrival) && int((ha / 3u) % 100u) < int(llround(35.0 + 40.0 * c.cadence01))) art = CompArt::HalfPedalWash;
-        else if (int((ha / 7u) % 100u) < int(llround(20.0 + 35.0 * qBound(0.0, c.rhythmicComplexity, 1.0)))) art = CompArt::Stab;
+        else if (int((ha / 7u) % 100u) < int(llround(20.0 + 35.0 * rc))) art = CompArt::Stab;
 
         const bool isPedalWash = !userBusy && (cadence || arrival || (c.userSilence && c.energy <= 0.55) || (art == CompArt::HalfPedalWash));
         const int velArtDelta = (art == CompArt::Stab) ? +1
@@ -1221,7 +1240,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
             else if (isTop) vel += (cadence ? 10 : 8); // singing top
             else vel -= 8;                             // inner voices very soft
             if (isRh) vel += 1;
-            if (c.toneDark >= 0.65) vel -= 2;
+            if (warmth >= 0.65) vel -= 2;
             // If arpeggiating upward, slightly crescendo; downward, slightly decrescendo.
             if (doArp) {
                 const int order = orderForIdx(idx);
@@ -1714,10 +1733,11 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
     if (userBusy) return {};
     // Removed: top-line planning (comp-only piano rebuild).
     return {};
+#if 0
 
     const int bar = qMax(0, c.playbackBarIndex);
     const double e = qBound(0.0, c.energy, 1.0);
-    const double rc = qBound(0.0, c.rhythmicComplexity, 1.0);
+    const double rc = rhythm;
     const bool cadence = (c.cadence01 >= 0.35) || c.phraseEndBar || c.chordIsNew;
 
     // --- Data-driven top-line library (preferred) ---
@@ -1737,7 +1757,7 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
             tq.userSilence = c.userSilence;
             tq.energy = e;
             tq.rhythmicComplexity = rc;
-            tq.interaction = qBound(0.0, c.interaction, 1.0);
+            tq.interaction = interact;
             // Story: encourage A/B alternation across phrases by perturbing determinism seed by phrase index parity.
             // This stays deterministic but avoids always selecting the same topline cell.
             const int phraseIndex = (phraseBars > 0) ? (phraseStart / phraseBars) : 0;
@@ -1754,7 +1774,7 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
         }
 
         // Gate top-line density: if user isn't silent and energy+interaction are very low, keep it minimal.
-        const bool allow = c.userSilence || c.chordIsNew || c.nextChanges || cadence || (rc >= 0.40) || (c.interaction >= 0.25);
+        const bool allow = c.userSilence || c.chordIsNew || c.nextChanges || cadence || (rc >= 0.40) || (interact >= 0.25);
         if (!allow && e < 0.12) return {};
 
         // Build a chord-safe pool, then (if we have a key) keep it diatonic for non-spicy chords.
@@ -1977,7 +1997,7 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
     // --- Motivic memory transforms (spec 3.3) ---
     // When the user is silent and interaction is high, we may reuse recent RH contour
     // with a deterministic transform (repeat/sequence/invert/retrograde + rhythmic displacement).
-    if (m_mem && c.userSilence && (c.interaction >= 0.65) && (rc >= 0.35) && (tgt >= 0) && !spicy) {
+    if (m_mem && c.userSilence && (interact >= 0.65) && (rc >= 0.35) && (tgt >= 0) && !spicy) {
         const auto recent = m_mem->recent("Piano", 6);
         QVector<int> pcs;
         pcs.reserve(4);
@@ -2041,6 +2061,7 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
     }
 
     return out;
+#endif
 }
 
 void JazzBalladPianoPlanner::ensurePhraseGuideLinePlanned(const Context& c) {
@@ -2201,7 +2222,109 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
         }
         out = dedup;
 
-        if (!out.isEmpty()) return out;
+        // --- Weights v2: Density drives how many comp hits we keep/add ---
+        // IMPORTANT: this is deterministic and does NOT create single-note onsets because each hit is rendered as a chord.
+        if (!out.isEmpty()) {
+            double dens = qBound(0.0, c.weights.density, 1.0);
+            if (userBusy) dens *= 0.55;
+            if (c.userSilence) dens = qMin(1.0, dens + 0.10);
+            const double rhy = qBound(0.0, c.weights.rhythm, 1.0);
+            const int maxHits = (dens >= 0.85 && rhy >= 0.55) ? 5 : 4;
+            int targetHits = qBound(1, int(llround(1.0 + dens * double(maxHits - 1))), maxHits);
+            if (c.chordIsNew) targetHits = qMax(1, targetHits);
+
+            // If we are under target and density is high, allow adding a small number of extra beat patterns
+            // even when a phrase already hits that beat (but still de-duped by (beat,sub,count)).
+            if (out.size() < targetHits && !userBusy && dens >= 0.70) {
+                int budget = targetHits - out.size();
+                for (int beat = 0; beat < 4 && budget > 0; ++beat) {
+                    const quint32 hx = virtuoso::util::StableHash::fnv1a32(QString("pno_extra|%1|%2|%3|%4")
+                                                                               .arg(c.chordText)
+                                                                               .arg(bar)
+                                                                               .arg(beat)
+                                                                               .arg(c.determinismSeed)
+                                                                               .toUtf8());
+                    const int pct = int(hx % 100u);
+                    const int want = qBound(0, int(llround((dens - 0.70) * 220.0)), 40); // 0..40%
+                    if (pct >= want) continue;
+                    virtuoso::vocab::VocabularyRegistry::PianoBeatQuery bq;
+                    bq.ts = ts;
+                    bq.playbackBarIndex = bar;
+                    bq.beatInBar = beat;
+                    bq.chordText = c.chordText;
+                    bq.chordFunction = c.chordFunction;
+                    bq.chordIsNew = c.chordIsNew;
+                    bq.userSilence = c.userSilence;
+                    bq.energy = qBound(0.0, c.energy, 1.0);
+                    // Deterministic "second draw" seed so extras don't mirror the main beat selection.
+                    bq.determinismSeed = c.determinismSeed ^ 0x9E3779B9u ^ quint32(beat * 131u);
+                    const auto ch = m_vocab->choosePianoBeat(bq);
+                    if (ch.id.trimmed().isEmpty()) continue;
+                    if (ch.id.toLower().contains("push") && dens < 0.80) continue; // keep pushes for truly denser feels
+
+                    const QString existing = (beat >= 0 && beat < m_compBeatIdsByBeat.size()) ? m_compBeatIdsByBeat[beat].trimmed() : QString();
+                    if (beat >= 0 && beat < m_compBeatIdsByBeat.size()) {
+                        m_compBeatIdsByBeat[beat] = existing.isEmpty() ? ch.id : (existing + "|" + ch.id);
+                    }
+                    for (const auto& h : ch.hits) {
+                        addV(beat, h, QString("vocab_extra:%1").arg(ch.id));
+                        if (budget > 0) budget--;
+                        if (budget <= 0) break;
+                    }
+                }
+                // Re-dedupe after optional extras.
+                std::sort(out.begin(), out.end(), [](const CompHit& a, const CompHit& b) {
+                    if (a.beatInBar != b.beatInBar) return a.beatInBar < b.beatInBar;
+                    if (a.sub != b.sub) return a.sub < b.sub;
+                    return a.count < b.count;
+                });
+                dedup.clear();
+                for (const auto& h : out) {
+                    if (!dedup.isEmpty()) {
+                        const auto& p = dedup.last();
+                        if (p.beatInBar == h.beatInBar && p.sub == h.sub && p.count == h.count) continue;
+                    }
+                    dedup.push_back(h);
+                }
+                out = dedup;
+            }
+
+            // If we are over target, drop the least important hits deterministically.
+            if (out.size() > targetHits) {
+                struct Ranked { double score; CompHit hit; };
+                QVector<Ranked> ranked;
+                ranked.reserve(out.size());
+                for (const auto& h : out) {
+                    double s = 0.0;
+                    const bool isArrival = c.chordIsNew && h.beatInBar == 0 && h.sub == 0;
+                    if (isArrival) s -= 10.0;
+                    // Prefer 2&4 (ballad pocket), but let density/rhythm keep some offbeats.
+                    if (h.beatInBar == 1 || h.beatInBar == 3) s -= 0.25;
+                    if (h.sub != 0) s += (0.20 + 0.60 * (1.0 - rhy));
+                    // Deterministic tiebreak.
+                    const quint32 hh = virtuoso::util::StableHash::fnv1a32(QString("pno_keep|%1|%2|%3|%4|%5|%6")
+                                                                               .arg(c.chordText)
+                                                                               .arg(bar)
+                                                                               .arg(h.beatInBar)
+                                                                               .arg(h.sub)
+                                                                               .arg(h.count)
+                                                                               .arg(c.determinismSeed)
+                                                                               .toUtf8());
+                    s += (double(hh & 1023u) / 1024.0) * 1e-3;
+                    ranked.push_back({s, h});
+                }
+                std::sort(ranked.begin(), ranked.end(), [](const Ranked& a, const Ranked& b) { return a.score < b.score; });
+                out.clear();
+                for (int i = 0; i < ranked.size() && i < targetHits; ++i) out.push_back(ranked[i].hit);
+                std::sort(out.begin(), out.end(), [](const CompHit& a, const CompHit& b) {
+                    if (a.beatInBar != b.beatInBar) return a.beatInBar < b.beatInBar;
+                    if (a.sub != b.sub) return a.sub < b.sub;
+                    return a.count < b.count;
+                });
+            }
+
+            return out;
+        }
         // else fall through to procedural model.
     }
 
@@ -2221,7 +2344,7 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
     // Complexity driver:
     // - previously was mostly energy-driven
     // - Stage 3: rhythmicComplexity should be the primary dial (so Virt slider is audible)
-    double complexity = qBound(0.0, c.rhythmicComplexity, 1.0);
+    double complexity = qBound(0.0, c.weights.rhythm, 1.0);
     if (userBusy) complexity *= 0.55;
     if (c.userSilence) complexity = qMin(1.0, complexity + 0.10);
     // As the song progresses, we want a gentle density ramp (starts sparse, becomes a bit fuller).

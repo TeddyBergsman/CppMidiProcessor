@@ -10,6 +10,8 @@
 #include "playback/HarmonyContext.h"
 #include "playback/SemanticMidiAnalyzer.h"
 #include "playback/VibeStateMachine.h"
+#include "playback/WeightNegotiator.h"
+#include "virtuoso/control/PerformanceWeightsV2.h"
 
 namespace playback {
 
@@ -57,12 +59,11 @@ public:
         bool debugEnergyAuto = true;
         double debugEnergy = 0.25;
 
-        // Virtuosity matrix (temporary; formalized in a later todo)
-        bool virtAuto = true;
-        double virtHarmonicRisk = 0.20;
-        double virtRhythmicComplexity = 0.25;
-        double virtInteraction = 0.50;
-        double virtToneDark = 0.60;
+        // Global weights v2 (single source of truth for macro controls).
+        virtuoso::control::PerformanceWeightsV2 weightsV2{};
+        // Negotiator state seed for smoothing continuity (optional).
+        bool hasNegotiatorState = false;
+        WeightNegotiator::State negotiatorState{};
 
         // Engine time domain (for TheoryEvent.engine_now_ms)
         qint64 engineNowMs = 0;

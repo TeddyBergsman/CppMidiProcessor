@@ -95,11 +95,12 @@ public:
     }
 
     HumanizedEvent humanizeNote(const GridPos& start,
-                               const TimeSignature& ts,
-                               int bpm,
-                               int baseVelocity,
-                               const Rational& durationWhole,
-                               bool structural) {
+                                const TimeSignature& ts,
+                                int bpm,
+                                int baseVelocity,
+                                const Rational& durationWhole,
+                                bool structural,
+                                double emotion01 = 0.0) {
         advanceDriftToBar(start.barIndex);
 
         const qint64 baseOn = GrooveGrid::posToMs(start, ts, bpm);
@@ -157,8 +158,11 @@ public:
             const int b = int(m_rng.bounded(quint32(maxAbs + 1)));
             return (a + b) - maxAbs;
         };
-        const int jitterMax = int(llround(double(m_profile.microJitterMs) * tempoScale));
-        const int attackMax = int(llround(double(m_profile.attackVarianceMs) * tempoScale));
+        // Emotion: micro-timing freedom. Higher => wider jitter + looser clamp (still tempo-aware).
+        const double emo = qBound(0.0, emotion01, 1.0);
+        const double microScale = 0.75 + 1.00 * emo; // 0.75..1.75
+        const int jitterMax = int(llround(double(m_profile.microJitterMs) * tempoScale * microScale));
+        const int attackMax = int(llround(double(m_profile.attackVarianceMs) * tempoScale * microScale));
         int jitter = tri(jitterMax);
         int attackVar = tri(attackMax);
 
@@ -191,7 +195,7 @@ public:
         // Clamp only the *microtiming* components; keep systematic groove offsets intact.
         int microOffset = laidBack - push + driftLocal + phraseOffset + jitter + attackVar;
         int clampMs = structural ? m_profile.clampMsStructural : m_profile.clampMsLoose;
-        clampMs = int(llround(double(clampMs) * tempoScale));
+        clampMs = int(llround(double(clampMs) * tempoScale * (0.85 + 0.90 * emo)));
         clampMs = qMin(clampMs, maxOffsetMusical);
         clampMs = qMax(4, clampMs);
         if (microOffset > clampMs) microOffset = clampMs;

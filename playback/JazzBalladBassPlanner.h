@@ -6,6 +6,7 @@
 #include "music/ChordSymbol.h"
 #include "virtuoso/constraints/BassDriver.h"
 #include "virtuoso/engine/VirtuosoEngine.h"
+#include "virtuoso/control/PerformanceWeightsV2.h"
 #include "virtuoso/vocab/VocabularyRegistry.h"
 
 namespace playback {
@@ -82,11 +83,8 @@ public:
         // the planner may deviate for voice-leading, but it biases the phrase-level motion.
         int registerCenterMidi = 45;
 
-        // Stage 3 solver weights (Virtuosity Matrix-style, 0..1).
-        double harmonicRisk = 0.20;
-        double rhythmicComplexity = 0.25;
-        double interaction = 0.50;
-        double toneDark = 0.60;
+        // Global weights v2 (0..1) negotiated for this agent, plus any local shaping.
+        virtuoso::control::PerformanceWeightsV2 weights{};
 
         // Optional Stage 2 context (for smarter choices).
         QString chordFunction; // "Tonic" | "Subdominant" | "Dominant" | "Other"

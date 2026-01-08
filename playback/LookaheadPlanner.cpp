@@ -61,6 +61,9 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
     JazzBalladBassPlanner bassSim = *in.bassPlanner;
     JazzBalladPianoPlanner pianoSim = *in.pianoPlanner;
 
+    // Local negotiator state for this lookahead block (seeded if provided).
+    WeightNegotiator::State negState = in.hasNegotiatorState ? in.negotiatorState : WeightNegotiator::State{};
+
     // Local chord simulation baseline (do NOT mutate in.lastChord).
     music::ChordSymbol simLast = in.hasLastChord ? in.lastChord : music::ChordSymbol{};
     bool simHasLast = in.hasLastChord;
@@ -99,8 +102,7 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
         te.vibe_state = vibeStr;
         te.user_intents = intentStr;
         te.user_outside_ratio = intent.outsideRatio;
-        te.has_virtuosity = n.has_virtuosity;
-        te.virtuosity = n.virtuosity;
+        // Legacy VirtuosityMatrix removed; global weights v2 are emitted via candidate_pool.
         arr.push_back(te.toJsonObject());
     };
 
@@ -267,6 +269,20 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
             : HarmonyContext::ScaleChoice{};
         const QString scaleUsed = scaleChoice.display;
 
+        // Energy-driven instrument layering (match runtime behavior).
+        const double eBand = qBound(0.0, baseEnergy, 1.0);
+        const bool allowDrums = (eBand >= 0.22);
+
+        // Negotiated weights v2 for this step (deterministic, smoothed).
+        WeightNegotiator::Inputs wi;
+        wi.global = in.weightsV2;
+        wi.userBusy = userBusy;
+        wi.userSilence = intent.silence;
+        wi.cadence = (cadence01 >= 0.55);
+        wi.phraseEnd = phraseEndBar;
+        wi.sectionLabel = "";
+        const auto negotiated = WeightNegotiator::negotiate(wi, negState, /*smoothingAlpha=*/0.25);
+
         // Drums
         {
             BrushesBalladDrummer::Context dc;
@@ -316,18 +332,20 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
             const double bassMult = in.agentEnergyMult.value("Bass", 1.0);
             bc.energy = qBound(0.0, baseEnergy * bassMult, 1.0);
 
-            const double progress01 = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
-            if (in.virtAuto) {
-                bc.harmonicRisk = qBound(0.0, in.virtHarmonicRisk + 0.35 * bc.energy + 0.15 * progress01, 1.0);
-                bc.rhythmicComplexity = qBound(0.0, in.virtRhythmicComplexity + 0.45 * bc.energy + 0.20 * progress01, 1.0);
-                bc.interaction = qBound(0.0, in.virtInteraction + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.10 * bc.energy, 1.0);
-                bc.toneDark = qBound(0.0, in.virtToneDark + 0.15 * (1.0 - bc.energy), 1.0);
-            } else {
-                bc.harmonicRisk = in.virtHarmonicRisk;
-                bc.rhythmicComplexity = in.virtRhythmicComplexity;
-                bc.interaction = in.virtInteraction;
-                bc.toneDark = in.virtToneDark;
+            bc.weights = negotiated.bass.w;
+
+            if (!allowDrums) {
+                bc.energy *= 0.70;
+                bc.weights.rhythm *= 0.55;
             }
+
+            // Local shaping (v2 axes, no legacy mapping).
+            const double progress01 = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
+            bc.weights.density = qBound(0.0, bc.weights.density + 0.35 * bc.energy + 0.15 * progress01, 1.0);
+            bc.weights.rhythm = qBound(0.0, bc.weights.rhythm + 0.45 * bc.energy + 0.20 * progress01, 1.0);
+            bc.weights.interactivity = qBound(0.0, bc.weights.interactivity + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.10 * bc.energy, 1.0);
+            bc.weights.warmth = qBound(0.0, bc.weights.warmth + 0.15 * (1.0 - bc.energy), 1.0);
+            bc.weights.creativity = qBound(0.0, bc.weights.creativity + 0.20 * bc.energy + 0.10 * progress01, 1.0);
 
             const auto bplan = bassSim.planBeatWithActions(bc, in.chBass, in.ts);
             for (const auto& ks : bplan.keyswitches) {
@@ -340,11 +358,6 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
                 if (!roman.isEmpty()) n.roman = roman;
                 if (!func.isEmpty()) n.chord_function = func;
                 if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
-                n.has_virtuosity = true;
-                n.virtuosity.harmonicRisk = bc.harmonicRisk;
-                n.virtuosity.rhythmicComplexity = bc.rhythmicComplexity;
-                n.virtuosity.interaction = bc.interaction;
-                n.virtuosity.toneDark = bc.toneDark;
                 emitIntentAsJson(n);
             }
             for (auto n : bplan.fxNotes) {
@@ -378,18 +391,20 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
             const double pianoMult = in.agentEnergyMult.value("Piano", 1.0);
             pc.energy = qBound(0.0, baseEnergy * pianoMult, 1.0);
 
-            const double progress01p = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
-            if (in.virtAuto) {
-                pc.harmonicRisk = qBound(0.0, in.virtHarmonicRisk + 0.40 * pc.energy + 0.20 * progress01p, 1.0);
-                pc.rhythmicComplexity = qBound(0.0, in.virtRhythmicComplexity + 0.55 * pc.energy + 0.15 * progress01p, 1.0);
-                pc.interaction = qBound(0.0, in.virtInteraction + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.15 * pc.energy, 1.0);
-                pc.toneDark = qBound(0.0, in.virtToneDark + 0.20 * (1.0 - pc.energy) + 0.10 * (intent.registerHigh ? 1.0 : 0.0), 1.0);
-            } else {
-                pc.harmonicRisk = in.virtHarmonicRisk;
-                pc.rhythmicComplexity = in.virtRhythmicComplexity;
-                pc.interaction = in.virtInteraction;
-                pc.toneDark = in.virtToneDark;
+            pc.weights = negotiated.piano.w;
+            const double eBand2 = qBound(0.0, baseEnergy, 1.0);
+            if (eBand2 < 0.12) {
+                pc.weights.rhythm *= 0.30;
+                pc.weights.creativity *= 0.25;
             }
+
+            const double progress01p = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
+            // Local shaping (v2 axes, no legacy mapping).
+            pc.weights.density = qBound(0.0, pc.weights.density + 0.40 * pc.energy + 0.20 * progress01p, 1.0);
+            pc.weights.rhythm = qBound(0.0, pc.weights.rhythm + 0.55 * pc.energy + 0.15 * progress01p, 1.0);
+            pc.weights.interactivity = qBound(0.0, pc.weights.interactivity + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.15 * pc.energy, 1.0);
+            pc.weights.warmth = qBound(0.0, pc.weights.warmth + 0.20 * (1.0 - pc.energy) + 0.10 * (intent.registerHigh ? 1.0 : 0.0), 1.0);
+            pc.weights.creativity = qBound(0.0, pc.weights.creativity + 0.30 * pc.energy + 0.15 * progress01p, 1.0);
 
             const auto pplan = pianoSim.planBeatWithActions(pc, in.chPiano, in.ts);
             for (const auto& ci : pplan.ccs) {
@@ -401,11 +416,6 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
                 if (!roman.isEmpty()) n.roman = roman;
                 if (!func.isEmpty()) n.chord_function = func;
                 if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
-                n.has_virtuosity = true;
-                n.virtuosity.harmonicRisk = pc.harmonicRisk;
-                n.virtuosity.rhythmicComplexity = pc.rhythmicComplexity;
-                n.virtuosity.interaction = pc.interaction;
-                n.virtuosity.toneDark = pc.toneDark;
                 emitIntentAsJson(n);
             }
         }

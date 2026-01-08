@@ -7,7 +7,7 @@
 #include "virtuoso/groove/FeelTemplate.h"
 #include "virtuoso/groove/GrooveTemplate.h"
 #include "virtuoso/groove/TimingHumanizer.h"
-#include "virtuoso/control/VirtuosityMatrix.h"
+#include "virtuoso/control/PerformanceWeightsV2.h"
 
 namespace virtuoso::groove {
 
@@ -47,9 +47,8 @@ public:
         int defaultBpm = 120;
         TimeSignature defaultTimeSig{4, 4};
 
-        // Stage 3: preset-level defaults for the Virtuosity Matrix.
-        // These are used as baseline weights in Auto mode and as defaults in Manual mode.
-        virtuoso::control::VirtuosityMatrix virtuosityDefaults{};
+        // Legacy VirtuosityMatrix removed; Weights v2 defaults live here instead.
+        virtuoso::control::PerformanceWeightsV2 weightsV2Defaults{};
     };
     const StylePreset* stylePreset(const QString& key) const;
     QVector<const StylePreset*> allStylePresets() const;

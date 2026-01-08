@@ -123,7 +123,8 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
 
     const qint64 baseMs = ensureGridBaseMs();
     auto& h = humanizerFor(note.agent);
-    auto he = h.humanizeNote(note.startPos, m_ts, m_bpm, note.baseVelocity, note.durationWhole, note.structural);
+    const double emo = (note.emotion01 >= 0.0) ? qBound(0.0, note.emotion01, 1.0) : 0.0;
+    auto he = h.humanizeNote(note.startPos, m_ts, m_bpm, note.baseVelocity, note.durationWhole, note.structural, emo);
     he.onMs += baseMs;
     he.offMs += baseMs;
     const quint32 id = nextNoteId();
@@ -174,8 +175,7 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
     te.vibe_state = note.vibe_state;
     te.user_intents = note.user_intents;
     te.user_outside_ratio = note.user_outside_ratio;
-    te.has_virtuosity = note.has_virtuosity;
-    te.virtuosity = note.virtuosity;
+    // Legacy VirtuosityMatrix removed; global weights v2 are emitted via candidate_pool.
 
     emit plannedTheoryEventJson(te.toJsonString(true));
 
@@ -377,7 +377,8 @@ groove::HumanizedEvent VirtuosoEngine::humanizeIntent(const AgentIntentNote& not
     if (note.baseVelocity < 1 || note.baseVelocity > 127) return empty;
 
     auto& h = humanizerFor(note.agent);
-    auto he = h.humanizeNote(note.startPos, m_ts, m_bpm, note.baseVelocity, note.durationWhole, note.structural);
+    const double emo = (note.emotion01 >= 0.0) ? qBound(0.0, note.emotion01, 1.0) : 0.0;
+    auto he = h.humanizeNote(note.startPos, m_ts, m_bpm, note.baseVelocity, note.durationWhole, note.structural, emo);
     const qint64 baseMs = ensureGridBaseMs();
     he.onMs += baseMs;
     he.offMs += baseMs;
@@ -440,8 +441,7 @@ void VirtuosoEngine::scheduleHumanizedIntentNote(const AgentIntentNote& note,
     te.vibe_state = note.vibe_state;
     te.user_intents = note.user_intents;
     te.user_outside_ratio = note.user_outside_ratio;
-    te.has_virtuosity = note.has_virtuosity;
-    te.virtuosity = note.virtuosity;
+    // Legacy VirtuosityMatrix removed; global weights v2 are emitted via candidate_pool.
 
     emit plannedTheoryEventJson(te.toJsonString(true));
 

@@ -3,7 +3,6 @@
 #include <QJsonObject>
 
 #include "virtuoso/control/PerformanceWeightsV2.h"
-#include "virtuoso/control/VirtuosityMatrix.h"
 
 namespace playback {
 
@@ -11,7 +10,6 @@ namespace playback {
 struct WeightNegotiator final {
     struct AgentWeights {
         virtuoso::control::PerformanceWeightsV2 w;
-        virtuoso::control::VirtuosityMatrix virt; // legacy mapping for existing solvers
     };
 
     struct Output {
@@ -23,7 +21,7 @@ struct WeightNegotiator final {
     };
 
     struct State {
-        // EMA for stability (per agent, per axis): we store only the mapped virt weights for now.
+        // EMA for stability (per agent, per axis).
         AgentWeights piano;
         AgentWeights bass;
         AgentWeights drums;

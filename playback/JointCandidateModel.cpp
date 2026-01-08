@@ -230,9 +230,9 @@ JointCandidateModel::BestChoice JointCandidateModel::chooseBestCombo(const Scori
             0.20 * virtuoso::solver::rhythmicInterestPenalty01(drumNotes, in.ts);
 
         const double totalNotes = double(bassNotes.size() + pianoNotes.size()) + 0.35 * double(drumNotes.size());
-        const double rc = qBound(0.0, in.virtAvg.rhythmicComplexity, 1.0);
+        const double rc = qBound(0.0, in.weightsAvg.rhythm, 1.0);
         double target = 2.0 + 4.5 * rc;
-        if (in.userSilence) target += qBound(0.0, in.virtAvg.interaction, 1.0) * 2.0;
+        if (in.userSilence) target += qBound(0.0, in.weightsAvg.interactivity, 1.0) * 2.0;
         if (in.userBusy) target -= 2.5;
         target = qBound(0.0, target, 10.0);
         bd.interactionFactor = 0.55 * qAbs(totalNotes - target);
@@ -267,6 +267,10 @@ JointCandidateModel::BestChoice JointCandidateModel::chooseBestCombo(const Scori
     }
 
     out.combos.reserve(bass.size() * piano.size() * drums.size());
+    // Variability (v2): higher variability => lower continuity penalties (more switching),
+    // lower variability => stronger continuity (more "stay on a concept").
+    const double var = qBound(0.0, in.weightsAvg.variability, 1.0);
+    const double switchMul = qBound(0.20, 1.15 - 0.90 * var, 1.15);
     for (int bi = 0; bi < bass.size(); ++bi) {
         for (int pi = 0; pi < piano.size(); ++pi) {
             for (int di = 0; di < drums.size(); ++di) {
@@ -277,9 +281,9 @@ JointCandidateModel::BestChoice JointCandidateModel::chooseBestCombo(const Scori
                 const double pianoExtra = piano[pi].pianistFeasibilityCost + piano[pi].pedalClarityCost + piano[pi].topLineContinuityCost;
                 c += pianoExtra;
 
-                if (!in.lastBassId.isEmpty() && in.lastBassId != bass[bi].id) c += in.bassSwitchPenalty;
-                if (!in.lastPianoId.isEmpty() && in.lastPianoId != piano[pi].id) c += in.pianoSwitchPenalty;
-                if (!in.lastDrumsId.isEmpty() && in.lastDrumsId != drums[di].id) c += in.drumsSwitchPenalty;
+                if (!in.lastBassId.isEmpty() && in.lastBassId != bass[bi].id) c += in.bassSwitchPenalty * switchMul;
+                if (!in.lastPianoId.isEmpty() && in.lastPianoId != piano[pi].id) c += in.pianoSwitchPenalty * switchMul;
+                if (!in.lastDrumsId.isEmpty() && in.lastDrumsId != drums[di].id) c += in.drumsSwitchPenalty * switchMul;
 
                 // Piano library continuity (prefer staying within a phrase/story choice).
                 {
@@ -287,22 +291,22 @@ JointCandidateModel::BestChoice JointCandidateModel::chooseBestCombo(const Scori
                     if (!in.lastPianoCompPhraseId.trimmed().isEmpty()
                         && !perf.compPhraseId.trimmed().isEmpty()
                         && perf.compPhraseId.trimmed() != in.lastPianoCompPhraseId.trimmed()) {
-                        c += in.pianoCompPhraseSwitchPenalty;
+                        c += in.pianoCompPhraseSwitchPenalty * switchMul;
                     }
                     if (!in.lastPianoTopLinePhraseId.trimmed().isEmpty()
                         && !perf.toplinePhraseId.trimmed().isEmpty()
                         && perf.toplinePhraseId.trimmed() != in.lastPianoTopLinePhraseId.trimmed()) {
-                        c += in.pianoTopLinePhraseSwitchPenalty;
+                        c += in.pianoTopLinePhraseSwitchPenalty * switchMul;
                     }
                     if (!in.lastPianoPedalId.trimmed().isEmpty()
                         && !perf.pedalId.trimmed().isEmpty()
                         && perf.pedalId.trimmed() != in.lastPianoPedalId.trimmed()) {
-                        c += in.pianoPedalSwitchPenalty;
+                        c += in.pianoPedalSwitchPenalty * switchMul;
                     }
                     if (!in.lastPianoGestureId.trimmed().isEmpty()
                         && !perf.gestureId.trimmed().isEmpty()
                         && perf.gestureId.trimmed() != in.lastPianoGestureId.trimmed()) {
-                        c += in.pianoGestureSwitchPenalty;
+                        c += in.pianoGestureSwitchPenalty * switchMul;
                     }
                 }
 

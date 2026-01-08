@@ -219,11 +219,30 @@ void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
     li.agentEnergyMult = m_agentEnergyMult;
     li.debugEnergyAuto = m_debugEnergyAuto;
     li.debugEnergy = m_debugEnergy;
-    li.virtAuto = m_virtAuto;
-    li.virtHarmonicRisk = m_virtHarmonicRisk;
-    li.virtRhythmicComplexity = m_virtRhythmicComplexity;
-    li.virtInteraction = m_virtInteraction;
-    li.virtToneDark = m_virtToneDark;
+    // Weights v2 (single source of truth).
+    if (m_weightsV2Auto) {
+        AutoWeightController::Inputs wi;
+        const int beatsPerBar = qMax(1, ts.num);
+        const int playbackBarIndex = (beatsPerBar > 0) ? (stepNow / beatsPerBar) : 0;
+        wi.sectionLabel = sectionLabelForPlaybackBar(m_model, playbackBarIndex);
+        wi.repeatIndex = 0;
+        wi.repeatsTotal = qMax(1, m_repeats);
+        wi.playbackBarIndex = playbackBarIndex;
+        wi.phraseBars = (m_bpm <= 84) ? 8 : 4;
+        wi.barInPhrase = (wi.phraseBars > 0) ? (playbackBarIndex % wi.phraseBars) : 0;
+        wi.phraseEndBar = (wi.phraseBars > 0) ? (wi.barInPhrase == (wi.phraseBars - 1)) : false;
+        wi.cadence01 = 0.0; // lookahead-only; cadence is computed in runtime scheduler
+        const auto snap = m_interaction.snapshot(QDateTime::currentMSecsSinceEpoch(), m_debugEnergyAuto, m_debugEnergy);
+        wi.userSilence = snap.intent.silence;
+        wi.userBusy = (snap.intent.densityHigh || snap.intent.intensityPeak || snap.intent.registerHigh);
+        wi.userRegisterHigh = snap.intent.registerHigh;
+        wi.userIntensityPeak = snap.intent.intensityPeak;
+        li.weightsV2 = AutoWeightController::compute(wi);
+    } else {
+        li.weightsV2 = m_weightsV2Manual;
+    }
+    li.hasNegotiatorState = true;
+    li.negotiatorState = m_weightNegState;
     li.engineNowMs = m_engine.elapsedMs();
     li.nowMs = QDateTime::currentMSecsSinceEpoch();
 
@@ -369,12 +388,7 @@ void VirtuosoBalladMvpPlaybackEngine::applyPresetToEngine() {
     if (preset->instrumentProfiles.contains("Bass"))  m_engine.setInstrumentGrooveProfile("Bass",  preset->instrumentProfiles.value("Bass"));
     if (preset->instrumentProfiles.contains("Piano")) m_engine.setInstrumentGrooveProfile("Piano", preset->instrumentProfiles.value("Piano"));
 
-    // Stage 3 Virtuosity Matrix defaults are preset-driven (not just groove).
-    // In Auto mode, these are treated as baseline weights; in Manual mode, they are the defaults.
-    m_virtHarmonicRisk = qBound(0.0, preset->virtuosityDefaults.harmonicRisk, 1.0);
-    m_virtRhythmicComplexity = qBound(0.0, preset->virtuosityDefaults.rhythmicComplexity, 1.0);
-    m_virtInteraction = qBound(0.0, preset->virtuosityDefaults.interaction, 1.0);
-    m_virtToneDark = qBound(0.0, preset->virtuosityDefaults.toneDark, 1.0);
+    // Legacy VirtuosityMatrix defaults removed; Weights v2 are the only global control surface.
 }
 
 const chart::Cell* VirtuosoBalladMvpPlaybackEngine::cellForFlattenedIndex(int cellIndex) const {
@@ -535,11 +549,28 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleLookaheadAsync(int stepNow,
     li.agentEnergyMult = m_agentEnergyMult;
     li.debugEnergyAuto = m_debugEnergyAuto;
     li.debugEnergy = m_debugEnergy;
-    li.virtAuto = m_virtAuto;
-    li.virtHarmonicRisk = m_virtHarmonicRisk;
-    li.virtRhythmicComplexity = m_virtRhythmicComplexity;
-    li.virtInteraction = m_virtInteraction;
-    li.virtToneDark = m_virtToneDark;
+    if (m_weightsV2Auto) {
+        AutoWeightController::Inputs wi;
+        const int beatsPerBar = qMax(1, ts.num);
+        const int playbackBarIndex = (beatsPerBar > 0) ? (stepNow / beatsPerBar) : 0;
+        wi.sectionLabel = sectionLabelForPlaybackBar(m_model, playbackBarIndex);
+        wi.repeatIndex = 0;
+        wi.repeatsTotal = qMax(1, m_repeats);
+        wi.playbackBarIndex = playbackBarIndex;
+        wi.phraseBars = (m_bpm <= 84) ? 8 : 4;
+        wi.barInPhrase = (wi.phraseBars > 0) ? (playbackBarIndex % wi.phraseBars) : 0;
+        wi.phraseEndBar = (wi.phraseBars > 0) ? (wi.barInPhrase == (wi.phraseBars - 1)) : false;
+        wi.cadence01 = 0.0;
+        wi.userSilence = li.intentSnapshot.silence;
+        wi.userBusy = (li.intentSnapshot.densityHigh || li.intentSnapshot.intensityPeak || li.intentSnapshot.registerHigh);
+        wi.userRegisterHigh = li.intentSnapshot.registerHigh;
+        wi.userIntensityPeak = li.intentSnapshot.intensityPeak;
+        li.weightsV2 = AutoWeightController::compute(wi);
+    } else {
+        li.weightsV2 = m_weightsV2Manual;
+    }
+    li.hasNegotiatorState = true;
+    li.negotiatorState = m_weightNegState;
     li.engineNowMs = engineNowMs;
     li.nowMs = nowWallMs;
 
@@ -581,12 +612,6 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     ai.bpm = m_bpm;
     ai.stylePresetKey = m_stylePresetKey;
     ai.agentEnergyMult = m_agentEnergyMult;
-
-    ai.virtAuto = m_virtAuto;
-    ai.virtHarmonicRisk = m_virtHarmonicRisk;
-    ai.virtRhythmicComplexity = m_virtRhythmicComplexity;
-    ai.virtInteraction = m_virtInteraction;
-    ai.virtToneDark = m_virtToneDark;
 
     // --- Weights v2 (primary) ---
     ai.weightsV2Auto = m_weightsV2Auto;

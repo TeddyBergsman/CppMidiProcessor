@@ -43,10 +43,6 @@ QJsonObject TheoryEvent::toJsonObject() const {
     if (!user_intents.trimmed().isEmpty()) o.insert("user_intents", user_intents);
     if (user_outside_ratio > 0.0) o.insert("user_outside_ratio", user_outside_ratio);
 
-    // Optional Virtuosity Matrix snapshot
-    if (has_virtuosity) {
-        o.insert("virtuosity", virtuosity.toJsonObject());
-    }
     return o;
 }
 

@@ -68,16 +68,6 @@ public slots:
         m_agentEnergyMult.insert(agent, qBound(0.0, mult01to2, 2.0));
     }
 
-    // Stage 3 Virtuosity Matrix (global solver weights). When Auto is on (default),
-    // weights are derived from energy + song progress + listening context.
-    void setVirtuosityAuto(bool on) { m_virtAuto = on; }
-    void setVirtuosity(double harmonicRisk01, double rhythmicComplexity01, double interaction01, double toneDark01) {
-        m_virtHarmonicRisk = qBound(0.0, harmonicRisk01, 1.0);
-        m_virtRhythmicComplexity = qBound(0.0, rhythmicComplexity01, 1.0);
-        m_virtInteraction = qBound(0.0, interaction01, 1.0);
-        m_virtToneDark = qBound(0.0, toneDark01, 1.0);
-    }
-
     // New global control surface (Weights v2): primary sliders.
     void setPerformanceWeightsAuto(bool on) { m_weightsV2Auto = on; }
     void setPerformanceWeightsV2(const virtuoso::control::PerformanceWeightsV2& w) { m_weightsV2Manual = w; }
@@ -204,13 +194,6 @@ private:
     int m_lastCc11Drums = -1;
     qint64 m_lastRealtimeGainUpdateElapsedMs = -1;
     double m_realtimeEnergySmoothed = 0.25;
-
-    // Stage 3 Virtuosity Matrix (defaults: Auto).
-    bool m_virtAuto = true;
-    double m_virtHarmonicRisk = 0.20;
-    double m_virtRhythmicComplexity = 0.25;
-    double m_virtInteraction = 0.50;
-    double m_virtToneDark = 0.60;
 
     // Weights v2 (defaults: Auto).
     bool m_weightsV2Auto = true;

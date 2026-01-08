@@ -24,7 +24,6 @@ add_library(VirtuosoCore STATIC
   virtuoso/util/StableHash.h
   virtuoso/util/DeterminismPolicy.h
   virtuoso/util/StableRng.h
-  virtuoso/control/VirtuosityMatrix.h
   virtuoso/control/PerformanceWeightsV2.h
   virtuoso/control/PerformanceWeightsV2.cpp
   virtuoso/solver/CspSolver.h

@@ -173,28 +173,33 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
         pc.forceClimax = (baseEnergy >= 0.85);
         pc.energy = baseEnergy * in.agentEnergyMult.value("Piano", 1.0);
 
-        // Virtuosity (same policy as runtime, simplified for planning).
+        // Weights v2 negotiation (single source of truth; no legacy virt knobs).
+        static WeightNegotiator::State negState; // deterministic within this process; phrase plan is rebuilt often
+        WeightNegotiator::Inputs wi;
+        wi.global = in.weightsV2;
+        wi.userBusy = userBusy;
+        wi.userSilence = intent.silence;
+        wi.cadence = (look.cadence01 >= 0.55);
+        wi.phraseEnd = look.phraseEndBar;
+        wi.sectionLabel = ""; // section labels handled by the playback engine
+        const auto negotiated = WeightNegotiator::negotiate(wi, negState, /*smoothingAlpha=*/0.25);
+
+        bc.weights = negotiated.bass.w;
+        pc.weights = negotiated.piano.w;
+
+        // Local shaping (still v2 axes, consistent with beat scheduler).
         const double progress01 = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
-        const auto virtAuto = in.virtAuto;
-        if (virtAuto) {
-            bc.harmonicRisk = qBound(0.0, in.virtHarmonicRisk + 0.35 * bc.energy + 0.15 * progress01, 1.0);
-            bc.rhythmicComplexity = qBound(0.0, in.virtRhythmicComplexity + 0.45 * bc.energy + 0.20 * progress01, 1.0);
-            bc.interaction = qBound(0.0, in.virtInteraction + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.10 * bc.energy, 1.0);
-            bc.toneDark = qBound(0.0, in.virtToneDark + 0.15 * (1.0 - bc.energy), 1.0);
-            pc.harmonicRisk = qBound(0.0, in.virtHarmonicRisk + 0.40 * pc.energy + 0.20 * progress01, 1.0);
-            pc.rhythmicComplexity = qBound(0.0, in.virtRhythmicComplexity + 0.55 * pc.energy + 0.15 * progress01, 1.0);
-            pc.interaction = qBound(0.0, in.virtInteraction + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.15 * pc.energy, 1.0);
-            pc.toneDark = qBound(0.0, in.virtToneDark + 0.20 * (1.0 - pc.energy) + 0.10 * (intent.registerHigh ? 1.0 : 0.0), 1.0);
-        } else {
-            bc.harmonicRisk = in.virtHarmonicRisk;
-            bc.rhythmicComplexity = in.virtRhythmicComplexity;
-            bc.interaction = in.virtInteraction;
-            bc.toneDark = in.virtToneDark;
-            pc.harmonicRisk = in.virtHarmonicRisk;
-            pc.rhythmicComplexity = in.virtRhythmicComplexity;
-            pc.interaction = in.virtInteraction;
-            pc.toneDark = in.virtToneDark;
-        }
+        bc.weights.density = qBound(0.0, bc.weights.density + 0.35 * bc.energy + 0.15 * progress01, 1.0);
+        bc.weights.rhythm = qBound(0.0, bc.weights.rhythm + 0.45 * bc.energy + 0.20 * progress01, 1.0);
+        bc.weights.interactivity = qBound(0.0, bc.weights.interactivity + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.10 * bc.energy, 1.0);
+        bc.weights.warmth = qBound(0.0, bc.weights.warmth + 0.15 * (1.0 - bc.energy), 1.0);
+        bc.weights.creativity = qBound(0.0, bc.weights.creativity + 0.20 * bc.energy + 0.10 * progress01, 1.0);
+
+        pc.weights.density = qBound(0.0, pc.weights.density + 0.40 * pc.energy + 0.20 * progress01, 1.0);
+        pc.weights.rhythm = qBound(0.0, pc.weights.rhythm + 0.55 * pc.energy + 0.15 * progress01, 1.0);
+        pc.weights.interactivity = qBound(0.0, pc.weights.interactivity + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.15 * pc.energy, 1.0);
+        pc.weights.warmth = qBound(0.0, pc.weights.warmth + 0.20 * (1.0 - pc.energy) + 0.10 * (intent.registerHigh ? 1.0 : 0.0), 1.0);
+        pc.weights.creativity = qBound(0.0, pc.weights.creativity + 0.30 * pc.energy + 0.15 * progress01, 1.0);
 
         // Drums contexts (dry/wet).
         BrushesBalladDrummer::Context dcBase;
@@ -260,11 +265,11 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
         JazzBalladBassPlanner::Context bcSparse = bc;
         JazzBalladBassPlanner::Context bcBase = bc;
         JazzBalladBassPlanner::Context bcRich = bc;
-        bcSparse.rhythmicComplexity *= 0.55;
+        bcSparse.weights.rhythm *= 0.55;
         bcSparse.approachProbBeat3 *= 0.55;
         bcSparse.skipBeat3ProbStable = qMin(0.98, bcSparse.skipBeat3ProbStable + 0.18);
-        bcSparse.harmonicRisk *= 0.70;
-        bcRich.rhythmicComplexity = qMin(1.0, bcRich.rhythmicComplexity + 0.18);
+        bcSparse.weights.creativity *= 0.70;
+        bcRich.weights.rhythm = qMin(1.0, bcRich.weights.rhythm + 0.18);
         bcRich.approachProbBeat3 = qMin(1.0, bcRich.approachProbBeat3 + 0.20);
         bcRich.skipBeat3ProbStable = qMax(0.0, bcRich.skipBeat3ProbStable - 0.12);
 
@@ -278,7 +283,7 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
         pcRich.skipBeat2ProbStable = qMax(0.0, pcRich.skipBeat2ProbStable - 0.18);
         pcRich.addSecondColorProb = qMin(0.85, pcRich.addSecondColorProb + 0.18);
         pcRich.sparkleProbBeat4 = qMin(0.85, pcRich.sparkleProbBeat4 + 0.18);
-        if (pcRich.harmonicRisk >= 0.55 && !userBusy) pcRich.preferShells = false;
+        if (pcRich.weights.creativity >= 0.55 && !userBusy) pcRich.preferShells = false;
 
         if (userBusy) {
             // Strong space negotiation: both agents avoid richness.
@@ -292,13 +297,21 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
             pcRich.addSecondColorProb = qMin(0.95, pcRich.addSecondColorProb + 0.10);
         }
 
-        const virtuoso::control::VirtuosityMatrix virtAvg{
-            0.5 * (bc.harmonicRisk + pc.harmonicRisk),
-            0.5 * (bc.rhythmicComplexity + pc.rhythmicComplexity),
-            0.5 * (bc.interaction + pc.interaction),
-            0.5 * (bc.toneDark + pc.toneDark),
-        };
-        const auto weights = virtuoso::solver::weightsFromVirtuosity(virtAvg);
+        auto avgW = [&](double a, double b) { return qBound(0.0, 0.5 * (a + b), 1.0); };
+        virtuoso::control::PerformanceWeightsV2 weightsAvg;
+        weightsAvg.density = avgW(bc.weights.density, pc.weights.density);
+        weightsAvg.rhythm = avgW(bc.weights.rhythm, pc.weights.rhythm);
+        weightsAvg.emotion = avgW(bc.weights.emotion, pc.weights.emotion);
+        weightsAvg.intensity = avgW(bc.weights.intensity, pc.weights.intensity);
+        weightsAvg.dynamism = avgW(bc.weights.dynamism, pc.weights.dynamism);
+        weightsAvg.creativity = avgW(bc.weights.creativity, pc.weights.creativity);
+        weightsAvg.tension = avgW(bc.weights.tension, pc.weights.tension);
+        weightsAvg.interactivity = avgW(bc.weights.interactivity, pc.weights.interactivity);
+        weightsAvg.variability = avgW(bc.weights.variability, pc.weights.variability);
+        weightsAvg.warmth = avgW(bc.weights.warmth, pc.weights.warmth);
+        weightsAvg.clamp01();
+
+        const auto weights = virtuoso::solver::weightsFromWeightsV2(weightsAvg);
 
         QVector<BeamNode> nextBeam;
         nextBeam.reserve(beamWidth * 6);
@@ -336,7 +349,7 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
             si.userSilence = intent.silence;
             si.prevBassCenterMidi = node.lastBassCenter;
             si.prevPianoCenterMidi = node.lastPianoCenter;
-            si.virtAvg = virtAvg;
+            si.weightsAvg = weightsAvg;
             si.weights = weights;
             si.lastBassId = node.lastBassId;
             si.lastPianoId = node.lastPianoId;

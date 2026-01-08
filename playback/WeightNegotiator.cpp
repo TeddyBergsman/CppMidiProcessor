@@ -8,22 +8,12 @@ namespace playback {
 static double c01(double x) { return qBound(0.0, x, 1.0); }
 static double lerp(double a, double b, double t) { return a + (b - a) * c01(t); }
 
-static virtuoso::control::VirtuosityMatrix mapToVirt(const virtuoso::control::PerformanceWeightsV2& w) {
-    virtuoso::control::VirtuosityMatrix v;
-    v.harmonicRisk = c01(0.15 + 0.85 * w.creativity);
-    v.rhythmicComplexity = c01(0.15 + 0.85 * w.rhythm * (0.70 + 0.60 * w.density));
-    v.interaction = c01(0.10 + 0.90 * w.interactivity);
-    v.toneDark = c01(w.warmth);
-    return v;
-}
-
 QJsonObject WeightNegotiator::Output::toJson() const {
     QJsonObject o;
     o.insert("global", global.toJson());
     auto pack = [&](const char* k, const AgentWeights& aw) {
         QJsonObject a;
         a.insert("weights", aw.w.toJson());
-        a.insert("virt", aw.virt.toJsonObject());
         o.insert(k, a);
     };
     pack("piano", piano);
@@ -95,7 +85,6 @@ WeightNegotiator::Output WeightNegotiator::negotiate(const Inputs& in, State& st
         aw.w.variability *= (idx == 0 ? aVar[0] : (idx == 1 ? aVar[1] : aVar[2])) * 3.0;
         aw.w.warmth *= (idx == 0 ? aWarm[0] : (idx == 1 ? aWarm[1] : aWarm[2])) * 3.0;
         aw.w.clamp01();
-        aw.virt = mapToVirt(aw.w);
         return aw;
     };
 
@@ -103,13 +92,20 @@ WeightNegotiator::Output WeightNegotiator::negotiate(const Inputs& in, State& st
     AgentWeights bass = buildAgent(1);
     AgentWeights drums = buildAgent(2);
 
-    // Smooth mapped virt weights so allocations don't thrash (EMA).
-    auto smoothVirt = [&](virtuoso::control::VirtuosityMatrix& cur,
-                          const virtuoso::control::VirtuosityMatrix& tgt) {
-        cur.harmonicRisk = lerp(cur.harmonicRisk, tgt.harmonicRisk, alpha);
-        cur.rhythmicComplexity = lerp(cur.rhythmicComplexity, tgt.rhythmicComplexity, alpha);
-        cur.interaction = lerp(cur.interaction, tgt.interaction, alpha);
-        cur.toneDark = lerp(cur.toneDark, tgt.toneDark, alpha);
+    // Smooth weights so allocations don't thrash (EMA).
+    auto smoothW = [&](virtuoso::control::PerformanceWeightsV2& cur,
+                       const virtuoso::control::PerformanceWeightsV2& tgt) {
+        cur.density = lerp(cur.density, tgt.density, alpha);
+        cur.rhythm = lerp(cur.rhythm, tgt.rhythm, alpha);
+        cur.emotion = lerp(cur.emotion, tgt.emotion, alpha);
+        cur.intensity = lerp(cur.intensity, tgt.intensity, alpha);
+        cur.dynamism = lerp(cur.dynamism, tgt.dynamism, alpha);
+        cur.creativity = lerp(cur.creativity, tgt.creativity, alpha);
+        cur.tension = lerp(cur.tension, tgt.tension, alpha);
+        cur.interactivity = lerp(cur.interactivity, tgt.interactivity, alpha);
+        cur.variability = lerp(cur.variability, tgt.variability, alpha);
+        cur.warmth = lerp(cur.warmth, tgt.warmth, alpha);
+        cur.clamp01();
     };
 
     if (!state.initialized) {
@@ -118,12 +114,9 @@ WeightNegotiator::Output WeightNegotiator::negotiate(const Inputs& in, State& st
         state.drums = drums;
         state.initialized = true;
     } else {
-        smoothVirt(state.piano.virt, piano.virt);
-        smoothVirt(state.bass.virt, bass.virt);
-        smoothVirt(state.drums.virt, drums.virt);
-        state.piano.w = piano.w;
-        state.bass.w = bass.w;
-        state.drums.w = drums.w;
+        smoothW(state.piano.w, piano.w);
+        smoothW(state.bass.w, bass.w);
+        smoothW(state.drums.w, drums.w);
     }
 
     out.piano = state.piano;

@@ -1147,13 +1147,9 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
         const int base16 = to16thSub(hit.sub, hit.count);
 
         // --- Comp articulation model (deterministic) ---
-        // Goal: avoid "MIDI robot" by varying attack + release shapes like a real pianist:
-        // - Stab: shorter, clearer, slightly less pedal smear
-        // - Tenuto: default, singy
-        // - HalfPedalWash: longer ring, more pedal-ish wash
-        // - ReStrike: allow re-articulating held notes (esp. arrivals) for touch/definition
-        // - Ghost: very soft, short "breath" comp
-        enum class CompArt { Stab, Tenuto, HalfPedalWash, ReStrike, Ghost };
+        // IMPORTANT (comp-only phase): never emit partial single-note "plink" re-attacks.
+        // So we deliberately avoid articulation types that lead to single-note re-strikes/ghosts.
+        enum class CompArt { Stab, Tenuto, HalfPedalWash };
         const quint32 ha = virtuoso::util::StableHash::fnv1a32(QString("pno_art|%1|%2|%3|%4|%5")
                                                                    .arg(c.chordText)
                                                                    .arg(c.playbackBarIndex)
@@ -1161,19 +1157,13 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
                                                                    .arg(hit.sub)
                                                                    .arg(c.determinismSeed)
                                                                    .toUtf8());
-        const bool isUpbeat = (hit.count >= 2) ? (hit.sub > 0) : false;
-        const bool wantsGhost = hit.rhythmTag.contains("breath") || hit.rhythmTag.contains("jab") || hit.rhythmTag.contains("delay");
         CompArt art = CompArt::Tenuto;
         if (userBusy) art = CompArt::Stab;
-        else if (wantsGhost && int(ha % 100u) < 75) art = CompArt::Ghost;
-        else if ((cadence || arrival) && !isUpbeat && int((ha / 3u) % 100u) < int(llround(35.0 + 40.0 * c.cadence01))) art = CompArt::HalfPedalWash;
-        else if ((arrival || hit.rhythmTag.contains("touch1") || hit.rhythmTag.contains("arrival")) && int((ha / 5u) % 100u) < 45) art = CompArt::ReStrike;
+        else if ((cadence || arrival) && int((ha / 3u) % 100u) < int(llround(35.0 + 40.0 * c.cadence01))) art = CompArt::HalfPedalWash;
         else if (int((ha / 7u) % 100u) < int(llround(20.0 + 35.0 * qBound(0.0, c.rhythmicComplexity, 1.0)))) art = CompArt::Stab;
 
         const bool isPedalWash = !userBusy && (cadence || arrival || (c.userSilence && c.energy <= 0.55) || (art == CompArt::HalfPedalWash));
-        const bool forceRestrike = (art == CompArt::ReStrike);
-        const int velArtDelta = (art == CompArt::Ghost) ? -10
-                              : (art == CompArt::Stab) ? +1
+        const int velArtDelta = (art == CompArt::Stab) ? +1
                               : (art == CompArt::HalfPedalWash) ? -2
                               : 0;
 
@@ -1183,14 +1173,11 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
         const int hitLate128Raw = (userBusy ? 0
                                 : (arrival ? 0
                                 : (art == CompArt::Stab ? 0
-                                : (art == CompArt::Ghost ? 1
-                                : (cadence ? 1 : 2)))));
+                                : (cadence ? 1 : 2))));
         const int hitLate128 = qBound(0, int(llround(double(hitLate128Raw) * tempoScale)), 2);
 
-        // LH independence: occasionally re-articulate just the LH anchor under a RH wash
-        // (feels like the left hand "breathes" while RH stays connected).
-        const bool allowLhInd = !userBusy && isPedalWash && !arrival && (art == CompArt::HalfPedalWash || art == CompArt::Tenuto);
-        const bool doLhOnly = allowLhInd && (int((ha / 17u) % 100u) < int(llround(10.0 + 22.0 * qBound(0.0, c.cadence01, 1.0) + (c.userSilence ? 12.0 : 0.0))));
+        // Comp-only: disable LH-only re-articulation (a major source of single-note NOTE_ONs).
+        const bool doLhOnly = false;
 
         // If harmony changes next bar, avoid letting this hit ring into the new chord.
         // We clamp noteOff earlier than the barline by a small safety margin so humanization doesn't smear.
@@ -1225,17 +1212,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
             const bool isTop = (m == topNote);
             const bool isRh = (m > c.lhHi); // heuristic split at LH range ceiling
 
-            // Pedal-aware re-strike avoidance (articulation-aware):
-            // if we're in a "wash" state and the note was already held from the previous voicing,
-            // avoid retriggering it on non-arrival hits (lets the harmony ring like pedal).
-            if (isPedalWash && !forceRestrike && !arrival && !prevVoicing.isEmpty() && prevVoicing.contains(m)) {
-                if (doLhOnly) {
-                    // In LH-only mode, skip re-triggering everything except LH anchor.
-                    if (!isLow) continue;
-                }
-                // Allow top voice to be re-articulated occasionally for singing line.
-                if (!isTop && (isLow || !isRh || hit.dur >= virtuoso::groove::Rational(1, 4))) continue;
-            }
+            // Comp-only: do not emit partial re-attacks. Always treat a hit as a chord onset.
 
             int vel = baseVel + hit.velDelta + velArtDelta;
             // Touch model v2 (Bill-ish): top voice sings, inner voices disappear, LH is a soft bed.
@@ -1245,10 +1222,6 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
             else vel -= 8;                             // inner voices very soft
             if (isRh) vel += 1;
             if (c.toneDark >= 0.65) vel -= 2;
-            if (art == CompArt::Ghost) {
-                if (isTop) vel -= 6;
-                else vel -= 10;
-            }
             // If arpeggiating upward, slightly crescendo; downward, slightly decrescendo.
             if (doArp) {
                 const int order = orderForIdx(idx);
@@ -1381,15 +1354,10 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
                 if (isLow && !isRh) d = qMin(d, virtuoso::groove::Rational(1, 4));
                 if (isRh) d = qMin(d, virtuoso::groove::Rational(1, 8));
                 if (isTop && isRh && (cadence || arrival)) d = qMax(d, virtuoso::groove::Rational(1, 4));
-            } else if (art == CompArt::Ghost) {
-                d = qMin(d, virtuoso::groove::Rational(1, 8));
             } else if (art == CompArt::HalfPedalWash) {
                 if (isRh && !isTop) d = qMax(d, virtuoso::groove::Rational(1, 4));
                 if (isTop && isRh) d = qMax(d, virtuoso::groove::Rational(3, 8));
                 if (cadence) d = qMax(d, barDur());
-            } else if (art == CompArt::ReStrike) {
-                // Give definition: shorten slightly so the re-attack reads.
-                if (isRh && !isTop) d = qMin(d, virtuoso::groove::Rational(3, 16));
             }
 
             // Final duration clamp to avoid ringing into the next chord when harmony changes.
@@ -1404,8 +1372,6 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
             QString artTag = "tenuto";
             if (art == CompArt::Stab) artTag = "stab";
             else if (art == CompArt::HalfPedalWash) artTag = "half_pedal";
-            else if (art == CompArt::ReStrike) artTag = "restrike";
-            else if (art == CompArt::Ghost) artTag = "ghost";
             const QString gid = gch.id.trimmed();
             const QString gtag = gid.isEmpty() ? QString() : (QString("|gesture:") + gid);
             n.logic_tag = (hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag)) + "|art=" + artTag + gtag + cspTag;
@@ -2162,7 +2128,9 @@ QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRh
             hit.count = qMax(1, h.count);
             hit.dur = virtuoso::groove::Rational(qMax(1, h.dur_num), qMax(1, h.dur_den));
             hit.velDelta = h.vel_delta;
-            hit.density = h.density.trimmed().isEmpty() ? QString("full") : h.density.trimmed();
+            // Comp-only: never allow "guide" density that can read as sparse plinks.
+            // Keep rhythm libraries fully active, but make every hit a chord.
+            hit.density = QString("full");
             hit.rhythmTag = tag;
             out.push_back(hit);
         };

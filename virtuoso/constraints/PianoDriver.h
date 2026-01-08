@@ -6,6 +6,7 @@ namespace virtuoso::constraints {
 
 struct PianoConstraints {
     int maxFingers = 10;
+    int maxFingersPerHand = 5;
     // A 10th is 16 semitones (e.g., C to E an octave higher).
     int maxSpanSemitones = 16;
 
@@ -13,6 +14,11 @@ struct PianoConstraints {
     // When sustain is held, we allow more total sounding notes but penalize excessive wash.
     int maxSustainedNotesSoft = 18;
     int maxSustainedNotesHard = 32;
+
+    // Penalize re-striking notes while pedal is down/half (smear risk).
+    // 0 disables.
+    int maxRestrikesUnderSustainSoft = 3;
+    int maxRestrikesUnderSustainHard = 7;
 };
 
 class PianoDriver final : public IInstrumentDriver {

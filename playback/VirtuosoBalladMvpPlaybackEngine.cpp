@@ -111,8 +111,8 @@ VirtuosoBalladMvpPlaybackEngine::VirtuosoBalladMvpPlaybackEngine(QObject* parent
         m_vocabError = err;
         // Bass planner consumes VocabularyRegistry directly.
         m_bassPlanner.setVocabulary(m_vocabLoaded ? &m_vocab : nullptr);
-        // Piano planner is currently procedural; we keep its vocab interface as deprecated/no-op.
-        m_pianoPlanner.setVocabulary(nullptr);
+        // Piano planner consumes VocabularyRegistry for comping rhythm grammar.
+        m_pianoPlanner.setVocabulary(m_vocabLoaded ? &m_vocab : nullptr);
     }
 
     // Ontology is the canonical musical truth for voicing choices.

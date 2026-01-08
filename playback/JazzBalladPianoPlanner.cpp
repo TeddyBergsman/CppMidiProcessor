@@ -3,6 +3,7 @@
 #include "virtuoso/util/StableHash.h"
 #include "virtuoso/solver/CspSolver.h"
 #include "virtuoso/memory/MotifTransform.h"
+#include "virtuoso/piano/PianoPerformanceModel.h"
 
 #include <QtGlobal>
 #include <algorithm>
@@ -45,6 +46,12 @@ void JazzBalladPianoPlanner::reset() {
     m_lastUpperPcs.clear();
     m_lastMotifSourceAgent.clear();
     m_lastMotifTransform.clear();
+    m_compPhraseId.clear();
+    m_compBeatIdsByBeat.clear();
+    m_topLinePhraseStartBar = -1;
+    m_topLinePhraseId.clear();
+    m_topLinePhraseHits.clear();
+    m_pedalStrategyId.clear();
 }
 
 JazzBalladPianoPlanner::PlannerState JazzBalladPianoPlanner::snapshotState() const {
@@ -78,6 +85,11 @@ JazzBalladPianoPlanner::PlannerState JazzBalladPianoPlanner::snapshotState() con
     s.anchorRhPcs = m_anchorRhPcs;
     s.lastArpBar = m_lastArpBar;
     s.lastArpStyle = m_lastArpStyle;
+    s.compPhraseId = m_compPhraseId;
+    s.compBeatIdsByBeat = m_compBeatIdsByBeat;
+    s.topLinePhraseStartBar = m_topLinePhraseStartBar;
+    s.topLinePhraseId = m_topLinePhraseId;
+    s.pedalStrategyId = m_pedalStrategyId;
     return s;
 }
 
@@ -111,6 +123,11 @@ void JazzBalladPianoPlanner::restoreState(const PlannerState& s) {
     m_anchorRhPcs = s.anchorRhPcs;
     m_lastArpBar = s.lastArpBar;
     m_lastArpStyle = s.lastArpStyle;
+    m_compPhraseId = s.compPhraseId;
+    m_compBeatIdsByBeat = s.compBeatIdsByBeat;
+    m_topLinePhraseStartBar = s.topLinePhraseStartBar;
+    m_topLinePhraseId = s.topLinePhraseId;
+    m_pedalStrategyId = s.pedalStrategyId;
 }
 
 int JazzBalladPianoPlanner::thirdIntervalForQuality(music::ChordQuality q) {
@@ -311,28 +328,63 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
     const bool considerPedalNow = (c.beatInBar == 0) || phraseLandmark || chordBoundarySoon;
     if (considerPedalNow) {
         const int cc64Now = m_state.ints.value("cc64", 0);
-        const bool sustainNow = (cc64Now >= 64);
+        const bool sustainNowDown = (cc64Now >= 96);
+        const bool sustainNowHalf = (!sustainNowDown && cc64Now >= 32);
+        const bool sustainNowAny = sustainNowDown || sustainNowHalf;
 
         // Heuristic "want sustain": ballads generally pedal unless the user is busy or harmony is about to change.
         // IMPORTANT: bias toward using sustain; otherwise "keep pedal up" dominates every time.
         const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+        virtuoso::vocab::VocabularyRegistry::PianoPedalChoice pedalChoice;
+        if (m_vocab && m_vocab->isLoaded()) {
+            virtuoso::vocab::VocabularyRegistry::PianoPedalQuery pq;
+            pq.ts = ts;
+            pq.playbackBarIndex = c.playbackBarIndex;
+            pq.beatInBar = c.beatInBar;
+            pq.chordText = c.chordText;
+            pq.chordFunction = c.chordFunction;
+            pq.chordIsNew = c.chordIsNew;
+            pq.userBusy = userBusy;
+            pq.userSilence = c.userSilence;
+            pq.nextChanges = c.nextChanges;
+            pq.beatsUntilChordChange = c.beatsUntilChordChange;
+            pq.energy = qBound(0.0, c.energy, 1.0);
+            pq.toneDark = qBound(0.0, c.toneDark, 1.0);
+            pq.determinismSeed = c.determinismSeed;
+            pedalChoice = m_vocab->choosePianoPedal(pq);
+            m_pedalStrategyId = pedalChoice.id;
+        }
         const double wantDownScore =
             (0.90 * qBound(0.0, c.toneDark, 1.0)) +
             (0.55 * (c.userSilence ? 1.0 : 0.0)) +
             (0.35 * (1.0 - qBound(0.0, c.energy, 1.0))) -
             (1.10 * (userBusy ? 1.0 : 0.0)) -
             (0.75 * (chordBoundarySoon ? 1.0 : 0.0));
-        const bool preferDown = (wantDownScore >= 0.15) && !chordBoundarySoon;
+        const bool wantDownHeuristic = (wantDownScore >= 0.35) && !chordBoundarySoon;
+        const QString pedalDefault = pedalChoice.defaultState.trimmed().toLower();
+        const bool preferDown = (!pedalDefault.isEmpty() ? (pedalDefault == "down") : wantDownHeuristic);
+        const bool preferHalf = (!pedalDefault.isEmpty() ? (pedalDefault == "half") : (!preferDown) && !chordBoundarySoon && !userBusy);
+        const bool preferUp = (!pedalDefault.isEmpty() ? (pedalDefault == "up") : (chordBoundarySoon || userBusy));
 
-        struct PedalCand { QString id; int cc64 = 0; bool clearHeld = false; double actionCost = 0.0; };
+        struct PedalCand { QString id; int cc64 = 0; bool clearHeld = false; bool repedal = false; double actionCost = 0.0; };
         QVector<PedalCand> cands;
-        cands.reserve(3);
+        cands.reserve(5);
         // Keep current pedal state.
-        cands.push_back({"keep", cc64Now, false, 0.0});
+        cands.push_back({"keep", cc64Now, false, false, 0.0});
         // Lift: clear sustain/held notes (good at chord boundaries).
-        cands.push_back({"lift", 0, true, chordBoundarySoon ? 0.0 : 0.10});
-        // Press: only meaningful if not already down.
-        if (!sustainNow) cands.push_back({"down", 127, false, preferDown ? -0.10 : 0.10});
+        cands.push_back({"lift", 0, true, false, chordBoundarySoon ? 0.0 : 0.10});
+        // Half pedal: ballad default when not busy (clarity + warmth).
+        if (!sustainNowHalf && !sustainNowDown) cands.push_back({"half", 64, false, false, preferHalf ? -0.10 : 0.05});
+        // Down pedal: only meaningful if not already down.
+        if (!sustainNowDown) cands.push_back({"down", 127, false, false, preferDown ? -0.12 : 0.10});
+        // Repedal: when a new chord arrives and we are already sustaining, clear briefly then re-engage.
+        if (sustainNowAny && (phraseLandmark || c.chordIsNew) && (c.beatInBar == 0)) {
+            const int rep = int((h / 13u) % 100u);
+            const int repProb = pedalChoice.id.isEmpty() ? 55 : qBound(0, pedalChoice.repedalProbPct, 100);
+            if ((pedalChoice.id.isEmpty() || pedalChoice.repedalOnNewChord) && rep < repProb) {
+                cands.push_back({"repedal", preferDown ? 127 : (preferHalf ? 64 : 64), true, true, -0.05});
+            }
+        }
 
         // Evaluate candidates by simulating a small chordal gesture.
         // IMPORTANT: keep span <= maxSpanSemitones, otherwise all candidates become infeasible and pedal never engages.
@@ -358,10 +410,11 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
 
             double score = fr.cost + cands[i].actionCost;
             // Bias toward the musical intent (down when desired, lift near chord boundaries).
-            if (preferDown && cands[i].cc64 < 64) score += 1.00;
-            if (chordBoundarySoon && cands[i].cc64 >= 64) score += 1.10;
+            if (preferDown && cands[i].cc64 < 96) score += 0.95;
+            if (preferHalf && (cands[i].cc64 <= 1 || cands[i].cc64 >= 96)) score += 0.65;
+            if (preferUp && cands[i].cc64 >= 32) score += 1.10;
             // If we're currently up and we want down, discourage "keep" strongly.
-            if (preferDown && !sustainNow && cands[i].id == "keep") score += 0.85;
+            if (preferDown && !sustainNowAny && cands[i].id == "keep") score += 0.85;
             // Tiny deterministic tie-break.
             score += (double(virtuoso::util::StableHash::fnv1a32(cands[i].id.toUtf8())) / double(std::numeric_limits<uint>::max())) * 1e-6;
 
@@ -369,20 +422,61 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
         }
 
         const PedalCand chosen = cands[bestIdx];
-        if (chosen.cc64 != cc64Now) {
-            // Emit pedal action slightly ahead of the chord (16th before the beat when possible),
-            // to avoid blurring the new harmony.
-            const int sub = (c.beatInBar == 0) ? 0 : 0;
-            const int count = 4;
+        const bool changed = (chosen.cc64 != cc64Now);
+        if (chosen.repedal) {
+            // Repedal within the beat: lift at onset, then re-engage one 16th later.
+            {
+                CcIntent ci;
+                ci.cc = 64;
+                ci.value = 0;
+                ci.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 4, ts);
+                ci.structural = true;
+                const QString pid = m_pedalStrategyId.trimmed();
+                ci.logic_tag = pid.isEmpty() ? "Piano:pedal_repedal_lift" : (QString("Piano:pedal_repedal_lift|pedal:") + pid);
+                plan.ccs.push_back(ci);
+            }
+            {
+                CcIntent ci;
+                ci.cc = 64;
+                ci.value = chosen.cc64;
+                ci.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 1, 4, ts);
+                ci.structural = true;
+                const QString pid = m_pedalStrategyId.trimmed();
+                const QString base = QString("Piano:pedal_repedal_%1").arg(chosen.cc64 >= 96 ? "down" : "half");
+                ci.logic_tag = pid.isEmpty() ? base : (base + "|pedal:" + pid);
+                plan.ccs.push_back(ci);
+            }
+            m_state.ints.insert("cc64", chosen.cc64);
+            m_state.heldNotes.clear();
+        } else if (changed) {
+            // Emit pedal action grid-aligned. Engine schedules CC with a tiny lead.
             CcIntent ci;
             ci.cc = 64;
             ci.value = chosen.cc64;
-            ci.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, sub, count, ts);
+            ci.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, 0, 4, ts);
             ci.structural = (c.beatInBar == 0) || phraseLandmark;
-            ci.logic_tag = QString("Piano:pedal_%1").arg(chosen.id);
+            const QString pid = m_pedalStrategyId.trimmed();
+            const QString base = QString("Piano:pedal_%1").arg(chosen.id);
+            ci.logic_tag = pid.isEmpty() ? base : (base + "|pedal:" + pid);
             plan.ccs.push_back(ci);
             m_state.ints.insert("cc64", chosen.cc64);
             if (chosen.clearHeld) m_state.heldNotes.clear();
+        }
+
+        // If a chord boundary is imminent, lift late in the beat to avoid blurring the next harmony.
+        const bool doClear = (pedalChoice.id.isEmpty() ? true : pedalChoice.clearBeforeChange);
+        const int clearSub = (pedalChoice.id.isEmpty() ? 3 : qMax(0, pedalChoice.clearSub));
+        const int clearCount = (pedalChoice.id.isEmpty() ? 4 : qMax(1, pedalChoice.clearCount));
+        if (doClear && chordBoundarySoon && (c.beatsUntilChordChange == 1) && (m_state.ints.value("cc64", 0) >= 32)) {
+            CcIntent ci;
+            ci.cc = 64;
+            ci.value = 0;
+            ci.startPos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, c.beatInBar, clearSub, clearCount, ts);
+            ci.structural = true;
+            const QString pid = m_pedalStrategyId.trimmed();
+            ci.logic_tag = pid.isEmpty() ? "Piano:pedal_clear_for_change" : (QString("Piano:pedal_clear_for_change|pedal:") + pid);
+            plan.ccs.push_back(ci);
+            m_state.ints.insert("cc64", 0);
         }
     }
 
@@ -919,6 +1013,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
 
     // Save for voice-leading.
     m_lastVoicing = midi;
+    if (!m_lastVoicing.isEmpty()) m_lastTopMidi = m_lastVoicing.last();
 
     // voicingType chosen by solver (above)
     const int baseVel0 = climaxDense ? (c.chordIsNew ? 64 : 58) : (c.chordIsNew ? 50 : 44);
@@ -1003,6 +1098,9 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
         return g;
     };
 
+    // Track selected gesture ID for audit/debug (per beat).
+    QString gestureIdUsed;
+
     auto renderHit = [&](const CompHit& hit) {
         QVector<int> notes = (hit.density.trimmed().toLower() == "guide") ? guideSubset(midi) : midi;
         if (notes.isEmpty()) return;
@@ -1028,38 +1126,51 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
         // - Increase pattern variety
         // - Add deterministic anti-repeat across bars
         const double rc = qBound(0.0, c.rhythmicComplexity, 1.0);
-        const int pRoll = qBound(0, int(llround(4.0 + 6.0 * c.energy + 14.0 * rc + 6.0 * progress01 + (cadence ? 6.0 : 0.0))), 45);
-        // At higher BPM, reduce rolls (they read like bad time if the spread is too audible).
-        const double rollTempoScale = qBound(0.35, 90.0 / double(qMax(1, c.bpm)), 1.0);
-        const int pRollAdj = qBound(0, int(llround(double(pRoll) * rollTempoScale)), 100);
-        const bool doRoll = !userBusy && ((c.energy >= 0.18) || (rc >= 0.32) || cadence) && (int(hr % 100u) < pRollAdj);
-        const int pBigRoll = qBound(0, int(llround((1.0 + 2.0 * c.energy + 5.0 * rc + 2.0 * progress01 + (cadence ? 3.0 : 0.0)) * rollTempoScale)), 12);
-        const bool bigRoll = doRoll && (int((hr / 97u) % 100u) < pBigRoll);
+        // Gesture selection (data-driven, auditable).
+        virtuoso::vocab::VocabularyRegistry::PianoGestureChoice gch;
+        if (m_vocab && m_vocab->isLoaded()) {
+            virtuoso::vocab::VocabularyRegistry::PianoGestureQuery gq;
+            gq.ts = ts;
+            gq.bpm = c.bpm;
+            gq.playbackBarIndex = c.playbackBarIndex;
+            gq.beatInBar = hit.beatInBar;
+            gq.chordText = c.chordText;
+            gq.chordFunction = c.chordFunction;
+            gq.chordIsNew = c.chordIsNew;
+            gq.userSilence = c.userSilence;
+            gq.cadence = cadence || arrival;
+            gq.energy = qBound(0.0, c.energy, 1.0);
+            gq.rhythmicComplexity = rc;
+            gq.determinismSeed = c.determinismSeed;
+            gq.noteCount = notes.size();
+            gch = m_vocab->choosePianoGesture(gq);
+        }
+        if (!gch.id.trimmed().isEmpty()) gestureIdUsed = gch.id.trimmed();
+        const QString gKind = gch.kind.trimmed().toLower();
+        const QString gStyle = gch.style.trimmed().toLower();
+        const int gSpreadMs = qMax(0, gch.spreadMs);
 
-        // Arpeggiation should be rarer than rolling, and more likely only at cadences/arrivals.
-        const int pArp = qBound(0, int(llround((cadence ? 18.0 : 8.0) + 16.0 * rc + (bigRoll ? 14.0 : 0.0))), 55);
-        const bool doArp = doRoll && (notes.size() >= 3) && (hit.dur >= virtuoso::groove::Rational(1, 8)) && (int((hr / 13u) % 100u) < pArp);
+        const bool doRoll = !userBusy && (gKind == "roll" || gKind == "arp");
+        const bool doArp = doRoll && (gKind == "arp") && (notes.size() >= 3) && (hit.dur >= virtuoso::groove::Rational(1, 8));
+        const bool bigRoll = doRoll && (gSpreadMs >= 44);
 
-        // Style selection (deterministic), with anti-repeat per bar.
-        // 0=none/subtle roll, 1=up, 2=down, 3=inside-out, 4=outside-in, 5=skip, 6=triplet (cadence only)
+        // Style selection:
+        // 0=none/subtle roll, 1=up, 2=down, 3=inside-out, 4=outside-in, 5=skip, 6=triplet
         int style = 0;
         if (doArp) {
-            const quint32 hs = virtuoso::util::StableHash::fnv1a32(QString("arpStyle|%1|%2|%3|%4")
-                                                                       .arg(c.chordText)
-                                                                       .arg(c.playbackBarIndex)
-                                                                       .arg(hit.beatInBar)
-                                                                       .arg(c.determinismSeed)
-                                                                       .toUtf8());
-            const int wantTrip = (cadence && (int((hs / 11u) % 100u) < 18)) ? 1 : 0;
-            const int pool = wantTrip ? 6 : 5;
-            style = 1 + int((hs % uint(pool)) % uint(pool)); // 1..pool
-            if (m_lastArpBar == c.playbackBarIndex && style == m_lastArpStyle) {
-                style = 1 + ((style) % pool); // rotate
-            }
+            if (gStyle == "up") style = 1;
+            else if (gStyle == "down") style = 2;
+            else if (gStyle == "inside_out") style = 3;
+            else if (gStyle == "outside_in") style = 4;
+            else if (gStyle == "skip") style = 5;
+            else if (gStyle == "triplet") style = 6;
+            else style = 3;
+            // Anti-repeat per bar.
+            if (m_lastArpBar == c.playbackBarIndex && style == m_lastArpStyle) style = qBound(1, (style % 6) + 1, 6);
             m_lastArpBar = c.playbackBarIndex;
             m_lastArpStyle = style;
         } else if (doRoll) {
-            style = 0; // subtle roll only
+            style = 0;
         }
 
         // Order helper (used for both velocity shaping and timing spread).
@@ -1217,17 +1328,32 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
 
             // Intra-chord roll/arp: spread notes using a small pattern library.
             if (doRoll) {
-                count = 4;
                 int step = 0;
                 if (!doArp) {
-                    step = isLow ? -1 : (isTop ? +1 : 0); // subtle roll
+                    // Subtle roll: tiny early/late bias for LH/top.
+                    count = 4;
+                    step = isLow ? -1 : (isTop ? +1 : 0);
                     sub = qBound(0, base16 + step, 3);
                 } else {
                     const int order = orderForIdx(idx);
 
-                    const int maxStep = bigRoll ? 3 : 2;
-                    step = qBound(0, qMin(maxStep, order), 3);
-                    sub = qBound(0, base16 + step, 3);
+                    // If a gesture spread is provided, use a 128th grid so the spread is explicitly auditable.
+                    if (gSpreadMs > 0 && c.bpm > 0) {
+                        const double quarterMs = 60000.0 / double(qMax(1, c.bpm));
+                        const double beatMs = quarterMs * (4.0 / double(qMax(1, ts.den)));
+                        const double tickMs = beatMs / 32.0; // count=32 => 128th-note grid in 4/4
+                        const int spreadTicks = qBound(0, int(llround(double(gSpreadMs) / qMax(1.0, tickMs))), 24);
+                        const int denom = qMax(1, notes.size() - 1);
+                        const int per = qMax(0, spreadTicks / denom);
+                        const int base32 = base16 * 8;
+                        count = 32;
+                        sub = qBound(0, base32 + qMin(31 - base32, order * per), 31);
+                    } else {
+                        count = 4;
+                        const int maxStep = bigRoll ? 3 : 2;
+                        step = qBound(0, qMin(maxStep, order), 3);
+                        sub = qBound(0, base16 + step, 3);
+                    }
 
                     // Triplet option (cadence only): use count=3 and spread within the beat.
                     if (style == 6 && cadence) {
@@ -1324,13 +1450,64 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
             else if (art == CompArt::HalfPedalWash) artTag = "half_pedal";
             else if (art == CompArt::ReStrike) artTag = "restrike";
             else if (art == CompArt::Ghost) artTag = "ghost";
-            n.logic_tag = (hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag)) + "|art=" + artTag + cspTag;
+            const QString gid = gch.id.trimmed();
+            const QString gtag = gid.isEmpty() ? QString() : (QString("|gesture:") + gid);
+            n.logic_tag = (hit.rhythmTag.isEmpty() ? "ballad_comp" : ("ballad_comp|" + hit.rhythmTag)) + "|art=" + artTag + gtag + cspTag;
             n.target_note = isTop ? "Comp (top voice)" : (isLow ? "Comp (LH anchor)" : "Comp (inner)");
         out.push_back(n);
     }
     };
 
     for (const auto& hit : hitsThisBeat) renderHit(hit);
+
+    // --- Always-on top-line voice (phrase-aware) ---
+    // We now render the planned RH guide/motif line as actual notes (not only as voicing targets).
+    // This is kept subtle and leaves space when the user is busy.
+    {
+        const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+        const bool allow = !userBusy && !m_barTopHits.isEmpty() && (c.userSilence || c.interaction >= 0.20 || c.chordIsNew || c.cadence01 >= 0.35);
+        if (allow) {
+            const int topLo = qBound(0, c.rhLo + 6, 127);
+            const int topHi = qBound(0, c.sparkleHi > c.rhHi ? c.sparkleHi : c.rhHi, 127);
+            int around = (m_lastTopMidi >= 0) ? m_lastTopMidi : qBound(0, (c.rhLo + c.rhHi) / 2 + 10, 127);
+            for (const auto& th : m_barTopHits) {
+                if (th.beatInBar != c.beatInBar) continue;
+                if (th.pc < 0) continue;
+
+                const auto pos = GrooveGrid::fromBarBeatTuplet(c.playbackBarIndex, th.beatInBar, th.sub, th.count, ts);
+                int m = nearestMidiForPc(th.pc, around, topLo, topHi);
+                if (m < 0) continue;
+
+                // Avoid exact unison with comp notes at the same grid position.
+                bool collides = false;
+                for (const auto& n : out) {
+                    if (n.startPos.barIndex != pos.barIndex) continue;
+                    if (!(n.startPos.withinBarWhole == pos.withinBarWhole)) continue;
+                    if (n.note == m) { collides = true; break; }
+                }
+                if (collides && (m + 12) <= topHi) m += 12;
+
+                virtuoso::engine::AgentIntentNote tn;
+                tn.agent = "Piano";
+                tn.channel = midiChannel;
+                tn.note = clampMidi(m);
+                tn.baseVelocity = qBound(1, baseVel + th.velDelta - (th.resolve ? 0 : 10), 127);
+                tn.startPos = pos;
+                tn.durationWhole = th.dur;
+                tn.structural = th.resolve || c.chordIsNew;
+                tn.chord_context = c.chordText;
+                tn.voicing_type = "Piano TopLine";
+                const QString tlid = m_topLinePhraseId.trimmed();
+                tn.logic_tag = tlid.isEmpty()
+                    ? QString("piano_topline|%1").arg(th.tag)
+                    : QString("piano_topline|topline_phrase:%1|hit=%2").arg(tlid, th.tag);
+                tn.target_note = th.resolve ? "TopLine (resolve)" : "TopLine";
+                out.push_back(tn);
+                around = tn.note;
+                m_lastTopMidi = tn.note;
+            }
+        }
+    }
 
     // Reintroduce "alive" RH movement the right way: as a transformation of the current comp voicing
     // (same pianist, same hands), not as a separate pitch generator.
@@ -1474,7 +1651,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
     // Track sustained notes approximately for pedaling wash constraints.
     // This is intentionally conservative (adds notes when sustain is down; clears on pedal-up decisions).
     const int cc64After = m_state.ints.value("cc64", 0);
-    const bool sustainAfter = (cc64After >= 64);
+    const bool sustainAfter = (cc64After >= 32);
     if (!out.isEmpty()) {
         if (sustainAfter) {
             for (const auto& n : out) {
@@ -1489,6 +1666,27 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(con
                 m_state.heldNotes.push_back(n.note);
             }
         }
+    }
+
+    // Populate performance-plan view (notes+pedal+gesture profiles) for candidate_pool/UI.
+    {
+        QVector<virtuoso::piano::PianoPerformanceModel::LegacyCc64Intent> cc64;
+        cc64.reserve(plan.ccs.size());
+        for (const auto& ci : plan.ccs) {
+            if (ci.cc != 64) continue;
+            virtuoso::piano::PianoPerformanceModel::LegacyCc64Intent e;
+            e.value = ci.value;
+            e.startPos = ci.startPos;
+            e.structural = ci.structural;
+            e.logicTag = ci.logic_tag;
+            cc64.push_back(e);
+        }
+        plan.performance = virtuoso::piano::PianoPerformanceModel::inferFromLegacy(plan.notes, cc64);
+        plan.performance.compPhraseId = m_compPhraseId;
+        if (c.beatInBar >= 0 && c.beatInBar < m_compBeatIdsByBeat.size()) plan.performance.compBeatId = m_compBeatIdsByBeat[c.beatInBar];
+        plan.performance.toplinePhraseId = m_topLinePhraseId;
+            plan.performance.gestureId = gestureIdUsed;
+        plan.performance.pedalId = m_pedalStrategyId;
     }
 
     return plan;
@@ -1792,7 +1990,7 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::realizeTopTempla
     return out;
 }
 
-QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine(const Context& c) const {
+QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine(const Context& c) {
     const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
     if (userBusy) return {};
 
@@ -1800,6 +1998,139 @@ QVector<JazzBalladPianoPlanner::TopHit> JazzBalladPianoPlanner::chooseBarTopLine
     const double e = qBound(0.0, c.energy, 1.0);
     const double rc = qBound(0.0, c.rhythmicComplexity, 1.0);
     const bool cadence = (c.cadence01 >= 0.35) || c.phraseEndBar || c.chordIsNew;
+
+    // --- Data-driven top-line library (preferred) ---
+    // If vocabulary is available, select a phrase-level top-line pattern by ID and realize it to pitch-classes.
+    if (m_vocab && m_vocab->isLoaded() && !m_vocab->pianoTopLinePatterns().isEmpty()) {
+        const int phraseBars = qMax(1, c.phraseBars);
+        const int phraseStart = (bar / phraseBars) * phraseBars;
+        if (phraseStart != m_topLinePhraseStartBar) {
+            m_topLinePhraseStartBar = phraseStart;
+            virtuoso::vocab::VocabularyRegistry::PianoTopLineQuery tq;
+            tq.ts = {4, 4};
+            tq.playbackBarIndex = bar;
+            tq.beatInBar = c.beatInBar;
+            tq.chordText = c.chordText;
+            tq.chordFunction = c.chordFunction;
+            tq.chordIsNew = c.chordIsNew;
+            tq.userSilence = c.userSilence;
+            tq.energy = e;
+            tq.rhythmicComplexity = rc;
+            tq.interaction = qBound(0.0, c.interaction, 1.0);
+            tq.determinismSeed = c.determinismSeed;
+            tq.phraseBars = phraseBars;
+            const auto ch = m_vocab->choosePianoTopLine(tq);
+            m_topLinePhraseId = ch.id;
+            m_topLinePhraseHits = ch.hits;
+        }
+
+        // Gate top-line density: if user isn't silent and energy+interaction are very low, keep it minimal.
+        const bool allow = c.userSilence || c.chordIsNew || c.nextChanges || cadence || (rc >= 0.40) || (c.interaction >= 0.25);
+        if (!allow && e < 0.12) return {};
+
+        // Build a chord-safe pool, then (if we have a key) keep it diatonic for non-spicy chords.
+        const int pc1 = (c.chord.rootPc >= 0) ? (c.chord.rootPc % 12) : 0;
+        const int pc3 = pcForDegree(c.chord, 3);
+        const int pc5 = pcForDegree(c.chord, 5);
+        const int pc7 = pcForDegree(c.chord, 7);
+        const int pc9 = pcForDegree(c.chord, 9);
+        const int pc11 = pcForDegree(c.chord, 11);
+        const int pc13 = pcForDegree(c.chord, 13);
+
+        QSet<int> chordSafe;
+        chordSafe.insert((pc1 + 12) % 12);
+        if (pc3 >= 0) chordSafe.insert((pc3 + 12) % 12);
+        if (pc5 >= 0) chordSafe.insert((pc5 + 12) % 12);
+        if (pc7 >= 0) chordSafe.insert((pc7 + 12) % 12);
+        if (pc9 >= 0) chordSafe.insert((pc9 + 12) % 12);
+        if (pc11 >= 0) chordSafe.insert((pc11 + 12) % 12);
+        if (pc13 >= 0) chordSafe.insert((pc13 + 12) % 12);
+
+        QSet<int> tonalSafe = chordSafe;
+        if (c.hasKey) {
+            tonalSafe.clear();
+            const int t = (c.keyTonicPc % 12 + 12) % 12;
+            const int stepsIonian[7] = {0,2,4,5,7,9,11};
+            const int stepsAeolian[7] = {0,2,3,5,7,8,10};
+            const int* steps = (c.keyMode == virtuoso::theory::KeyMode::Minor) ? stepsAeolian : stepsIonian;
+            QSet<int> keySafe;
+            for (int i = 0; i < 7; ++i) keySafe.insert((t + steps[i]) % 12);
+            for (int pc : chordSafe) {
+                if (keySafe.contains(pc)) tonalSafe.insert(pc);
+            }
+            if (tonalSafe.isEmpty()) tonalSafe = chordSafe;
+        }
+
+        auto pickDegreePc = [&](int degree, bool resolve) -> int {
+            int pc = -1;
+            switch (degree) {
+                case 1: pc = pc1; break;
+                case 3: pc = pc3; break;
+                case 5: pc = pc5; break;
+                case 7: pc = pc7; break;
+                case 9: pc = pc9; break;
+                case 11: pc = pc11; break;
+                case 13: pc = pc13; break;
+                default: pc = pc9; break;
+            }
+            if (pc < 0) pc = (pc7 >= 0 ? pc7 : pc3);
+            const int p = (pc % 12 + 12) % 12;
+            if (resolve) {
+                // Prefer guides on resolves.
+                const int p7 = (pc7 % 12 + 12) % 12;
+                const int p3 = (pc3 % 12 + 12) % 12;
+                if (pc7 >= 0 && tonalSafe.contains(p7)) return p7;
+                if (pc3 >= 0 && tonalSafe.contains(p3)) return p3;
+            }
+            if (tonalSafe.contains(p)) return p;
+            return tonalSafe.isEmpty() ? p : *tonalSafe.begin();
+        };
+
+        auto nearestOtherSafePc = [&](int aroundPc, int preferDir) -> int {
+            int best = -1;
+            int bestDist = 999;
+            for (int pc : tonalSafe) {
+                if (pc == aroundPc) continue;
+                int d = pc - aroundPc;
+                while (d > 6) d -= 12;
+                while (d < -6) d += 12;
+                const int dist = qAbs(d) * 10 + ((preferDir < 0 && d > 0) || (preferDir > 0 && d < 0) ? 3 : 0);
+                if (dist < bestDist) { bestDist = dist; best = pc; }
+            }
+            return best;
+        };
+
+        QVector<TopHit> out;
+        out.reserve(8);
+        const int barInPhrase = (phraseBars > 0) ? (bar % phraseBars) : 0;
+        for (const auto& h : m_topLinePhraseHits) {
+            if (h.barOffset != barInPhrase) continue;
+            int pc = pickDegreePc(h.degree, h.resolve);
+            if (h.neighborDir != 0) {
+                const int nb = nearestOtherSafePc(pc, h.neighborDir);
+                if (nb >= 0) pc = nb;
+            }
+            TopHit t;
+            t.beatInBar = qBound(0, h.beatInBar, 3);
+            t.sub = qMax(0, h.sub);
+            t.count = qMax(1, h.count);
+            if (t.sub >= t.count) t.sub = t.count - 1;
+            t.dur = virtuoso::groove::Rational(qMax(1, h.dur_num), qMax(1, h.dur_den));
+            t.velDelta = h.vel_delta;
+            t.pc = (pc % 12 + 12) % 12;
+            t.resolve = h.resolve;
+            t.tag = (h.tag.trimmed().isEmpty() ? QString("vocab_topline") : h.tag.trimmed());
+            out.push_back(t);
+        }
+
+        // Record for explainability.
+        if (!m_topLinePhraseId.trimmed().isEmpty()) {
+            m_lastMotifSourceAgent = "Piano";
+            m_lastMotifTransform = QString("topline_phrase:%1").arg(m_topLinePhraseId.trimmed());
+        }
+
+        return out;
+    }
 
     // Phrase guide tone target for this bar (computed in ensurePhraseGuideLinePlanned()).
     const int phraseBars = qMax(1, m_phraseGuideBars);
@@ -2038,9 +2369,90 @@ int JazzBalladPianoPlanner::chooseGuidePcForChord(const music::ChordSymbol& chor
     return best;
 }
 
-QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRhythm(const Context& c) const {
+QVector<JazzBalladPianoPlanner::CompHit> JazzBalladPianoPlanner::chooseBarCompRhythm(const Context& c) {
     QVector<CompHit> out;
     out.reserve(6);
+
+    // Data-driven vocab (preferred): phrase + beat patterns.
+    // If vocabulary is loaded, use it as the primary rhythmic grammar and fall back to the procedural model only if empty.
+    if (m_vocab && m_vocab->isLoaded()) {
+        const virtuoso::groove::TimeSignature ts{4, 4};
+        const int bar = qMax(0, c.playbackBarIndex);
+        const bool userBusy = (c.userDensityHigh || c.userIntensityPeak);
+        m_compPhraseId.clear();
+        m_compBeatIdsByBeat = QVector<QString>(4);
+
+        auto addV = [&](int beat, const virtuoso::vocab::VocabularyRegistry::PianoHit& h, const QString& tag) {
+            CompHit hit;
+            hit.beatInBar = qBound(0, beat, 3);
+            hit.sub = qMax(0, h.sub);
+            hit.count = qMax(1, h.count);
+            hit.dur = virtuoso::groove::Rational(qMax(1, h.dur_num), qMax(1, h.dur_den));
+            hit.velDelta = h.vel_delta;
+            hit.density = h.density.trimmed().isEmpty() ? QString("full") : h.density.trimmed();
+            hit.rhythmTag = tag;
+            out.push_back(hit);
+        };
+
+        // Phrase pattern hits.
+        QString phraseId;
+        QString phraseNotes;
+        for (int beat = 0; beat < 4; ++beat) {
+            virtuoso::vocab::VocabularyRegistry::PianoPhraseQuery pq;
+            pq.ts = ts;
+            pq.playbackBarIndex = bar;
+            pq.beatInBar = beat;
+            pq.chordText = c.chordText;
+            pq.chordFunction = c.chordFunction;
+            pq.chordIsNew = c.chordIsNew;
+            pq.userSilence = c.userSilence;
+            pq.energy = qBound(0.0, c.energy, 1.0);
+            pq.determinismSeed = c.determinismSeed;
+            pq.phraseBars = qMax(1, c.phraseBars);
+            const auto hits = m_vocab->pianoPhraseHitsForBeat(pq, &phraseId, &phraseNotes);
+            for (const auto& h : hits) addV(beat, h, QString("vocab_phrase:%1").arg(phraseId));
+        }
+        if (!phraseId.trimmed().isEmpty()) m_compPhraseId = phraseId.trimmed();
+
+        // Beat pattern hits (sprinkles).
+        for (int beat = 0; beat < 4; ++beat) {
+            virtuoso::vocab::VocabularyRegistry::PianoBeatQuery bq;
+            bq.ts = ts;
+            bq.playbackBarIndex = bar;
+            bq.beatInBar = beat;
+            bq.chordText = c.chordText;
+            bq.chordFunction = c.chordFunction;
+            bq.chordIsNew = c.chordIsNew;
+            bq.userSilence = c.userSilence;
+            bq.energy = qBound(0.0, c.energy, 1.0);
+            bq.determinismSeed = c.determinismSeed;
+            const auto ch = m_vocab->choosePianoBeat(bq);
+            // When user is busy, suppress extra beat patterns (space negotiation).
+            if (userBusy && !ch.id.trimmed().isEmpty() && ch.id.toLower().contains("push")) continue;
+            if (beat >= 0 && beat < m_compBeatIdsByBeat.size()) m_compBeatIdsByBeat[beat] = ch.id;
+            for (const auto& h : ch.hits) addV(beat, h, QString("vocab:%1").arg(ch.id));
+        }
+
+        // De-dupe by (beat,sub,count).
+        std::sort(out.begin(), out.end(), [](const CompHit& a, const CompHit& b) {
+            if (a.beatInBar != b.beatInBar) return a.beatInBar < b.beatInBar;
+            if (a.sub != b.sub) return a.sub < b.sub;
+            return a.count < b.count;
+        });
+        QVector<CompHit> dedup;
+        dedup.reserve(out.size());
+        for (const auto& h : out) {
+            if (!dedup.isEmpty()) {
+                const auto& p = dedup.last();
+                if (p.beatInBar == h.beatInBar && p.sub == h.sub && p.count == h.count) continue;
+            }
+            dedup.push_back(h);
+        }
+        out = dedup;
+
+        if (!out.isEmpty()) return out;
+        // else fall through to procedural model.
+    }
 
     // Coherence: keep the comping feel stable for 2-bar blocks (less "random new pattern every bar").
     const int barBlock = qMax(0, c.playbackBarIndex) / 2;

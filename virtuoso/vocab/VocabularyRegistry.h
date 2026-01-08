@@ -31,6 +31,7 @@ public:
         int playbackBarIndex = 0;
         int beatInBar = 0; // 0-based
         QString chordText;
+        QString chordFunction; // "Tonic" | "Subdominant" | "Dominant" | "Other" (optional)
         bool chordIsNew = false;
         bool userSilence = false;
         double energy = 0.25; // 0..1
@@ -55,6 +56,7 @@ public:
         int playbackBarIndex = 0;
         int beatInBar = 0;
         QString chordText;
+        QString chordFunction; // optional
         bool chordIsNew = false;
         bool userSilence = false;
         double energy = 0.25;
@@ -69,6 +71,141 @@ public:
         QString notes;
     };
 
+    // --- Piano top-line vocabulary (phrase-level) ---
+    // This is the "melodic mind": a named library of phrase-level top-line cells with rhythm+degree intent.
+    struct PianoTopLineHit {
+        int barOffset = 0; // 0..phraseBars-1
+        int beatInBar = 0; // 0-based
+        int sub = 0;
+        int count = 1;
+        int dur_num = 1;
+        int dur_den = 8;
+        int vel_delta = -10;
+        int degree = 9;      // 1,3,5,7,9,11,13
+        int neighborDir = 0; // -1/+1 for neighbor/enclosure; 0 for direct tones
+        bool resolve = false;
+        QString tag;         // e.g. "a", "b", "resolve", "mem:sequence"
+    };
+
+    struct PianoTopLineQuery {
+        virtuoso::groove::TimeSignature ts{4, 4};
+        int playbackBarIndex = 0;
+        int beatInBar = 0;
+        QString chordText;
+        QString chordFunction; // optional
+        bool chordIsNew = false;
+        bool userSilence = false;
+        double energy = 0.25;
+        double rhythmicComplexity = 0.25;
+        double interaction = 0.50;
+        quint32 determinismSeed = 1;
+        int phraseBars = 4;
+    };
+
+    struct PianoTopLineChoice {
+        QString id;
+        int phraseBars = 4;
+        QVector<PianoTopLineHit> hits;
+        QString notes;
+    };
+
+    struct PianoTopLinePatternDef {
+        QString id;
+        int phraseBars = 4;
+        double minEnergy = 0.0;
+        double maxEnergy = 1.0;
+        double weight = 1.0;
+        bool allowWhenUserSilence = true;
+        QVector<QString> chordFunctions; // empty => any
+        QVector<PianoTopLineHit> hits;
+        QString notes;
+    };
+
+    // --- Piano gesture vocabulary (roll/arp/touch) ---
+    struct PianoGestureQuery {
+        virtuoso::groove::TimeSignature ts{4, 4};
+        int bpm = 60;
+        int playbackBarIndex = 0;
+        int beatInBar = 0;
+        QString chordText;
+        QString chordFunction;
+        bool chordIsNew = false;
+        bool userSilence = false;
+        bool cadence = false;
+        double energy = 0.25;
+        double rhythmicComplexity = 0.25;
+        quint32 determinismSeed = 1;
+        int noteCount = 3; // size of voicing hit
+    };
+
+    struct PianoGestureChoice {
+        QString id;
+        QString kind;      // "none"|"roll"|"arp"|"broken"|"strum"
+        QString style;     // "up"|"down"|"inside_out"|...
+        int spreadMs = 0;  // timing spread for roll/arp
+        QString notes;
+    };
+
+    struct PianoGesturePatternDef {
+        QString id;
+        double minEnergy = 0.0;
+        double maxEnergy = 1.0;
+        double weight = 1.0;
+        bool cadenceOnly = false;
+        bool chordIsNewOnly = false;
+        bool allowWhenUserSilence = true;
+        int minNoteCount = 2;
+        int maxNoteCount = 10;
+        int maxBpm = 999;
+        QString kind;
+        QString style;
+        int spreadMs = 0;
+        QString notes;
+    };
+
+    // --- Piano pedal strategy vocabulary ---
+    struct PianoPedalQuery {
+        virtuoso::groove::TimeSignature ts{4, 4};
+        int playbackBarIndex = 0;
+        int beatInBar = 0;
+        QString chordText;
+        QString chordFunction;
+        bool chordIsNew = false;
+        bool userBusy = false;
+        bool userSilence = false;
+        bool nextChanges = false;
+        int beatsUntilChordChange = 0;
+        double energy = 0.25;
+        double toneDark = 0.60;
+        quint32 determinismSeed = 1;
+    };
+
+    struct PianoPedalChoice {
+        QString id;
+        QString defaultState; // "up"|"half"|"down"
+        bool repedalOnNewChord = false;
+        int repedalProbPct = 50;
+        bool clearBeforeChange = false;
+        int clearSub = 3;   // 16th index within beat (count=4)
+        int clearCount = 4; // typically 4
+        QString notes;
+    };
+
+    struct PianoPedalPatternDef {
+        QString id;
+        double minEnergy = 0.0;
+        double maxEnergy = 1.0;
+        double weight = 1.0;
+        bool allowWhenUserSilence = true;
+        QString defaultState;
+        bool repedalOnNewChord = false;
+        int repedalProbPct = 50;
+        bool clearBeforeChange = true;
+        int clearSub = 3;
+        int clearCount = 4;
+        QString notes;
+    };
+
     // UI browsing helpers (copy out loaded definitions)
     struct PianoPatternDef {
         QString id;
@@ -79,6 +216,7 @@ public:
         bool chordIsNewOnly = false;
         bool stableOnly = false;
         bool allowWhenUserSilence = true;
+        QVector<QString> chordFunctions; // empty => any
         QVector<PianoHit> hits;
         QString notes;
     };
@@ -246,6 +384,9 @@ public:
     DrumsBeatChoice chooseDrumsBeat(const DrumsBeatQuery& q) const;
 
     PianoPhraseChoice choosePianoPhrase(const PianoPhraseQuery& q) const;
+    PianoTopLineChoice choosePianoTopLine(const PianoTopLineQuery& q) const;
+    PianoGestureChoice choosePianoGesture(const PianoGestureQuery& q) const;
+    PianoPedalChoice choosePianoPedal(const PianoPedalQuery& q) const;
     BassPhraseChoice chooseBassPhrase(const BassPhraseQuery& q) const;
     DrumsPhraseChoice chooseDrumsPhrase(const DrumsPhraseQuery& q) const;
 
@@ -258,6 +399,9 @@ public:
     QVector<DrumsPatternDef> drumsPatterns() const;
 
     QVector<PianoPhraseChoice> pianoPhrasePatterns() const;
+    QVector<PianoTopLinePatternDef> pianoTopLinePatterns() const;
+    QVector<PianoGesturePatternDef> pianoGesturePatterns() const;
+    QVector<PianoPedalPatternDef> pianoPedalPatterns() const;
     QVector<BassPhraseChoice> bassPhrasePatterns() const;
     QVector<DrumsPhraseChoice> drumsPhrasePatterns() const;
 
@@ -271,6 +415,7 @@ private:
         bool chordIsNewOnly = false;
         bool stableOnly = false;
         bool allowWhenUserSilence = true;
+        QVector<QString> chordFunctions; // empty => any
         QVector<PianoHit> hits;
         QString notes;
     };
@@ -312,7 +457,52 @@ private:
         double maxEnergy = 1.0;
         double weight = 1.0;
         bool allowWhenUserSilence = true;
+        QVector<QString> chordFunctions; // empty => any
         QVector<PianoPhraseHit> hits;
+        QString notes;
+    };
+
+    struct PianoTopLinePattern {
+        QString id;
+        int phraseBars = 4;
+        double minEnergy = 0.0;
+        double maxEnergy = 1.0;
+        double weight = 1.0;
+        bool allowWhenUserSilence = true;
+        QVector<QString> chordFunctions; // empty => any
+        QVector<PianoTopLineHit> hits;
+        QString notes;
+    };
+
+    struct PianoGesturePattern {
+        QString id;
+        double minEnergy = 0.0;
+        double maxEnergy = 1.0;
+        double weight = 1.0;
+        bool cadenceOnly = false;
+        bool chordIsNewOnly = false;
+        bool allowWhenUserSilence = true;
+        int minNoteCount = 2;
+        int maxNoteCount = 10;
+        int maxBpm = 999;
+        QString kind;
+        QString style;
+        int spreadMs = 0;
+        QString notes;
+    };
+
+    struct PianoPedalPattern {
+        QString id;
+        double minEnergy = 0.0;
+        double maxEnergy = 1.0;
+        double weight = 1.0;
+        bool allowWhenUserSilence = true;
+        QString defaultState;
+        bool repedalOnNewChord = false;
+        int repedalProbPct = 50;
+        bool clearBeforeChange = true;
+        int clearSub = 3;
+        int clearCount = 4;
         QString notes;
     };
 
@@ -355,6 +545,9 @@ private:
     QVector<DrumsBeatPattern> m_drums;
 
     QVector<PianoPhrasePattern> m_pianoPhrases;
+    QVector<PianoTopLinePattern> m_pianoTopLines;
+    QVector<PianoGesturePattern> m_pianoGestures;
+    QVector<PianoPedalPattern> m_pianoPedals;
     QVector<BassPhrasePattern> m_bassPhrases;
     QVector<DrumsPhrasePattern> m_drumsPhrases;
 };

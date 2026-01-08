@@ -3,6 +3,8 @@
 #include <QtGlobal>
 #include <limits>
 
+#include "virtuoso/constraints/PianoDriver.h"
+
 namespace playback {
 
 JointCandidateModel::NoteStats JointCandidateModel::statsForNotes(const QVector<virtuoso::engine::AgentIntentNote>& notes) {
@@ -19,6 +21,122 @@ JointCandidateModel::NoteStats JointCandidateModel::statsForNotes(const QVector<
     s.meanMidi = double(sum) / double(qMax(1, s.count));
     return s;
 }
+
+namespace {
+
+static bool samePos(const virtuoso::groove::GridPos& a, const virtuoso::groove::GridPos& b) {
+    return a.barIndex == b.barIndex && (a.withinBarWhole == b.withinBarWhole);
+}
+
+struct PianoExtraCosts {
+    double pianist = 0.0;
+    double pedal = 0.0;
+    double topline = 0.0;
+};
+
+static PianoExtraCosts pianoExtraCosts(const JazzBalladPianoPlanner::PlannerState& startState,
+                                       const JazzBalladPianoPlanner::BeatPlan& plan,
+                                       const virtuoso::groove::TimeSignature& ts) {
+    PianoExtraCosts out;
+    virtuoso::constraints::PianoDriver driver;
+    virtuoso::constraints::PerformanceState st = startState.perf;
+
+    // Collect CC64 events (sorted by time).
+    struct CcEv { virtuoso::groove::GridPos pos; int value = 0; };
+    QVector<CcEv> ccs;
+    ccs.reserve(plan.ccs.size());
+    for (const auto& ci : plan.ccs) {
+        if (ci.cc != 64) continue;
+        ccs.push_back({ci.startPos, qBound(0, ci.value, 127)});
+    }
+    std::sort(ccs.begin(), ccs.end(), [&](const CcEv& a, const CcEv& b) {
+        if (a.pos.barIndex != b.pos.barIndex) return a.pos.barIndex < b.pos.barIndex;
+        return a.pos.withinBarWhole < b.pos.withinBarWhole;
+    });
+
+    // Group notes by startPos.
+    struct Group { virtuoso::groove::GridPos pos; QVector<int> notes; bool hasTopLine = false; };
+    QVector<Group> groups;
+    groups.reserve(8);
+    for (const auto& n : plan.notes) {
+        if (n.note < 0) continue;
+        int idx = -1;
+        for (int i = 0; i < groups.size(); ++i) {
+            if (samePos(groups[i].pos, n.startPos)) { idx = i; break; }
+        }
+        if (idx < 0) {
+            Group g;
+            g.pos = n.startPos;
+            groups.push_back(g);
+            idx = groups.size() - 1;
+        }
+        groups[idx].notes.push_back(qBound(0, n.note, 127));
+        const QString tn = n.target_note.trimmed().toLower();
+        if (tn.contains("topline")) groups[idx].hasTopLine = true;
+    }
+    std::sort(groups.begin(), groups.end(), [&](const Group& a, const Group& b) {
+        if (a.pos.barIndex != b.pos.barIndex) return a.pos.barIndex < b.pos.barIndex;
+        return a.pos.withinBarWhole < b.pos.withinBarWhole;
+    });
+
+    auto applyCcUpTo = [&](const virtuoso::groove::GridPos& pos) {
+        for (const auto& ev : ccs) {
+            if (ev.pos.barIndex < pos.barIndex || (ev.pos.barIndex == pos.barIndex && ev.pos.withinBarWhole <= pos.withinBarWhole)) {
+                st.ints.insert("cc64", ev.value);
+                if (ev.value <= 1) st.heldNotes.clear();
+            }
+        }
+    };
+
+    int pedalChanges = 0;
+    int lastCc = st.ints.value("cc64", 0);
+    for (const auto& ev : ccs) {
+        if (ev.value != lastCc) ++pedalChanges;
+        lastCc = ev.value;
+    }
+    out.pedal += 0.10 * double(qMax(0, pedalChanges - 1));
+
+    // Step through the beat, accumulating feasibility costs.
+    for (const auto& g : groups) {
+        applyCcUpTo(g.pos);
+        QVector<int> ns = g.notes;
+        std::sort(ns.begin(), ns.end());
+        ns.erase(std::unique(ns.begin(), ns.end()), ns.end());
+        if (ns.isEmpty()) continue;
+        virtuoso::constraints::CandidateGesture cg;
+        cg.midiNotes = ns;
+        const auto fr = driver.evaluateFeasibility(st, cg);
+        if (!fr.ok) out.pianist += 25.0;
+        else out.pianist += 0.12 * fr.cost;
+
+        // Update held notes approximation.
+        const int cc = st.ints.value("cc64", 0);
+        const bool sustainAny = (cc >= 32);
+        if (sustainAny) {
+            for (int m : ns) if (!st.heldNotes.contains(m)) st.heldNotes.push_back(m);
+        } else {
+            st.heldNotes = ns;
+        }
+
+        if (g.hasTopLine) out.topline += 0.0;
+    }
+
+    // If the beat produced no topline note at all, add a tiny penalty (encourage melodic continuity).
+    bool anyTop = false;
+    for (const auto& g : groups) if (g.hasTopLine) { anyTop = true; break; }
+    if (!anyTop) out.topline += 0.15;
+
+    // Pedal clarity: penalize excessive held notes under sustain.
+    const int ccEnd = st.ints.value("cc64", 0);
+    if (ccEnd >= 32) {
+        const int held = st.heldNotes.size();
+        if (held > 14) out.pedal += 0.08 * double(held - 14);
+    }
+
+    return out;
+}
+
+} // namespace
 
 void JointCandidateModel::generateBassPianoCandidates(const GenerationInputs& in,
                                                       QVector<BassCand>& outBass,
@@ -45,6 +163,10 @@ void JointCandidateModel::generateBassPianoCandidates(const GenerationInputs& in
         c.plan = in.pianoPlanner->planBeatWithActions(ctx, in.chPiano, in.ts);
         c.nextState = in.pianoPlanner->snapshotState();
         c.st = statsForNotes(c.plan.notes);
+        const auto extra = pianoExtraCosts(in.pianoStart, c.plan, in.ts);
+        c.pianistFeasibilityCost = extra.pianist;
+        c.pedalClarityCost = extra.pedal;
+        c.topLineContinuityCost = extra.topline;
         return c;
     };
 
@@ -152,6 +274,9 @@ JointCandidateModel::BestChoice JointCandidateModel::chooseBestCombo(const Scori
                 double c = comboCost(bass[bi].plan.notes, piano[pi].plan.notes, drums[di].plan, drums[di].id, &bd);
                 c += spacingPenalty(bass[bi].plan.notes, piano[pi].plan.notes);
 
+                const double pianoExtra = piano[pi].pianistFeasibilityCost + piano[pi].pedalClarityCost + piano[pi].topLineContinuityCost;
+                c += pianoExtra;
+
                 if (!in.lastBassId.isEmpty() && in.lastBassId != bass[bi].id) c += in.bassSwitchPenalty;
                 if (!in.lastPianoId.isEmpty() && in.lastPianoId != piano[pi].id) c += in.pianoSwitchPenalty;
                 if (!in.lastDrumsId.isEmpty() && in.lastDrumsId != drums[di].id) c += in.drumsSwitchPenalty;
@@ -162,7 +287,7 @@ JointCandidateModel::BestChoice JointCandidateModel::chooseBestCombo(const Scori
                     if (bass[bi].id == "rich") c -= in.responseBassRichBonus;
                 }
 
-                out.combos.push_back({bi, pi, di, bass[bi].id, piano[pi].id, drums[di].id, c, bd});
+                out.combos.push_back({bi, pi, di, bass[bi].id, piano[pi].id, drums[di].id, c, pianoExtra, bd});
                 if (c < out.bestCost) {
                     out.bestCost = c;
                     out.bestBd = bd;

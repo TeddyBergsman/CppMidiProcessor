@@ -32,6 +32,9 @@ add_library(VirtuosoCore STATIC
   virtuoso/memory/MotivicMemory.cpp
   virtuoso/memory/MotifTransform.h
   virtuoso/memory/MotifTransform.cpp
+  virtuoso/piano/PianoPerformancePlan.h
+  virtuoso/piano/PianoPerformanceModel.h
+  virtuoso/piano/PianoPerformanceModel.cpp
   virtuoso/ontology/OntologyRegistry.h
   virtuoso/ontology/OntologyRegistry.cpp
   virtuoso/vocab/VocabularyRegistry.h

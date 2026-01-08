@@ -732,6 +732,10 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
     const QString scaleKey = chosen.value("scale_key").toString();
     voicingKey = chosen.value("voicing_key").toString();
     voicingType = chosen.value("voicing_type").toString();
+    const QString pedalProfile = chosen.value("pedal_profile").toString();
+    const QString gestureProfile = chosen.value("gesture_profile").toString();
+    const QString topline = chosen.value("topline").toString();
+    const QString motifT = chosen.value("motif_transform").toString();
     const bool hasPolyChoice = chosen.value("has_polychord").toBool(false);
 
     m_liveUpdatingUi = true;
@@ -854,6 +858,16 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
 
     updateHighlights();
     updateGrooveInfo();
+
+    // Status bar: expose pianist performance decisions during live-follow.
+    if (m_liveFollowActive && statusBar()) {
+        QStringList parts;
+        if (!pedalProfile.trimmed().isEmpty()) parts << QString("pedal=%1").arg(pedalProfile.trimmed());
+        if (!gestureProfile.trimmed().isEmpty()) parts << QString("gesture=%1").arg(gestureProfile.trimmed());
+        if (!topline.trimmed().isEmpty()) parts << QString("top=%1").arg(topline.trimmed());
+        if (!motifT.trimmed().isEmpty()) parts << QString("motif=%1").arg(motifT.trimmed());
+        if (!parts.isEmpty()) statusBar()->showMessage(QString("Piano: %1").arg(parts.join(" | ")), 800);
+    }
 
     // --- Audition triggering ---
     // Only audition on *actual chord changes*, per your requirement.

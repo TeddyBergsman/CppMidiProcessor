@@ -11,6 +11,8 @@
 #include "virtuoso/ontology/OntologyRegistry.h"
 #include "virtuoso/memory/MotivicMemory.h"
 #include "virtuoso/constraints/ConstraintsTypes.h"
+#include "virtuoso/piano/PianoPerformancePlan.h"
+#include "virtuoso/vocab/VocabularyRegistry.h"
 
 namespace playback {
 
@@ -31,6 +33,7 @@ public:
     struct BeatPlan {
         QVector<virtuoso::engine::AgentIntentNote> notes;
         QVector<CcIntent> ccs;
+        virtuoso::piano::PianoPerformancePlan performance;
         // Ontology-first: explicit keys (no string scraping).
         QString chosenVoicingKey; // ontology voicing key (e.g. "piano_rootless_A")
         QString chosenScaleKey;   // ontology scale key (e.g. "altered")
@@ -110,6 +113,13 @@ public:
 
         int lastArpBar = -1;
         int lastArpStyle = -1;
+
+        // Data-driven library selections (auditable).
+        QString compPhraseId;
+        QVector<QString> compBeatIdsByBeat;
+        int topLinePhraseStartBar = -1;
+        QString topLinePhraseId;
+        QString pedalStrategyId;
     };
 
     struct Context {
@@ -166,6 +176,10 @@ public:
         double rhythmicComplexity = 0.25;  // 0=simpler placement, 1=more motion
         double interaction = 0.50;         // 0=backing track, 1=conversational
         double toneDark = 0.60;            // 0=bright/open, 1=dark/warm (bias register + density)
+
+        // Optional Stage 2 context (for smarter choices / vocab filtering).
+        QString chordFunction; // "Tonic" | "Subdominant" | "Dominant" | "Other"
+        QString roman;
     };
 
     JazzBalladPianoPlanner();
@@ -175,8 +189,7 @@ public:
     PlannerState snapshotState() const;
     void restoreState(const PlannerState& s);
 
-    // Deprecated (kept for compatibility): pianist is fully procedural.
-    void setVocabulary(const void*) {}
+    void setVocabulary(const virtuoso::vocab::VocabularyRegistry* vocab) { m_vocab = vocab; }
 
     // Ontology registry is the single source of truth for voicing choices.
     void setOntology(const virtuoso::ontology::OntologyRegistry* ont) { m_ont = ont; }
@@ -208,8 +221,8 @@ private:
     QVector<int> repairToFeasible(QVector<int> midiNotes) const;
 
     void ensureBarRhythmPlanned(const Context& c);
-    QVector<CompHit> chooseBarCompRhythm(const Context& c) const;
-    QVector<TopHit> chooseBarTopLine(const Context& c) const;
+    QVector<CompHit> chooseBarCompRhythm(const Context& c);
+    QVector<TopHit> chooseBarTopLine(const Context& c);
     void ensureMotifBlockPlanned(const Context& c);
     void buildMotifBlockTemplates(const Context& c);
     QVector<TopHit> realizeTopTemplate(const Context& c, const QVector<TopTemplateHit>& tmpl) const;
@@ -238,6 +251,14 @@ private:
     QString m_lastMotifSourceAgent;
     QString m_lastMotifTransform;
 
+    // Data-driven vocab selections (for auditability / continuity).
+    QString m_compPhraseId;
+    QVector<QString> m_compBeatIdsByBeat;
+    int m_topLinePhraseStartBar = -1;
+    QString m_topLinePhraseId;
+    QVector<virtuoso::vocab::VocabularyRegistry::PianoTopLineHit> m_topLinePhraseHits;
+    QString m_pedalStrategyId;
+
     int m_motifBlockStartBar = -1; // even bar index of current 2-bar block
     QVector<TopTemplateHit> m_motifA;
     QVector<TopTemplateHit> m_motifB;
@@ -261,6 +282,7 @@ private:
 
     const virtuoso::ontology::OntologyRegistry* m_ont = nullptr; // not owned
     const virtuoso::memory::MotivicMemory* m_mem = nullptr;      // not owned
+    const virtuoso::vocab::VocabularyRegistry* m_vocab = nullptr; // not owned
 };
 
 } // namespace playback

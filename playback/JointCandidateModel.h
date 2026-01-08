@@ -38,6 +38,10 @@ public:
         JazzBalladPianoPlanner::BeatPlan plan;
         JazzBalladPianoPlanner::PlannerState nextState;
         NoteStats st;
+        // Additional piano-specific costs (embodiment/pedal/topline).
+        double pianistFeasibilityCost = 0.0;
+        double pedalClarityCost = 0.0;
+        double topLineContinuityCost = 0.0;
     };
     struct DrumCand {
         QString id;
@@ -110,6 +114,7 @@ public:
         QString pianoId;
         QString drumsId;
         double cost = 0.0;
+        double pianoExtraCost = 0.0;
         virtuoso::solver::CostBreakdown bd{};
     };
 

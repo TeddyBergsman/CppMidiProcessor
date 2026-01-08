@@ -106,11 +106,17 @@ static void testPianoConstraints() {
     auto r2 = piano.evaluateFeasibility(s, g2);
     expect(!r2.ok, "Piano: >10 notes rejected");
 
-    // FAIL: span too wide
+    // OK: wide span is feasible with two hands
     CandidateGesture g3;
     g3.midiNotes = {48, 72}; // 24 semitones
     auto r3 = piano.evaluateFeasibility(s, g3);
-    expect(!r3.ok, "Piano: span > 10th rejected");
+    expect(r3.ok, "Piano: 2-octave split is feasible (two hands)");
+
+    // FAIL: absurd spread (unrealistic chord grip)
+    CandidateGesture g4;
+    g4.midiNotes = {24, 96}; // 72 semitones
+    auto r4 = piano.evaluateFeasibility(s, g4);
+    expect(!r4.ok, "Piano: extreme spread rejected");
 }
 
 static void testBassConstraints() {

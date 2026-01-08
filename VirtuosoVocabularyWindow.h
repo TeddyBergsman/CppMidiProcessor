@@ -4,6 +4,7 @@
 #include <QVector>
 
 #include "virtuoso/ui/GrooveTimelineWidget.h"
+#include "virtuoso/vocab/VocabularyRegistry.h"
 
 class QListWidget;
 class QLabel;
@@ -108,5 +109,10 @@ private:
 
     // Current plan rendered on timeline (filtered by selected logic_tag).
     QVector<virtuoso::ui::GrooveTimelineWidget::LaneEvent> m_displayEvents;
+
+    // Vocabulary (for mapping IDs/tags -> underlying library definition)
+    virtuoso::vocab::VocabularyRegistry m_vocab;
+    bool m_vocabLoaded = false;
+    QString m_vocabErr;
 };
 

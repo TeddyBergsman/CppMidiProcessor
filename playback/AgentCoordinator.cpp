@@ -787,6 +787,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         {
             QJsonObject root;
             root.insert("event_kind", "candidate_pool");
+            root.insert("schema", 2);
             root.insert("tempo_bpm", in.bpm);
             root.insert("ts_num", ts.num);
             root.insert("ts_den", ts.den);
@@ -830,11 +831,22 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                 o.insert("rhythmicComplexity", c.ctx.rhythmicComplexity);
                 o.insert("interaction", c.ctx.interaction);
                 o.insert("toneDark", c.ctx.toneDark);
+                o.insert("pianist_cost", c.pianistFeasibilityCost);
+                o.insert("pedal_cost", c.pedalClarityCost);
+                o.insert("topline_cost", c.topLineContinuityCost);
                 const QString vt = representativeVoicingType(c.plan.notes);
                 if (!vt.isEmpty()) o.insert("voicing_type", vt);
                 if (!c.plan.chosenVoicingKey.trimmed().isEmpty()) o.insert("voicing_key", c.plan.chosenVoicingKey.trimmed());
                 if (!c.plan.motifSourceAgent.trimmed().isEmpty()) o.insert("motif_source", c.plan.motifSourceAgent.trimmed());
                 if (!c.plan.motifTransform.trimmed().isEmpty()) o.insert("motif_transform", c.plan.motifTransform.trimmed());
+                if (!c.plan.performance.pedalProfile.trimmed().isEmpty()) o.insert("pedal_profile", c.plan.performance.pedalProfile.trimmed());
+                if (!c.plan.performance.gestureProfile.trimmed().isEmpty()) o.insert("gesture_profile", c.plan.performance.gestureProfile.trimmed());
+                if (!c.plan.performance.toplineSummary.trimmed().isEmpty()) o.insert("topline", c.plan.performance.toplineSummary.trimmed());
+                if (!c.plan.performance.compPhraseId.trimmed().isEmpty()) o.insert("comp_phrase_id", c.plan.performance.compPhraseId.trimmed());
+                if (!c.plan.performance.compBeatId.trimmed().isEmpty()) o.insert("comp_beat_id", c.plan.performance.compBeatId.trimmed());
+                if (!c.plan.performance.toplinePhraseId.trimmed().isEmpty()) o.insert("topline_phrase_id", c.plan.performance.toplinePhraseId.trimmed());
+                if (!c.plan.performance.gestureId.trimmed().isEmpty()) o.insert("gesture_id", c.plan.performance.gestureId.trimmed());
+                if (!c.plan.performance.pedalId.trimmed().isEmpty()) o.insert("pedal_id", c.plan.performance.pedalId.trimmed());
                 pianoCandsJson.push_back(o);
             }
             QJsonArray drumsCandsJson;
@@ -885,6 +897,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                 cj.insert("piano", ce.pianoId);
                 cj.insert("drums", ce.drumsId);
                 cj.insert("total_cost", ce.cost);
+                cj.insert("piano_extra_cost", ce.pianoExtraCost);
                 cj.insert("cost_tag", ce.bd.shortTag(w));
                 QJsonObject bdj;
                 bdj.insert("harmonicStability", ce.bd.harmonicStability);
@@ -907,6 +920,14 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             chosen.insert("scale_key", scaleKey);
             if (!pCands[bestPi].plan.motifSourceAgent.trimmed().isEmpty()) chosen.insert("motif_source", pCands[bestPi].plan.motifSourceAgent.trimmed());
             if (!pCands[bestPi].plan.motifTransform.trimmed().isEmpty()) chosen.insert("motif_transform", pCands[bestPi].plan.motifTransform.trimmed());
+            if (!pCands[bestPi].plan.performance.pedalProfile.trimmed().isEmpty()) chosen.insert("pedal_profile", pCands[bestPi].plan.performance.pedalProfile.trimmed());
+            if (!pCands[bestPi].plan.performance.gestureProfile.trimmed().isEmpty()) chosen.insert("gesture_profile", pCands[bestPi].plan.performance.gestureProfile.trimmed());
+            if (!pCands[bestPi].plan.performance.toplineSummary.trimmed().isEmpty()) chosen.insert("topline", pCands[bestPi].plan.performance.toplineSummary.trimmed());
+            if (!pCands[bestPi].plan.performance.compPhraseId.trimmed().isEmpty()) chosen.insert("comp_phrase_id", pCands[bestPi].plan.performance.compPhraseId.trimmed());
+            if (!pCands[bestPi].plan.performance.compBeatId.trimmed().isEmpty()) chosen.insert("comp_beat_id", pCands[bestPi].plan.performance.compBeatId.trimmed());
+            if (!pCands[bestPi].plan.performance.toplinePhraseId.trimmed().isEmpty()) chosen.insert("topline_phrase_id", pCands[bestPi].plan.performance.toplinePhraseId.trimmed());
+            if (!pCands[bestPi].plan.performance.gestureId.trimmed().isEmpty()) chosen.insert("gesture_id", pCands[bestPi].plan.performance.gestureId.trimmed());
+            if (!pCands[bestPi].plan.performance.pedalId.trimmed().isEmpty()) chosen.insert("pedal_id", pCands[bestPi].plan.performance.pedalId.trimmed());
             // Chosen voicing key/type (for exact Library selection).
             {
                 const QString vk = pCands[bestPi].plan.chosenVoicingKey.trimmed();
@@ -1196,6 +1217,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     if (!emittedCandidatePool && in.engine) {
         QJsonObject root;
         root.insert("event_kind", "candidate_pool");
+        root.insert("schema", 2);
         root.insert("tempo_bpm", in.bpm);
         root.insert("ts_num", ts.num);
         root.insert("ts_den", ts.den);
@@ -1232,6 +1254,14 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             if (!vk.isEmpty()) o.insert("voicing_key", vk);
             const QString vt = representativeVoicingType(pianoPlan.notes);
             if (!vt.isEmpty()) o.insert("voicing_type", vt);
+            if (!pianoPlan.performance.pedalProfile.trimmed().isEmpty()) o.insert("pedal_profile", pianoPlan.performance.pedalProfile.trimmed());
+            if (!pianoPlan.performance.gestureProfile.trimmed().isEmpty()) o.insert("gesture_profile", pianoPlan.performance.gestureProfile.trimmed());
+            if (!pianoPlan.performance.toplineSummary.trimmed().isEmpty()) o.insert("topline", pianoPlan.performance.toplineSummary.trimmed());
+            if (!pianoPlan.performance.compPhraseId.trimmed().isEmpty()) o.insert("comp_phrase_id", pianoPlan.performance.compPhraseId.trimmed());
+            if (!pianoPlan.performance.compBeatId.trimmed().isEmpty()) o.insert("comp_beat_id", pianoPlan.performance.compBeatId.trimmed());
+            if (!pianoPlan.performance.toplinePhraseId.trimmed().isEmpty()) o.insert("topline_phrase_id", pianoPlan.performance.toplinePhraseId.trimmed());
+            if (!pianoPlan.performance.gestureId.trimmed().isEmpty()) o.insert("gesture_id", pianoPlan.performance.gestureId.trimmed());
+            if (!pianoPlan.performance.pedalId.trimmed().isEmpty()) o.insert("pedal_id", pianoPlan.performance.pedalId.trimmed());
             pianoArr.push_back(o);
         }
         QJsonArray drumsArr;
@@ -1272,6 +1302,14 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         chosen.insert("scale_key", scaleKey);
         if (!pianoPlan.motifSourceAgent.trimmed().isEmpty()) chosen.insert("motif_source", pianoPlan.motifSourceAgent.trimmed());
         if (!pianoPlan.motifTransform.trimmed().isEmpty()) chosen.insert("motif_transform", pianoPlan.motifTransform.trimmed());
+        if (!pianoPlan.performance.pedalProfile.trimmed().isEmpty()) chosen.insert("pedal_profile", pianoPlan.performance.pedalProfile.trimmed());
+        if (!pianoPlan.performance.gestureProfile.trimmed().isEmpty()) chosen.insert("gesture_profile", pianoPlan.performance.gestureProfile.trimmed());
+        if (!pianoPlan.performance.toplineSummary.trimmed().isEmpty()) chosen.insert("topline", pianoPlan.performance.toplineSummary.trimmed());
+        if (!pianoPlan.performance.compPhraseId.trimmed().isEmpty()) chosen.insert("comp_phrase_id", pianoPlan.performance.compPhraseId.trimmed());
+        if (!pianoPlan.performance.compBeatId.trimmed().isEmpty()) chosen.insert("comp_beat_id", pianoPlan.performance.compBeatId.trimmed());
+        if (!pianoPlan.performance.toplinePhraseId.trimmed().isEmpty()) chosen.insert("topline_phrase_id", pianoPlan.performance.toplinePhraseId.trimmed());
+        if (!pianoPlan.performance.gestureId.trimmed().isEmpty()) chosen.insert("gesture_id", pianoPlan.performance.gestureId.trimmed());
+        if (!pianoPlan.performance.pedalId.trimmed().isEmpty()) chosen.insert("pedal_id", pianoPlan.performance.pedalId.trimmed());
         {
             const QString vk = pianoPlan.chosenVoicingKey.trimmed();
             if (!vk.isEmpty()) chosen.insert("voicing_key", vk);

@@ -1,9 +1,9 @@
 #pragma once
 
 #include <QHash>
+#include <QObject>
 #include <QString>
 
-#include "music/ChordSymbol.h"
 #include "playback/HarmonyContext.h"
 #include "playback/InteractionContext.h"
 #include "playback/JazzBalladBassPlanner.h"
@@ -11,21 +11,20 @@
 #include "playback/BrushesBalladDrummer.h"
 #include "playback/StoryState.h"
 #include "virtuoso/engine/VirtuosoEngine.h"
-#include "virtuoso/groove/GrooveGrid.h"
 #include "virtuoso/ontology/OntologyRegistry.h"
 #include "virtuoso/memory/MotivicMemory.h"
+#include "virtuoso/control/PerformanceWeightsV2.h"
+#include "playback/WeightNegotiator.h"
 
 namespace playback {
-
-class VirtuosoBalladMvpPlaybackEngine;
 
 // AgentCoordinator: owns the per-step agent scheduling policy (which agents act, when, and how),
 // bridging HarmonyContext + InteractionContext into concrete AgentIntentNotes scheduled into VirtuosoEngine.
 class AgentCoordinator final {
 public:
     struct Inputs {
-        // Owner (for emitting debug signals)
-        VirtuosoBalladMvpPlaybackEngine* owner = nullptr; // not owned
+        // Owner (for emitting debug signals via invokeMethod; can be any QObject exposing slots/signals).
+        QObject* owner = nullptr; // not owned
 
         // Core environment
         const chart::ChartModel* model = nullptr;   // not owned
@@ -43,6 +42,12 @@ public:
         double virtRhythmicComplexity = 0.25;
         double virtInteraction = 0.50;
         double virtToneDark = 0.60;
+
+        // Weights v2 (new global control surface).
+        bool weightsV2Auto = true;
+        virtuoso::control::PerformanceWeightsV2 weightsV2{};
+        // Negotiated per-agent applied weights (computed by playback engine).
+        playback::WeightNegotiator::Output negotiated{};
 
         // Debug controls
         bool debugEnergyAuto = true;

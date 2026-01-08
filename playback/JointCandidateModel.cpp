@@ -281,6 +281,31 @@ JointCandidateModel::BestChoice JointCandidateModel::chooseBestCombo(const Scori
                 if (!in.lastPianoId.isEmpty() && in.lastPianoId != piano[pi].id) c += in.pianoSwitchPenalty;
                 if (!in.lastDrumsId.isEmpty() && in.lastDrumsId != drums[di].id) c += in.drumsSwitchPenalty;
 
+                // Piano library continuity (prefer staying within a phrase/story choice).
+                {
+                    const auto& perf = piano[pi].plan.performance;
+                    if (!in.lastPianoCompPhraseId.trimmed().isEmpty()
+                        && !perf.compPhraseId.trimmed().isEmpty()
+                        && perf.compPhraseId.trimmed() != in.lastPianoCompPhraseId.trimmed()) {
+                        c += in.pianoCompPhraseSwitchPenalty;
+                    }
+                    if (!in.lastPianoTopLinePhraseId.trimmed().isEmpty()
+                        && !perf.toplinePhraseId.trimmed().isEmpty()
+                        && perf.toplinePhraseId.trimmed() != in.lastPianoTopLinePhraseId.trimmed()) {
+                        c += in.pianoTopLinePhraseSwitchPenalty;
+                    }
+                    if (!in.lastPianoPedalId.trimmed().isEmpty()
+                        && !perf.pedalId.trimmed().isEmpty()
+                        && perf.pedalId.trimmed() != in.lastPianoPedalId.trimmed()) {
+                        c += in.pianoPedalSwitchPenalty;
+                    }
+                    if (!in.lastPianoGestureId.trimmed().isEmpty()
+                        && !perf.gestureId.trimmed().isEmpty()
+                        && perf.gestureId.trimmed() != in.lastPianoGestureId.trimmed()) {
+                        c += in.pianoGestureSwitchPenalty;
+                    }
+                }
+
                 if (in.inResponse) {
                     if (drums[di].id == "wet") c -= in.responseWetBonus;
                     if (piano[pi].id == "rich") c -= in.responsePianoRichBonus;

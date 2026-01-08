@@ -104,6 +104,16 @@ public:
         double responseWetBonus = 0.25;
         double responsePianoRichBonus = 0.18;
         double responseBassRichBonus = 0.08;
+
+        // Piano library continuity (session-player coherence).
+        QString lastPianoCompPhraseId;
+        QString lastPianoTopLinePhraseId;
+        QString lastPianoPedalId;
+        QString lastPianoGestureId;
+        double pianoCompPhraseSwitchPenalty = 0.10;
+        double pianoTopLinePhraseSwitchPenalty = 0.08;
+        double pianoPedalSwitchPenalty = 0.05;
+        double pianoGestureSwitchPenalty = 0.03;
     };
 
     struct ComboEval {

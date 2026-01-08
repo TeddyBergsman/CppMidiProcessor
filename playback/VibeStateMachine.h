@@ -27,13 +27,21 @@ public:
         // How quickly we enter Climax on sustained intensity peaks.
         int climaxEnterMs = 500;   // lowered threshold
         // How quickly we exit Climax once intensity drops (linger).
-        int climaxExitMs = 2600;
+        int climaxExitMs = 5200; // require sustained calm before dropping from Climax
+        // Additional Climax hysteresis: don't fall just because of a brief breath.
+        // Require either sustained silence, or sustained low CC2 + low note density.
+        int climaxDownSilenceMs = 3200;
+        int climaxDownConfirmMs = 4200;
+        int climaxDownCc2Max = 46;             // "less CC2 intensity"
+        double climaxDownNotesPerSecMax = 1.2; // "less note density"
         // If user silence persists, we relax.
         int coolDownEnterMs = 2400; // don't drop to cooldown on brief rests
 
         // Energy smoothing (continuous transitions).
         int energyRiseTauMs = 520;   // faster attack
         int energyFallTauMs = 1500;  // slower release
+        int energyFallTauMsClimax = 3400; // even slower release while in Climax
+        int energyFallTauMsBuild = 2200;  // slightly slower release while in Build
     };
 
     struct Output {
@@ -62,6 +70,7 @@ private:
     qint64 m_silenceSinceMs = -1;
     qint64 m_buildSinceMs = -1;
     qint64 m_calmSinceMs = -1;
+    qint64 m_climaxDownSinceMs = -1;
 
     double m_energy = 0.35;
     qint64 m_lastEnergyUpdateMs = -1;

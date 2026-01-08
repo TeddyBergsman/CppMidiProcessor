@@ -56,6 +56,8 @@ public:
     void setGrooveTemplate(const groove::GrooveTemplate& t);
 
     void setInstrumentGrooveProfile(const QString& agent, const groove::InstrumentGrooveProfile& p);
+    void setRealtimeVelocityScale(double s);
+    void sendCcNow(int channel, int cc, int value);
 
     bool isRunning() const { return m_clock.isRunning(); }
     qint64 elapsedMs() const { return m_clock.elapsedMs(); }

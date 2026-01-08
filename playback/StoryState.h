@@ -42,6 +42,12 @@ struct StoryState final {
     // Energy tracking for instant replanning when user changes energy.
     double lastPlannedEnergy01 = -1.0;
 
+    // Piano library continuity (auditable IDs).
+    QString lastPianoCompPhraseId;
+    QString lastPianoTopLinePhraseId;
+    QString lastPianoPedalId;
+    QString lastPianoGestureId;
+
     // Phrase-level joint plan (beam-search output). One entry per beat-step.
     struct JointStepChoice {
         int stepIndex = -1; // absolute beat-step index
@@ -70,6 +76,10 @@ struct StoryState final {
         lastPianoCenterMidi = 72;
         responseUntilBar = -1;
         lastPlannedEnergy01 = -1.0;
+        lastPianoCompPhraseId.clear();
+        lastPianoTopLinePhraseId.clear();
+        lastPianoPedalId.clear();
+        lastPianoGestureId.clear();
         planStartStep = -1;
         planSteps = 0;
         plan.clear();

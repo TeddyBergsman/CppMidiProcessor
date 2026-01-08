@@ -6,6 +6,8 @@
 #include "playback/LookaheadPlanner.h"
 #include "playback/SemanticMidiAnalyzer.h"
 #include "playback/TransportTimeline.h"
+#include "playback/AutoWeightController.h"
+#include "playback/WeightNegotiator.h"
 
 #include <QHash>
 #include <QDateTime>
@@ -15,9 +17,23 @@
 #include <QRunnable>
 #include <QtGlobal>
 #include <algorithm>
+#include <cmath>
 
 namespace playback {
 namespace {
+
+static QString sectionLabelForPlaybackBar(const chart::ChartModel& m, int playbackBarIndex) {
+    if (playbackBarIndex < 0) playbackBarIndex = 0;
+    int bar = 0;
+    QString last;
+    for (const auto& line : m.lines) {
+        if (!line.sectionLabel.trimmed().isEmpty()) last = line.sectionLabel.trimmed();
+        const int n = line.bars.size();
+        if (playbackBarIndex < bar + n) return last;
+        bar += n;
+    }
+    return last;
+}
 
 class LookaheadRunnable final : public QRunnable {
 public:
@@ -71,6 +87,54 @@ private:
 };
 
 } // namespace
+
+void VirtuosoBalladMvpPlaybackEngine::updateRealtimeEnergyGains(double energy01) {
+    const double e = qBound(0.0, energy01, 1.0);
+
+    // Make Energy feel continuous without changing planning:
+    // - CC11 affects currently-sounding notes (\"inside the beat\")
+    //
+    // Important: do NOT let this become a master-volume knob that can mute instruments.
+    // Energy primarily shapes *what* gets played; real-time CC11 should be subtle and have a floor.
+    m_engine.setRealtimeVelocityScale(1.0); // avoid compounding with planner/intensity velocity logic
+
+    auto cc11FromEnergy = [&](double e01, int floor) -> int {
+        const double shaped = std::pow(qBound(0.0, e01, 1.0), 0.55);
+        return qBound(floor, int(std::llround(double(floor) + (127.0 - double(floor)) * shaped)), 127);
+    };
+
+    // Floors chosen so \"simmer\" stays audible and energy=0 never silences.
+    const int cc11P = cc11FromEnergy(e, /*floor=*/78);
+    const int cc11B = cc11FromEnergy(e, /*floor=*/88);
+    const int cc11D = 127; // avoid changing drum bus loudness (often less musical)
+
+    auto sendIfChanged = [&](int ch, int ccValue, int& last) {
+        if (ch < 1 || ch > 16) return;
+        if (ccValue == last) return;
+        last = ccValue;
+        m_engine.sendCcNow(ch, /*cc=*/11, ccValue);
+    };
+
+    sendIfChanged(m_chPiano, cc11P, m_lastCc11Piano);
+    sendIfChanged(m_chBass, cc11B, m_lastCc11Bass);
+    sendIfChanged(m_chDrums, cc11D, m_lastCc11Drums);
+}
+
+void VirtuosoBalladMvpPlaybackEngine::setDebugEnergyAuto(bool on) {
+    m_debugEnergyAuto = on;
+    // If Auto is turned off, immediately apply the currently-set manual energy.
+    if (!m_debugEnergyAuto) {
+        updateRealtimeEnergyGains(m_debugEnergy);
+    }
+}
+
+void VirtuosoBalladMvpPlaybackEngine::setDebugEnergy(double energy01) {
+    m_debugEnergy = qBound(0.0, energy01, 1.0);
+    // Always apply immediately so it feels continuous while dragging the slider.
+    if (!m_debugEnergyAuto) {
+        updateRealtimeEnergyGains(m_debugEnergy);
+    }
+}
 
 void VirtuosoBalladMvpPlaybackEngine::onGuitarNoteOn(int note, int vel) {
     m_interaction.ingestGuitarNoteOn(note, vel, QDateTime::currentMSecsSinceEpoch());
@@ -345,6 +409,31 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
     const qint64 nowWallMs = (m_playStartWallMs > 0) ? (m_playStartWallMs + elapsedMs) : QDateTime::currentMSecsSinceEpoch();
     const int stepNow = int(double(songMs) / beatMs);
 
+    // Keep real-time gain continuous even inside beats.
+    // Manual mode uses the slider directly; Auto mode uses the vibe engine snapshot.
+    {
+        // Rate-limit to avoid excessive CC spam and listener compute cost.
+        constexpr qint64 kMinUpdateMs = 45; // ~22 Hz; feels continuous
+        if (m_lastRealtimeGainUpdateElapsedMs < 0 || (elapsedMs - m_lastRealtimeGainUpdateElapsedMs) >= kMinUpdateMs) {
+            m_lastRealtimeGainUpdateElapsedMs = elapsedMs;
+
+            double eTarget = m_debugEnergy;
+            if (m_debugEnergyAuto) {
+                const auto snap = m_interaction.snapshot(nowWallMs, /*debugEnergyAuto=*/true, /*debugEnergy01=*/m_debugEnergy);
+                eTarget = snap.energy01;
+            }
+
+            // Smooth slightly to avoid zippering when the vibe engine jitters.
+            // EMA alpha chosen for ~150ms-ish response.
+            const double alpha = 0.28;
+            m_realtimeEnergySmoothed = qBound(0.0,
+                                             (1.0 - alpha) * m_realtimeEnergySmoothed + alpha * qBound(0.0, eTarget, 1.0),
+                                             1.0);
+
+            updateRealtimeEnergyGains(m_realtimeEnergySmoothed);
+        }
+    }
+
     const int total = seqLen * qMax(1, m_repeats);
     if (stepNow >= total) {
         stop();
@@ -358,6 +447,37 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
         if (cellIndex != m_lastEmittedCell) {
             m_lastEmittedCell = cellIndex;
             emit currentCellChanged(cellIndex);
+        }
+
+        // Emit weights v2 (for UI slider animation / debugging).
+        {
+            const int beatsPerBar = qMax(1, (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4);
+            const int playbackBarIndex = qMax(0, stepNow / beatsPerBar);
+            const QString sec = sectionLabelForPlaybackBar(m_model, playbackBarIndex);
+            const auto snap = m_interaction.snapshot(nowWallMs, m_debugEnergyAuto, m_debugEnergy);
+
+            virtuoso::control::PerformanceWeightsV2 w = m_weightsV2Manual;
+            w.clamp01();
+            if (m_weightsV2Auto) {
+                AutoWeightController::Inputs wi;
+                wi.sectionLabel = sec;
+                wi.repeatIndex = qMax(0, stepNow / qMax(1, seqLen));
+                wi.repeatsTotal = qMax(1, m_repeats);
+                wi.playbackBarIndex = playbackBarIndex;
+                wi.phraseBars = qMax(1, m_story.phraseBars);
+                wi.barInPhrase = (wi.phraseBars > 0) ? (playbackBarIndex % wi.phraseBars) : 0;
+                wi.phraseEndBar = (wi.barInPhrase == (wi.phraseBars - 1));
+                wi.cadence01 = 0.0;
+                wi.userSilence = snap.intent.silence;
+                wi.userBusy = snap.userBusy;
+                wi.userRegisterHigh = snap.intent.registerHigh;
+                wi.userIntensityPeak = snap.intent.intensityPeak;
+                w = AutoWeightController::compute(wi);
+            }
+
+            emit debugWeightsV2(w.density, w.rhythm, w.intensity, w.dynamism, w.emotion,
+                                w.creativity, w.tension, w.interactivity, w.variability, w.warmth,
+                                m_weightsV2Auto);
         }
     }
 
@@ -467,6 +587,47 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     ai.virtRhythmicComplexity = m_virtRhythmicComplexity;
     ai.virtInteraction = m_virtInteraction;
     ai.virtToneDark = m_virtToneDark;
+
+    // --- Weights v2 (primary) ---
+    ai.weightsV2Auto = m_weightsV2Auto;
+    // Derive section label for macro controller (from iReal section markers).
+    const int beatsPerBar = qMax(1, (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4);
+    const int playbackBarIndex = qMax(0, stepIndex / beatsPerBar);
+    const QString sec = sectionLabelForPlaybackBar(m_model, playbackBarIndex);
+
+    // Snapshot interaction at scheduling time (good enough for near-horizon).
+    const qint64 nowWallMs = QDateTime::currentMSecsSinceEpoch();
+    const auto snap = m_interaction.snapshot(nowWallMs, m_debugEnergyAuto, m_debugEnergy);
+
+    virtuoso::control::PerformanceWeightsV2 gw = m_weightsV2Manual;
+    gw.clamp01();
+    if (m_weightsV2Auto) {
+        AutoWeightController::Inputs wi;
+        wi.sectionLabel = sec;
+        wi.repeatIndex = qMax(0, stepIndex / qMax(1, seqLen));
+        wi.repeatsTotal = qMax(1, m_repeats);
+        wi.playbackBarIndex = playbackBarIndex;
+        wi.phraseBars = qMax(1, m_story.phraseBars);
+        wi.barInPhrase = (wi.phraseBars > 0) ? (playbackBarIndex % wi.phraseBars) : 0;
+        wi.phraseEndBar = (wi.barInPhrase == (wi.phraseBars - 1));
+        wi.cadence01 = 0.0; // refined cadence comes from HarmonyContext downstream; start conservative
+        wi.userSilence = snap.intent.silence;
+        wi.userBusy = snap.userBusy;
+        wi.userRegisterHigh = snap.intent.registerHigh;
+        wi.userIntensityPeak = snap.intent.intensityPeak;
+        gw = AutoWeightController::compute(wi);
+    }
+    ai.weightsV2 = gw;
+
+    // Negotiate per-agent applied weights (for now: deterministic heuristic + smoothing state).
+    WeightNegotiator::Inputs ni;
+    ni.global = gw;
+    ni.userBusy = snap.userBusy;
+    ni.userSilence = snap.intent.silence;
+    ni.cadence = false;
+    ni.phraseEnd = false;
+    ni.sectionLabel = sec;
+    ai.negotiated = WeightNegotiator::negotiate(ni, m_weightNegState, /*alpha=*/0.22);
 
     ai.debugEnergyAuto = m_debugEnergyAuto;
     ai.debugEnergy = m_debugEnergy;

@@ -47,6 +47,10 @@ public:
 
     void schedule(const ScheduledEvent& ev);
 
+    // Real-time output scaling (applied at dispatch time so already-queued events respond immediately).
+    // 1.0 = unchanged. Values are clamped to a reasonable range internally by callers.
+    void setRealtimeVelocityScale(double s) { m_velocityScale = s; }
+
     // Hard stop: immediately emits NoteOff for any notes that are currently on (tracked internally),
     // then emits AllNotesOff per channel as a safety net, and clears the queue.
     // This does NOT depend on the clock running.
@@ -66,6 +70,8 @@ private:
     VirtuosoClock* m_clock = nullptr; // not owned
     QVector<ScheduledEvent> m_heap;   // min-heap by dueMs
     QTimer m_dispatchTimer;
+
+    double m_velocityScale = 1.0;
 
     // Track active notes that have actually been emitted as NOTE_ON and not yet NOTE_OFF.
     // [channel-1][note] => on/off

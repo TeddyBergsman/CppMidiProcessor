@@ -11,7 +11,7 @@ BalladRefTuning tuningForReferenceTrack(const QString& presetKey) {
         t.bassSkipBeat3ProbStable = 0.18;
         t.pianoSkipBeat2ProbStable = 0.30;
         t.pianoAddSecondColorProb = 0.40;
-        t.pianoSparkleProbBeat4 = 0.22;
+        t.pianoSparkleProbBeat4 = 0.0;
         t.pianoPreferShells = false;
         t.pianoLhLo = 48; t.pianoLhHi = 67;
         t.pianoRhLo = 65; t.pianoRhHi = 86;
@@ -24,7 +24,7 @@ BalladRefTuning tuningForReferenceTrack(const QString& presetKey) {
         // Piano: fewer skipped beats, more color, less sparkle ping, more mid-high warmth.
         t.pianoSkipBeat2ProbStable = qMax(0.08, t.pianoSkipBeat2ProbStable - 0.10);
         t.pianoAddSecondColorProb = qMin(0.70, t.pianoAddSecondColorProb + 0.12);
-        t.pianoSparkleProbBeat4 = qMax(0.10, t.pianoSparkleProbBeat4 - 0.08);
+        t.pianoSparkleProbBeat4 = 0.0;
         t.pianoPreferShells = false;
         t.pianoLhLo = qMax(44, t.pianoLhLo - 2);
         t.pianoLhHi = qMin(70, t.pianoLhHi + 1);

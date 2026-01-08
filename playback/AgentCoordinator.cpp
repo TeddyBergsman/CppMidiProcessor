@@ -4,7 +4,6 @@
 #include "playback/JointPhrasePlanner.h"
 #include "playback/JointCandidateModel.h"
 #include "playback/LookaheadWindow.h"
-#include "playback/VirtuosoBalladMvpPlaybackEngine.h"
 #include "virtuoso/solver/BeatCostModel.h"
 #include "virtuoso/util/StableHash.h"
 #include "virtuoso/theory/ScaleSuggester.h"
@@ -13,6 +12,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMetaObject>
 #include <QtGlobal>
 #include <limits>
 
@@ -202,27 +202,32 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
 
     // Debug UI status (emitted once per beat step).
     if (in.owner) {
-        const QString virtStr = in.virtAuto
-            ? "Virt=Auto"
-            : QString("Virt=Manual r=%1 rc=%2 i=%3 t=%4")
-                  .arg(in.virtHarmonicRisk, 0, 'f', 2)
-                  .arg(in.virtRhythmicComplexity, 0, 'f', 2)
-                  .arg(in.virtInteraction, 0, 'f', 2)
-                  .arg(in.virtToneDark, 0, 'f', 2);
-        in.owner->debugStatus(QString("Preset=%1  Vibe=%2  energy=%3  %4  intents=%5  nps=%6  reg=%7  gVel=%8  cc2=%9  vNote=%10  silenceMs=%11  outside=%12")
-                                  .arg(in.stylePresetKey)
-                                  .arg(vibeStr)
-                                  .arg(baseEnergy, 0, 'f', 2)
-                                  .arg(virtStr)
-                                  .arg(intentStr.isEmpty() ? "-" : intentStr)
-                                  .arg(intent.notesPerSec, 0, 'f', 2)
-                                  .arg(intent.registerCenterMidi)
-                                  .arg(intent.lastGuitarVelocity)
-                                  .arg(intent.lastCc2)
-                                  .arg(intent.lastVoiceMidi)
-                                  .arg(intent.msSinceLastActivity == std::numeric_limits<qint64>::max() ? -1 : intent.msSinceLastActivity)
-                                  .arg(intent.outsideRatio, 0, 'f', 2));
-        in.owner->debugEnergy(baseEnergy, in.debugEnergyAuto);
+        const QString w2 = QString("W2 d=%1 r=%2 i=%3 dyn=%4 emo=%5 cre=%6 ten=%7 int=%8 var=%9 warm=%10")
+                               .arg(in.weightsV2.density, 0, 'f', 2)
+                               .arg(in.weightsV2.rhythm, 0, 'f', 2)
+                               .arg(in.weightsV2.intensity, 0, 'f', 2)
+                               .arg(in.weightsV2.dynamism, 0, 'f', 2)
+                               .arg(in.weightsV2.emotion, 0, 'f', 2)
+                               .arg(in.weightsV2.creativity, 0, 'f', 2)
+                               .arg(in.weightsV2.tension, 0, 'f', 2)
+                               .arg(in.weightsV2.interactivity, 0, 'f', 2)
+                               .arg(in.weightsV2.variability, 0, 'f', 2)
+                               .arg(in.weightsV2.warmth, 0, 'f', 2);
+        const QString status = QString("Preset=%1  Vibe=%2  energy=%3  %4  intents=%5  nps=%6  reg=%7  gVel=%8  cc2=%9  vNote=%10  silenceMs=%11  outside=%12")
+                                   .arg(in.stylePresetKey)
+                                   .arg(vibeStr)
+                                   .arg(baseEnergy, 0, 'f', 2)
+                                   .arg(in.weightsV2Auto ? (w2 + " (Auto)") : (w2 + " (Manual)"))
+                                   .arg(intentStr.isEmpty() ? "-" : intentStr)
+                                   .arg(intent.notesPerSec, 0, 'f', 2)
+                                   .arg(intent.registerCenterMidi)
+                                   .arg(intent.lastGuitarVelocity)
+                                   .arg(intent.lastCc2)
+                                   .arg(intent.lastVoiceMidi)
+                                   .arg(intent.msSinceLastActivity == std::numeric_limits<qint64>::max() ? -1 : intent.msSinceLastActivity)
+                                   .arg(intent.outsideRatio, 0, 'f', 2);
+        QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, status));
+        QMetaObject::invokeMethod(in.owner, "debugEnergy", Qt::DirectConnection, Q_ARG(double, baseEnergy), Q_ARG(bool, in.debugEnergyAuto));
     }
 
     // Energy-driven instrument layering.
@@ -355,7 +360,10 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         for (auto n : drumIntents) {
             const double e = qBound(0.0, baseEnergy, 1.0);
             const double mult = 0.55 + 0.55 * e;
+            // Weights v2: let negotiated intensity influence touch.
+            const double iMult = 0.70 + 0.70 * qBound(0.0, in.negotiated.drums.w.intensity, 1.0);
             n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * mult)), 127);
+            n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * iMult)), 127);
             n.vibe_state = vibeStr;
             n.user_intents = intentStr;
             n.user_outside_ratio = intent.outsideRatio;
@@ -442,16 +450,12 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     bc.chordFunction = func;
     bc.roman = roman;
     const double progress01 = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
-    if (in.virtAuto) {
-        bc.harmonicRisk = qBound(0.0, in.virtHarmonicRisk + 0.35 * bc.energy + 0.15 * progress01, 1.0);
-        bc.rhythmicComplexity = qBound(0.0, in.virtRhythmicComplexity + 0.45 * bc.energy + 0.20 * progress01, 1.0);
-        bc.interaction = qBound(0.0, in.virtInteraction + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.10 * bc.energy, 1.0);
-        bc.toneDark = qBound(0.0, in.virtToneDark + 0.15 * (1.0 - bc.energy), 1.0);
-    } else {
-        bc.harmonicRisk = in.virtHarmonicRisk;
-        bc.rhythmicComplexity = in.virtRhythmicComplexity;
-        bc.interaction = in.virtInteraction;
-        bc.toneDark = in.virtToneDark;
+    {
+        const auto vb = in.negotiated.bass.virt;
+        bc.harmonicRisk = qBound(0.0, vb.harmonicRisk + 0.35 * bc.energy + 0.15 * progress01, 1.0);
+        bc.rhythmicComplexity = qBound(0.0, vb.rhythmicComplexity + 0.45 * bc.energy + 0.20 * progress01, 1.0);
+        bc.interaction = qBound(0.0, vb.interaction + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.10 * bc.energy, 1.0);
+        bc.toneDark = qBound(0.0, vb.toneDark + 0.15 * (1.0 - bc.energy), 1.0);
     }
     if (intent.densityHigh || intent.intensityPeak) {
         bc.approachProbBeat3 *= 0.35;
@@ -525,16 +529,12 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         pc.cadence01 *= 0.65;
     }
     const double progress01p = qBound(0.0, double(qMax(0, playbackBarIndex)) / 24.0, 1.0);
-    if (in.virtAuto) {
-        pc.harmonicRisk = qBound(0.0, in.virtHarmonicRisk + 0.40 * pc.energy + 0.20 * progress01p, 1.0);
-        pc.rhythmicComplexity = qBound(0.0, in.virtRhythmicComplexity + 0.55 * pc.energy + 0.15 * progress01p, 1.0);
-        pc.interaction = qBound(0.0, in.virtInteraction + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.15 * pc.energy, 1.0);
-        pc.toneDark = qBound(0.0, in.virtToneDark + 0.20 * (1.0 - pc.energy) + 0.10 * (intent.registerHigh ? 1.0 : 0.0), 1.0);
-    } else {
-        pc.harmonicRisk = in.virtHarmonicRisk;
-        pc.rhythmicComplexity = in.virtRhythmicComplexity;
-        pc.interaction = in.virtInteraction;
-        pc.toneDark = in.virtToneDark;
+    {
+        const auto vp = in.negotiated.piano.virt;
+        pc.harmonicRisk = qBound(0.0, vp.harmonicRisk + 0.40 * pc.energy + 0.20 * progress01p, 1.0);
+        pc.rhythmicComplexity = qBound(0.0, vp.rhythmicComplexity + 0.55 * pc.energy + 0.15 * progress01p, 1.0);
+        pc.interaction = qBound(0.0, vp.interaction + 0.30 * (intent.silence ? 1.0 : 0.0) + 0.15 * pc.energy, 1.0);
+        pc.toneDark = qBound(0.0, vp.toneDark + 0.20 * (1.0 - pc.energy) + 0.10 * (intent.registerHigh ? 1.0 : 0.0), 1.0);
     }
     if (intent.registerHigh) {
         pc.rhHi = qMax(pc.rhLo + 4, pc.rhHi - 6);
@@ -770,6 +770,12 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         si.prevPianoCenterMidi = prevPianoCenter;
         si.virtAvg = virtAvg;
         si.weights = w;
+        if (in.story) {
+            si.lastPianoCompPhraseId = in.story->lastPianoCompPhraseId;
+            si.lastPianoTopLinePhraseId = in.story->lastPianoTopLinePhraseId;
+            si.lastPianoPedalId = in.story->lastPianoPedalId;
+            si.lastPianoGestureId = in.story->lastPianoGestureId;
+        }
 
         const bool havePlanned = (!plannedBassId.isEmpty() || !plannedPianoId.isEmpty() || !plannedDrumsId.isEmpty());
         const auto best = JointCandidateModel::chooseBestCombo(si, bCands, pCands, dCands,
@@ -788,6 +794,8 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             QJsonObject root;
             root.insert("event_kind", "candidate_pool");
             root.insert("schema", 2);
+            root.insert("weights_v2", in.weightsV2.toJson());
+            root.insert("negotiated_v2", in.negotiated.toJson());
             root.insert("tempo_bpm", in.bpm);
             root.insert("ts_num", ts.num);
             root.insert("ts_den", ts.den);
@@ -1081,7 +1089,9 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             n.virtuosity.toneDark = bcChosen.toneDark;
             n.logic_tag = n.logic_tag.isEmpty() ? jointTag : (n.logic_tag + "|" + jointTag);
             const double e = qBound(0.0, baseEnergy, 1.0);
+            const double iMult = 0.75 + 0.65 * qBound(0.0, in.negotiated.bass.w.intensity, 1.0);
             n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.90 + 0.25 * e))), 127);
+            n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * iMult)), 127);
 
             if (in.kickLocksBass && beatInBar == 0 && haveKickHe) {
                 auto bhe = in.engine->humanizeIntent(n);
@@ -1200,7 +1210,11 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         n.virtuosity.toneDark = pcChosen.toneDark;
         n.logic_tag = n.logic_tag.isEmpty() ? jointTag : (n.logic_tag + "|" + jointTag);
         const double e = qBound(0.0, vibeEff.energy, 1.0);
+        const double iMult = 0.70 + 0.75 * qBound(0.0, in.negotiated.piano.w.intensity, 1.0);
         n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * (0.82 + 0.40 * e))), 127);
+        n.baseVelocity = qBound(1, int(llround(double(n.baseVelocity) * iMult)), 127);
+        // Prevent simmer/low-energy from becoming inaudible (energy should reduce density/complexity first).
+        n.baseVelocity = qMax(n.baseVelocity, 14);
         in.engine->scheduleNote(n);
         if (in.motivicMemory) in.motivicMemory->push(n);
         pianoSum += n.note;
@@ -1208,6 +1222,12 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     }
     if (in.story && pianoN > 0) {
         in.story->lastPianoCenterMidi = clampPianoCenterMidi(int(llround(double(pianoSum) / double(pianoN))));
+    }
+    if (in.story) {
+        in.story->lastPianoCompPhraseId = pianoPlan.performance.compPhraseId.trimmed();
+        in.story->lastPianoTopLinePhraseId = pianoPlan.performance.toplinePhraseId.trimmed();
+        in.story->lastPianoPedalId = pianoPlan.performance.pedalId.trimmed();
+        in.story->lastPianoGestureId = pianoPlan.performance.gestureId.trimmed();
     }
     if (usePlannedBeat) {
         in.pianoPlanner->restoreState(plannedStep->pianoStateAfter);
@@ -1219,6 +1239,8 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         QJsonObject root;
         root.insert("event_kind", "candidate_pool");
         root.insert("schema", 2);
+        root.insert("weights_v2", in.weightsV2.toJson());
+        root.insert("negotiated_v2", in.negotiated.toJson());
         root.insert("tempo_bpm", in.bpm);
         root.insert("ts_num", ts.num);
         root.insert("ts_den", ts.den);

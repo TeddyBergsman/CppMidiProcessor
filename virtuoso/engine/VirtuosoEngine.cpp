@@ -50,6 +50,25 @@ void VirtuosoEngine::setInstrumentGrooveProfile(const QString& agent, const groo
     if (m_hasGrooveTemplate) h.setGrooveTemplate(m_grooveTemplate);
 }
 
+void VirtuosoEngine::setRealtimeVelocityScale(double s) {
+    m_sched.setRealtimeVelocityScale(qBound(0.0, s, 4.0));
+}
+
+void VirtuosoEngine::sendCcNow(int channel, int ccNum, int value) {
+    if (!m_clock.isRunning()) return;
+    if (channel < 1 || channel > 16) return;
+    if (ccNum < 0 || ccNum > 127) return;
+    if (value < 0 || value > 127) return;
+
+    VirtuosoScheduler::ScheduledEvent ev;
+    ev.dueMs = m_clock.elapsedMs();
+    ev.kind = VirtuosoScheduler::Kind::CC;
+    ev.channel = channel;
+    ev.cc = ccNum;
+    ev.ccValue = value;
+    m_sched.schedule(ev);
+}
+
 void VirtuosoEngine::start() {
     m_sched.clear();
     m_clock.start();

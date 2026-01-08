@@ -12,6 +12,7 @@ void VibeStateMachine::reset() {
     m_silenceSinceMs = -1;
     m_buildSinceMs = -1;
     m_calmSinceMs = -1;
+    m_climaxDownSinceMs = -1;
     m_energy = 0.35;
     m_lastEnergyUpdateMs = -1;
 }
@@ -61,6 +62,17 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
         m_calmSinceMs = -1;
     }
 
+    // Climax down-signal: require *sustained* calm evidence, not just a brief breath.
+    const double cc201 = qBound(0.0, double(intent.lastCc2) / 127.0, 1.0);
+    const bool lowCc2 = (intent.lastCc2 <= m_s.climaxDownCc2Max);
+    const bool lowDensity = (intent.notesPerSec <= m_s.climaxDownNotesPerSecMax) && (!intent.densityHigh);
+    const bool downSignal = (!intent.intensityPeak) && (intent.silence || (lowCc2 && lowDensity));
+    if (downSignal) {
+        if (m_climaxDownSinceMs < 0) m_climaxDownSinceMs = nowMs;
+    } else {
+        m_climaxDownSinceMs = -1;
+    }
+
     const bool canChange = (nowMs - m_lastStateChangeMs) >= qint64(qMax(0, m_s.minStateHoldMs));
 
     // Transitions (simple but musical):
@@ -93,7 +105,11 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
         // We don't require canChange here; we use a separate decay timer but still respect min hold.
         const bool decayOk = (nowMs - m_lastStateChangeMs) >= qint64(qMax(0, m_s.minStateHoldMs));
         const bool calmLongEnough = (m_calmSinceMs >= 0) && ((nowMs - m_calmSinceMs) >= qint64(qMax(0, m_s.climaxExitMs)));
-        if (decayOk && calmLongEnough) {
+        const bool downSilenceOk = (intent.silence && m_silenceSinceMs >= 0
+                                    && (nowMs - m_silenceSinceMs) >= qint64(qMax(0, m_s.climaxDownSilenceMs)));
+        const bool downConfirmOk = (m_climaxDownSinceMs >= 0
+                                    && (nowMs - m_climaxDownSinceMs) >= qint64(qMax(0, m_s.climaxDownConfirmMs)));
+        if (decayOk && calmLongEnough && (downSilenceOk || downConfirmOk)) {
             // If silent: cooldown; else relax to simmer/build based on input.
             if (intent.silence) {
                 m_vibe = Vibe::CoolDown;
@@ -102,7 +118,7 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
             } else {
                 m_vibe = buildSignal ? Vibe::Build : Vibe::Simmer;
                 m_lastStateChangeMs = nowMs;
-                out.reason = "exit_climax->relax";
+                out.reason = "exit_climax->relax:hysteresis";
             }
         }
     }
@@ -128,7 +144,7 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
         case Vibe::CoolDown: base = 0.22; break;
     }
     const double nps01 = qBound(0.0, intent.notesPerSec / 8.0, 1.0);
-    const double cc201 = qBound(0.0, double(intent.lastCc2) / 127.0, 1.0);
+    // (cc201 computed above for down-signal)
     double target = base
         + 0.10 * nps01
         + 0.08 * cc201
@@ -140,7 +156,11 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
     const qint64 prevMs = (m_lastEnergyUpdateMs >= 0) ? m_lastEnergyUpdateMs : nowMs;
     const double dt = double(qMax<qint64>(0, nowMs - prevMs));
     m_lastEnergyUpdateMs = nowMs;
-    const int tauMs = (target >= m_energy) ? qMax(1, m_s.energyRiseTauMs) : qMax(1, m_s.energyFallTauMs);
+    int tauMs = (target >= m_energy) ? qMax(1, m_s.energyRiseTauMs) : qMax(1, m_s.energyFallTauMs);
+    if (target < m_energy) {
+        if (m_vibe == Vibe::Climax) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsClimax));
+        if (m_vibe == Vibe::Build) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsBuild));
+    }
     const double a = 1.0 - std::exp(-dt / double(tauMs));
     m_energy = m_energy + a * (target - m_energy);
     out.energy = m_energy;

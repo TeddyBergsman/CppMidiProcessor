@@ -21,6 +21,8 @@
 #include "playback/InteractionContext.h"
 #include "playback/StoryState.h"
 #include "virtuoso/memory/MotivicMemory.h"
+#include "virtuoso/control/PerformanceWeightsV2.h"
+#include "playback/WeightNegotiator.h"
 
 class MidiProcessor;
 
@@ -58,8 +60,8 @@ public slots:
 
     // Debug/validation knobs (glass-box controllable).
     // Global energy override (0..1). When Auto is on (default), energy follows the vibe engine.
-    void setDebugEnergyAuto(bool on) { m_debugEnergyAuto = on; }
-    void setDebugEnergy(double energy01) { m_debugEnergy = qBound(0.0, energy01, 1.0); }
+    void setDebugEnergyAuto(bool on);
+    void setDebugEnergy(double energy01);
 
     // Per-agent energy multipliers (0..2 recommended).
     void setAgentEnergyMultiplier(const QString& agent, double mult01to2) {
@@ -76,6 +78,10 @@ public slots:
         m_virtToneDark = qBound(0.0, toneDark01, 1.0);
     }
 
+    // New global control surface (Weights v2): primary sliders.
+    void setPerformanceWeightsAuto(bool on) { m_weightsV2Auto = on; }
+    void setPerformanceWeightsV2(const virtuoso::control::PerformanceWeightsV2& w) { m_weightsV2Manual = w; }
+
 signals:
     void currentCellChanged(int cellIndex);
     void theoryEventJson(const QString& json);
@@ -83,6 +89,17 @@ signals:
     void lookaheadPlanJson(const QString& json);
     void debugStatus(const QString& text);
     void debugEnergy(double energy01, bool isAuto);
+    void debugWeightsV2(double density01,
+                        double rhythm01,
+                        double intensity01,
+                        double dynamism01,
+                        double emotion01,
+                        double creativity01,
+                        double tension01,
+                        double interactivity01,
+                        double variability01,
+                        double warmth01,
+                        bool isAuto);
 
 private slots:
     void onTick();
@@ -94,6 +111,7 @@ private slots:
     void onVoiceNoteOff(int note);
 
 private:
+    void updateRealtimeEnergyGains(double energy01);
     void scheduleLookaheadAsync(int stepNow, const virtuoso::groove::TimeSignature& ts, qint64 nowWallMs, qint64 engineNowMs);
 
     void rebuildSequence();
@@ -181,12 +199,23 @@ private:
     double m_debugEnergy = 0.25;
     QHash<QString, double> m_agentEnergyMult; // agent -> multiplier
 
+    int m_lastCc11Piano = -1;
+    int m_lastCc11Bass = -1;
+    int m_lastCc11Drums = -1;
+    qint64 m_lastRealtimeGainUpdateElapsedMs = -1;
+    double m_realtimeEnergySmoothed = 0.25;
+
     // Stage 3 Virtuosity Matrix (defaults: Auto).
     bool m_virtAuto = true;
     double m_virtHarmonicRisk = 0.20;
     double m_virtRhythmicComplexity = 0.25;
     double m_virtInteraction = 0.50;
     double m_virtToneDark = 0.60;
+
+    // Weights v2 (defaults: Auto).
+    bool m_weightsV2Auto = true;
+    virtuoso::control::PerformanceWeightsV2 m_weightsV2Manual{};
+    playback::WeightNegotiator::State m_weightNegState{};
 
     // Track whether drums were enabled last tick (for stopping loops when drums are disabled by energy layering).
     bool m_drumsEnabledLast = false;

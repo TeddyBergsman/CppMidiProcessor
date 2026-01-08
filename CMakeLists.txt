@@ -25,6 +25,8 @@ add_library(VirtuosoCore STATIC
   virtuoso/util/DeterminismPolicy.h
   virtuoso/util/StableRng.h
   virtuoso/control/VirtuosityMatrix.h
+  virtuoso/control/PerformanceWeightsV2.h
+  virtuoso/control/PerformanceWeightsV2.cpp
   virtuoso/solver/CspSolver.h
   virtuoso/solver/BeatCostModel.h
   virtuoso/solver/BeatCostModel.cpp
@@ -84,10 +86,13 @@ add_executable(VirtuosoPlaybackTests
   playback/tests/VirtuosoPlaybackTests.cpp
   playback/HarmonyContext.cpp
   playback/InteractionContext.cpp
+  playback/AutoWeightController.cpp
+  playback/WeightNegotiator.cpp
   playback/LookaheadWindow.cpp
   playback/LookaheadPlanner.cpp
   playback/JointPhrasePlanner.cpp
   playback/JointCandidateModel.cpp
+  playback/AgentCoordinator.cpp
   playback/JazzBalladBassPlanner.cpp
   playback/JazzBalladPianoPlanner.cpp
   playback/BrushesBalladDrummer.cpp
@@ -161,6 +166,10 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/LookaheadPlanner.cpp
   playback/TransportTimeline.h
   playback/TransportTimeline.cpp
+  playback/AutoWeightController.h
+  playback/AutoWeightController.cpp
+  playback/WeightNegotiator.h
+  playback/WeightNegotiator.cpp
   playback/BalladReferenceTuning.h
   playback/BalladReferenceTuning.cpp
   playback/JazzBalladBassPlanner.h

@@ -1,62 +1,61 @@
 {
   "version": 1,
   "style": "cool_jazz",
-  "notes": "MVP vocabulary pack: cool jazz ballad language (Chet/Bill Evans/early Miles/Ben Webster). Beat-scoped patterns for 4/4.",
+  "notes": "MVP vocabulary pack: cool jazz ballad language. Piano vocab intentionally reset to a minimal 'tasteful basics' set (shells/rootless + 8th/16th rhythm cells) before reintroducing complexity.",
 
   "piano_phrases": [
     {
-      "id": "EVANS_4BAR_SPARSE_2_4",
+      "id": "P_BASIC_4BAR_2_4_SHELLS",
       "phraseBars": 4,
       "minEnergy": 0.0,
-      "maxEnergy": 0.75,
-      "weight": 3.0,
+      "maxEnergy": 1.0,
+      "weight": 4.0,
       "allowWhenUserSilence": false,
       "hits": [
-        { "bar": 0, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
-        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
+        { "bar": 0, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
 
-        { "bar": 1, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
-        { "bar": 1, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" },
+        { "bar": 1, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 1, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
 
-        { "bar": 2, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
-        { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
+        { "bar": 2, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
 
-        { "bar": 3, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
-        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "full" },
-        { "bar": 3, "beat": 3, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -14, "density": "guide" }
+        { "bar": 3, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
+        { "bar": 3, "beat": 3, "sub": 3, "count": 4, "dur_num": 1, "dur_den": 16, "vel_delta": -16, "density": "guide" }
       ],
-      "notes": "Bill Evans-ish 4-bar comp rhythm: mostly shells on 2&4, occasional fuller beat 4 and tiny and-of-4 breath at phrase end."
+      "notes": "Tasteful baseline: shells on 2&4 (guide tones), with a tiny late 16th breath at phrase end."
     },
     {
-      "id": "EVANS_4BAR_CHARLESTON_LIGHT",
+      "id": "P_BASIC_4BAR_CHARLESTON",
       "phraseBars": 4,
       "minEnergy": 0.20,
       "maxEnergy": 0.90,
-      "weight": 1.8,
+      "weight": 2.0,
       "allowWhenUserSilence": false,
       "hits": [
-        { "bar": 0, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -10, "density": "guide" },
-        { "bar": 0, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "full" },
-        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
+        { "bar": 0, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -12, "density": "guide" },
+        { "bar": 0, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
 
-        { "bar": 1, "beat": 1, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "guide" },
-        { "bar": 1, "beat": 3, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "full" },
+        { "bar": 1, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -12, "density": "guide" },
+        { "bar": 1, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
 
-        { "bar": 2, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -10, "density": "guide" },
-        { "bar": 2, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -4, "density": "full" },
-        { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -2, "density": "guide" },
+        { "bar": 2, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -12, "density": "guide" },
+        { "bar": 2, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
 
-        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" },
-        { "bar": 3, "beat": 3, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -14, "density": "guide" }
+        { "bar": 3, "beat": 0, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -12, "density": "guide" },
+        { "bar": 3, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -8, "density": "guide" },
+        { "bar": 3, "beat": 3, "sub": 3, "count": 4, "dur_num": 1, "dur_den": 16, "vel_delta": -18, "density": "guide" }
       ],
-      "notes": "Light Charleston cells (1 + and-of-2) sprinkled into a 4-bar phrase, with a push on and-of-4 at the phrase end."
+      "notes": "Charleston cell baseline (1 + and-of-2), all shells; tiny late 16th breath at phrase end."
     },
     {
-      "id": "CHET_SPACE_4BAR_ONLY_4",
+      "id": "P_BASIC_4BAR_ONLY_4",
       "phraseBars": 4,
       "minEnergy": 0.0,
-      "maxEnergy": 0.65,
-      "weight": 1.4,
+      "maxEnergy": 0.75,
+      "weight": 2.2,
       "allowWhenUserSilence": true,
       "hits": [
         { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -6, "density": "guide" },
@@ -64,64 +63,31 @@
         { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -6, "density": "guide" },
         { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -6, "density": "guide" }
       ],
-      "notes": "Very sparse phrase: comp only on beat 4 each bar (Chet space)."
+      "notes": "Very sparse phrase: comp only on beat 4 each bar."
     }
   ],
 
   "piano_topline": [
     {
-      "id": "TL_4BAR_GUIDE_RESOLVE",
+      "id": "TL_NONE",
       "phraseBars": 4,
       "minEnergy": 0.0,
       "maxEnergy": 1.0,
-      "weight": 3.0,
+      "weight": 9.0,
       "allowWhenUserSilence": true,
-      "hits": [
-        { "bar": 0, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -18, "degree": 7, "neighborDir": 0, "resolve": false, "tag": "a" },
-        { "bar": 0, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -16, "degree": 9, "neighborDir": -1, "resolve": false, "tag": "b" },
-        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -10, "degree": 7, "neighborDir": 0, "resolve": true, "tag": "resolve" },
-
-        { "bar": 1, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -18, "degree": 3, "neighborDir": 0, "resolve": false, "tag": "a2" },
-        { "bar": 1, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -16, "degree": 9, "neighborDir": 1, "resolve": false, "tag": "b2" },
-        { "bar": 1, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -10, "degree": 3, "neighborDir": 0, "resolve": true, "tag": "resolve2" },
-
-        { "bar": 2, "beat": 2, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 16, "vel_delta": -18, "degree": 9, "neighborDir": 0, "resolve": false, "tag": "a3" },
-        { "bar": 2, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -10, "degree": 7, "neighborDir": 0, "resolve": true, "tag": "resolve3" },
-
-        { "bar": 3, "beat": 2, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -18, "degree": 9, "neighborDir": 0, "resolve": false, "tag": "a4" },
-        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 3, "dur_den": 16, "vel_delta": -6, "degree": 7, "neighborDir": 0, "resolve": true, "tag": "cadence" }
-      ],
-      "notes": "Phrase-aware guide-tone-ish top-line with beat-4 resolves. Conservative and singable."
-    },
-    {
-      "id": "TL_4BAR_SWINGY_UPBEATS",
-      "phraseBars": 4,
-      "minEnergy": 0.20,
-      "maxEnergy": 1.0,
-      "weight": 2.0,
-      "allowWhenUserSilence": false,
-      "hits": [
-        { "bar": 0, "beat": 0, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -20, "degree": 9, "neighborDir": 0, "resolve": false, "tag": "pickup" },
-        { "bar": 0, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -18, "degree": 13, "neighborDir": -1, "resolve": false, "tag": "a" },
-        { "bar": 0, "beat": 3, "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -10, "degree": 3, "neighborDir": 0, "resolve": true, "tag": "resolve" },
-        { "bar": 2, "beat": 1, "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -18, "degree": 9, "neighborDir": 1, "resolve": false, "tag": "answer" },
-        { "bar": 3, "beat": 3, "sub": 0, "count": 1, "dur_num": 3, "dur_den": 16, "vel_delta": -6, "degree": 7, "neighborDir": 0, "resolve": true, "tag": "cadence" }
-      ],
-      "notes": "More upbeat, conversational top-line cells; still sparse, but with pickups."
+      "hits": [],
+      "notes": "No top-line (default while rebuilding basics)."
     }
   ],
 
   "piano_gestures": [
-    { "id": "G_NONE", "minEnergy": 0.0, "maxEnergy": 1.0, "weight": 4.0, "kind": "none", "style": "", "spreadMs": 0, "notes": "No roll/arp." },
-    { "id": "G_ROLL_UP_SMALL", "minEnergy": 0.15, "maxEnergy": 0.90, "weight": 2.0, "allowWhenUserSilence": true, "minNoteCount": 3, "maxNoteCount": 6, "maxBpm": 140, "kind": "roll", "style": "up", "spreadMs": 32, "notes": "Small upward roll." },
-    { "id": "G_ROLL_DOWN_SMALL", "minEnergy": 0.15, "maxEnergy": 0.90, "weight": 1.8, "allowWhenUserSilence": true, "minNoteCount": 3, "maxNoteCount": 6, "maxBpm": 140, "kind": "roll", "style": "down", "spreadMs": 30, "notes": "Small downward roll (answering feel)." },
-    { "id": "G_ARP_CADENCE", "minEnergy": 0.25, "maxEnergy": 1.0, "weight": 1.2, "cadenceOnly": true, "allowWhenUserSilence": false, "minNoteCount": 3, "maxNoteCount": 6, "maxBpm": 120, "kind": "arp", "style": "inside_out", "spreadMs": 46, "notes": "Cadence arpeggiation (inside-out), rare." }
+    { "id": "G_NONE", "minEnergy": 0.0, "maxEnergy": 1.0, "weight": 6.0, "kind": "none", "style": "", "spreadMs": 0, "notes": "No roll/arp (default while rebuilding basics)." },
+    { "id": "G_ROLL_UP_SMALL", "minEnergy": 0.20, "maxEnergy": 1.0, "weight": 0.8, "cadenceOnly": true, "allowWhenUserSilence": true, "minNoteCount": 3, "maxNoteCount": 6, "maxBpm": 130, "kind": "roll", "style": "up", "spreadMs": 30, "notes": "Small upward roll, cadence-only." }
   ],
 
   "piano_pedals": [
-    { "id": "P_HALF_DEFAULT", "minEnergy": 0.0, "maxEnergy": 1.0, "weight": 3.0, "defaultState": "half", "repedalOnNewChord": true, "repedalProbPct": 55, "clearBeforeChange": true, "clearSub": 3, "clearCount": 4, "notes": "Half pedal default, repedal on new chords, late clear before changes." },
-    { "id": "P_DRY_UP", "minEnergy": 0.0, "maxEnergy": 0.55, "weight": 1.2, "defaultState": "up", "repedalOnNewChord": false, "clearBeforeChange": true, "clearSub": 3, "clearCount": 4, "notes": "Dry touch: mostly pedal up (clarity, less smear)." },
-    { "id": "P_DOWN_WASH", "minEnergy": 0.25, "maxEnergy": 1.0, "weight": 0.9, "defaultState": "down", "repedalOnNewChord": true, "repedalProbPct": 40, "clearBeforeChange": true, "clearSub": 3, "clearCount": 4, "notes": "Lusher wash: pedal down more often, still clears on changes." }
+    { "id": "P_HALF_DEFAULT", "minEnergy": 0.0, "maxEnergy": 1.0, "weight": 4.0, "defaultState": "half", "repedalOnNewChord": true, "repedalProbPct": 60, "clearBeforeChange": true, "clearSub": 3, "clearCount": 4, "notes": "Half pedal default, repedal on new chords, late clear before changes." },
+    { "id": "P_DRY_UP", "minEnergy": 0.0, "maxEnergy": 0.70, "weight": 1.0, "defaultState": "up", "repedalOnNewChord": false, "clearBeforeChange": true, "clearSub": 3, "clearCount": 4, "notes": "Dry touch: pedal up (clarity, less smear)." }
   ],
 
   "bass_phrases": [
@@ -197,82 +163,6 @@
         { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" }
       ],
       "notes": "Beat 4 full voicing (shell + 1-2 colors)."
-    },
-    {
-      "id": "EVANS_PUSH_AND_OF_1",
-      "beats": [0],
-      "minEnergy": 0.0,
-      "maxEnergy": 0.85,
-      "weight": 2.2,
-      "chordIsNewOnly": true,
-      "allowWhenUserSilence": false,
-      "hits": [
-        { "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -10, "density": "guide" }
-      ],
-      "notes": "Push chord entrance on and-of-1 (tasteful, only on new chords; avoid when user is silent to not step on vocal)."
-    },
-    {
-      "id": "EVANS_4_GHOST_AND",
-      "beats": [3],
-      "minEnergy": 0.30,
-      "maxEnergy": 1.0,
-      "weight": 1.4,
-      "hits": [
-        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": 0, "density": "full" },
-        { "sub": 1, "count": 2, "dur_num": 1, "dur_den": 16, "vel_delta": -14, "density": "guide" }
-      ],
-      "notes": "Beat 4 + tiny guide-tone ghost on and-of-4 (Evans-ish breath)."
-    },
-    {
-      "id": "DELAYED_2_AND",
-      "beats": [1],
-      "minEnergy": 0.15,
-      "maxEnergy": 0.90,
-      "weight": 1.4,
-      "stableOnly": true,
-      "allowWhenUserSilence": false,
-      "hits": [
-        { "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -10, "density": "guide" }
-      ],
-      "notes": "Delay the backbeat to and-of-2 (subtle conversational comping)."
-    },
-    {
-      "id": "PUSH_AND_OF_4",
-      "beats": [3],
-      "minEnergy": 0.25,
-      "maxEnergy": 1.0,
-      "weight": 1.6,
-      "chordIsNewOnly": true,
-      "allowWhenUserSilence": false,
-      "hits": [
-        { "sub": 1, "count": 2, "dur_num": 1, "dur_den": 8, "vel_delta": -10, "density": "full" }
-      ],
-      "notes": "Anticipate chord change with a push on and-of-4 (new chords only)."
-    },
-    {
-      "id": "TOUCH_1_SOFT",
-      "beats": [0],
-      "minEnergy": 0.0,
-      "maxEnergy": 0.70,
-      "weight": 1.1,
-      "stableOnly": true,
-      "allowWhenUserSilence": true,
-      "hits": [
-        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 8, "vel_delta": -16, "density": "guide" }
-      ],
-      "notes": "Very soft touch on beat 1 (pad-like, avoids stepping on soloist)."
-    },
-    {
-      "id": "SPACE_ONLY_4",
-      "beats": [3],
-      "minEnergy": 0.0,
-      "maxEnergy": 0.70,
-      "weight": 1.2,
-      "stableOnly": true,
-      "hits": [
-        { "sub": 0, "count": 1, "dur_num": 1, "dur_den": 4, "vel_delta": -6, "density": "guide" }
-      ],
-      "notes": "Extra space: keep comp mostly on beat 4 only."
     }
   ],
 

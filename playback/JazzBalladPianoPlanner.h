@@ -115,6 +115,9 @@ public:
         int lastArpStyle = -1;
 
         // Data-driven library selections (auditable).
+        int compPhraseStartBar = -1;
+        QString compPhraseAnchorChordText;
+        QString compPhraseAnchorFunction;
         QString compPhraseId;
         QVector<QString> compBeatIdsByBeat;
         int topLinePhraseStartBar = -1;
@@ -252,6 +255,9 @@ private:
     QString m_lastMotifTransform;
 
     // Data-driven vocab selections (for auditability / continuity).
+    int m_compPhraseStartBar = -1;
+    QString m_compPhraseAnchorChordText;
+    QString m_compPhraseAnchorFunction;
     QString m_compPhraseId;
     QVector<QString> m_compBeatIdsByBeat;
     int m_topLinePhraseStartBar = -1;

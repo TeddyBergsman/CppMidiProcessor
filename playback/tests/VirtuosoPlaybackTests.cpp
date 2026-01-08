@@ -7,14 +7,20 @@
 #include "playback/JazzBalladBassPlanner.h"
 #include "playback/JazzBalladPianoPlanner.h"
 #include "playback/BrushesBalladDrummer.h"
+#include "playback/AgentCoordinator.h"
+#include "playback/AutoWeightController.h"
+#include "playback/WeightNegotiator.h"
+#include "playback/StoryState.h"
 
 #include "music/ChordSymbol.h"
 #include "virtuoso/ontology/OntologyRegistry.h"
 #include "virtuoso/memory/MotifTransform.h"
+#include "virtuoso/engine/VirtuosoEngine.h"
 
 #include <QCoreApplication>
 #include <QJsonDocument>
 #include <QJsonArray>
+#include <QElapsedTimer>
 #include <QtGlobal>
 
 namespace {
@@ -173,7 +179,7 @@ static void testMotifTransformDeterminism() {
     expect(a.pcs == b.pcs, "MotifTransform is deterministic (pcs)");
 }
 
-static void testPianoPlannerPedalAndTopline() {
+static void testPianoPlannerCompOnlyBasics() {
     using namespace playback;
     const virtuoso::ontology::OntologyRegistry ont = virtuoso::ontology::OntologyRegistry::builtins();
 
@@ -214,7 +220,7 @@ static void testPianoPlannerPedalAndTopline() {
 
     virtuoso::groove::TimeSignature ts{4, 4};
 
-    // Prefer some sustain (half or down) in a non-busy, stable moment.
+    // Comp-only basics: allow pedal CC64, but no topline/gesture notes.
     JazzBalladPianoPlanner::Context c;
     c.bpm = 120;
     c.playbackBarIndex = 4;
@@ -238,42 +244,49 @@ static void testPianoPlannerPedalAndTopline() {
     c.barInPhrase = 1;
     c.phraseEndBar = false;
     c.cadence01 = 0.25;
-
-    (void)piano.planBeatWithActions(c, /*midiChannel=*/4, ts);
-    const auto st = piano.snapshotState();
-    const int cc64 = st.perf.ints.value("cc64", 0);
-    expect(cc64 >= 32, "Piano: sustain used (CC64 >= 32)");
-
-    // Topline should be emitted somewhere in the bar on chord arrivals/cadence-ish landmarks.
-    JazzBalladPianoPlanner::Context c2 = c;
-    c2.chordIsNew = true;
-    c2.cadence01 = 0.55;
-    bool hasTop = false;
-    for (int beat = 0; beat < 4; ++beat) {
-        c2.beatInBar = beat;
-        const auto plan2 = piano.planBeatWithActions(c2, /*midiChannel=*/4, ts);
-        for (const auto& n : plan2.notes) {
+    {
+        auto plan0 = piano.planBeatWithActions(c, /*midiChannel=*/4, ts);
+        // Pedal may emit CC64 depending on strategy; ensure no non-comp notes.
+        for (const auto& n : plan0.notes) {
             if (n.agent != "Piano") continue;
-            if (n.target_note.trimmed().toLower().contains("topline")) { hasTop = true; break; }
+            expect(n.logic_tag.startsWith("ballad_comp"), "Piano basics: only ballad_comp notes emitted");
+            expect(!n.logic_tag.contains("rh_gesture"), "Piano basics: no RH gesture notes");
+            expect(!n.logic_tag.contains("piano_topline"), "Piano basics: no topline notes");
         }
-        if (hasTop) break;
     }
-    expect(hasTop, "Piano: topline notes are emitted on landmarks");
 
     // Library IDs should be populated when vocab is available.
+    JazzBalladPianoPlanner::Context c2 = c;
+    c2.chordIsNew = true;
     c2.beatInBar = 1;
     const auto planA = piano.planBeatWithActions(c2, /*midiChannel=*/4, ts);
     expect(!planA.performance.compPhraseId.trimmed().isEmpty(), "Piano: comp_phrase_id is set");
-    expect(!planA.performance.toplinePhraseId.trimmed().isEmpty(), "Piano: topline_phrase_id is set");
-    expect(!planA.performance.pedalId.trimmed().isEmpty(), "Piano: pedal_id is set");
-    expect(!planA.performance.gestureId.trimmed().isEmpty(), "Piano: gesture_id is set");
+    expect(planA.performance.toplinePhraseId.trimmed().isEmpty(), "Piano basics: topline_phrase_id is empty");
+    expect(!planA.performance.pedalId.trimmed().isEmpty(), "Piano basics: pedal_id is set");
+    expect(planA.performance.gestureId.trimmed().isEmpty(), "Piano basics: gesture_id is empty");
 
     // Determinism: same context should choose same library IDs.
     const auto planB = piano.planBeatWithActions(c2, /*midiChannel=*/4, ts);
     expect(planA.performance.compPhraseId == planB.performance.compPhraseId, "Piano: comp_phrase_id deterministic");
-    expect(planA.performance.toplinePhraseId == planB.performance.toplinePhraseId, "Piano: topline_phrase_id deterministic");
-    expect(planA.performance.pedalId == planB.performance.pedalId, "Piano: pedal_id deterministic");
-    expect(planA.performance.gestureId == planB.performance.gestureId, "Piano: gesture_id deterministic");
+    expect(planA.performance.toplinePhraseId == planB.performance.toplinePhraseId, "Piano basics: topline_phrase_id deterministic");
+    expect(planA.performance.pedalId == planB.performance.pedalId, "Piano basics: pedal_id deterministic");
+    expect(planA.performance.gestureId == planB.performance.gestureId, "Piano basics: gesture_id deterministic");
+
+    // Phrase coherence: comp phrase id should remain stable across bars within the phrase,
+    // even if chord text changes (phrase uses anchor chord for selection).
+    JazzBalladPianoPlanner::Context c4 = c;
+    c4.chordIsNew = true;
+    music::ChordSymbol chordF;
+    expect(music::parseChordSymbol("F7", chordF), "ParseChordSymbol F7");
+    const auto p0 = piano.planBeatWithActions(c4, /*midiChannel=*/4, ts);
+    c4.playbackBarIndex = 5;
+    c4.barInPhrase = 2;
+    c4.chordIsNew = true;
+    c4.chord = chordF;
+    c4.chordText = "F7";
+    const auto p1 = piano.planBeatWithActions(c4, /*midiChannel=*/4, ts);
+    expect(!p0.performance.compPhraseId.trimmed().isEmpty(), "Piano: comp phrase chosen (bar0)");
+    expect(p0.performance.compPhraseId.trimmed() == p1.performance.compPhraseId.trimmed(), "Piano: comp phrase stable across phrase bars");
 
     // No-ring invariant: when the next chord change is one beat away, comp notes should not ring past that boundary.
     JazzBalladPianoPlanner::Context c3 = c;
@@ -292,33 +305,190 @@ static void testPianoPlannerPedalAndTopline() {
         const auto end = n.startPos.withinBarWhole + n.durationWhole;
         expect(end <= boundary, "Piano: comp note does not ring into next chord");
     }
+}
 
-    // Repedal should be possible deterministically when sustain is already down and chord is new.
-    bool foundRepedal = false;
-    for (int seed = 1; seed <= 240; ++seed) {
-        JazzBalladPianoPlanner p3;
-        p3.setOntology(&ont);
-        p3.reset();
-        auto s3 = p3.snapshotState();
-        s3.perf.ints.insert("cc64", 127);
-        s3.perf.heldNotes = {60, 64, 67};
-        p3.restoreState(s3);
+static void testAutoWeightsV2DeterminismAndBounds() {
+    using playback::AutoWeightController;
+    AutoWeightController::Inputs in;
+    in.sectionLabel = "Chorus";
+    in.repeatIndex = 0;
+    in.repeatsTotal = 2;
+    in.playbackBarIndex = 7;
+    in.phraseBars = 4;
+    in.barInPhrase = 3;
+    in.phraseEndBar = true;
+    in.cadence01 = 0.8;
+    in.userSilence = false;
+    in.userBusy = false;
+    in.userRegisterHigh = true;
+    in.userIntensityPeak = true;
 
-        JazzBalladPianoPlanner::Context cx = c;
-        cx.determinismSeed = quint32(seed);
-        cx.chordIsNew = true;
-        cx.cadence01 = 0.65;
-        const auto px = p3.planBeatWithActions(cx, /*midiChannel=*/4, ts);
-        bool haveLift = false;
-        bool haveDown = false;
-        for (const auto& ci : px.ccs) {
-            if (ci.cc != 64) continue;
-            if (ci.logic_tag.contains("repedal", Qt::CaseInsensitive) && ci.value <= 1) haveLift = true;
-            if (ci.logic_tag.contains("repedal", Qt::CaseInsensitive) && ci.value >= 32) haveDown = true;
-        }
-        if (haveLift && haveDown) { foundRepedal = true; break; }
+    const auto a = AutoWeightController::compute(in);
+    const auto b = AutoWeightController::compute(in);
+    expectStrEq(QString::fromUtf8(QJsonDocument(a.toJson()).toJson(QJsonDocument::Compact)),
+                QString::fromUtf8(QJsonDocument(b.toJson()).toJson(QJsonDocument::Compact)),
+                "AutoWeightController is deterministic for fixed inputs");
+
+    auto ok01 = [](double v) { return v >= 0.0 && v <= 1.0; };
+    expect(ok01(a.density), "Auto weights: density in [0,1]");
+    expect(ok01(a.rhythm), "Auto weights: rhythm in [0,1]");
+    expect(ok01(a.intensity), "Auto weights: intensity in [0,1]");
+    expect(ok01(a.dynamism), "Auto weights: dynamism in [0,1]");
+    expect(ok01(a.emotion), "Auto weights: emotion in [0,1]");
+    expect(ok01(a.creativity), "Auto weights: creativity in [0,1]");
+    expect(ok01(a.tension), "Auto weights: tension in [0,1]");
+    expect(ok01(a.interactivity), "Auto weights: interactivity in [0,1]");
+    expect(ok01(a.variability), "Auto weights: variability in [0,1]");
+    expect(ok01(a.warmth), "Auto weights: warmth in [0,1]");
+}
+
+static void testWeightNegotiatorDeterminismAndBounds() {
+    using playback::WeightNegotiator;
+    WeightNegotiator::Inputs in;
+    in.sectionLabel = "Bridge";
+    in.userBusy = false;
+    in.userSilence = false;
+    in.cadence = true;
+    in.phraseEnd = true;
+    in.global.density = 0.55;
+    in.global.rhythm = 0.70;
+    in.global.intensity = 0.80;
+    in.global.dynamism = 0.60;
+    in.global.emotion = 0.35;
+    in.global.creativity = 0.65;
+    in.global.tension = 0.75;
+    in.global.interactivity = 0.50;
+    in.global.variability = 0.55;
+    in.global.warmth = 0.60;
+    in.global.clamp01();
+
+    WeightNegotiator::State s1;
+    WeightNegotiator::State s2;
+    const auto a = WeightNegotiator::negotiate(in, s1, /*smoothingAlpha=*/0.22);
+    const auto b = WeightNegotiator::negotiate(in, s2, /*smoothingAlpha=*/0.22);
+    expectStrEq(QString::fromUtf8(QJsonDocument(a.toJson()).toJson(QJsonDocument::Compact)),
+                QString::fromUtf8(QJsonDocument(b.toJson()).toJson(QJsonDocument::Compact)),
+                "WeightNegotiator is deterministic for fixed inputs + fresh state");
+
+    auto ok01 = [](double v) { return v >= 0.0 && v <= 1.0; };
+    auto chkAgent = [&](const WeightNegotiator::AgentWeights& aw, const QString& tag) {
+        expect(ok01(aw.w.density), tag + ": density in [0,1]");
+        expect(ok01(aw.w.rhythm), tag + ": rhythm in [0,1]");
+        expect(ok01(aw.w.intensity), tag + ": intensity in [0,1]");
+        expect(ok01(aw.w.dynamism), tag + ": dynamism in [0,1]");
+        expect(ok01(aw.w.emotion), tag + ": emotion in [0,1]");
+        expect(ok01(aw.w.creativity), tag + ": creativity in [0,1]");
+        expect(ok01(aw.w.tension), tag + ": tension in [0,1]");
+        expect(ok01(aw.w.interactivity), tag + ": interactivity in [0,1]");
+        expect(ok01(aw.w.variability), tag + ": variability in [0,1]");
+        expect(ok01(aw.w.warmth), tag + ": warmth in [0,1]");
+        expect(ok01(aw.virt.harmonicRisk), tag + ": virt.harmonicRisk in [0,1]");
+        expect(ok01(aw.virt.rhythmicComplexity), tag + ": virt.rhythmicComplexity in [0,1]");
+        expect(ok01(aw.virt.interaction), tag + ": virt.interaction in [0,1]");
+        expect(ok01(aw.virt.toneDark), tag + ": virt.toneDark in [0,1]");
+    };
+    chkAgent(a.piano, "Negotiator:piano");
+    chkAgent(a.bass, "Negotiator:bass");
+    chkAgent(a.drums, "Negotiator:drums");
+}
+
+static void testCandidatePoolIncludesWeightsV2() {
+    using namespace playback;
+    const virtuoso::ontology::OntologyRegistry ont = virtuoso::ontology::OntologyRegistry::builtins();
+
+    // Minimal 1-bar chart.
+    const chart::ChartModel model = makeOneBarChart("Cmaj7");
+    QVector<int> sequence;
+    sequence << 0 << 1 << 2 << 3;
+
+    HarmonyContext harmony;
+    harmony.setOntology(&ont);
+    harmony.rebuildFromModel(model);
+
+    InteractionContext interaction;
+
+    JazzBalladBassPlanner bassPlanner;
+    JazzBalladPianoPlanner pianoPlanner;
+    pianoPlanner.setOntology(&ont);
+    BrushesBalladDrummer drummer;
+
+    virtuoso::memory::MotivicMemory mem;
+    StoryState story;
+
+    virtuoso::engine::VirtuosoEngine engine;
+    engine.setTempoBpm(120);
+    engine.setTimeSignature({4, 4});
+    engine.start();
+
+    QString captured;
+    QObject::connect(&engine, &virtuoso::engine::VirtuosoEngine::theoryEventJson,
+                     &engine, [&](const QString& json) {
+                         if (json.contains("\"event_kind\":\"candidate_pool\"")) {
+                             captured = json;
+                         }
+                     });
+
+    // Provide v2 weights + negotiated allocation.
+    WeightNegotiator::Inputs ni;
+    ni.sectionLabel = "Verse";
+    ni.global.density = 0.40;
+    ni.global.rhythm = 0.35;
+    ni.global.intensity = 0.45;
+    ni.global.dynamism = 0.50;
+    ni.global.emotion = 0.40;
+    ni.global.creativity = 0.25;
+    ni.global.tension = 0.45;
+    ni.global.interactivity = 0.55;
+    ni.global.variability = 0.35;
+    ni.global.warmth = 0.60;
+    ni.global.clamp01();
+    WeightNegotiator::State ns;
+    const auto negotiated = WeightNegotiator::negotiate(ni, ns, 0.0);
+
+    AgentCoordinator::Inputs in;
+    in.model = &model;
+    in.sequence = &sequence;
+    in.repeats = 1;
+    in.bpm = 120;
+    in.stylePresetKey = "jazz_brushes_ballad_60_evans";
+    in.debugEnergyAuto = false;
+    in.debugEnergy = 0.35;
+    in.chDrums = 6;
+    in.chBass = 3;
+    in.chPiano = 4;
+    in.harmony = &harmony;
+    in.interaction = &interaction;
+    in.engine = &engine;
+    in.ontology = &ont;
+    in.bassPlanner = &bassPlanner;
+    in.pianoPlanner = &pianoPlanner;
+    in.drummer = &drummer;
+    in.motivicMemory = &mem;
+    in.story = &story;
+    in.weightsV2Auto = false;
+    in.weightsV2 = ni.global;
+    in.negotiated = negotiated;
+
+    AgentCoordinator::scheduleStep(in, /*stepIndex=*/0);
+
+    // Pump the event loop until the scheduler dispatches candidate_pool, or timeout.
+    QElapsedTimer t;
+    t.start();
+    while (captured.isEmpty() && t.elapsed() < 250) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
     }
-    expect(foundRepedal, "Piano: repedal (lift+re-engage) occurs for some deterministic seeds");
+    expect(!captured.isEmpty(), "candidate_pool JSON emitted by engine");
+    if (captured.isEmpty()) return;
+
+    const auto doc = QJsonDocument::fromJson(captured.toUtf8());
+    expect(doc.isObject(), "candidate_pool parses as JSON object");
+    if (!doc.isObject()) return;
+    const QJsonObject o = doc.object();
+    expect(o.value("event_kind").toString() == "candidate_pool", "candidate_pool: event_kind=candidate_pool");
+    expect(o.contains("weights_v2"), "candidate_pool includes weights_v2");
+    expect(o.contains("negotiated_v2"), "candidate_pool includes negotiated_v2");
+    expect(o.value("weights_v2").isObject(), "weights_v2 is object");
+    expect(o.value("negotiated_v2").isObject(), "negotiated_v2 is object");
 }
 
 int main(int argc, char** argv) {
@@ -326,7 +496,10 @@ int main(int argc, char** argv) {
     testLookaheadPlannerJsonDeterminism();
     testHarmonyContextKeyWindowAndFunctionalTagging();
     testMotifTransformDeterminism();
-    testPianoPlannerPedalAndTopline();
+    testPianoPlannerCompOnlyBasics();
+    testAutoWeightsV2DeterminismAndBounds();
+    testWeightNegotiatorDeterminismAndBounds();
+    testCandidatePoolIncludesWeightsV2();
     if (g_failures > 0) {
         qWarning() << "VirtuosoPlaybackTests failures:" << g_failures;
         return 1;

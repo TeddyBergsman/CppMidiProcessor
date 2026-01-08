@@ -83,7 +83,11 @@ void VirtuosoScheduler::onDispatch() {
                 m_active[ev.channel - 1][ev.note] = true;
                 m_activeId[ev.channel - 1][ev.note] = ev.noteId;
             }
-            emit noteOn(ev.channel, ev.note, ev.velocity);
+            {
+                const double s = std::max(0.0, m_velocityScale);
+                const int v = std::max(1, std::min(127, int(std::llround(double(ev.velocity) * s))));
+                emit noteOn(ev.channel, ev.note, v);
+            }
             break;
         case Kind::NoteOff:
             if (ev.channel >= 1 && ev.channel <= 16 && ev.note >= 0 && ev.note <= 127) {

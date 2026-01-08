@@ -206,10 +206,16 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
         // Chord-list commas are consumed as part of chord tokens below.
         if (c == ',') { i += 1; continue; }
 
-        // Section markers: *A, *B... (ignore lower-case control tokens like *i)
+        // Section markers:
+        // - classic iReal: *A, *B, ...
+        // - some exports: *i/*v/*b/*c/*o (intro/verse/bridge/chorus/outro)
+        // We treat any single-letter token after '*' as a section marker and map well-known ones.
         if (c == '*' && i + 1 < s.size()) {
-            const QChar sec = s[i + 1];
-            if (sec.isUpper()) {
+            const QChar sec0 = s[i + 1];
+            if (sec0.isLetter()) {
+                int j = i + 1;
+                while (j < s.size() && s[j].isLetter()) j++;
+                const QString tok = s.mid(i + 1, j - (i + 1)); // "A" or "Intro" etc.
                 // Section markers start a new line in iReal.
                 // If we are mid-line or mid-bar, flush first so the section label does not get applied retroactively.
                 // IMPORTANT: do NOT flush a bar that only contains a leading barline marker (e.g. "{") before a section.
@@ -220,9 +226,19 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
                 if (!currentLine.bars.isEmpty()) {
                     pushLine(model, currentLine);
                 }
-                currentLine.sectionLabel = QString(sec);
+                const QString t = tok.trimmed();
+                const QString lcStr = t.toLower();
+                QString label;
+                if (lcStr == "i" || lcStr == "intro") label = "Intro";
+                else if (lcStr == "v" || lcStr == "verse") label = "Verse";
+                else if (lcStr == "b" || lcStr == "bridge") label = "Bridge";
+                else if (lcStr == "c" || lcStr == "chorus") label = "Chorus";
+                else if (lcStr == "o" || lcStr == "outro") label = "Outro";
+                else if (t.size() == 1) label = t.toUpper(); // A/B/C...
+                else label = t; // keep unknown section token verbatim
+                currentLine.sectionLabel = label;
                 pendingSection.clear();
-                i += 2;
+                i = j;
                 continue;
             }
         }

@@ -13,7 +13,7 @@ struct BalladRefTuning {
 
     double pianoSkipBeat2ProbStable = 0.45;
     double pianoAddSecondColorProb = 0.25;
-    double pianoSparkleProbBeat4 = 0.18;
+    double pianoSparkleProbBeat4 = 0.0; // disabled for "absolute basics" (sparkles read as random single notes)
     bool pianoPreferShells = true;
 
     int pianoLhLo = 50, pianoLhHi = 66;

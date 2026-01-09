@@ -232,6 +232,26 @@ private:
     };
     RhMelodic generateRhMelodicVoicing(const Context& c, int targetTopMidi) const;
     
+    // ========== UPPER STRUCTURE TRIADS (Bill Evans signature) ==========
+    // A simple triad played in the RH that creates sophisticated extensions
+    // Examples:
+    //   C7  + D major triad  → creates 9, #11, 13
+    //   Dm7 + F major triad  → creates b3, 5, b7
+    //   G7alt + Ab major triad → creates b9, #11, b13
+    
+    struct UpperStructureTriad {
+        int rootPc;           // Root of the triad (0-11)
+        bool isMajor;         // true = major triad, false = minor triad
+        double tensionLevel;  // How much tension this UST adds (0.0 = safe, 1.0 = very tense)
+        QString colorDescription; // e.g., "9-#11-13", "b9-#11-b13"
+    };
+    
+    // Get available UST options for a chord (returns candidates sorted by consonance)
+    QVector<UpperStructureTriad> getUpperStructureTriads(const music::ChordSymbol& chord) const;
+    
+    // Build a UST voicing in the RH register
+    RhMelodic buildUstVoicing(const Context& c, const UpperStructureTriad& ust) const;
+    
     // Determine if LH should play this beat (sparse: beat 1, sometimes 3)
     bool shouldLhPlayBeat(const Context& c, quint32 hash) const;
     

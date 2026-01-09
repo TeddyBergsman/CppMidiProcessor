@@ -1110,6 +1110,221 @@ JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::generateRhMelodicVoici
     return rh;
 }
 
+// =============================================================================
+// UPPER STRUCTURE TRIADS (UST) - Bill Evans Signature Sound
+// =============================================================================
+// A UST is a simple major or minor triad played in the RH that creates
+// sophisticated extensions over the LH chord. The magic is that simple
+// triads produce complex harmonic colors.
+//
+// Key relationships:
+//   Dominant 7:  D/C7 → 9-#11-13 (lydian dominant color)
+//                Eb/C7 → b9-11-b13 (altered dominant)
+//                F#/C7 → #11-7-b9 (tritone sub color)
+//   Minor 7:     F/Dm7 → b3-5-b7 (reinforces minor quality)
+//                Eb/Dm7 → b9-11-b13 (phrygian color)
+//   Major 7:     D/Cmaj7 → 9-#11-13 (lydian color)
+//                E/Cmaj7 → 3-#5-7 (augmented color)
+// =============================================================================
+
+QVector<JazzBalladPianoPlanner::UpperStructureTriad> JazzBalladPianoPlanner::getUpperStructureTriads(
+    const music::ChordSymbol& chord) const {
+    
+    QVector<UpperStructureTriad> triads;
+    
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return triads;
+    
+    const int root = chord.rootPc;
+    const bool isDominant = (chord.quality == music::ChordQuality::Dominant);
+    const bool isMajor = (chord.quality == music::ChordQuality::Major);
+    const bool isMinor = (chord.quality == music::ChordQuality::Minor);
+    const bool isAlt = chord.alt && isDominant;
+    
+    // ==========================================================================
+    // DOMINANT 7TH CHORDS - Most UST options (the jazz workhorse)
+    // ==========================================================================
+    if (isDominant) {
+        if (isAlt) {
+            // Altered dominant: prefer tense USTs
+            // bII major (half step up) → b9, 3, b13
+            triads.push_back({normalizePc(root + 1), true, 0.7, "b9-3-b13"});
+            // bVI major (minor 6th up) → b9, #11, b13
+            triads.push_back({normalizePc(root + 8), true, 0.8, "b9-#11-b13"});
+            // #IV major (tritone) → #11, 7, b9
+            triads.push_back({normalizePc(root + 6), true, 0.6, "#11-7-b9"});
+        } else {
+            // Standard dominant - range of colors from safe to tense
+            
+            // II major (whole step up) → 9-#11-13 (lydian dominant - BEAUTIFUL)
+            triads.push_back({normalizePc(root + 2), true, 0.3, "9-#11-13"});
+            
+            // bVII major (whole step down) → 7-9-11 (mixolydian - safe)
+            triads.push_back({normalizePc(root + 10), true, 0.2, "b7-9-11"});
+            
+            // VI major (major 6th up) → 13-#9-#11 (bright tension)
+            triads.push_back({normalizePc(root + 9), true, 0.5, "13-#9-#11"});
+            
+            // bIII major (minor 3rd up) → #9-#11-13 (more tension)
+            triads.push_back({normalizePc(root + 3), true, 0.6, "#9-#11-13"});
+            
+            // #IV major (tritone) → #11-7-b9 (tritone sub hint)
+            triads.push_back({normalizePc(root + 6), true, 0.7, "#11-7-b9"});
+        }
+    }
+    
+    // ==========================================================================
+    // MINOR 7TH CHORDS
+    // ==========================================================================
+    else if (isMinor) {
+        // bIII major (minor 3rd up) → b3-5-b7 (reinforces minor - SAFE)
+        triads.push_back({normalizePc(root + 3), true, 0.1, "b3-5-b7"});
+        
+        // IV major (perfect 4th up) → 11-13-9 (dorian color - beautiful)
+        triads.push_back({normalizePc(root + 5), true, 0.3, "11-13-9"});
+        
+        // bVII major (minor 7th up) → b7-9-11 (safe extension)
+        triads.push_back({normalizePc(root + 10), true, 0.2, "b7-9-11"});
+        
+        // II minor (whole step up) → 9-11-13 (dorian 9-11-13)
+        triads.push_back({normalizePc(root + 2), false, 0.4, "9-11-13"});
+    }
+    
+    // ==========================================================================
+    // MAJOR 7TH CHORDS
+    // ==========================================================================
+    else if (isMajor) {
+        // II major (whole step up) → 9-#11-13 (lydian color - CLASSIC)
+        triads.push_back({normalizePc(root + 2), true, 0.3, "9-#11-13"});
+        
+        // V major (perfect 5th up) → 5-7-9 (simple, safe extension)
+        triads.push_back({normalizePc(root + 7), true, 0.1, "5-7-9"});
+        
+        // III minor (major 3rd up) → 3-5-7 (reinforces maj7 - SAFE)
+        triads.push_back({normalizePc(root + 4), false, 0.1, "3-5-7"});
+        
+        // VII minor (major 7th up) → 7-9-#11 (lydian hint)
+        triads.push_back({normalizePc(root + 11), false, 0.4, "7-9-#11"});
+    }
+    
+    // ==========================================================================
+    // HALF-DIMINISHED / DIMINISHED
+    // ==========================================================================
+    else if (chord.quality == music::ChordQuality::HalfDiminished) {
+        // bIII major → b3-5-b7 (locrian natural 9)
+        triads.push_back({normalizePc(root + 3), true, 0.2, "b3-5-b7"});
+        
+        // bVI major → b9-11-b13 (phrygian color)
+        triads.push_back({normalizePc(root + 8), true, 0.5, "b9-11-b13"});
+    }
+    
+    // Sort by tension level (safest first)
+    std::sort(triads.begin(), triads.end(), 
+              [](const UpperStructureTriad& a, const UpperStructureTriad& b) {
+                  return a.tensionLevel < b.tensionLevel;
+              });
+    
+    return triads;
+}
+
+JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::buildUstVoicing(
+    const Context& c, const UpperStructureTriad& ust) const {
+    
+    RhMelodic rh;
+    
+    // Build the triad: root, 3rd, 5th of the UST
+    int ustRoot = ust.rootPc;
+    int ustThird = normalizePc(ustRoot + (ust.isMajor ? 4 : 3)); // major 3rd or minor 3rd
+    int ustFifth = normalizePc(ustRoot + 7); // perfect 5th
+    
+    // Target the top voice for melodic continuity
+    int lastTop = (m_state.lastRhTopMidi > 0) ? m_state.lastRhTopMidi : 76;
+    
+    // Find best voicing of the triad in the RH register
+    // Prefer inversion that puts a note near the last top note
+    QVector<QVector<int>> inversions = {
+        {ustRoot, ustThird, ustFifth},  // Root position
+        {ustThird, ustFifth, ustRoot},  // 1st inversion
+        {ustFifth, ustRoot, ustThird}   // 2nd inversion
+    };
+    
+    int bestInversion = 0;
+    int bestDist = 999;
+    int bestTopMidi = -1;
+    
+    for (int inv = 0; inv < inversions.size(); ++inv) {
+        int topPc = inversions[inv].last();
+        
+        // Find MIDI note for top voice
+        for (int oct = 5; oct <= 7; ++oct) {
+            int topMidi = topPc + 12 * oct;
+            if (topMidi < c.rhLo || topMidi > c.rhHi) continue;
+            
+            int dist = qAbs(topMidi - lastTop);
+            // Prefer stepwise motion (1-4 semitones)
+            if (dist >= 1 && dist <= 4 && dist < bestDist) {
+                bestDist = dist;
+                bestInversion = inv;
+                bestTopMidi = topMidi;
+            } else if (dist < bestDist && dist <= 7) {
+                bestDist = dist;
+                bestInversion = inv;
+                bestTopMidi = topMidi;
+            }
+        }
+    }
+    
+    if (bestTopMidi < 0) {
+        // Fallback: just pick middle register
+        bestTopMidi = 76;
+        bestInversion = 0;
+    }
+    
+    // Build the MIDI notes from bottom to top
+    const QVector<int>& pcs = inversions[bestInversion];
+    int topMidi = bestTopMidi;
+    int topPc = pcs.last();
+    
+    // Find top note first
+    while (normalizePc(topMidi) != topPc && topMidi >= c.rhLo) {
+        topMidi--;
+    }
+    topMidi = bestTopMidi; // Use the calculated top
+    
+    // Stack from top down (closest voicing)
+    QVector<int> midiNotes;
+    midiNotes.push_back(topMidi);
+    
+    // Middle note
+    int middlePc = pcs[1];
+    int middleMidi = topMidi - 3;
+    while (normalizePc(middleMidi) != middlePc && middleMidi > topMidi - 12) {
+        middleMidi--;
+    }
+    if (middleMidi >= c.rhLo) {
+        midiNotes.insert(midiNotes.begin(), middleMidi);
+    }
+    
+    // Bottom note
+    int bottomPc = pcs[0];
+    int bottomMidi = (midiNotes.size() > 1) ? midiNotes.first() - 3 : topMidi - 6;
+    while (normalizePc(bottomMidi) != bottomPc && bottomMidi > topMidi - 14) {
+        bottomMidi--;
+    }
+    if (bottomMidi >= c.rhLo && (midiNotes.isEmpty() || bottomMidi < midiNotes.first())) {
+        midiNotes.insert(midiNotes.begin(), bottomMidi);
+    }
+    
+    std::sort(midiNotes.begin(), midiNotes.end());
+    
+    rh.midiNotes = midiNotes;
+    rh.topNoteMidi = midiNotes.isEmpty() ? -1 : midiNotes.last();
+    rh.melodicDirection = (rh.topNoteMidi > lastTop) ? 1 : ((rh.topNoteMidi < lastTop) ? -1 : 0);
+    rh.ontologyKey = QString("UST_%1_%2").arg(ust.isMajor ? "Maj" : "Min").arg(ust.colorDescription);
+    rh.isColorTone = true;
+    
+    return rh;
+}
+
 // LH: Provides harmonic foundation. ALWAYS plays regardless of user activity.
 // The LH is the anchor - it doesn't back off, only the RH does.
 bool JazzBalladPianoPlanner::shouldLhPlayBeat(const Context& c, quint32 hash) const {
@@ -1621,6 +1836,46 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         // Slight delay for RH relative to LH (rubato feel)
         const int rhTimingOffset = computeTimingOffsetMs(adjusted, rhHash) + 5;
         
+        // ================================================================
+        // UPPER STRUCTURE TRIAD DECISION
+        // Bill Evans signature: sometimes play a simple triad that creates
+        // sophisticated extensions. Use more at higher creativity/tension.
+        // ================================================================
+        const double tensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
+        const double creativityLevel = c.weights.creativity;
+        
+        // Probability of using UST instead of regular melodic voicing
+        // Higher at: chord changes, high creativity, moderate-high tension
+        double ustProb = 0.0;
+        if (chordChanged) {
+            ustProb = 0.15 + 0.25 * creativityLevel + 0.20 * tensionLevel;
+        } else if (adjusted.beatInBar == 2) { // Beat 3 is good for color
+            ustProb = 0.08 + 0.20 * creativityLevel + 0.15 * tensionLevel;
+        }
+        
+        // Dominant chords: UST sounds especially good
+        const bool isDominant = (adjusted.chord.quality == music::ChordQuality::Dominant);
+        if (isDominant) ustProb += 0.10;
+        
+        // Get available USTs
+        const auto ustCandidates = getUpperStructureTriads(adjusted.chord);
+        const bool useUst = !ustCandidates.isEmpty() && ((rhHash % 100) < int(ustProb * 100));
+        
+        // If using UST, select one based on tension level
+        RhMelodic ustVoicing;
+        if (useUst) {
+            // Select UST: lower tension = safer (earlier in list), higher = more tense
+            int ustIndex = 0;
+            if (tensionLevel > 0.6 && ustCandidates.size() > 1) {
+                // Allow more tense options
+                ustIndex = qMin(int(tensionLevel * ustCandidates.size()), ustCandidates.size() - 1);
+            } else if (tensionLevel > 0.4 && ustCandidates.size() > 1) {
+                ustIndex = 1; // Second safest
+            }
+            
+            ustVoicing = buildUstVoicing(adjusted, ustCandidates[ustIndex]);
+        }
+        
         // Track melodic line through this beat - each hit advances the melody
         int currentTopMidi = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 74;
         int currentDirection = m_state.rhMelodicDirection;
@@ -1635,6 +1890,49 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             const int sub = std::get<0>(timing);
             const int velDelta = std::get<1>(timing);
             const bool preferDyad = std::get<2>(timing);
+            
+            // ================================================================
+            // UPPER STRUCTURE TRIAD: Use on FIRST hit of beat if selected
+            // This creates the Bill Evans signature sound
+            // ================================================================
+            if (useUst && hitIndex == 0 && !ustVoicing.midiNotes.isEmpty()) {
+                // Play the UST triad as the first hit
+                virtuoso::groove::GridPos rhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                    adjusted.playbackBarIndex, adjusted.beatInBar, sub, 4, ts);
+                rhPos = applyTimingOffset(rhPos, rhTimingOffset, adjusted.bpm, ts);
+                
+                int rhVel = int(baseVel * mappings.velocityMod + velDelta);
+                rhVel = qBound(45, rhVel, 100);
+                
+                // Longer duration for UST triads (they ring beautifully)
+                const virtuoso::groove::Rational rhDurWhole(qint64(0.85 * mappings.durationMod * 1000), 4000);
+                
+                for (int midi : ustVoicing.midiNotes) {
+                    virtuoso::engine::AgentIntentNote note;
+                    note.agent = "Piano";
+                    note.channel = midiChannel;
+                    note.note = midi;
+                    note.baseVelocity = rhVel;
+                    note.startPos = rhPos;
+                    note.durationWhole = rhDurWhole;
+                    note.structural = (hitIndex == 0 && adjusted.chordIsNew);
+                    note.chord_context = adjusted.chordText;
+                    note.voicing_type = ustVoicing.ontologyKey;
+                    note.logic_tag = "RH_UST";
+                    
+                    plan.notes.push_back(note);
+                }
+                
+                // Update state for melodic continuity
+                currentTopMidi = ustVoicing.topNoteMidi;
+                currentDirection = ustVoicing.melodicDirection;
+                motionCount++;
+                m_state.rhMotionsThisChord++;
+                m_state.lastRhTopMidi = ustVoicing.topNoteMidi;
+                m_state.rhMelodicDirection = ustVoicing.melodicDirection;
+                
+                continue; // Skip regular voicing for this hit
+            }
             
             // ================================================================
             // MUSICAL DECISION: Move, Hold, or Return?
@@ -1674,12 +1972,12 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             int thirteenth = pcForDegree(adjusted.chord, 13);
             
             // Determine how "safe" we should be based on energy and tension
-            const double tensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
-            const bool allowExtensions = tensionLevel > 0.3;
-            const bool allowColorTones = tensionLevel > 0.5;
+            const double hitTensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
+            const bool allowExtensions = hitTensionLevel > 0.3;
+            const bool allowColorTones = hitTensionLevel > 0.5;
             
             // Is this a dominant chord? Extensions are more natural on dominants
-            const bool isDominant = (adjusted.chord.quality == music::ChordQuality::Dominant);
+            const bool hitIsDominant = (adjusted.chord.quality == music::ChordQuality::Dominant);
             const bool isMajor = (adjusted.chord.quality == music::ChordQuality::Major);
             const bool isMinor = (adjusted.chord.quality == music::ChordQuality::Minor);
             
@@ -1701,7 +1999,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     
                     // Natural 9 is safe on almost any chord
                     // b9/#9 only on dominants when we want tension
-                    if (isNatural9 || (isDominant && allowColorTones)) {
+                    if (isNatural9 || (hitIsDominant && allowColorTones)) {
                         melodicPcs.push_back(ninth);
                     }
                 }
@@ -1712,7 +2010,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     int expectedThirteenth = normalizePc(root + 9);
                     bool isNatural13 = (thirteenth == expectedThirteenth);
                     
-                    if (isNatural13 || isDominant) {
+                    if (isNatural13 || hitIsDominant) {
                         melodicPcs.push_back(thirteenth);
                     }
                 }
@@ -1830,7 +2128,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     else if (interval == 6) consonanceScore = 9; // Tritone - avoid unless dominant
                     
                     // Allow tritone on dominant chords for color
-                    if (interval == 6 && isDominant && tensionLevel > 0.6) {
+                    if (interval == 6 && hitIsDominant && hitTensionLevel > 0.6) {
                         consonanceScore = 4; // OK on dominants
                     }
                     
@@ -1876,7 +2174,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     // Verify the interval is consonant before adding
                     int actualInterval = bestTarget - secondMidi;
                     bool intervalOk = (actualInterval >= 3 && actualInterval <= 9) || 
-                                      (actualInterval == 10 && tensionLevel > 0.5);
+                                      (actualInterval == 10 && hitTensionLevel > 0.5);
                     
                     if (intervalOk && secondMidi >= adjusted.rhLo && secondMidi < bestTarget) {
                         rhMidiNotes.insert(rhMidiNotes.begin(), secondMidi);

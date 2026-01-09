@@ -1070,139 +1070,106 @@ JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::generateRhMelodicVoici
     return rh;
 }
 
-// LH plays sparsely: primarily on beat 1, sometimes beat 3
-// RESPONSIVE to weights and user activity
+// LH: Provides harmonic foundation. ALWAYS plays regardless of user activity.
+// The LH is the anchor - it doesn't back off, only the RH does.
 bool JazzBalladPianoPlanner::shouldLhPlayBeat(const Context& c, quint32 hash) const {
     // ================================================================
-    // INTERACTION: When user is playing, dramatically reduce LH
+    // LH NEVER backs off for user activity - it's the foundation
+    // (Only RH becomes sparse when user is playing)
     // ================================================================
-    if (c.userBusy || c.userDensityHigh || c.userIntensityPeak) {
-        // Only play on chord changes when user is active
-        if (!c.chordIsNew) return false;
-        // Even on chord changes, sometimes stay silent
-        return (hash % 100) < 60;
+    
+    // Chord changes: always play
+    if (c.chordIsNew) {
+        return true;
     }
     
-    // Weights-driven base probability
-    const double densityWeight = qBound(0.0, c.weights.density, 1.0);
-    const double interactWeight = qBound(0.0, c.weights.interactivity, 1.0);
-    
-    // Always play on chord changes (but softer via velocity, not absence)
-    if (c.chordIsNew) return true;
-    
-    // Beat 1: usually yes, scaled by density
+    // Beat 1 (without chord change): usually play to reinforce
     if (c.beatInBar == 0) {
-        double prob = 0.50 + 0.40 * densityWeight;
+        double prob = 0.55 + 0.30 * c.weights.density;
         return (hash % 100) < int(prob * 100);
     }
     
-    // Beat 3: context-dependent
+    // Beat 3: often play for rhythmic pulse
     if (c.beatInBar == 2) {
-        double prob = 0.10 + 0.25 * densityWeight;
-        if (c.cadence01 >= 0.5) prob += 0.20 * c.cadence01;
+        double prob = 0.30 + 0.25 * c.weights.density;
+        if (c.cadence01 >= 0.4) prob += 0.20;
         if (c.phraseEndBar) prob += 0.15;
-        // User silence: can fill more
-        if (c.userSilence) prob += 0.15 * interactWeight;
         return (hash % 100) < int(prob * 100);
     }
     
-    // Beats 2/4: very rarely (only at high energy climaxes)
-    if (c.energy >= 0.75 && densityWeight >= 0.7) {
-        return (hash % 100) < 5;
+    // Beats 2/4: occasionally at higher energy
+    if (c.energy >= 0.5) {
+        double prob = 0.15 * c.energy;
+        return (hash % 100) < int(prob * 100);
     }
+    
     return false;
 }
 
-// RH activity: DRAMATICALLY scaled by weights and interaction
-// Great pianists leave SPACE - activity 0 (silence) should be common!
+// RH activity: Melodic color and movement. Backs off when user plays, but doesn't disappear.
 int JazzBalladPianoPlanner::rhActivityLevel(const Context& c, quint32 hash) const {
     // ================================================================
-    // CRITICAL: When user is playing, RH should mostly be SILENT
-    // This is the #1 characteristic of great accompanists
+    // WHEN USER IS PLAYING: RH becomes sparse but NOT silent
+    // Still provides occasional color, just much less
     // ================================================================
-    if (c.userBusy || c.userDensityHigh) {
-        // Dramatic back-off: 70% chance of complete silence
-        if ((hash % 100) < 70) return 0;
-        // Otherwise, minimal (single note or nothing)
-        return (hash % 100) < 85 ? 0 : 1;
-    }
-    
-    if (c.userIntensityPeak) {
-        // When user is really going for it, stay completely out
-        return 0;
-    }
-    
-    // ================================================================
-    // Weights-driven activity (respecting density, rhythm, interactivity)
-    // ================================================================
-    const double densityWeight = qBound(0.0, c.weights.density, 1.0);
-    const double rhythmWeight = qBound(0.0, c.weights.rhythm, 1.0);
-    const double interactWeight = qBound(0.0, c.weights.interactivity, 1.0);
-    const double dynamismWeight = qBound(0.0, c.weights.dynamism, 1.0);
-    
-    // Base activity: very sparse by default (0.3 = mostly silent)
-    double baseActivity = 0.3;
-    
-    // Energy contribution (0.0-1.0 adds up to +1.5 activity)
-    baseActivity += 1.5 * c.energy;
-    
-    // Weights contribution
-    baseActivity += 0.8 * densityWeight;
-    baseActivity += 0.5 * rhythmWeight;
-    baseActivity += 0.3 * dynamismWeight;
-    
-    // ================================================================
-    // BREATH/PHRASE: Add intentional silence for musical phrasing
-    // ================================================================
-    
-    // Every 2-4 beats, consider taking a breath (0 activity)
-    const int phrasePosition = (c.playbackBarIndex * 4 + c.beatInBar);
-    const bool breathMoment = ((phrasePosition + (hash % 3)) % 4) == 3; // ~25% of beats
-    if (breathMoment && c.energy < 0.6) {
-        baseActivity *= 0.3; // Dramatically reduce on breath moments
-    }
-    
-    // Bar 2 of phrase: often lay out (building anticipation)
-    if (c.barInPhrase == 1 && c.beatInBar >= 2 && c.energy < 0.5) {
-        baseActivity *= 0.4;
-    }
-    
-    // ================================================================
-    // Context modifiers
-    // ================================================================
-    
-    // Chord changes: moderate increase (but not overwhelming)
-    if (c.chordIsNew) baseActivity += 0.4;
-    
-    // User silence: can fill, but tastefully
-    if (c.userSilence) {
-        baseActivity += 0.5 * interactWeight;
-    }
-    
-    // Phrase endings: add a bit more movement for resolution
-    if (c.phraseEndBar && c.beatInBar >= 2) {
-        baseActivity += 0.3 * c.cadence01;
-    }
-    
-    // ================================================================
-    // Randomness for human feel (but controlled)
-    // ================================================================
-    int variation = int(hash % 5) - 2; // -2 to +2
-    
-    // Final activity level
-    int level = qBound(0, int(baseActivity) + variation, 4);
-    
-    // ================================================================
-    // FINAL GATE: Low energy/density should mean more silence
-    // ================================================================
-    if (level > 0 && c.energy < 0.35 && densityWeight < 0.4) {
-        // Roll again - 50% chance to reduce to 0 or 1
-        if ((hash % 100) < 50) {
-            level = (hash % 100) < 30 ? 0 : 1;
+    if (c.userBusy || c.userDensityHigh || c.userIntensityPeak) {
+        // Sparse mode: occasional single notes, mostly on chord changes
+        if (c.chordIsNew) {
+            return (hash % 100) < 50 ? 1 : 0; // 50% single note on chord changes
         }
+        // Otherwise very rare
+        return (hash % 100) < 10 ? 1 : 0; // 10% chance of single note
     }
     
-    return level;
+    // ================================================================
+    // NORMAL COMPING: RH adds color and melodic interest
+    // ================================================================
+    
+    double activityScore = 0.5; // Base: modest activity
+    
+    // Energy contribution
+    activityScore += 1.0 * c.energy;
+    
+    // Chord changes: more activity
+    if (c.chordIsNew) {
+        activityScore += 0.8;
+    }
+    
+    // User silence: fill opportunity
+    if (c.userSilence) {
+        activityScore += 0.5 * c.weights.interactivity;
+    }
+    
+    // Density weight
+    activityScore += 0.6 * c.weights.density;
+    
+    // Cadence/phrase endings
+    if (c.cadence01 >= 0.4) {
+        activityScore += 0.4 * c.cadence01;
+    }
+    
+    // Phrase breathing: reduce in middle of phrases
+    const bool middleOfPhrase = (c.barInPhrase >= 1 && c.barInPhrase <= c.phraseBars - 2);
+    if (middleOfPhrase && !c.chordIsNew) {
+        activityScore *= 0.6;
+    }
+    
+    // Offbeats: reduce unless energetic
+    if ((c.beatInBar == 1 || c.beatInBar == 3) && !c.chordIsNew) {
+        activityScore *= (0.3 + 0.5 * c.energy);
+    }
+    
+    // Random variation
+    int variation = (hash % 3) - 1; // -1, 0, +1
+    
+    int activity = qBound(0, int(activityScore) + variation, 4);
+    
+    // Final gate: low density = cap at 2
+    if (c.weights.density < 0.35) {
+        activity = qMin(activity, 2);
+    }
+    
+    return activity;
 }
 
 // Select next melodic target for RH top voice (stepwise preferred)
@@ -1332,8 +1299,10 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     }
     
     // ==========================================================================
-    // LEFT HAND: Sparse rootless voicing (Bill Evans Type A/B)
-    // Plays on chord changes and beat 1, occasionally beat 3
+    // LEFT HAND: Rootless voicings (Bill Evans Type A/B)
+    // - Always plays (doesn't back off for user)
+    // - Multiple hits per chord with variation
+    // - Sometimes syncopates (anticipates chord changes)
     // ==========================================================================
     
     const bool lhPlays = shouldLhPlayBeat(adjusted, lhHash);
@@ -1343,33 +1312,128 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         lhVoicing = generateLhRootlessVoicing(adjusted);
         
         if (!lhVoicing.midiNotes.isEmpty()) {
-            const int lhTimingOffset = computeTimingOffsetMs(adjusted, timingHash);
-            virtuoso::groove::GridPos lhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-                adjusted.playbackBarIndex, adjusted.beatInBar, 0, 4, ts);
-            lhPos = applyTimingOffset(lhPos, lhTimingOffset, adjusted.bpm, ts);
+            // ================================================================
+            // LH RHYTHM PATTERN: Determine how many hits and when
+            // ================================================================
+            struct LhHit {
+                int sub = 0;           // subdivision (0=beat, 1=e, 2=and, 3=a)
+                int velDelta = 0;      // velocity adjustment
+                bool useAltVoicing = false; // use alternate voicing (Type B if was A, etc.)
+                bool anticipate = false;    // play early (syncopation)
+            };
             
-            // LH: longer duration, softer velocity
-            int lhVel = int(baseVel * mappings.velocityMod * 0.85);
-            lhVel = qBound(35, lhVel, 95);
+            QVector<LhHit> lhHits;
+            const int patternSeed = (lhHash / 11) % 8;
             
-            // Duration: LH sustains longer (1.5-2 beats)
-            const double lhDurBeats = 1.5 * mappings.durationMod;
-            const virtuoso::groove::Rational lhDurWhole(qint64(lhDurBeats * 1000), 4000);
+            // Chord changes get more interesting patterns
+            if (adjusted.chordIsNew) {
+                switch (patternSeed) {
+                    case 0: // Simple: just on the beat
+                        lhHits.push_back({0, 0, false, false});
+                        break;
+                    case 1: // Syncopated: anticipate the chord change
+                        lhHits.push_back({0, 0, false, true}); // Plays early
+                        break;
+                    case 2: // Two hits: beat + and
+                        lhHits.push_back({0, 0, false, false});
+                        lhHits.push_back({2, -10, true, false}); // Alt voicing
+                        break;
+                    case 3: // Two hits: syncopated + beat
+                        lhHits.push_back({0, 0, false, true}); // Anticipate
+                        lhHits.push_back({2, -8, false, false}); // Repeat
+                        break;
+                    case 4: // Three hits at higher energy
+                        if (adjusted.energy >= 0.5) {
+                            lhHits.push_back({0, 0, false, false});
+                            lhHits.push_back({2, -8, true, false});
+                            lhHits.push_back({3, -12, false, false});
+                        } else {
+                            lhHits.push_back({0, 0, false, false});
+                        }
+                        break;
+                    case 5: // Delayed: and only (very syncopated)
+                        lhHits.push_back({2, -3, false, false});
+                        break;
+                    case 6: // Beat + pickup
+                        lhHits.push_back({0, 0, false, false});
+                        if (adjusted.cadence01 >= 0.3) {
+                            lhHits.push_back({3, -10, true, false});
+                        }
+                        break;
+                    default: // Beat + repeat with same voicing
+                        lhHits.push_back({0, 0, false, false});
+                        if (adjusted.energy >= 0.4) {
+                            lhHits.push_back({2, -6, false, false}); // Same voicing
+                        }
+                        break;
+                }
+            } else {
+                // Non-chord-change: simpler patterns
+                switch (patternSeed % 3) {
+                    case 0:
+                        lhHits.push_back({0, 0, false, false});
+                        break;
+                    case 1:
+                        lhHits.push_back({0, 0, false, false});
+                        if (adjusted.energy >= 0.6) {
+                            lhHits.push_back({2, -10, false, false});
+                        }
+                        break;
+                    case 2: // Syncopated
+                        lhHits.push_back({2, -3, false, false});
+                        break;
+                }
+            }
             
-            for (int midi : lhVoicing.midiNotes) {
-                virtuoso::engine::AgentIntentNote note;
-                note.agent = "Piano";
-                note.channel = midiChannel;
-                note.note = midi;
-                note.baseVelocity = lhVel;
-                note.startPos = lhPos;
-                note.durationWhole = lhDurWhole;
-                note.structural = (adjusted.chordIsNew && adjusted.beatInBar == 0);
-                note.chord_context = adjusted.chordText;
-                note.voicing_type = lhVoicing.ontologyKey;
-                note.logic_tag = "LH";
+            // Generate notes for each LH hit
+            for (const auto& hit : lhHits) {
+                QVector<int> hitMidi = lhVoicing.midiNotes;
+                QString hitKey = lhVoicing.ontologyKey;
                 
-                plan.notes.push_back(note);
+                // Alternate voicing: regenerate with opposite Type
+                if (hit.useAltVoicing && hitMidi.size() >= 3) {
+                    // Shift voicing: move middle notes up/down
+                    for (int i = 1; i < hitMidi.size() - 1; ++i) {
+                        hitMidi[i] += (lhVoicing.isTypeA ? 2 : -2);
+                    }
+                    hitKey = lhVoicing.isTypeA ? "LH_RootlessB_Alt" : "LH_RootlessA_Alt";
+                }
+                
+                // Calculate timing
+                int timingOffsetMs = computeTimingOffsetMs(adjusted, timingHash + hit.sub);
+                if (hit.anticipate) {
+                    // Syncopation: play 1/8 note early
+                    timingOffsetMs -= int(60000.0 / adjusted.bpm / 2.0);
+                }
+                
+                virtuoso::groove::GridPos lhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                    adjusted.playbackBarIndex, adjusted.beatInBar, hit.sub, 4, ts);
+                lhPos = applyTimingOffset(lhPos, timingOffsetMs, adjusted.bpm, ts);
+                
+                // Velocity: accent first hit, softer subsequent
+                int lhVel = int(baseVel * mappings.velocityMod * 0.85) + hit.velDelta;
+                lhVel = qBound(35, lhVel, 95);
+                
+                // Duration: shorter for repeated hits
+                double lhDurBeats = (hit.sub == 0 && !hit.useAltVoicing) ? 1.5 : 0.8;
+                lhDurBeats *= mappings.durationMod;
+                const virtuoso::groove::Rational lhDurWhole(qint64(lhDurBeats * 1000), 4000);
+                
+                for (int midi : hitMidi) {
+                    virtuoso::engine::AgentIntentNote note;
+                    note.agent = "Piano";
+                    note.channel = midiChannel;
+                    note.note = midi;
+                    note.baseVelocity = lhVel;
+                    note.startPos = lhPos;
+                    note.durationWhole = lhDurWhole;
+                    note.structural = (adjusted.chordIsNew && adjusted.beatInBar == 0 && hit.sub == 0);
+                    note.chord_context = adjusted.chordText;
+                    note.voicing_type = hitKey;
+                    note.logic_tag = "LH";
+                    
+                    plan.notes.push_back(note);
+                }
             }
             
             // Update LH state

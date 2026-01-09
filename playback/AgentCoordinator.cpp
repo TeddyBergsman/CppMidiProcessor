@@ -727,6 +727,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     pc.userIntensityPeak = intent.intensityPeak;
     pc.userRegisterHigh = intent.registerHigh;
     pc.userSilence = intent.silence;
+    pc.userBusy = userBusy;  // CRITICAL: Was missing! Piano couldn't respond to user activity
     pc.forceClimax = (baseEnergy >= 0.85);
     {
         const double mult = in.agentEnergyMult.value("Piano", 1.0);

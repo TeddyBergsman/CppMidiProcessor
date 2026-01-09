@@ -387,6 +387,7 @@ QString LookaheadPlanner::buildLookaheadPlanJson(const Inputs& in, int stepNow, 
             pc.userIntensityPeak = intent.intensityPeak;
             pc.userRegisterHigh = intent.registerHigh;
             pc.userSilence = intent.silence;
+            pc.userBusy = userBusy;  // CRITICAL: Enable piano response to user activity
             pc.forceClimax = (baseEnergy >= 0.85);
             const double pianoMult = in.agentEnergyMult.value("Piano", 1.0);
             pc.energy = qBound(0.0, baseEnergy * pianoMult, 1.0);

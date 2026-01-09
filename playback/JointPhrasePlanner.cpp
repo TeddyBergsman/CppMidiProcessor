@@ -176,6 +176,7 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
         pc.userIntensityPeak = intent.intensityPeak;
         pc.userRegisterHigh = intent.registerHigh;
         pc.userSilence = intent.silence;
+        pc.userBusy = userBusy;  // CRITICAL: Enable piano response to user activity
         pc.forceClimax = (baseEnergy >= 0.85);
         pc.energy = baseEnergy * in.agentEnergyMult.value("Piano", 1.0);
 

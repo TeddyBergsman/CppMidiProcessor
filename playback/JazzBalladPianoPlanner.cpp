@@ -2143,23 +2143,25 @@ bool JazzBalladPianoPlanner::shouldLhPlayBeat(const Context& c, quint32 hash) co
 // RH activity: Melodic color and movement. Backs off when user plays, but doesn't disappear.
 int JazzBalladPianoPlanner::rhActivityLevel(const Context& c, quint32 hash) const {
     // ================================================================
-    // WHEN USER IS PLAYING: RH becomes sparse but NOT silent
-    // Still provides occasional color, just much less
+    // WHEN USER IS PLAYING: RH becomes VERY sparse
+    // Piano should SUPPORT, not compete with the soloist
+    // Much lower probabilities than before
     // ================================================================
     if (c.userBusy || c.userDensityHigh || c.userIntensityPeak) {
-        // Sparse mode: occasional single notes, mostly on chord changes
+        // Very sparse mode: rare single notes, mostly on chord changes
         if (c.chordIsNew) {
-            return (hash % 100) < 50 ? 1 : 0; // 50% single note on chord changes
+            return (hash % 100) < 25 ? 1 : 0; // 25% single note on chord changes (was 50%)
         }
-        // Otherwise very rare
-        return (hash % 100) < 10 ? 1 : 0; // 10% chance of single note
+        // Otherwise almost never - let the soloist have space!
+        return (hash % 100) < 3 ? 1 : 0; // 3% chance (was 10%)
     }
     
     // ================================================================
-    // NORMAL COMPING: RH adds color and melodic interest
+    // USER SILENCE: More active RH fills the space
+    // NORMAL COMPING: Moderate RH activity
     // ================================================================
     
-    double activityScore = 0.5; // Base: modest activity
+    double activityScore = c.userSilence ? 0.6 : 0.4; // Base: modest activity, higher when silent
     
     // Energy contribution
     activityScore += 1.0 * c.energy;
@@ -2321,7 +2323,32 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         adjusted.determinismSeed, adjusted.playbackBarIndex * 31 + adjusted.beatInBar * 7);
     
     const auto mappings = computeWeightMappings(adjusted);
-    const int baseVel = 55 + int(25.0 * adjusted.energy);
+    
+    // ================================================================
+    // VELOCITY: Must respect user's dynamics!
+    // When user is playing/singing, piano BACKS OFF significantly
+    // Base velocity is lower and scales with user activity
+    // ================================================================
+    int baseVel;
+    
+    if (adjusted.userBusy || adjusted.userDensityHigh || adjusted.userIntensityPeak) {
+        // USER IS ACTIVE: Play SOFT to support, not overpower
+        // Base around 40-55, much lower than solo playing
+        baseVel = 40 + int(15.0 * adjusted.energy);
+    } else if (adjusted.userSilence) {
+        // USER IS SILENT: Can play with more presence
+        // Base around 50-70
+        baseVel = 50 + int(20.0 * adjusted.energy);
+    } else {
+        // NORMAL: Moderate dynamics
+        baseVel = 45 + int(20.0 * adjusted.energy);
+    }
+    
+    // Additional velocity reduction based on intensity weight (respects CC2)
+    // If user is playing softly (low intensity), we should also be soft
+    if (adjusted.weights.intensity < 0.4) {
+        baseVel = int(baseVel * (0.7 + 0.3 * adjusted.weights.intensity / 0.4));
+    }
     
     QString pedalId;
     
@@ -2587,8 +2614,10 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 lhPos = applyTimingOffset(lhPos, timingOffsetMs, adjusted.bpm, ts);
                 
                 // Velocity: accent first hit, softer subsequent
+                // When user is active, cap velocity MUCH lower to avoid overpowering
                 int lhVel = int(baseVel * mappings.velocityMod * 0.85) + hit.velDelta;
-                lhVel = qBound(35, lhVel, 95);
+                int maxLhVel = (adjusted.userBusy || adjusted.userDensityHigh) ? 65 : 85;
+                lhVel = qBound(30, lhVel, maxLhVel);
                 
                 // Duration: shorter for repeated hits
                 double lhDurBeats = (hit.sub == 0 && !hit.useAltVoicing) ? 1.5 : 0.8;
@@ -2841,7 +2870,9 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 rhPos = applyTimingOffset(rhPos, rhTimingOffset, adjusted.bpm, ts);
                 
                 int rhVel = int(baseVel * mappings.velocityMod + velDelta);
-                rhVel = qBound(45, rhVel, 100);
+                // Cap RH velocity when user is active - stay out of the way!
+                int maxRhVel = (adjusted.userBusy || adjusted.userDensityHigh) ? 55 : 80;
+                rhVel = qBound(35, rhVel, maxRhVel);
                 
                 // Longer duration for UST triads (they ring beautifully)
                 const virtuoso::groove::Rational rhDurWhole(qint64(0.85 * mappings.durationMod * 1000), 4000);
@@ -3105,7 +3136,9 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                             fnPos = applyTimingOffset(fnPos, rhTimingOffset, adjusted.bpm, ts);
                             
                             int fnVel = int(baseVel * mappings.velocityMod + velDelta + fn.velocityDelta);
-                            fnVel = qBound(40, fnVel, 105);
+                            // Fragment notes should be even softer when user is playing
+                            int maxFnVel = (adjusted.userBusy || adjusted.userDensityHigh) ? 50 : 75;
+                            fnVel = qBound(35, fnVel, maxFnVel);
                             
                             double fnDur = 0.35 * fn.durationMult * mappings.durationMod;
                             const virtuoso::groove::Rational fnDurWhole(qint64(fnDur * 1000), 4000);
@@ -3331,9 +3364,11 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             rhPos = applyTimingOffset(rhPos, rhTimingOffset, adjusted.bpm, ts);
             
             // Velocity: emphasize downbeats, softer passing tones
+            // When user is active, MUCH lower velocity to support, not compete
             int rhVel = int(baseVel * mappings.velocityMod + velDelta);
-            if (sub == 0) rhVel += 5; // Emphasize beat
-            rhVel = qBound(40, rhVel, 105);
+            if (sub == 0) rhVel += 3; // Slight emphasis on beat (reduced from 5)
+            int maxRhVel = (adjusted.userBusy || adjusted.userDensityHigh) ? 55 : 80;
+            rhVel = qBound(35, rhVel, maxRhVel);
             
             // Duration: shorter for faster passages, longer for sustained
             double rhDurBeats = (sub == 0) ? 0.65 : 0.4;

@@ -46,15 +46,18 @@ WeightNegotiator::Output WeightNegotiator::negotiate(const Inputs& in, State& st
     const bool outro = (sec.compare("Outro", Qt::CaseInsensitive) == 0);
 
     // Density: who \"fills\".
+    // CRITICAL: When user is busy playing/singing, piano should BACK OFF significantly!
+    // Piano density drops sharply to support rather than compete
     auto aDensity = alloc(
-        in.userSilence ? 0.55 : 0.40,
-        in.userSilence ? 0.30 : 0.30,
+        in.userBusy ? 0.20 : (in.userSilence ? 0.55 : 0.40),  // Piano: very low when user busy
+        in.userSilence ? 0.30 : 0.25,
         in.userBusy ? 0.55 : 0.30
     );
     // Rhythm: drums lead.
     auto aRhythm = alloc(0.25, 0.20, 0.55);
     // Intensity: drums+piano.
-    auto aIntensity = alloc(0.40, 0.15, 0.45);
+    // When user is busy, piano intensity should drop to avoid overpowering
+    auto aIntensity = alloc(in.userBusy ? 0.20 : 0.40, 0.15, in.userBusy ? 0.65 : 0.45);
     // Dynamism: piano+piano phrasing + drums gestures.
     auto aDyn = alloc(0.45, 0.15, 0.40);
     // Emotion (time feel): piano leads.

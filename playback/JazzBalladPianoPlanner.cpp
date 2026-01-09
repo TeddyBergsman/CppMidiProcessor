@@ -108,21 +108,25 @@ int JazzBalladPianoPlanner::computeTimingOffsetMs(const Context& c, quint32 hash
     const auto mappings = computeWeightMappings(c);
     int offset = 0;
 
-    const int rubato = int(mappings.rubatoPushMs);
+    // REDUCED rubato influence to prevent sloppiness
+    const int rubato = int(mappings.rubatoPushMs * 0.5);  // Halved
     if (rubato > 0) {
         const int jitter = int(hash % (2 * rubato + 1)) - rubato;
         offset += jitter;
     }
 
+    // REDUCED offbeat offset
     if (c.beatInBar == 1 || c.beatInBar == 3) {
-        offset += 5 + int(mappings.rubatoPushMs * 0.3);
+        offset += 3 + int(mappings.rubatoPushMs * 0.15);  // Much smaller
     }
 
+    // Slight push at cadences
     if (c.cadence01 >= 0.7 && c.beatInBar == 3) {
-        offset -= 8;
+        offset -= 5;  // Reduced from 8
     }
 
-    return qBound(-40, offset, 40);
+    // TIGHTER bounds to prevent sloppiness
+    return qBound(-25, offset, 25);
 }
 
 virtuoso::groove::GridPos JazzBalladPianoPlanner::applyTimingOffset(
@@ -2744,23 +2748,29 @@ QVector<JazzBalladPianoPlanner::FragmentNote> JazzBalladPianoPlanner::applyMelod
         }
         
         // ================================================================
-        // CONSONANCE CHECK: Snap to chord scale
-        // Exception: the final target note (interval 0) stays as-is
-        // Exception: very brief chromatic approaches (±1) are OK if leading to target
+        // CONSONANCE CHECK: Snap ALL notes to chord scale
+        // STRICT: No raw intervals allowed - everything must be validated
+        // This eliminates chromatic approach notes which can cause dissonance
         // ================================================================
         bool isTargetNote = (fragment.intervalPattern[i] == 0);
-        bool isImmediateApproach = (qAbs(fragment.intervalPattern[i]) == 1 && 
-                                    i == fragment.intervalPattern.size() - 2);
         
         if (isTargetNote) {
             // Target stays as-is (should already be a chord tone)
             fn.midiNote = rawMidi;
-        } else if (isImmediateApproach) {
-            // Brief chromatic approach right before target is OK
-            fn.midiNote = rawMidi;
         } else {
-            // All other notes: snap to chord scale for consonance
+            // ALL non-target notes: snap to chord scale for consonance
+            // This is stricter than before but eliminates dissonance
             fn.midiNote = snapToChordScale(rawMidi);
+        }
+        
+        // Verify the snapped note is within an octave of the target
+        // If too far, snap to a closer chord tone
+        if (qAbs(fn.midiNote - targetMidi) > 7) {
+            // Try snapping the raw note from the other direction
+            int alternate = snapToChordScale(rawMidi + (rawMidi < targetMidi ? 12 : -12));
+            if (qAbs(alternate - targetMidi) < qAbs(fn.midiNote - targetMidi)) {
+                fn.midiNote = alternate;
+            }
         }
         
         // Ensure within range
@@ -3491,12 +3501,16 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                             hitKey = "LH_Inversion_Down";
                             break;
                         case 2:
-                            // Spread: Move all notes slightly (creates movement)
-                            for (int i = 0; i < hitMidi.size(); ++i) {
-                                int shift = (i % 2 == 0) ? 0 : 1;
-                                hitMidi[i] = qBound(48, hitMidi[i] + shift, 67);
+                            // Lighter texture: just use the shell (3rd and 7th only)
+                            // Safer than spreading which can create clusters
+                            if (hitMidi.size() >= 3) {
+                                // Keep only first and last (typically 3rd and 7th)
+                                QVector<int> shell;
+                                shell.push_back(hitMidi.first());
+                                shell.push_back(hitMidi.last());
+                                hitMidi = shell;
                             }
-                            hitKey = "LH_Spread";
+                            hitKey = "LH_Shell_Var";
                             break;
                         case 3:
                             // Drop 2: Move second-from-top note down an octave

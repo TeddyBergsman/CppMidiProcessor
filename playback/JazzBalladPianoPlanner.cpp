@@ -1466,71 +1466,90 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         const int patternSeed = (rhHash / 7) % 6;
         const bool preferSparse = (c.energy < 0.4) || (c.weights.density < 0.4);
         
+        // Note: preferDyad values: 0=single, 1=dyad, 2=triad (new!)
+        // Using int instead of bool for more voicing variety
+        
         switch (rhActivity) {
             case 1:
-                // Single hit - vary between dyad and single note
-                if (preferSparse || (patternSeed % 2) == 0) {
+                // Single hit - FAVOR dyads for richness, singles for sparse moments
+                if (preferSparse) {
                     rhTimings.push_back({0, 0, false}); // Single note
                 } else {
-                    rhTimings.push_back({0, 0, true}); // Dyad
+                    // 70% dyads, 30% singles at normal density
+                    rhTimings.push_back({0, 0, (patternSeed % 10) < 7}); // Mostly dyads
                 }
                 break;
                 
             case 2:
-                // Two hits - multiple pattern options
-                switch (patternSeed % 4) {
-                    case 0: // Beat + and
+                // Two hits - mix of dyads and singles for melodic interest
+                switch (patternSeed % 5) {
+                    case 0: // Beat (dyad) + and (single)
                         rhTimings.push_back({0, 0, true});
                         rhTimings.push_back({2, -10, false});
                         break;
-                    case 1: // Just and (syncopated)
+                    case 1: // Just and (dyad) - syncopated
                         rhTimings.push_back({2, -3, true});
                         break;
-                    case 2: // Beat + pickup
+                    case 2: // Beat (dyad) + pickup (dyad)
                         rhTimings.push_back({0, 0, true});
-                        rhTimings.push_back({3, -12, false});
+                        rhTimings.push_back({3, -8, true});
                         break;
-                    case 3: // E-and + and (offbeat feel)
+                    case 3: // E-and (single) + and (dyad) - offbeat
                         rhTimings.push_back({1, -5, false});
                         rhTimings.push_back({2, -3, true});
+                        break;
+                    case 4: // Two dyads for rich texture
+                        rhTimings.push_back({0, 0, true});
+                        rhTimings.push_back({2, -6, true});
                         break;
                 }
                 break;
                 
             case 3:
-                // Three hits - still varied
-                switch (patternSeed % 3) {
-                    case 0: // Beat + and + pickup
+                // Three hits - varied textures
+                switch (patternSeed % 4) {
+                    case 0: // Dyad + single + single (melodic line)
                         rhTimings.push_back({0, 0, true});
                         rhTimings.push_back({2, -6, false});
                         rhTimings.push_back({3, -12, false});
                         break;
-                    case 1: // E-and + and + a-and
+                    case 1: // Single + dyad + single (centered richness)
                         rhTimings.push_back({1, -4, false});
                         rhTimings.push_back({2, -2, true});
                         rhTimings.push_back({3, -10, false});
                         break;
-                    case 2: // Beat + e-and + and (front-loaded)
+                    case 2: // Dyad + single + dyad (bookended)
                         rhTimings.push_back({0, 0, true});
                         rhTimings.push_back({1, -8, false});
                         rhTimings.push_back({2, -4, true});
+                        break;
+                    case 3: // Three dyads for lush texture
+                        rhTimings.push_back({0, 0, true});
+                        rhTimings.push_back({2, -5, true});
+                        rhTimings.push_back({3, -10, true});
                         break;
                 }
                 break;
                 
             case 4:
-                // Four hits - climax moments only, still musical
-                switch (patternSeed % 2) {
-                    case 0:
+                // Four hits - climax, can include triads!
+                switch (patternSeed % 3) {
+                    case 0: // Standard: dyad-single-dyad-single
                         rhTimings.push_back({0, 0, true});
                         rhTimings.push_back({1, -8, false});
                         rhTimings.push_back({2, -4, true});
                         rhTimings.push_back({3, -10, false});
                         break;
-                    case 1: // Swing feel (1-and-a)
+                    case 1: // Swing: dyad-dyad-single
                         rhTimings.push_back({0, 0, true});
                         rhTimings.push_back({2, -3, true});
                         rhTimings.push_back({3, -8, false});
+                        break;
+                    case 2: // Dense: dyad-dyad-dyad-single
+                        rhTimings.push_back({0, 0, true});
+                        rhTimings.push_back({1, -6, true});
+                        rhTimings.push_back({2, -4, true});
+                        rhTimings.push_back({3, -10, false});
                         break;
                 }
                 break;
@@ -1670,10 +1689,17 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             
             rhMidiNotes.push_back(bestTarget);
             
-            // Add second voice for dyads (3rd-6th below top)
+            // Determine if we should build a triad (3 notes) vs dyad (2 notes)
+            // Triads for climactic moments at high energy
+            const bool buildTriad = preferDyad && (c.energy > 0.7) && 
+                                   (c.weights.density > 0.6) && ((rhHash + hitIndex) % 4 == 0);
+            
+            // Add second voice for dyads/triads (3rd-6th below top)
             if (preferDyad) {
                 int secondPc = -1;
-                // Try 3rd below
+                int thirdPc = -1; // For triads
+                
+                // Find best second voice: 3rd or 4th below
                 for (int pc : melodicPcs) {
                     if (pc == topPc) continue;
                     int interval = (topPc - pc + 12) % 12;
@@ -1682,7 +1708,8 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                         break;
                     }
                 }
-                // Try 6th below
+                
+                // Try 6th below if no 3rd found
                 if (secondPc < 0) {
                     for (int pc : melodicPcs) {
                         if (pc == topPc) continue;
@@ -1693,11 +1720,23 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                         }
                     }
                 }
+                
                 // Fallback to 7th or 3rd
                 if (secondPc < 0) {
                     secondPc = (seventh >= 0 && seventh != topPc) ? seventh : third;
                 }
                 
+                // For triads, find a third voice below the second
+                if (buildTriad && secondPc >= 0) {
+                    for (int pc : melodicPcs) {
+                        if (pc == topPc || pc == secondPc) continue;
+                        // Look for a note that would be below the second voice
+                        thirdPc = pc;
+                        break;
+                    }
+                }
+                
+                // Build the MIDI notes
                 if (secondPc >= 0) {
                     int secondMidi = bestTarget - 3;
                     while (normalizePc(secondMidi) != secondPc && secondMidi > bestTarget - 12) {
@@ -1705,6 +1744,17 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     }
                     if (secondMidi >= adjusted.rhLo && secondMidi < bestTarget) {
                         rhMidiNotes.insert(rhMidiNotes.begin(), secondMidi);
+                        
+                        // Add third voice for triads
+                        if (buildTriad && thirdPc >= 0) {
+                            int thirdMidi = secondMidi - 3;
+                            while (normalizePc(thirdMidi) != thirdPc && thirdMidi > secondMidi - 12) {
+                                thirdMidi--;
+                            }
+                            if (thirdMidi >= adjusted.rhLo && thirdMidi < secondMidi) {
+                                rhMidiNotes.insert(rhMidiNotes.begin(), thirdMidi);
+                            }
+                        }
                     }
                 }
             }
@@ -1725,7 +1775,8 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             if (rhTimings.size() >= 3) rhDurBeats *= 0.8; // Tighter for busier patterns
             const virtuoso::groove::Rational rhDurWhole(qint64(rhDurBeats * mappings.durationMod * 1000), 4000);
             
-            QString ontologyKey = preferDyad ? "RH_Melodic_Dyad" : "RH_Melodic_Single";
+            QString ontologyKey = (rhMidiNotes.size() >= 3) ? "RH_Melodic_Triad" : 
+                                  (preferDyad ? "RH_Melodic_Dyad" : "RH_Melodic_Single");
             if (topPc == ninth || topPc == thirteenth) ontologyKey += "_Color";
             
             for (int midi : rhMidiNotes) {

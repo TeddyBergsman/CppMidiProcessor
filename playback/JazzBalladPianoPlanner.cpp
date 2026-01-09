@@ -1307,31 +1307,30 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     
     if (rhActivity > 0) {
         // Generate multiple RH hits based on activity level
-        // Activity 1: single hit on beat
-        // Activity 2: hit on beat + and-of-beat
-        // Activity 3-4: more melodic motion
+        // EACH hit moves melodically - no repetition!
         
-        QVector<std::pair<int, int>> rhTimings; // sub, velDelta
+        QVector<std::tuple<int, int, bool>> rhTimings; // sub, velDelta, preferDyad
         
         switch (rhActivity) {
             case 1:
-                rhTimings.push_back({0, 0});
+                rhTimings.push_back({0, 0, true});
                 break;
             case 2:
-                rhTimings.push_back({0, 0});
-                if ((rhHash % 2) == 0) {
-                    rhTimings.push_back({2, -8}); // and-of-beat, softer
-                }
+                rhTimings.push_back({0, 0, true});
+                rhTimings.push_back({2, -8, (rhHash % 3) != 0}); // and-of-beat
                 break;
             case 3:
-                rhTimings.push_back({0, 0});
-                rhTimings.push_back({2, -5});
+                rhTimings.push_back({0, 0, true});
+                rhTimings.push_back({2, -5, true});
+                if ((rhHash % 2) == 0) {
+                    rhTimings.push_back({3, -10, false}); // single note pickup
+                }
                 break;
             case 4:
-                rhTimings.push_back({0, 0});
-                rhTimings.push_back({1, -6});
-                rhTimings.push_back({2, -4});
-                rhTimings.push_back({3, -8});
+                rhTimings.push_back({0, 0, true});
+                rhTimings.push_back({1, -6, false}); // passing tone (single)
+                rhTimings.push_back({2, -4, true});
+                rhTimings.push_back({3, -8, false}); // pickup (single)
                 break;
             default:
                 break;
@@ -1340,48 +1339,180 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         // Slight delay for RH relative to LH (rubato feel)
         const int rhTimingOffset = computeTimingOffsetMs(adjusted, rhHash) + 5;
         
+        // Track melodic line through this beat - each hit advances the melody
+        int currentTopMidi = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 74;
+        int currentDirection = m_state.rhMelodicDirection;
+        int motionCount = 0;
+        
         for (const auto& timing : rhTimings) {
-            // Find melodic target for this hit
-            int targetTop = selectNextRhMelodicTarget(adjusted);
+            const int sub = std::get<0>(timing);
+            const int velDelta = std::get<1>(timing);
+            const bool preferDyad = std::get<2>(timing);
             
-            RhMelodic rhVoicing = generateRhMelodicVoicing(adjusted, targetTop);
+            // ================================================================
+            // KEY: Generate a NEW melodic target for EACH hit
+            // This creates flowing motion, not repetitive hammering
+            // ================================================================
             
-            if (!rhVoicing.midiNotes.isEmpty()) {
-                virtuoso::groove::GridPos rhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-                    adjusted.playbackBarIndex, adjusted.beatInBar, timing.first, 4, ts);
-                rhPos = applyTimingOffset(rhPos, rhTimingOffset, adjusted.bpm, ts);
-                
-                // RH: shorter duration, varied velocity for melodic interest
-                int rhVel = int(baseVel * mappings.velocityMod + timing.second);
-                rhVel = qBound(40, rhVel, 105);
-                
-                // Duration: RH notes shorter for melodic clarity
-                const double rhDurBeats = (timing.first == 0) ? 0.75 : 0.5;
-                const virtuoso::groove::Rational rhDurWhole(qint64(rhDurBeats * mappings.durationMod * 1000), 4000);
-                
-                for (int midi : rhVoicing.midiNotes) {
-                    virtuoso::engine::AgentIntentNote note;
-                    note.agent = "Piano";
-                    note.channel = midiChannel;
-                    note.note = midi;
-                    note.baseVelocity = rhVel;
-                    note.startPos = rhPos;
-                    note.durationWhole = rhDurWhole;
-                    note.structural = false;
-                    note.chord_context = adjusted.chordText;
-                    note.voicing_type = rhVoicing.ontologyKey;
-                    note.logic_tag = "RH";
+            // Collect scale/chord tones for melodic motion
+            QVector<int> melodicPcs;
+            int ninth = pcForDegree(adjusted.chord, 9);
+            int thirteenth = pcForDegree(adjusted.chord, 13);
+            int seventh = pcForDegree(adjusted.chord, 7);
+            int third = pcForDegree(adjusted.chord, 3);
+            int fifth = pcForDegree(adjusted.chord, 5);
+            int root = adjusted.chord.rootPc;
+            
+            // Priority: extensions first for color, then guide tones
+            if (ninth >= 0) melodicPcs.push_back(ninth);
+            if (thirteenth >= 0) melodicPcs.push_back(thirteenth);
+            if (seventh >= 0) melodicPcs.push_back(seventh);
+            if (third >= 0) melodicPcs.push_back(third);
+            if (fifth >= 0) melodicPcs.push_back(fifth);
+            if (root >= 0 && motionCount > 0) melodicPcs.push_back(root); // Root OK for passing
+            
+            if (melodicPcs.isEmpty()) continue;
+            
+            // Determine direction: tend to continue, reverse near boundaries
+            if (currentTopMidi >= 82) currentDirection = -1;
+            else if (currentTopMidi <= 68) currentDirection = 1;
+            else if (motionCount >= 3 && (rhHash % 4) == 0) currentDirection = -currentDirection;
+            
+            // Find next scale tone in direction (stepwise: 1-4 semitones)
+            int bestTarget = currentTopMidi;
+            int bestScore = 999;
+            
+            for (int pc : melodicPcs) {
+                for (int oct = 5; oct <= 7; ++oct) {
+                    int midi = pc + 12 * oct;
+                    if (midi < adjusted.rhLo || midi > adjusted.rhHi) continue;
                     
-                    plan.notes.push_back(note);
+                    int motion = midi - currentTopMidi;
+                    int absMotion = qAbs(motion);
+                    
+                    // Skip if no motion (we want MOVEMENT!)
+                    if (absMotion == 0) continue;
+                    
+                    // Prefer stepwise motion (1-3 semitones)
+                    int score = 0;
+                    if (absMotion <= 2) score = 0;
+                    else if (absMotion <= 4) score = 2;
+                    else if (absMotion <= 7) score = 5;
+                    else score = 10;
+                    
+                    // Bonus for matching direction
+                    bool rightDirection = (currentDirection == 0) ||
+                                          (currentDirection > 0 && motion > 0) ||
+                                          (currentDirection < 0 && motion < 0);
+                    if (!rightDirection) score += 3;
+                    
+                    // Slight preference for color tones (9, 13)
+                    if (pc == ninth || pc == thirteenth) score -= 1;
+                    
+                    // Sweet spot bonus
+                    if (midi >= 72 && midi <= 80) score -= 1;
+                    
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestTarget = midi;
+                    }
+                }
+            }
+            
+            // Create voicing for this target
+            QVector<int> rhMidiNotes;
+            int topPc = normalizePc(bestTarget);
+            
+            rhMidiNotes.push_back(bestTarget);
+            
+            // Add second voice for dyads (3rd-6th below top)
+            if (preferDyad) {
+                int secondPc = -1;
+                // Try 3rd below
+                for (int pc : melodicPcs) {
+                    if (pc == topPc) continue;
+                    int interval = (topPc - pc + 12) % 12;
+                    if (interval >= 3 && interval <= 5) {
+                        secondPc = pc;
+                        break;
+                    }
+                }
+                // Try 6th below
+                if (secondPc < 0) {
+                    for (int pc : melodicPcs) {
+                        if (pc == topPc) continue;
+                        int interval = (topPc - pc + 12) % 12;
+                        if (interval >= 8 && interval <= 10) {
+                            secondPc = pc;
+                            break;
+                        }
+                    }
+                }
+                // Fallback to 7th or 3rd
+                if (secondPc < 0) {
+                    secondPc = (seventh >= 0 && seventh != topPc) ? seventh : third;
                 }
                 
-                // Update RH melodic state
-                m_state.lastRhMidi = rhVoicing.midiNotes;
-                m_state.lastRhTopMidi = rhVoicing.topNoteMidi;
-                m_state.rhMelodicDirection = rhVoicing.melodicDirection;
-                m_state.rhMotionsThisChord++;
+                if (secondPc >= 0) {
+                    int secondMidi = bestTarget - 3;
+                    while (normalizePc(secondMidi) != secondPc && secondMidi > bestTarget - 12) {
+                        secondMidi--;
+                    }
+                    if (secondMidi >= adjusted.rhLo && secondMidi < bestTarget) {
+                        rhMidiNotes.insert(rhMidiNotes.begin(), secondMidi);
+                    }
+                }
             }
+            
+            if (rhMidiNotes.isEmpty()) continue;
+            
+            virtuoso::groove::GridPos rhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                adjusted.playbackBarIndex, adjusted.beatInBar, sub, 4, ts);
+            rhPos = applyTimingOffset(rhPos, rhTimingOffset, adjusted.bpm, ts);
+            
+            // Velocity: emphasize downbeats, softer passing tones
+            int rhVel = int(baseVel * mappings.velocityMod + velDelta);
+            if (sub == 0) rhVel += 5; // Emphasize beat
+            rhVel = qBound(40, rhVel, 105);
+            
+            // Duration: shorter for faster passages, longer for sustained
+            double rhDurBeats = (sub == 0) ? 0.65 : 0.4;
+            if (rhTimings.size() >= 3) rhDurBeats *= 0.8; // Tighter for busier patterns
+            const virtuoso::groove::Rational rhDurWhole(qint64(rhDurBeats * mappings.durationMod * 1000), 4000);
+            
+            QString ontologyKey = preferDyad ? "RH_Melodic_Dyad" : "RH_Melodic_Single";
+            if (topPc == ninth || topPc == thirteenth) ontologyKey += "_Color";
+            
+            for (int midi : rhMidiNotes) {
+                virtuoso::engine::AgentIntentNote note;
+                note.agent = "Piano";
+                note.channel = midiChannel;
+                note.note = midi;
+                note.baseVelocity = rhVel;
+                note.startPos = rhPos;
+                note.durationWhole = rhDurWhole;
+                note.structural = false;
+                note.chord_context = adjusted.chordText;
+                note.voicing_type = ontologyKey;
+                note.logic_tag = "RH";
+                
+                plan.notes.push_back(note);
+            }
+            
+            // ================================================================
+            // CRITICAL: Update state for NEXT hit to continue melodic motion
+            // ================================================================
+            int oldTop = currentTopMidi;
+            currentTopMidi = bestTarget;
+            if (bestTarget > oldTop) currentDirection = 1;
+            else if (bestTarget < oldTop) currentDirection = -1;
+            motionCount++;
         }
+        
+        // Persist final melodic state for next beat
+        m_state.lastRhTopMidi = currentTopMidi;
+        m_state.rhMelodicDirection = currentDirection;
+        m_state.rhMotionsThisChord += motionCount;
     }
     
     // Return early if no notes generated

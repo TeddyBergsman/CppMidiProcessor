@@ -2414,7 +2414,11 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 
                 // ============================================================
                 // ADDITIONAL COMPING HITS (1-2 per chord, tastefully placed)
-                // These create rhythmic interest without being busy
+                // Classic jazz piano comp placements:
+                // - "and of 1" (sub=2 on beat 1): rhythmic push
+                // - Beat 3: secondary accent
+                // - "and of 3" (sub=2 on beat 3): anticipates beat 4
+                // - "and of 4" (sub=2 on beat 4): anticipates next bar!
                 // ============================================================
                 
                 // Determine how many additional hits (0, 1, or 2)
@@ -2427,37 +2431,88 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     extraHits = (lhHash % 5 == 0) ? 1 : 0; // ~20% chance of 1
                 }
                 
-                // Place extra hits on musically sensible subdivisions
+                // Choose comp placement based on hash for variety
+                int compPattern = (lhHash / 3) % 6;
+                
                 if (extraHits >= 1) {
-                    // First extra hit: "and of the beat" or beat 3
-                    if (isDownbeat) {
-                        // Add on the "and" (sub=2)
-                        lhHits.push_back({2, -6, false, false});
-                    } else {
-                        // Add on beat 3 if we're on an earlier beat
-                        lhHits.push_back({0, -5, false, false}); // Will be on next beat
+                    bool useAltVoicing = (lhHash % 3 == 0); // ~33% use different voicing
+                    
+                    switch (compPattern) {
+                        case 0:
+                            // "and of 1" - classic rhythmic push
+                            lhHits.push_back({2, -5, useAltVoicing, false});
+                            break;
+                        case 1:
+                            // Beat 3 - secondary accent
+                            // (This will be handled in the beat 3 scheduling)
+                            break;
+                        case 2:
+                            // "and of 2" - syncopated
+                            lhHits.push_back({2, -6, useAltVoicing, false});
+                            break;
+                        case 3:
+                            // "and of 3" - anticipates beat 4
+                            lhHits.push_back({2, -5, useAltVoicing, false});
+                            break;
+                        case 4:
+                        case 5:
+                            // "and of 4" - anticipates next bar (very common in jazz!)
+                            lhHits.push_back({2, -4, useAltVoicing, false});
+                            break;
                     }
                 }
+                
                 if (extraHits >= 2 && isHighEnergy) {
-                    // Second extra hit: "and of 2" or similar
-                    lhHits.push_back({2, -10, true, false}); // Alternate voicing
+                    // Second hit: use a DIFFERENT voicing for interest
+                    bool useAltVoicing2 = true; // Always vary the second hit
+                    int compPattern2 = (compPattern + 2) % 4;
+                    
+                    switch (compPattern2) {
+                        case 0:
+                            lhHits.push_back({2, -8, useAltVoicing2, false}); // "and"
+                            break;
+                        case 1:
+                            lhHits.push_back({1, -10, useAltVoicing2, false}); // "e" 
+                            break;
+                        case 2:
+                            lhHits.push_back({3, -7, useAltVoicing2, false}); // "a"
+                            break;
+                        case 3:
+                            lhHits.push_back({2, -9, useAltVoicing2, false}); // "and"
+                            break;
+                    }
                 }
                 
             } else {
                 // ============================================================
-                // NON-CHORD-CHANGE: Occasional supportive comp
-                // Much sparser - only on beat 3 or for pickups
+                // NON-CHORD-CHANGE: Supportive comps within the chord
+                // These add rhythmic life without changing harmony
                 // ============================================================
                 
-                if (isSecondaryDownbeat && (isMedEnergy || isHighEnergy)) {
-                    // Beat 3: Good for a supportive hit
-                    bool useAltVoicing = (lhHash % 4 == 0); // 25% use alternate voicing
-                    lhHits.push_back({0, -3, useAltVoicing, false});
-                } else if (adjusted.beatInBar == 3 && isHighEnergy && isCadence) {
-                    // Beat 4 approaching cadence: pickup to next bar
-                    lhHits.push_back({2, -8, false, false}); // "and of 4"
+                if (isDownbeat && (lhHash % 6 == 0)) {
+                    // Beat 1 (no chord change): occasional reinforcement
+                    bool useAltVoicing = (lhHash % 2 == 0);
+                    lhHits.push_back({0, -4, useAltVoicing, false});
+                } else if (isSecondaryDownbeat) {
+                    // Beat 3: Good spot for supportive comp
+                    if (isMedEnergy || isHighEnergy) {
+                        bool useAltVoicing = (lhHash % 3 == 0);
+                        lhHits.push_back({0, -3, useAltVoicing, false});
+                    }
+                    // Sometimes add "and of 3" as well
+                    if (isHighEnergy && slightVariation) {
+                        lhHits.push_back({2, -7, true, false});
+                    }
+                } else if (adjusted.beatInBar == 3) {
+                    // Beat 4: Classic spot for "and of 4" anticipation!
+                    if (isHighEnergy || isCadence || (lhHash % 4 == 0)) {
+                        bool useAltVoicing = (lhHash % 2 == 0);
+                        lhHits.push_back({2, -5, useAltVoicing, false}); // "and of 4"
+                    }
+                } else if (adjusted.beatInBar == 1 && isHighEnergy && slightVariation) {
+                    // Beat 2: Rare comp, only at high energy
+                    lhHits.push_back({2, -8, true, false}); // "and of 2"
                 }
-                // Beats 1 and 2 without chord change: REST (breathing room)
             }
             
             // Safety: ensure at least one hit on chord changes
@@ -2470,13 +2525,48 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 QVector<int> hitMidi = lhVoicing.midiNotes;
                 QString hitKey = lhVoicing.ontologyKey;
                 
-                // Alternate voicing: regenerate with opposite Type
-                if (hit.useAltVoicing && hitMidi.size() >= 3) {
-                    // Shift voicing: move middle notes up/down
-                    for (int i = 1; i < hitMidi.size() - 1; ++i) {
-                        hitMidi[i] += (lhVoicing.isTypeA ? 2 : -2);
+                // Alternate voicing: create meaningful variation
+                if (hit.useAltVoicing && hitMidi.size() >= 2) {
+                    // Several ways to vary the voicing:
+                    int variationType = (timingHash + hit.sub) % 4;
+                    
+                    switch (variationType) {
+                        case 0:
+                            // Inversion: Move lowest note up an octave
+                            if (hitMidi.size() >= 2 && hitMidi[0] + 12 <= 67) {
+                                hitMidi[0] += 12;
+                                std::sort(hitMidi.begin(), hitMidi.end());
+                            }
+                            hitKey = "LH_Inversion_Up";
+                            break;
+                        case 1:
+                            // Inversion: Move highest note down an octave
+                            if (hitMidi.size() >= 2 && hitMidi.last() - 12 >= 48) {
+                                hitMidi.last() -= 12;
+                                std::sort(hitMidi.begin(), hitMidi.end());
+                            }
+                            hitKey = "LH_Inversion_Down";
+                            break;
+                        case 2:
+                            // Spread: Move all notes slightly (creates movement)
+                            for (int i = 0; i < hitMidi.size(); ++i) {
+                                int shift = (i % 2 == 0) ? 0 : 1;
+                                hitMidi[i] = qBound(48, hitMidi[i] + shift, 67);
+                            }
+                            hitKey = "LH_Spread";
+                            break;
+                        case 3:
+                            // Drop 2: Move second-from-top note down an octave
+                            if (hitMidi.size() >= 3) {
+                                int idx = hitMidi.size() - 2;
+                                if (hitMidi[idx] - 12 >= 48) {
+                                    hitMidi[idx] -= 12;
+                                    std::sort(hitMidi.begin(), hitMidi.end());
+                                }
+                            }
+                            hitKey = "LH_Drop2";
+                            break;
                     }
-                    hitKey = lhVoicing.isTypeA ? "LH_RootlessB_Alt" : "LH_RootlessA_Alt";
                 }
                 
                 // Calculate timing using SUBDIVISIONS (not milliseconds!)

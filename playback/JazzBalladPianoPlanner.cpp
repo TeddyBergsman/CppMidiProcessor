@@ -1,15 +1,14 @@
 #include "playback/JazzBalladPianoPlanner.h"
 
 #include "virtuoso/util/StableHash.h"
-#include "virtuoso/piano/PianoPerformanceModel.h"
 
 #include <QtGlobal>
 #include <algorithm>
-#include <functional>
 
 namespace playback {
 
 namespace {
+
 static int clampMidi(int m) { return qBound(0, m, 127); }
 static int normalizePc(int pc) { return ((pc % 12) + 12) % 12; }
 
@@ -58,6 +57,7 @@ JazzBalladPianoPlanner::JazzBalladPianoPlanner() {
 }
 
 void JazzBalladPianoPlanner::reset() {
+    QMutexLocker locker(m_stateMutex.get());
     m_state = PlannerState{};
     m_state.perf.heldNotes.clear();
     m_state.perf.ints.insert("cc64", 0);
@@ -69,10 +69,12 @@ void JazzBalladPianoPlanner::reset() {
 }
 
 JazzBalladPianoPlanner::PlannerState JazzBalladPianoPlanner::snapshotState() const {
+    QMutexLocker locker(m_stateMutex.get());
     return m_state;
 }
 
 void JazzBalladPianoPlanner::restoreState(const PlannerState& s) {
+    QMutexLocker locker(m_stateMutex.get());
     m_state = s;
 }
 
@@ -154,6 +156,177 @@ virtuoso::groove::GridPos JazzBalladPianoPlanner::applyTimingOffset(
     }
 
     return result;
+}
+
+// =============================================================================
+// ARTICULATION & DYNAMICS
+// Expressive playing through varied touch and intensity
+// =============================================================================
+
+JazzBalladPianoPlanner::ArticulationType JazzBalladPianoPlanner::determineArticulation(
+    const Context& c, bool isRh, int positionInPhrase) const {
+    
+    // Ballads are predominantly legato
+    // Exception: phrase endings, punctuation moments
+    
+    const bool atPhraseEnd = (positionInPhrase >= c.phraseBars * 3);
+    const bool isDownbeat = (c.beatInBar == 0);
+    const bool isCadence = (c.cadence01 > 0.5);
+    
+    // LH: mostly legato/tenuto for warmth
+    if (!isRh) {
+        if (isCadence && isDownbeat) {
+            return ArticulationType::Accent;  // Cadential emphasis
+        }
+        if (c.weights.emotion > 0.7) {
+            return ArticulationType::Tenuto;  // Full, warm sustain
+        }
+        return ArticulationType::Legato;
+    }
+    
+    // RH: more varied for expression
+    if (atPhraseEnd) {
+        return ArticulationType::Portato;  // Gentle release
+    }
+    if (c.weights.tension > 0.6 && isDownbeat) {
+        return ArticulationType::Accent;   // Tension emphasis
+    }
+    if (c.weights.warmth > 0.7) {
+        return ArticulationType::Legato;   // Warm, connected
+    }
+    if (c.beatInBar == 2 && c.weights.rhythm > 0.4) {
+        return ArticulationType::Tenuto;   // Slight emphasis on beat 3
+    }
+    
+    return ArticulationType::Legato;  // Default for ballads
+}
+
+void JazzBalladPianoPlanner::applyArticulation(
+    ArticulationType art, double& duration, int& velocity, bool isTopVoice) const {
+    
+    // Modify duration and velocity based on articulation
+    // Duration is in whole notes
+    
+    switch (art) {
+        case ArticulationType::Legato:
+            // Full duration, slightly reduced velocity for smoothness
+            velocity = int(velocity * 0.95);
+            break;
+            
+        case ArticulationType::Tenuto:
+            // Full duration, full velocity
+            // No modification needed
+            break;
+            
+        case ArticulationType::Portato:
+            // 75% duration, slightly softer
+            duration *= 0.75;
+            velocity = int(velocity * 0.90);
+            break;
+            
+        case ArticulationType::Staccato:
+            // 40% duration (rare in ballads)
+            duration *= 0.40;
+            velocity = int(velocity * 0.85);
+            break;
+            
+        case ArticulationType::Accent:
+            // Full duration, boosted velocity
+            if (isTopVoice) {
+                velocity = qMin(127, velocity + 12);
+            } else {
+                velocity = qMin(127, velocity + 6);
+            }
+            break;
+    }
+}
+
+int JazzBalladPianoPlanner::contourVelocity(
+    int baseVel, int noteIndex, int noteCount, bool isRh) const {
+    
+    // Velocity contouring: melody voice (top) louder, inner voices softer
+    // This creates natural voicing where melody sings over harmony
+    
+    if (noteCount <= 1) return baseVel;
+    
+    if (isRh) {
+        // RH: top note is melody, should be loudest
+        if (noteIndex == noteCount - 1) {
+            // Top voice: melody boost
+            return qMin(127, baseVel + 10);
+        } else if (noteIndex == 0) {
+            // Bottom voice: slightly softer
+            return qMax(30, baseVel - 6);
+        } else {
+            // Middle voices: softest
+            return qMax(30, baseVel - 10);
+        }
+    } else {
+        // LH: more even, but top of voicing slightly emphasized
+        if (noteIndex == noteCount - 1) {
+            return qMin(127, baseVel + 4);
+        } else {
+            return qMax(30, baseVel - 3);
+        }
+    }
+}
+
+// =============================================================================
+// BREATH AND SPACE
+// Intentional silence for musicality - space is part of the music
+// =============================================================================
+
+bool JazzBalladPianoPlanner::shouldRest(const Context& c, quint32 hash) const {
+    // Intentional rests happen:
+    // 1. After phrase endings (musical breath)
+    // 2. When user is actively playing (give them space)
+    // 3. At low energy moments (less is more)
+    // 4. To create anticipation before cadences
+    
+    // Musical breath after phrase endings
+    const int phrasePhase = computePhraseArcPhase(c);
+    if (phrasePhase == 2) {  // Resolving phase = potential rest
+        return (hash % 100) < 60;
+    }
+    
+    // Before cadences (create anticipation)
+    if (c.cadence01 > 0.7 && c.beatInBar == 1) {
+        return (hash % 100) < 25;  // 25% chance to rest beat before cadence
+    }
+    
+    // At very low energy, occasional rests add space
+    if (c.energy < 0.25 && c.weights.density < 0.3) {
+        return (hash % 100) < 15;  // 15% chance at low energy
+    }
+    
+    // When user is playing intensely, give more space
+    if (c.userBusy) {
+        return (hash % 100) < 20;  // 20% chance when user is active
+    }
+    
+    return false;
+}
+
+double JazzBalladPianoPlanner::getRestDuration(const Context& c) const {
+    
+    // Rest duration depends on context
+    // Phrase endings: longer rest (half bar to full bar)
+    // Other contexts: shorter rest (1-2 beats)
+    
+    const double phrasePhase = computePhraseArcPhase(c);
+    
+    if (phrasePhase > 0.95) {
+        // Phrase end: rest for remainder of phrase
+        return 0.5;  // Half bar
+    }
+    
+    if (c.cadence01 > 0.7) {
+        // Before cadence: one beat
+        return 0.25;  // One beat
+    }
+    
+    // Default: short breath
+    return 0.125;  // Half beat
 }
 
 // =============================================================================
@@ -533,6 +706,333 @@ int JazzBalladPianoPlanner::getArcMelodicDirection(int arcPhase, int barInPhrase
 }
 
 // =============================================================================
+// QUESTION-ANSWER PHRASING
+// 2-bar phrases that relate to each other musically - creates dialogue
+// "Question" rises or leaves tension, "Answer" resolves or mirrors
+// =============================================================================
+
+void JazzBalladPianoPlanner::updateQuestionAnswerState(const Context& c, int melodicPeakMidi, int finalMidi) {
+    // Update Q/A tracking at phrase boundaries
+    // Called at the end of each 2-bar phrase
+    
+    m_state.barsInCurrentQA++;
+    
+    // Check if we're at a 2-bar phrase boundary
+    if (m_state.barsInCurrentQA >= 2) {
+        // Phrase complete - store data and flip
+        if (m_state.lastPhraseWasQuestion) {
+            // Just finished a Question - store it for the Answer to reference
+            m_state.questionPeakMidi = melodicPeakMidi;
+            m_state.questionEndMidi = finalMidi;
+        }
+        // Toggle for next phrase
+        m_state.lastPhraseWasQuestion = !m_state.lastPhraseWasQuestion;
+        m_state.barsInCurrentQA = 0;
+    }
+}
+
+int JazzBalladPianoPlanner::getQuestionAnswerTargetMidi(const Context& c) const {
+    // Determines the target register/direction based on Q/A position
+    // Returns a target MIDI to aim for, or -1 if no strong preference
+    
+    if (m_state.lastPhraseWasQuestion) {
+        // Currently playing a QUESTION phrase
+        // Questions typically rise, leave an open feeling
+        // Target: slightly above mid-register, end on a non-root tone
+        const int rhMid = (c.rhLo + c.rhHi) / 2;
+        const int questionTarget = rhMid + 4 + (m_state.barsInCurrentQA * 2);
+        // SAFETY: Ensure min <= max
+        return qBound(c.rhLo, questionTarget, qMax(c.rhLo, c.rhHi - 2));
+    } else {
+        // Currently playing an ANSWER phrase
+        // Answers relate to the question: can mirror, resolve, or complement
+        // Strategy: move toward a resolution note, often lower than the question peak
+        
+        // Start near where question ended
+        if (m_state.barsInCurrentQA == 0) {
+            // First bar of answer: relate to question's ending
+            return qBound(c.rhLo, m_state.questionEndMidi - 2, c.rhHi);
+        }
+        
+        // Second bar of answer: resolve lower, toward stability
+        const int resolutionTarget = m_state.questionPeakMidi - 5;
+        return qBound(c.rhLo, resolutionTarget, c.rhHi);
+    }
+}
+
+bool JazzBalladPianoPlanner::shouldUseQuestionContour(const Context& c) const {
+    // Whether to actively shape melodic line for Q/A effect
+    // More likely at emotional, expressive moments; less when busy
+    
+    if (c.userBusy) return false;  // Let user take the melodic lead
+    if (c.energy > 0.7) return false;  // At high energy, other factors dominate
+    if (c.weights.emotion < 0.3) return false;  // Low emotion = less phrasing
+    
+    // Probability based on emotion and warmth
+    const double prob = 0.4 + (c.weights.emotion * 0.3) + (c.weights.warmth * 0.2);
+    const quint32 hash = c.determinismSeed ^ (c.playbackBarIndex * 13);
+    return (hash % 100) < int(prob * 100);
+}
+
+// =============================================================================
+// MELODIC SEQUENCES
+// Repeat melodic patterns at different pitch levels for coherence
+// =============================================================================
+
+void JazzBalladPianoPlanner::updateMelodicSequenceState(const Context& c, const QVector<int>& pattern) {
+    // Track patterns for sequence detection/generation
+    
+    if (pattern.isEmpty()) return;
+    
+    // Check if current pattern matches previous (transposed)
+    if (!m_state.lastMelodicPattern.isEmpty() && pattern.size() == m_state.lastMelodicPattern.size()) {
+        // Check if it's a transposition of the last pattern
+        const int transposition = pattern[0] - m_state.lastMelodicPattern[0];
+        bool isSequence = true;
+        for (int i = 1; i < pattern.size(); ++i) {
+            if (pattern[i] - m_state.lastMelodicPattern[i] != transposition) {
+                isSequence = false;
+                break;
+            }
+        }
+        
+        if (isSequence) {
+            m_state.sequenceTransposition = transposition;
+            m_state.sequenceRepetitions++;
+        } else {
+            m_state.sequenceRepetitions = 0;
+        }
+    } else {
+        m_state.sequenceRepetitions = 0;
+    }
+    
+    m_state.lastMelodicPattern = pattern;
+}
+
+bool JazzBalladPianoPlanner::shouldContinueSequence(const Context& c) const {
+    // Should we continue an established sequence pattern?
+    // Sequences sound good with 2-3 repetitions, then should break
+    
+    if (m_state.sequenceRepetitions == 0) return false;  // No sequence going
+    if (m_state.sequenceRepetitions >= 3) return false;  // Don't overdo it
+    if (c.cadence01 > 0.6) return false;  // Break sequence at cadences
+    
+    // 60% chance to continue if we're in a sequence
+    const quint32 hash = c.determinismSeed ^ (c.playbackBarIndex * 23);
+    return (hash % 100) < 60;
+}
+
+int JazzBalladPianoPlanner::getSequenceTransposition(const Context& c) const {
+    // Get suggested transposition for continuing the sequence
+    // Common: down a 3rd (-3 or -4 semitones), up a 2nd (+2), down a 2nd (-2)
+    
+    if (m_state.sequenceTransposition != 0) {
+        // Continue the established transposition direction
+        return m_state.sequenceTransposition;
+    }
+    
+    // Choose new transposition based on musical context
+    const quint32 hash = c.determinismSeed ^ (c.playbackBarIndex * 31);
+    const int options[] = {-3, -4, 2, -2, 4};  // Common sequence intervals
+    return options[hash % 5];
+}
+
+// =============================================================================
+// ORNAMENTAL GESTURES
+// Tasteful embellishments: grace notes, turns, mordents
+// Used sparingly for expressiveness in ballads
+// =============================================================================
+
+bool JazzBalladPianoPlanner::shouldAddOrnament(const Context& c, quint32 hash) const {
+    // Ornaments are used sparingly in ballads - too many become distracting
+    // Best moments: downbeats, phrase starts, emotional peaks
+    
+    if (c.userBusy) return false;  // Don't ornament when user is playing
+    if (c.energy > 0.7) return false;  // High energy = cleaner lines
+    
+    // Only ornament on beat 1 or beat 3 (downbeats)
+    if (c.beatInBar != 0 && c.beatInBar != 2) return false;
+    
+    // Base probability ~8-12%
+    double prob = 0.08;
+    
+    // Increase at emotional moments
+    if (c.weights.emotion > 0.6) prob += 0.04;
+    
+    // Increase at phrase starts (first bar of phrase)
+    if (c.barInPhrase == 0 && c.beatInBar == 0) prob += 0.05;
+    
+    // Slightly more common at cadences
+    if (c.cadence01 > 0.5) prob += 0.03;
+    
+    return (hash % 100) < int(prob * 100);
+}
+
+JazzBalladPianoPlanner::Ornament JazzBalladPianoPlanner::generateOrnament(
+    const Context& c, int targetMidi, quint32 hash) const {
+    
+    Ornament orn;
+    
+    // Choose ornament type based on context
+    // Grace notes: most common, subtle
+    // Turns: at phrase starts, expressive moments
+    // Mordents: on accented beats
+    // Appoggiaturas: at cadences
+    
+    const int typeChoice = hash % 100;
+    
+    if (c.cadence01 > 0.6 && typeChoice < 30) {
+        // Appoggiatura at cadence - leaning note
+        orn.type = OrnamentType::Appoggiatura;
+    } else if (c.barInPhrase == 0 && c.beatInBar == 0 && typeChoice < 50) {
+        // Turn at phrase start
+        orn.type = OrnamentType::Turn;
+    } else if (typeChoice < 70) {
+        // Grace note - most common
+        orn.type = OrnamentType::GraceNote;
+    } else {
+        // Mordent
+        orn.type = OrnamentType::Mordent;
+    }
+    
+    // Get chord-safe neighbor notes for the ornament
+    // Use simple whole-step neighbors if possible, snap to chord tones
+    int upperNeighbor = targetMidi + 2;
+    int lowerNeighbor = targetMidi - 2;
+    
+    // Try to snap to chord tones for safety
+    const int third = pcForDegree(c.chord, 3);
+    const int fifth = pcForDegree(c.chord, 5);
+    const int seventh = pcForDegree(c.chord, 7);
+    
+    // Snap upper neighbor to nearest chord tone if close
+    auto snapToNearestChordTone = [&](int midi) -> int {
+        int pc = normalizePc(midi);
+        if (third >= 0 && qAbs(pc - third) <= 1) return midi + (third - pc);
+        if (fifth >= 0 && qAbs(pc - fifth) <= 1) return midi + (fifth - pc);
+        if (seventh >= 0 && qAbs(pc - seventh) <= 1) return midi + (seventh - pc);
+        return midi;
+    };
+    
+    upperNeighbor = snapToNearestChordTone(upperNeighbor);
+    lowerNeighbor = snapToNearestChordTone(lowerNeighbor);
+    
+    // Generate the ornament notes
+    const int graceDurMs = 40;   // Very quick for grace notes
+    const int turnDurMs = 60;    // Slightly longer for turns
+    const int appoggDurMs = 120; // Longer for appoggiatura (expressive)
+    
+    // Calculate base velocity from energy
+    const int baseVel = 50 + int(30.0 * c.energy);
+    const int graceVel = qMax(30, int(baseVel * 0.75));  // Softer than main note
+    
+    switch (orn.type) {
+        case OrnamentType::GraceNote:
+            // Single grace note from above or below
+            if ((hash >> 8) % 2 == 0) {
+                orn.notes = {upperNeighbor};
+            } else {
+                orn.notes = {lowerNeighbor};
+            }
+            orn.durationsMs = {graceDurMs};
+            orn.velocities = {graceVel};
+            orn.mainNoteDelayMs = graceDurMs;
+            break;
+            
+        case OrnamentType::Turn:
+            // Upper-main-lower-main (inverted if hash says so)
+            if ((hash >> 8) % 2 == 0) {
+                orn.notes = {upperNeighbor, targetMidi, lowerNeighbor};
+            } else {
+                orn.notes = {lowerNeighbor, targetMidi, upperNeighbor};
+            }
+            orn.durationsMs = {turnDurMs, turnDurMs, turnDurMs};
+            orn.velocities = {graceVel, graceVel, graceVel};
+            orn.mainNoteDelayMs = turnDurMs * 3;
+            break;
+            
+        case OrnamentType::Mordent:
+            // Quick alternation: main-upper-main or main-lower-main
+            if ((hash >> 8) % 2 == 0) {
+                orn.notes = {targetMidi, upperNeighbor};
+            } else {
+                orn.notes = {targetMidi, lowerNeighbor};
+            }
+            orn.durationsMs = {graceDurMs, graceDurMs};
+            orn.velocities = {graceVel, graceVel};
+            orn.mainNoteDelayMs = graceDurMs * 2;
+            break;
+            
+        case OrnamentType::Appoggiatura:
+            // Leaning note that resolves to target
+            // Usually from a step above
+            orn.notes = {upperNeighbor};
+            orn.durationsMs = {appoggDurMs};
+            orn.velocities = {qMin(127, int(baseVel * 0.9))};  // Almost as loud as main
+            orn.mainNoteDelayMs = appoggDurMs;
+            break;
+            
+        case OrnamentType::None:
+        default:
+            break;
+    }
+    
+    return orn;
+}
+
+// =============================================================================
+// GROOVE LOCK (Ensemble Coordination)
+// Piano timing relative to bass/drums for tight ensemble feel
+// =============================================================================
+
+int JazzBalladPianoPlanner::getGrooveLockLhOffset(const Context& c) const {
+    // When bass is playing on this beat, piano can:
+    // 1. Lock exactly with bass (beat 1 - tight unison)
+    // 2. Play slightly after (let bass lead on beat 3)
+    // 3. Play slightly before (anticipate on "and of 4")
+    
+    if (!c.bassPlayingThisBeat) {
+        return 0;  // No coordination needed
+    }
+    
+    // Beat 1: Lock with bass (no offset)
+    if (c.beatInBar == 0) {
+        return 0;
+    }
+    
+    // Beat 3: Let bass lead slightly (piano plays 10-20ms after)
+    if (c.beatInBar == 2) {
+        return 12 + int(c.bassActivity * 8);
+    }
+    
+    // Beat 4: Piano can anticipate slightly (for "and of 4" pickups)
+    if (c.beatInBar == 3) {
+        return -8;
+    }
+    
+    // Beat 2: Usually no bass, but if present, slight delay
+    return 8;
+}
+
+bool JazzBalladPianoPlanner::shouldComplementBass(const Context& c) const {
+    // Piano should complement (not compete with) bass activity
+    // When bass is very active, piano should be sparser
+    // When bass is sparse, piano can fill more
+    
+    if (c.bassActivity > 0.7) {
+        // Bass is very active - piano should lay back
+        return true;
+    }
+    
+    if (c.bassPlayingThisBeat && c.beatInBar != 0) {
+        // Bass playing on non-downbeat - let it be heard
+        return true;
+    }
+    
+    return false;
+}
+
+// =============================================================================
 // REGISTER VARIETY
 // Ensures we don't get stuck in one register, creates natural contour
 // =============================================================================
@@ -815,7 +1315,10 @@ int JazzBalladPianoPlanner::getResponseRegister(const Context& c, bool complemen
         }
     } else {
         // Echo register: roughly match user's register
-        return qBound(c.rhLo + 4, userMid, c.rhHi - 4);
+        // SAFETY: Ensure min <= max for qBound
+        const int safeLo = c.rhLo + 4;
+        const int safeHi = qMax(safeLo, c.rhHi - 4);
+        return qBound(safeLo, userMid, safeHi);
     }
 }
 
@@ -933,9 +1436,14 @@ JazzBalladPianoPlanner::StyleProfile JazzBalladPianoPlanner::getStyleProfile(Pia
             p.rhythmicDrive = 0.3;
             p.melodicFocus = 0.7;
             p.useQuartalVoicings = 0.3;
+            p.quartalPreference = 0.25;      // Bill loved quartal voicings
+            p.innerVoiceMovement = 0.4;      // Signature inner voice motion
             p.useBlockChords = 0.1;
             p.bluesInfluence = 0.2;
             p.gospelTouches = 0.0;
+            p.ornamentProbability = 0.08;    // Subtle, tasteful ornaments
+            p.questionAnswerWeight = 0.6;    // Strong Q/A phrasing
+            p.breathSpaceWeight = 0.4;       // Lots of musical space
             p.preferredRegisterLow = 52;
             p.preferredRegisterHigh = 82;
             break;
@@ -947,9 +1455,14 @@ JazzBalladPianoPlanner::StyleProfile JazzBalladPianoPlanner::getStyleProfile(Pia
             p.rhythmicDrive = 0.4;
             p.melodicFocus = 0.8;
             p.useQuartalVoicings = 0.1;
+            p.quartalPreference = 0.1;       // Less quartal, more traditional
+            p.innerVoiceMovement = 0.25;     // Some inner movement
             p.useBlockChords = 0.2;
             p.bluesInfluence = 0.4;
             p.gospelTouches = 0.0;
+            p.ornamentProbability = 0.12;    // More grace notes (cool style)
+            p.questionAnswerWeight = 0.7;    // Strong melodic conversation
+            p.breathSpaceWeight = 0.35;      // Good space, not as sparse as Evans
             p.preferredRegisterLow = 50;
             p.preferredRegisterHigh = 80;
             break;
@@ -961,9 +1474,14 @@ JazzBalladPianoPlanner::StyleProfile JazzBalladPianoPlanner::getStyleProfile(Pia
             p.rhythmicDrive = 0.9;
             p.melodicFocus = 0.6;
             p.useQuartalVoicings = 0.1;
+            p.quartalPreference = 0.05;      // Traditional voicings mostly
+            p.innerVoiceMovement = 0.15;     // Less inner movement
             p.useBlockChords = 0.5;
             p.bluesInfluence = 0.5;
             p.gospelTouches = 0.3;
+            p.ornamentProbability = 0.05;    // Fewer ornaments (more direct)
+            p.questionAnswerWeight = 0.4;    // Less conversational
+            p.breathSpaceWeight = 0.15;      // Denser, more continuous
             p.preferredRegisterLow = 48;
             p.preferredRegisterHigh = 88;
             break;
@@ -975,23 +1493,33 @@ JazzBalladPianoPlanner::StyleProfile JazzBalladPianoPlanner::getStyleProfile(Pia
             p.rhythmicDrive = 0.5;
             p.melodicFocus = 0.9;
             p.useQuartalVoicings = 0.2;
+            p.quartalPreference = 0.2;       // Some quartal
+            p.innerVoiceMovement = 0.35;     // Good inner movement
             p.useBlockChords = 0.1;
             p.bluesInfluence = 0.3;
             p.gospelTouches = 0.5;
+            p.ornamentProbability = 0.15;    // More ornamental (gospel influence)
+            p.questionAnswerWeight = 0.5;    // Moderate Q/A
+            p.breathSpaceWeight = 0.25;      // Some space but also flow
             p.preferredRegisterLow = 48;
             p.preferredRegisterHigh = 90;
             break;
             
         case PianistStyle::Default:
         default:
-            // Balanced, neutral
+            // Balanced, neutral - good for cool jazz ballads
             p.voicingSparseness = 0.5;
             p.rhythmicDrive = 0.5;
             p.melodicFocus = 0.5;
             p.useQuartalVoicings = 0.15;
+            p.quartalPreference = 0.15;
+            p.innerVoiceMovement = 0.3;
             p.useBlockChords = 0.15;
             p.bluesInfluence = 0.2;
             p.gospelTouches = 0.1;
+            p.ornamentProbability = 0.1;
+            p.questionAnswerWeight = 0.5;
+            p.breathSpaceWeight = 0.3;
             p.preferredRegisterLow = 48;
             p.preferredRegisterHigh = 84;
             break;
@@ -1452,7 +1980,9 @@ QVector<JazzBalladPianoPlanner::Voicing> JazzBalladPianoPlanner::generateVoicing
             int sum = 0;
             for (int m : m_state.lastVoicingMidi) sum += m;
             baseMidi = sum / m_state.lastVoicingMidi.size();
-            baseMidi = qBound(voicingFloor, baseMidi - 6, voicingCeiling - 12);
+            // SAFETY: Ensure min <= max for qBound
+            const int voicingHi = qMax(voicingFloor, voicingCeiling - 12);
+            baseMidi = qBound(voicingFloor, baseMidi - 6, voicingHi);
         }
 
         // For Type B, start lower (it begins on the 7th which is lower than the 3rd)
@@ -1934,6 +2464,147 @@ JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::generateLhRootlessVoic
     }
     
     lh.isTypeA = (chord.rootPc <= 5);
+    lh.cost = voiceLeadingCost(m_state.lastLhMidi, lh.midiNotes);
+    
+    return lh;
+}
+
+// =============================================================================
+// LH INNER VOICE MOVEMENT
+// Creates melodic motion within sustained voicings - makes LH feel alive
+// =============================================================================
+
+JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::LhVoicing::getAlternateVoicing() const {
+    LhVoicing alt = *this;
+    if (alt.midiNotes.size() < 2) return alt;
+    
+    // Invert by moving bottom note up an octave
+    if (alt.midiNotes[0] + 12 <= 67) {
+        alt.midiNotes[0] += 12;
+        std::sort(alt.midiNotes.begin(), alt.midiNotes.end());
+        alt.ontologyKey = "LH_Inversion";
+    }
+    return alt;
+}
+
+JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::LhVoicing::withInnerVoiceMovement(
+    int direction, int targetPc) const {
+    
+    LhVoicing moved = *this;
+    if (moved.midiNotes.size() < 2) return moved;
+    
+    // Choose the inner voice to move (not top or bottom - they anchor the voicing)
+    // For 3-note voicings, move the middle note
+    // For 2-note voicings, move the bottom slightly
+    
+    int moveIndex = (moved.midiNotes.size() >= 3) ? 1 : 0;
+    int originalNote = moved.midiNotes[moveIndex];
+    
+    // Move by 1-2 semitones in the specified direction
+    int delta = (direction > 0) ? 1 : -1;
+    if (targetPc >= 0) {
+        // Move toward target pitch class
+        int targetMidi = originalNote;
+        while (targetMidi % 12 != targetPc && qAbs(targetMidi - originalNote) < 4) {
+            targetMidi += delta;
+        }
+        if (qAbs(targetMidi - originalNote) <= 3 && targetMidi >= 48 && targetMidi <= 67) {
+            moved.midiNotes[moveIndex] = targetMidi;
+        }
+    } else {
+        // Simple stepwise movement
+        int newNote = originalNote + delta;
+        if (newNote >= 48 && newNote <= 67) {
+            // Verify it doesn't create a cluster with adjacent notes
+            bool safe = true;
+            for (int i = 0; i < moved.midiNotes.size(); ++i) {
+                if (i != moveIndex && qAbs(moved.midiNotes[i] - newNote) <= 1) {
+                    safe = false;
+                    break;
+                }
+            }
+            if (safe) {
+                moved.midiNotes[moveIndex] = newNote;
+            }
+        }
+    }
+    
+    std::sort(moved.midiNotes.begin(), moved.midiNotes.end());
+    moved.ontologyKey = "LH_InnerMove";
+    return moved;
+}
+
+JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::applyInnerVoiceMovement(
+    const LhVoicing& base, const Context& c, int beatInBar) const {
+    
+    // Inner voice movement happens on beat 3 of sustained chords
+    // Creates subtle motion that makes the harmony breathe
+    
+    if (c.chordIsNew) {
+        // New chord - no inner movement yet
+        return base;
+    }
+    
+    if (beatInBar != 2) {
+        // Only move on beat 3 (creates antiphonal motion)
+        return base;
+    }
+    
+    // Determine direction based on state
+    int dir = (m_state.lastInnerVoiceIndex % 2 == 0) ? 1 : -1;
+    
+    // Target a color tone (9th or 13th) if available
+    int targetPc = -1;
+    int ninth = pcForDegree(c.chord, 9);
+    int thirteenth = pcForDegree(c.chord, 13);
+    
+    if (c.weights.tension > 0.4 && ninth >= 0) {
+        targetPc = ninth;
+    } else if (c.weights.tension > 0.6 && thirteenth >= 0) {
+        targetPc = thirteenth;
+    }
+    
+    return base.withInnerVoiceMovement(dir, targetPc);
+}
+
+// =============================================================================
+// LH QUARTAL VOICINGS (McCoy Tyner style)
+// Stacked 4ths create open, modern sound - perfect for ballads
+// =============================================================================
+
+JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::generateLhQuartalVoicing(const Context& c) const {
+    LhVoicing lh;
+    const auto& chord = c.chord;
+    
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return lh;
+    
+    // Quartal voicings: stack perfect 4ths (5 semitones)
+    // Start from a chord tone and stack up
+    
+    const int root = chord.rootPc;
+    const int fifth = pcForDegree(chord, 5);
+    const int ninth = pcForDegree(chord, 9);
+    
+    // Start from the 5th of the chord (common quartal starting point)
+    int startPc = (fifth >= 0) ? fifth : root;
+    
+    // Find starting MIDI note
+    int startMidi = 50;
+    while (startMidi % 12 != startPc && startMidi < 55) startMidi++;
+    if (startMidi > 55) startMidi -= 12;
+    
+    // Stack 4ths (5 semitones each)
+    lh.midiNotes.push_back(startMidi);
+    lh.midiNotes.push_back(startMidi + 5);
+    
+    // Add third 4th if it fits and creates nice color
+    int thirdNote = startMidi + 10;
+    if (thirdNote <= 65) {
+        lh.midiNotes.push_back(thirdNote);
+    }
+    
+    lh.ontologyKey = "LH_Quartal";
+    lh.isTypeA = true;
     lh.cost = voiceLeadingCost(m_state.lastLhMidi, lh.midiNotes);
     
     return lh;
@@ -2812,7 +3483,13 @@ bool JazzBalladPianoPlanner::shouldLhPlayBeat(const Context& c, quint32 hash) co
     // (Only RH becomes sparse when user is playing)
     // ================================================================
     
-    // Chord changes: always play
+    // ================================================================
+    // GROOVE LOCK: When bass is very active, let it breathe
+    // Piano can be slightly sparser to give bass space
+    // ================================================================
+    const bool complementBass = shouldComplementBass(c);
+    
+    // Chord changes: always play (groove lock doesn't override this)
     if (c.chordIsNew) {
         return true;
     }
@@ -2827,6 +3504,8 @@ bool JazzBalladPianoPlanner::shouldLhPlayBeat(const Context& c, quint32 hash) co
         double prob = 0.70 + 0.20 * c.weights.density;
         // Higher at phrase boundaries (need to be present)
         if (c.barInPhrase == 0 || c.phraseEndBar) prob = 0.85;
+        // Groove lock: if bass very active, be slightly sparser
+        if (complementBass) prob -= 0.15;
         return (hash % 100) < int(prob * 100);
     }
     
@@ -2839,6 +3518,8 @@ bool JazzBalladPianoPlanner::shouldLhPlayBeat(const Context& c, quint32 hash) co
         if (c.phraseEndBar) prob += 0.25;
         // At high energy, almost always play
         if (c.energy >= 0.6) prob += 0.20;
+        // Groove lock: let bass lead on beat 3
+        if (complementBass) prob -= 0.20;
         return (hash % 100) < int(prob * 100);
     }
     
@@ -2975,8 +3656,10 @@ int JazzBalladPianoPlanner::selectNextRhMelodicTarget(const Context& c) const {
         // Blend arc target with response target - REDUCED influence (40% not 60%)
         // to prevent pulling too far from chord-appropriate notes
         arcTarget = int(arcTarget * 0.6 + responseTarget * 0.4);
-        // Clamp to safe RH range
-        arcTarget = qBound(c.rhLo + 4, arcTarget, c.rhHi - 4);
+        // Clamp to safe RH range - SAFETY: ensure min <= max
+        const int arcLo = c.rhLo + 4;
+        const int arcHi = qMax(arcLo, c.rhHi - 4);
+        arcTarget = qBound(arcLo, arcTarget, arcHi);
     }
     
     // Determine tension level for extension usage
@@ -3179,6 +3862,10 @@ QVector<virtuoso::engine::AgentIntentNote> JazzBalladPianoPlanner::planBeat(
 JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     const Context& c, int midiChannel, const virtuoso::groove::TimeSignature& ts) {
 
+    // THREAD SAFETY: Protect all access to m_state
+    // Multiple threads can call this concurrently (lookahead, phrase planner, main scheduler)
+    QMutexLocker locker(m_stateMutex.get());
+
     BeatPlan plan;
 
     Context adjusted = c;
@@ -3279,7 +3966,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     QString pedalId;
     
     // Get pedal from vocabulary if available
-    if (hasVocabularyLoaded()) {
+    if (hasVocabularyLoaded() && m_vocab != nullptr) {
         virtuoso::vocab::VocabularyRegistry::PianoPedalQuery pedalQ;
         pedalQ.ts = {4, 4};
         pedalQ.playbackBarIndex = adjusted.playbackBarIndex;
@@ -3307,8 +3994,39 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     const bool lhPlays = shouldLhPlayBeat(adjusted, lhHash);
     LhVoicing lhVoicing;
     
-    if (lhPlays) {
-        lhVoicing = generateLhRootlessVoicing(adjusted);
+    // Check for intentional rest (breath and space)
+    const bool wantsRest = shouldRest(adjusted, lhHash);
+    if (wantsRest && !adjusted.chordIsNew) {
+        // Intentional silence - skip LH this beat for musical breath
+        // But never rest on chord changes
+    } else if (lhPlays) {
+        // ================================================================
+        // LH VOICING SELECTION: Choose between rootless and quartal
+        // Quartal voicings create open, modern sound (Bill Evans, McCoy Tyner)
+        // Use quartal ~15-20% of the time for variety
+        // ================================================================
+        const bool useQuartal = (styleProfile.quartalPreference > 0) && 
+                                ((lhHash % 100) < int(styleProfile.quartalPreference * 100)) &&
+                                !adjusted.chordIsNew;  // Always use standard on chord changes
+        
+        if (useQuartal) {
+            lhVoicing = generateLhQuartalVoicing(adjusted);
+        } else {
+            lhVoicing = generateLhRootlessVoicing(adjusted);
+        }
+        
+        // ================================================================
+        // INNER VOICE MOVEMENT: On beat 3, add subtle melodic motion
+        // This makes sustained chords breathe and feel alive
+        // ================================================================
+        if (adjusted.beatInBar == 2 && !adjusted.chordIsNew && styleProfile.innerVoiceMovement > 0) {
+            const bool doInnerMovement = (lhHash % 100) < int(styleProfile.innerVoiceMovement * 100);
+            if (doInnerMovement) {
+                lhVoicing = applyInnerVoiceMovement(lhVoicing, adjusted, adjusted.beatInBar);
+                // Update state for alternation
+                const_cast<JazzBalladPianoPlanner*>(this)->m_state.lastInnerVoiceIndex++;
+            }
+        }
         
         if (!lhVoicing.midiNotes.isEmpty()) {
             // ================================================================
@@ -3539,6 +4257,11 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 // Minimal humanization - just a few ms, not enough to be noticeable
                 int timingOffsetMs = ((timingHash + hit.sub) % 11) - 5; // -5 to +5 ms only
                 
+                // GROOVE LOCK: Adjust timing relative to bass for ensemble cohesion
+                if (adjusted.bassPlayingThisBeat) {
+                    timingOffsetMs += getGrooveLockLhOffset(adjusted);
+                }
+                
                 virtuoso::groove::GridPos lhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
                     adjusted.playbackBarIndex, adjusted.beatInBar, timingSub, 4, ts);
                 lhPos = applyTimingOffset(lhPos, timingOffsetMs, adjusted.bpm, ts);
@@ -3585,11 +4308,22 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     int rhActivity = rhActivityLevel(adjusted, rhHash);
     
     // ================================================================
-    // CALL-AND-RESPONSE: Boost activity when filling user's silence
-    // Creates tasteful fills after user phrases
+    // CRITICAL: When user is actively playing, HARD CAP RH activity
+    // Piano must never compete with the soloist - only support
     // ================================================================
-    if (responding) {
-        rhActivity = qMin(rhActivity + responseBoost, 4);
+    const bool userActive = adjusted.userBusy || adjusted.userDensityHigh || adjusted.userIntensityPeak;
+    
+    if (userActive) {
+        // HARD CAP: Maximum 1 hit, and only sparse single notes
+        rhActivity = qMin(rhActivity, 1);
+    } else {
+        // ================================================================
+        // CALL-AND-RESPONSE: Boost activity when filling user's silence
+        // Creates tasteful fills after user phrases
+        // ================================================================
+        if (responding) {
+            rhActivity = qMin(rhActivity + responseBoost, 4);
+        }
     }
     
     // ================================================================
@@ -3597,10 +4331,14 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     // Different modes for comp, fill, solo, sparse, lush
     // ================================================================
     const TextureMode textureMode = determineTextureMode(adjusted);
-    bool texturePreferDyads = true;
+    bool texturePreferDyads = !userActive;  // Single notes when user is active
     bool texturePreferTriads = false;
     int dummyLhActivity = 1;  // LH activity is handled separately
-    applyTextureMode(textureMode, dummyLhActivity, rhActivity, texturePreferDyads, texturePreferTriads);
+    
+    // Skip texture mode adjustments when user is active
+    if (!userActive) {
+        applyTextureMode(textureMode, dummyLhActivity, rhActivity, texturePreferDyads, texturePreferTriads);
+    }
     
     // Reset RH motion counter on chord change
     if (chordChanged) {
@@ -3624,7 +4362,6 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         // MUSICAL INTENT: RH patterns based on phrase position and context
         // NOT random hash - purposeful rhythmic choices
         // ================================================================
-        
         const bool phraseStart = (adjusted.barInPhrase == 0);
         const bool phraseMid = (adjusted.barInPhrase >= 1 && adjusted.barInPhrase < adjusted.phraseBars - 1);
         const bool phraseEnd = adjusted.phraseEndBar;
@@ -3636,12 +4373,18 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         const bool preferRich = (c.energy >= 0.7) || (c.weights.density >= 0.7);
         
         // ================================================================
-        // SPECIAL PATTERNS: Triplet and Hemiola
-        // These override the normal switch when active
+        // WHEN USER IS ACTIVE: Extremely simple patterns only
+        // Just simple supporting harmony, no complex rhythms
         // ================================================================
         bool useSpecialPattern = false;
         
-        if (rhythmFeel == RhythmicFeel::Triplet && rhActivity >= 2) {
+        if (userActive) {
+            // User is playing - only simple single dyad/note on beat
+            if (rhActivity > 0) {
+                rhTimings.push_back({0, -5, false}); // Single soft note on beat
+            }
+            useSpecialPattern = true;
+        } else if (rhythmFeel == RhythmicFeel::Triplet && rhActivity >= 2) {
             // Use triplet pattern
             rhTimings = generateTripletPattern(adjusted, rhActivity);
             useSpecialPattern = true;
@@ -3787,21 +4530,23 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         // UPPER STRUCTURE TRIAD DECISION
         // Bill Evans signature: sometimes play a simple triad that creates
         // sophisticated extensions. Use more at higher creativity/tension.
+        // NEVER when user is active - keep RH simple for accompaniment
         // ================================================================
         const double tensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
         const double creativityLevel = c.weights.creativity;
         
         // Probability of using UST instead of regular melodic voicing
         // UST can introduce complex colors - use VERY sparingly to avoid dissonance
-        // DISABLE on dominant chords for now - too risky for dissonance
+        // DISABLE when user is active or on dominant chords
         double ustProb = 0.0;
         
         const bool isDominant = (adjusted.chord.quality == music::ChordQuality::Dominant);
         const bool isAugmented = (adjusted.chord.quality == music::ChordQuality::Augmented);
         const bool isDiminished = (adjusted.chord.quality == music::ChordQuality::Diminished);
-        const bool isProblematic = isDominant || isAugmented || isDiminished;
+        const bool isProblematic = userActive || isDominant || isAugmented || isDiminished;
         
         // Only use UST on "safe" chords (major/minor 7ths) and at high creativity
+        // And NEVER when user is playing
         if (!isProblematic && creativityLevel > 0.6 && tensionLevel > 0.4) {
             if (chordChanged) {
                 ustProb = 0.08 + 0.12 * (creativityLevel - 0.6);
@@ -4030,6 +4775,24 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 else if (currentTopMidi <= 68) currentDirection = 1;
                 else if (motionCount >= 3 && ((rhHash + hitIndex) % 4) == 0) currentDirection = -currentDirection;
                 
+                // ================================================================
+                // QUESTION-ANSWER PHRASING: Shape melodic direction
+                // Questions rise/open, Answers resolve/mirror
+                // SKIP when user is active - don't add melodic complexity
+                // ================================================================
+                if (!userActive && shouldUseQuestionContour(adjusted)) {
+                    const int qaTarget = getQuestionAnswerTargetMidi(adjusted);
+                    if (qaTarget > 0) {
+                        // Blend Q/A target with natural melodic motion
+                        // If Q/A target is higher, bias upward; lower, bias downward
+                        if (qaTarget > currentTopMidi + 2) {
+                            currentDirection = 1;  // Tend upward toward Q/A target
+                        } else if (qaTarget < currentTopMidi - 2) {
+                            currentDirection = -1; // Tend downward toward resolution
+                        }
+                    }
+                }
+                
                 int bestScore = 999;
             
                 for (int pc : melodicPcs) {
@@ -4077,12 +4840,12 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             // MELODIC FRAGMENT DECISION
             // Fragments can introduce non-chord tones - use VERY sparingly
             // Only at high creativity AND only on non-dominant chords
+            // NEVER when user is playing - would be distracting!
             // ================================================================
             double fragmentProb = 0.0;
             
-            // DISABLE fragments on problematic chords (dominant, augmented, diminished)
-            // These are where dissonance is most likely
-            const bool avoidFragments = hitIsDominant || 
+            // DISABLE fragments when user is active or on problematic chords
+            const bool avoidFragments = userActive || hitIsDominant || 
                 (adjusted.chord.quality == music::ChordQuality::Augmented) ||
                 (adjusted.chord.quality == music::ChordQuality::Diminished);
             
@@ -4354,6 +5117,63 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             perNoteOffset = qBound(-60, perNoteOffset, 60);
             rhPos = applyTimingOffset(rhPos, perNoteOffset, adjusted.bpm, ts);
             
+            // ================================================================
+            // ORNAMENTAL GESTURES: Grace notes, turns, etc.
+            // Add tasteful embellishment ~8-12% of the time in ballads
+            // ================================================================
+            const quint32 ornHash = rhHash ^ (hitIndex * 41);
+            const bool addOrnament = shouldAddOrnament(adjusted, ornHash) && 
+                                     hitIndex == 0 && sub == 0;  // Only on first beat
+            
+            // SAFETY: Only add ornaments when user is NOT playing (no distraction)
+            if (addOrnament && !rhMidiNotes.isEmpty() && !adjusted.userBusy) {
+                const int targetMidi = rhMidiNotes.last();  // Top note gets ornament
+                const Ornament orn = generateOrnament(adjusted, targetMidi, ornHash);
+                
+                // SAFETY: Validate all vectors have same size to prevent crash
+                const int ornNoteCount = orn.notes.size();
+                const bool vectorsSafe = (ornNoteCount > 0) && 
+                                         (orn.velocities.size() == ornNoteCount) &&
+                                         (orn.durationsMs.size() == ornNoteCount);
+                
+                if (orn.type != OrnamentType::None && vectorsSafe) {
+                    // Calculate ornament start position (before main note)
+                    double ornStartMs = -double(orn.mainNoteDelayMs);
+                    virtuoso::groove::GridPos ornPos = rhPos;
+                    ornPos = applyTimingOffset(ornPos, int(ornStartMs) + rhTimingOffset, adjusted.bpm, ts);
+                    
+                    // Add ornament notes
+                    int ornOffset = 0;
+                    for (int i = 0; i < ornNoteCount; ++i) {
+                        virtuoso::engine::AgentIntentNote ornNote;
+                        ornNote.agent = "Piano";
+                        ornNote.channel = midiChannel;
+                        ornNote.note = orn.notes[i];
+                        ornNote.baseVelocity = orn.velocities[i];
+                        
+                        virtuoso::groove::GridPos ornNotePos = applyTimingOffset(
+                            ornPos, ornOffset, adjusted.bpm, ts);
+                        ornNote.startPos = ornNotePos;
+                        
+                        // Very short duration for ornament notes
+                        const virtuoso::groove::Rational ornDur(orn.durationsMs[i] * 10, 40000);
+                        ornNote.durationWhole = ornDur;
+                        ornNote.structural = false;
+                        ornNote.chord_context = adjusted.chordText;
+                        ornNote.voicing_type = "RH_Ornament";
+                        ornNote.logic_tag = "RH_Orn";
+                        
+                        plan.notes.push_back(ornNote);
+                        ornOffset += orn.durationsMs[i];
+                    }
+                }
+            }
+            
+            // ================================================================
+            // ARTICULATION: Determine touch for this phrase position
+            // ================================================================
+            const ArticulationType art = determineArticulation(adjusted, true, hitIndex);
+            
             // Velocity: emphasize downbeats, softer passing tones
             // When user is active, MUCH lower velocity to support, not compete
             int rhVel = int(baseVel * mappings.velocityMod + velDelta);
@@ -4364,18 +5184,30 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             // Duration: shorter for faster passages, longer for sustained
             double rhDurBeats = (sub == 0) ? 0.65 : 0.4;
             if (rhTimings.size() >= 3) rhDurBeats *= 0.8; // Tighter for busier patterns
+            
+            // Apply articulation to duration and velocity
+            applyArticulation(art, rhDurBeats, rhVel, true);
+            
             const virtuoso::groove::Rational rhDurWhole(qint64(rhDurBeats * mappings.durationMod * 1000), 4000);
             
             QString ontologyKey = (rhMidiNotes.size() >= 3) ? "RH_Melodic_Triad" : 
                                   (preferDyad ? "RH_Melodic_Dyad" : "RH_Melodic_Single");
             if (topPc == ninth || topPc == thirteenth) ontologyKey += "_Color";
             
-            for (int midi : rhMidiNotes) {
+            // ================================================================
+            // VELOCITY CONTOURING: Melody voice louder than inner voices
+            // ================================================================
+            for (int noteIdx = 0; noteIdx < rhMidiNotes.size(); ++noteIdx) {
+                int midi = rhMidiNotes[noteIdx];
+                
+                // Apply velocity contouring - top note (melody) is louder
+                int contouredVel = contourVelocity(rhVel, noteIdx, rhMidiNotes.size(), true);
+                
                 virtuoso::engine::AgentIntentNote note;
                 note.agent = "Piano";
                 note.channel = midiChannel;
                 note.note = midi;
-                note.baseVelocity = rhVel;
+                note.baseVelocity = contouredVel;
                 note.startPos = rhPos;
                 note.durationWhole = rhDurWhole;
                 note.structural = false;
@@ -4401,14 +5233,39 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         m_state.rhMelodicDirection = currentDirection;
         m_state.rhMotionsThisChord += motionCount;
         
-        // Update register tracking for variety calculation
-        const_cast<JazzBalladPianoPlanner*>(this)->updateRegisterTracking(currentTopMidi);
+        // Update register tracking for variety calculation - SAFETY: bounds check
+        if (currentTopMidi >= 0 && currentTopMidi <= 127) {
+            const_cast<JazzBalladPianoPlanner*>(this)->updateRegisterTracking(currentTopMidi);
+        }
     }
     
     // Track phrase peak alternation at phrase boundaries
+    // SAFETY: Validate MIDI values are in reasonable range before state updates
     if (adjusted.phraseEndBar && adjusted.beatInBar == 3) {
-        const bool wasHigh = (m_state.lastRhTopMidi > (adjusted.rhLo + adjusted.rhHi) / 2 + 3);
+        const int safeMidi = qBound(0, m_state.lastRhTopMidi, 127);
+        const bool wasHigh = (safeMidi > (adjusted.rhLo + adjusted.rhHi) / 2 + 3);
         const_cast<JazzBalladPianoPlanner*>(this)->m_state.lastPhraseWasHigh = wasHigh;
+        
+        // Update Q/A state for next phrase - validate inputs
+        const int safePeak = qBound(0, m_state.currentPhrasePeakMidi, 127);
+        const int safeLast = qBound(0, m_state.currentPhraseLastMidi, 127);
+        const_cast<JazzBalladPianoPlanner*>(this)->updateQuestionAnswerState(
+            adjusted, safePeak, safeLast
+        );
+    }
+    
+    // Track melodic peaks for Q/A phrasing - SAFETY: bounds check
+    const int safeLastRhTop = qBound(0, m_state.lastRhTopMidi, 127);
+    if (safeLastRhTop > 0 && safeLastRhTop > m_state.currentPhrasePeakMidi) {
+        const_cast<JazzBalladPianoPlanner*>(this)->m_state.currentPhrasePeakMidi = safeLastRhTop;
+    }
+    if (safeLastRhTop > 0) {
+        const_cast<JazzBalladPianoPlanner*>(this)->m_state.currentPhraseLastMidi = safeLastRhTop;
+    }
+    
+    // Reset phrase tracking on new phrase
+    if (newPhrase) {
+        const_cast<JazzBalladPianoPlanner*>(this)->m_state.currentPhrasePeakMidi = 60;
     }
     
     // Return early if no notes generated

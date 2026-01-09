@@ -2,6 +2,9 @@
 
 #include <QString>
 #include <QVector>
+#include <QMutex>
+#include <QMutexLocker>
+#include <memory>
 
 #include "music/ChordSymbol.h"
 #include "virtuoso/constraints/PianoDriver.h"
@@ -89,6 +92,29 @@ public:
         bool inResponseMode = false;     // Currently responding to user?
         int userLastRegisterHigh = 72;   // Last high note user played
         int userLastRegisterLow = 60;    // Last low note user played
+        
+        // ========== QUESTION-ANSWER PHRASING ==========
+        // Tracks 2-bar phrase pairs for musical coherence
+        bool lastPhraseWasQuestion = true;  // Alternate question/answer
+        int questionPeakMidi = 76;          // Highest note of question phrase
+        int questionEndMidi = 72;           // Final note of question phrase
+        QVector<int> questionContour;       // Pitch contour of question (for answer to relate)
+        int barsInCurrentQA = 0;            // Bars into current Q or A
+        
+        // ========== MELODIC SEQUENCE ==========
+        // Tracks patterns for sequence development
+        QVector<int> lastMelodicPattern;    // Recent interval pattern
+        int sequenceTransposition = 0;      // Current transposition level
+        int sequenceRepetitions = 0;        // How many times pattern repeated
+        
+        // ========== INNER VOICE STATE ==========
+        // Tracks which inner voice moved last (for alternation)
+        int lastInnerVoiceIndex = 0;        // Which voice moved last
+        int innerVoiceDirection = 1;        // Direction of last movement
+        
+        // ========== PHRASE TRACKING ==========
+        int currentPhrasePeakMidi = 72;     // Highest note in current phrase (for Q/A)
+        int currentPhraseLastMidi = 72;     // Last note played in current phrase
     };
 
     struct CcIntent {
@@ -246,8 +272,21 @@ private:
         bool isTypeA = true;
         QString ontologyKey;
         double cost = 0.0;
+        
+        // Get an alternate voicing with inner voice movement
+        LhVoicing getAlternateVoicing() const;
+        
+        // Get a voicing with one inner voice moved
+        LhVoicing withInnerVoiceMovement(int direction, int targetPc = -1) const;
     };
     LhVoicing generateLhRootlessVoicing(const Context& c) const;
+    
+    // Generate quartal voicing (stacked 4ths) for open, modern sound
+    LhVoicing generateLhQuartalVoicing(const Context& c) const;
+    
+    // Apply inner voice movement to create melodic motion within sustained chords
+    // direction: +1 = move up, -1 = move down, 0 = automatic
+    LhVoicing applyInnerVoiceMovement(const LhVoicing& base, const Context& c, int beatInBar) const;
     
     // Right Hand: Melodic dyads/triads for color and movement
     // Based on chord extensions (9, 11, 13) and guide tones
@@ -483,6 +522,91 @@ private:
     // Decide if this phrase should peak high or low (alternates)
     bool shouldPhrasePeakHigh(const Context& c) const;
     
+    // ============= Articulation =============
+    
+    // Articulation types for expressive playing
+    enum class ArticulationType {
+        Legato,       // Long, connected notes (default for ballads)
+        Tenuto,       // Full value, slight separation
+        Portato,      // Slightly detached but warm
+        Staccato,     // Short, separated (rare in ballads)
+        Accent        // Emphasized attack
+    };
+    
+    // Determine articulation for current context
+    ArticulationType determineArticulation(const Context& c, bool isRh, int positionInPhrase) const;
+    
+    // Apply articulation to note duration and velocity
+    void applyArticulation(ArticulationType art, double& duration, int& velocity, bool isTopVoice) const;
+    
+    // ============= Velocity Contouring =============
+    
+    // Apply velocity shaping within a chord (melody voice louder)
+    int contourVelocity(int baseVel, int noteIndex, int noteCount, bool isRh) const;
+    
+    // ============= Breath and Space =============
+    
+    // Determine if we should rest (intentional silence)
+    bool shouldRest(const Context& c, quint32 hash) const;
+    
+    // Get rest duration in beats
+    double getRestDuration(const Context& c) const;
+    
+    // ============= Question-Answer Phrasing =============
+    
+    // Update Q/A state at phrase boundaries
+    void updateQuestionAnswerState(const Context& c, int melodicPeakMidi, int finalMidi);
+    
+    // Get target MIDI for current Q/A position
+    int getQuestionAnswerTargetMidi(const Context& c) const;
+    
+    // Whether to actively shape melodic line for Q/A
+    bool shouldUseQuestionContour(const Context& c) const;
+    
+    // ============= Melodic Sequences =============
+    
+    // Track patterns for sequence development
+    void updateMelodicSequenceState(const Context& c, const QVector<int>& pattern);
+    
+    // Should we continue an established sequence pattern?
+    bool shouldContinueSequence(const Context& c) const;
+    
+    // Get suggested transposition for continuing the sequence
+    int getSequenceTransposition(const Context& c) const;
+    
+    // ============= Ornamental Gestures =============
+    
+    enum class OrnamentType {
+        None,
+        GraceNote,    // Single short note before main note
+        Turn,         // Upper-main-lower-main (or inverted)
+        Mordent,      // Quick main-upper-main or main-lower-main
+        Appoggiatura  // Leaning note that resolves
+    };
+    
+    struct Ornament {
+        OrnamentType type = OrnamentType::None;
+        QVector<int> notes;           // Grace/ornament notes (MIDI)
+        QVector<int> durationsMs;     // Duration of each note in ms
+        QVector<int> velocities;      // Velocity of each note
+        int mainNoteDelayMs = 0;      // How much to delay main note
+    };
+    
+    // Determine if ornament is appropriate for current context
+    bool shouldAddOrnament(const Context& c, quint32 hash) const;
+    
+    // Generate an ornament for a given target note
+    Ornament generateOrnament(const Context& c, int targetMidi, quint32 hash) const;
+    
+    // ============= Groove Lock (Ensemble Coordination) =============
+    
+    // Get optimal LH timing relative to bass pattern
+    // Returns timing offset to complement (not clash with) bass
+    int getGrooveLockLhOffset(const Context& c) const;
+    
+    // Whether piano should emphasize or lay back this beat based on bass
+    bool shouldComplementBass(const Context& c) const;
+    
     // ============= Rhythmic Vocabulary =============
     
     // Rhythmic feel types for advanced patterns
@@ -556,9 +680,14 @@ private:
         double rhythmicDrive = 0.5;       // 0=laid back, 1=driving
         double melodicFocus = 0.5;        // 0=chordal, 1=melodic
         double useQuartalVoicings = 0.0;  // 0-1 probability
+        double quartalPreference = 0.15;  // 0-1 chance of using quartal voicing
+        double innerVoiceMovement = 0.3;  // 0-1 chance of inner voice movement
         double useBlockChords = 0.0;      // 0-1 probability
         double bluesInfluence = 0.0;      // 0-1 blue notes
         double gospelTouches = 0.0;       // 0-1 gospel influence
+        double ornamentProbability = 0.1; // 0-1 chance of adding ornaments
+        double questionAnswerWeight = 0.5; // 0-1 Q/A phrasing influence
+        double breathSpaceWeight = 0.3;   // 0-1 how often to take rests
         int preferredRegisterLow = 48;
         int preferredRegisterHigh = 84;
     };
@@ -576,6 +705,10 @@ private:
 
     virtuoso::constraints::PianoDriver m_driver;
     PlannerState m_state;
+    
+    // Thread safety: mutex protects all mutable state
+    // Using shared_ptr because QMutex is not copyable and planners may be copied/moved
+    mutable std::shared_ptr<QMutex> m_stateMutex = std::make_shared<QMutex>();
 
     const virtuoso::ontology::OntologyRegistry* m_ont = nullptr;
     const virtuoso::memory::MotivicMemory* m_mem = nullptr;

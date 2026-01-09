@@ -940,6 +940,7 @@ JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::generateLhRootlessVoic
 
 // RH Melodic: Create dyads/triads that move melodically
 // Top note follows stepwise motion, inner voice provides harmony
+// CONSONANCE-FIRST: Prioritize guide tones, use extensions based on tension
 JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::generateRhMelodicVoicing(
     const Context& c, int targetTopMidi) const {
     
@@ -948,25 +949,50 @@ JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::generateRhMelodicVoici
     
     if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
     
-    // Collect available color tones for RH (prefer extensions)
+    // ================================================================
+    // CONSONANCE-FIRST APPROACH
+    // Guide tones (3, 7) are always safe and define the chord
+    // Extensions (9, 13) add color but only when appropriate
+    // ================================================================
     QVector<int> colorPcs;
     
-    // Priority order: 9, 13, 11, then guide tones 7, 3
-    int ninth = pcForDegree(chord, 9);
-    int thirteenth = pcForDegree(chord, 13);
-    int eleventh = pcForDegree(chord, 11);
-    int seventh = pcForDegree(chord, 7);
+    // Core chord tones
     int third = pcForDegree(chord, 3);
     int fifth = pcForDegree(chord, 5);
+    int seventh = pcForDegree(chord, 7);
+    int root = chord.rootPc;
     
-    if (ninth >= 0) colorPcs.push_back(ninth);
-    if (thirteenth >= 0) colorPcs.push_back(thirteenth);
-    if (seventh >= 0) colorPcs.push_back(seventh);
+    // Extensions
+    int ninth = pcForDegree(chord, 9);
+    int thirteenth = pcForDegree(chord, 13);
+    
+    // Determine tension level for extension usage
+    const double tensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
+    const bool isDominant = (chord.quality == music::ChordQuality::Dominant);
+    
+    // PRIORITY 1: Guide tones (always beautiful)
     if (third >= 0) colorPcs.push_back(third);
-    if (eleventh >= 0 && chord.quality != music::ChordQuality::Major) {
-        colorPcs.push_back(eleventh); // Avoid 11 on major chords
-    }
+    if (seventh >= 0) colorPcs.push_back(seventh);
+    
+    // PRIORITY 2: Fifth (safe, consonant)
     if (fifth >= 0) colorPcs.push_back(fifth);
+    
+    // PRIORITY 3: Extensions (based on tension)
+    if (tensionLevel > 0.3) {
+        // Natural 9 is safe on most chords
+        if (ninth >= 0) {
+            int expectedNinth = normalizePc(root + 2);
+            bool isNatural9 = (ninth == expectedNinth);
+            if (isNatural9 || (isDominant && tensionLevel > 0.5)) {
+                colorPcs.push_back(ninth);
+            }
+        }
+        
+        // 13th only when tension warrants
+        if (thirteenth >= 0 && tensionLevel > 0.5) {
+            colorPcs.push_back(thirteenth);
+        }
+    }
     
     if (colorPcs.isEmpty()) return rh;
     
@@ -990,8 +1016,10 @@ JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::generateRhMelodicVoici
             else if (motion <= 7) cost = 3.0;
             else cost = 6.0;
             
-            // Slight preference for extensions (9, 13)
-            if (pc == ninth || pc == thirteenth) cost -= 0.5;
+            // PREFERENCE for guide tones (they sound most "right")
+            if (pc == third || pc == seventh) cost -= 0.8;
+            // Slight preference for extensions only at higher tension
+            else if ((pc == ninth || pc == thirteenth) && tensionLevel > 0.5) cost -= 0.3;
             
             // Prefer staying in sweet spot (72-82)
             if (midi >= 72 && midi <= 82) cost -= 0.3;
@@ -1013,44 +1041,56 @@ JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::generateRhMelodicVoici
     else if (rh.topNoteMidi < lastTop - 1) rh.melodicDirection = -1;
     else rh.melodicDirection = 0;
     
-    // Find a second voice (3rd or 6th below top)
+    // ================================================================
+    // CONSONANT SECOND VOICE SELECTION
+    // Prefer 3rds (3-4 semitones) and 6ths (8-9 semitones)
+    // Avoid 2nds, tritones, and 7ths unless tension is high
+    // ================================================================
     int secondPc = -1;
     int secondMidi = -1;
+    int bestConsonance = 99;
     
-    // Try 3rd below (interval of 3-4 semitones)
+    // Find the most consonant second voice with proper scoring
     for (int pc : colorPcs) {
         if (pc == topPc) continue;
         int interval = (topPc - pc + 12) % 12;
-        if (interval >= 3 && interval <= 5) { // Minor 3rd to perfect 4th
+        
+        // Score by consonance (lower is better)
+        int score = 99;
+        if (interval == 3 || interval == 4) score = 0;  // Minor/major 3rd - sweetest
+        else if (interval == 8 || interval == 9) score = 1;  // Minor/major 6th - beautiful
+        else if (interval == 5) score = 2;  // Perfect 4th - stable
+        else if (interval == 7) score = 3;  // Perfect 5th - open
+        else if ((interval == 10 || interval == 11) && tensionLevel > 0.5) score = 5; // 7ths OK with tension
+        // Avoid 2nds (1-2) and tritones (6) unless very high tension
+        else if ((interval == 1 || interval == 2) && tensionLevel > 0.7) score = 7;
+        else if (interval == 6 && isDominant && tensionLevel > 0.6) score = 6;
+        else score = 99; // Skip dissonant intervals at low tension
+        
+        if (score < bestConsonance) {
+            bestConsonance = score;
             secondPc = pc;
-            break;
         }
     }
     
-    // Fallback: try 6th below
-    if (secondPc < 0) {
-        for (int pc : colorPcs) {
-            if (pc == topPc) continue;
-            int interval = (topPc - pc + 12) % 12;
-            if (interval >= 8 && interval <= 10) { // Major 6th to minor 7th
-                secondPc = pc;
-                break;
-            }
-        }
-    }
-    
-    // Last resort: just use the 7th or 3rd
-    if (secondPc < 0) {
+    // Last resort: just use the 7th or 3rd (guaranteed consonant with chord)
+    if (secondPc < 0 || bestConsonance > 5) {
         secondPc = (seventh >= 0 && seventh != topPc) ? seventh : third;
     }
     
     if (secondPc >= 0) {
-        // Place second voice 3-6 semitones below top
+        // Place second voice 3-9 semitones below top (sweet spot for dyads)
         secondMidi = rh.topNoteMidi - 3;
-        while (normalizePc(secondMidi) != secondPc && secondMidi > rh.topNoteMidi - 12) {
+        while (normalizePc(secondMidi) != secondPc && secondMidi > rh.topNoteMidi - 10) {
             secondMidi--;
         }
-        if (secondMidi >= c.rhLo) {
+        
+        // Verify actual interval is consonant before adding
+        int actualInterval = rh.topNoteMidi - secondMidi;
+        bool intervalOk = (actualInterval >= 3 && actualInterval <= 9) ||
+                          (actualInterval == 10 && tensionLevel > 0.5);
+        
+        if (intervalOk && secondMidi >= c.rhLo) {
             rh.midiNotes.push_back(secondMidi);
         }
     }
@@ -1173,10 +1213,16 @@ int JazzBalladPianoPlanner::rhActivityLevel(const Context& c, quint32 hash) cons
 }
 
 // Select next melodic target for RH top voice (stepwise preferred)
+// CONSONANCE-FIRST: Prioritize guide tones, extensions only when tension warrants
 int JazzBalladPianoPlanner::selectNextRhMelodicTarget(const Context& c) const {
     int lastTop = (m_state.lastRhTopMidi > 0) ? m_state.lastRhTopMidi : 74;
+    int root = c.chord.rootPc;
     
-    // Collect scale tones for melodic motion
+    // Determine tension level for extension usage
+    const double tensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
+    const bool isDominant = (c.chord.quality == music::ChordQuality::Dominant);
+    
+    // Collect scale tones for melodic motion - CONSONANCE FIRST
     QVector<int> scalePcs;
     int third = pcForDegree(c.chord, 3);
     int fifth = pcForDegree(c.chord, 5);
@@ -1184,11 +1230,25 @@ int JazzBalladPianoPlanner::selectNextRhMelodicTarget(const Context& c) const {
     int ninth = pcForDegree(c.chord, 9);
     int thirteenth = pcForDegree(c.chord, 13);
     
-    if (ninth >= 0) scalePcs.push_back(ninth);
-    if (thirteenth >= 0) scalePcs.push_back(thirteenth);
-    if (seventh >= 0) scalePcs.push_back(seventh);
+    // PRIORITY 1: Guide tones (define the chord)
     if (third >= 0) scalePcs.push_back(third);
+    if (seventh >= 0) scalePcs.push_back(seventh);
+    
+    // PRIORITY 2: Fifth
     if (fifth >= 0) scalePcs.push_back(fifth);
+    
+    // PRIORITY 3: Extensions (only if tension warrants)
+    if (tensionLevel > 0.3) {
+        if (ninth >= 0) {
+            int expectedNinth = normalizePc(root + 2);
+            if (ninth == expectedNinth || (isDominant && tensionLevel > 0.5)) {
+                scalePcs.push_back(ninth);
+            }
+        }
+        if (thirteenth >= 0 && tensionLevel > 0.5) {
+            scalePcs.push_back(thirteenth);
+        }
+    }
     
     if (scalePcs.isEmpty()) return lastTop;
     
@@ -1596,22 +1656,70 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 choice = MelodicChoice::ReturnHome;
             }
             
-            // Collect scale/chord tones for melodic motion
+            // ================================================================
+            // CONSONANCE-FIRST NOTE SELECTION
+            // Prioritize chord tones that define the harmony beautifully
+            // Extensions only when energy/tension warrant it
+            // ================================================================
             QVector<int> melodicPcs;
-            int ninth = pcForDegree(adjusted.chord, 9);
-            int thirteenth = pcForDegree(adjusted.chord, 13);
-            int seventh = pcForDegree(adjusted.chord, 7);
+            
+            // Core chord tones - always safe and beautiful
             int third = pcForDegree(adjusted.chord, 3);
             int fifth = pcForDegree(adjusted.chord, 5);
+            int seventh = pcForDegree(adjusted.chord, 7);
             int root = adjusted.chord.rootPc;
             
-            // Priority: extensions first for color, then guide tones
-            if (ninth >= 0) melodicPcs.push_back(ninth);
-            if (thirteenth >= 0) melodicPcs.push_back(thirteenth);
-            if (seventh >= 0) melodicPcs.push_back(seventh);
+            // Extensions - use carefully based on chord quality and energy
+            int ninth = pcForDegree(adjusted.chord, 9);
+            int thirteenth = pcForDegree(adjusted.chord, 13);
+            
+            // Determine how "safe" we should be based on energy and tension
+            const double tensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
+            const bool allowExtensions = tensionLevel > 0.3;
+            const bool allowColorTones = tensionLevel > 0.5;
+            
+            // Is this a dominant chord? Extensions are more natural on dominants
+            const bool isDominant = (adjusted.chord.quality == music::ChordQuality::Dominant);
+            const bool isMajor = (adjusted.chord.quality == music::ChordQuality::Major);
+            const bool isMinor = (adjusted.chord.quality == music::ChordQuality::Minor);
+            
+            // PRIORITY 1: Guide tones (3 and 7) - these DEFINE the chord
+            // They are the most consonant and characteristic
             if (third >= 0) melodicPcs.push_back(third);
+            if (seventh >= 0) melodicPcs.push_back(seventh);
+            
+            // PRIORITY 2: Fifth - safe, consonant, but less characteristic
             if (fifth >= 0) melodicPcs.push_back(fifth);
-            if (root >= 0 && motionCount > 0) melodicPcs.push_back(root); // Root OK for passing
+            
+            // PRIORITY 3: Extensions - only if energy/tension warrants
+            if (allowExtensions) {
+                // 9th is generally safe on most chords (except when b9 on non-dominant)
+                if (ninth >= 0) {
+                    // Check if it's a natural 9 (whole step above root)
+                    int expectedNinth = normalizePc(root + 2);
+                    bool isNatural9 = (ninth == expectedNinth);
+                    
+                    // Natural 9 is safe on almost any chord
+                    // b9/#9 only on dominants when we want tension
+                    if (isNatural9 || (isDominant && allowColorTones)) {
+                        melodicPcs.push_back(ninth);
+                    }
+                }
+                
+                // 13th is beautiful on dominants and minor 7ths
+                if (thirteenth >= 0 && allowColorTones) {
+                    // Natural 13 is a 9th above 5th - generally safe
+                    int expectedThirteenth = normalizePc(root + 9);
+                    bool isNatural13 = (thirteenth == expectedThirteenth);
+                    
+                    if (isNatural13 || isDominant) {
+                        melodicPcs.push_back(thirteenth);
+                    }
+                }
+            }
+            
+            // Root is OK for passing tones after other motion
+            if (root >= 0 && motionCount > 0) melodicPcs.push_back(root);
             
             if (melodicPcs.isEmpty()) continue;
             
@@ -1694,64 +1802,95 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             const bool buildTriad = preferDyad && (c.energy > 0.7) && 
                                    (c.weights.density > 0.6) && ((rhHash + hitIndex) % 4 == 0);
             
-            // Add second voice for dyads/triads (3rd-6th below top)
+            // ================================================================
+            // CONSONANT DYAD/TRIAD BUILDING
+            // Prefer intervals that sound beautiful: 3rds (3-4 semitones)
+            // and 6ths (8-9 semitones). Avoid 2nds and tritones.
+            // ================================================================
             if (preferDyad) {
                 int secondPc = -1;
                 int thirdPc = -1; // For triads
+                int bestInterval = 99;
                 
-                // Find best second voice: 3rd or 4th below
+                // Find best second voice - prioritize CONSONANT intervals
+                // Perfect intervals: 3rds (3-4), 6ths (8-9), 4ths (5), 5ths (7)
+                // Avoid: 2nds (1-2), tritones (6), 7ths (10-11)
                 for (int pc : melodicPcs) {
                     if (pc == topPc) continue;
                     int interval = (topPc - pc + 12) % 12;
-                    if (interval >= 3 && interval <= 5) {
+                    
+                    // Score intervals by consonance (lower is better)
+                    int consonanceScore = 99;
+                    if (interval == 3 || interval == 4) consonanceScore = 0;  // Minor/major 3rd - sweetest
+                    else if (interval == 8 || interval == 9) consonanceScore = 1;  // Minor/major 6th - beautiful
+                    else if (interval == 5) consonanceScore = 2;  // Perfect 4th - stable
+                    else if (interval == 7) consonanceScore = 3;  // Perfect 5th - open
+                    else if (interval == 10 || interval == 11) consonanceScore = 5; // 7ths - some tension
+                    else if (interval == 1 || interval == 2) consonanceScore = 8; // 2nds - avoid
+                    else if (interval == 6) consonanceScore = 9; // Tritone - avoid unless dominant
+                    
+                    // Allow tritone on dominant chords for color
+                    if (interval == 6 && isDominant && tensionLevel > 0.6) {
+                        consonanceScore = 4; // OK on dominants
+                    }
+                    
+                    if (consonanceScore < bestInterval) {
+                        bestInterval = consonanceScore;
                         secondPc = pc;
-                        break;
                     }
                 }
                 
-                // Try 6th below if no 3rd found
-                if (secondPc < 0) {
+                // Fallback to 7th or 3rd of the chord (guaranteed consonant)
+                if (secondPc < 0 || bestInterval > 5) {
+                    secondPc = (seventh >= 0 && seventh != topPc) ? seventh : third;
+                }
+                
+                // For triads, find a third voice that creates a consonant stack
+                if (buildTriad && secondPc >= 0) {
+                    int bestTriadScore = 99;
                     for (int pc : melodicPcs) {
-                        if (pc == topPc) continue;
-                        int interval = (topPc - pc + 12) % 12;
-                        if (interval >= 8 && interval <= 10) {
-                            secondPc = pc;
-                            break;
+                        if (pc == topPc || pc == secondPc) continue;
+                        
+                        // Check interval from second voice
+                        int interval = (secondPc - pc + 12) % 12;
+                        int consonanceScore = 99;
+                        if (interval == 3 || interval == 4) consonanceScore = 0;
+                        else if (interval == 5 || interval == 7) consonanceScore = 2;
+                        else if (interval == 8 || interval == 9) consonanceScore = 1;
+                        
+                        if (consonanceScore < bestTriadScore) {
+                            bestTriadScore = consonanceScore;
+                            thirdPc = pc;
                         }
                     }
                 }
                 
-                // Fallback to 7th or 3rd
-                if (secondPc < 0) {
-                    secondPc = (seventh >= 0 && seventh != topPc) ? seventh : third;
-                }
-                
-                // For triads, find a third voice below the second
-                if (buildTriad && secondPc >= 0) {
-                    for (int pc : melodicPcs) {
-                        if (pc == topPc || pc == secondPc) continue;
-                        // Look for a note that would be below the second voice
-                        thirdPc = pc;
-                        break;
-                    }
-                }
-                
-                // Build the MIDI notes
+                // Build the MIDI notes with proper spacing
                 if (secondPc >= 0) {
+                    // Find second note 3-9 semitones below top (sweet spot for dyads)
                     int secondMidi = bestTarget - 3;
-                    while (normalizePc(secondMidi) != secondPc && secondMidi > bestTarget - 12) {
+                    while (normalizePc(secondMidi) != secondPc && secondMidi > bestTarget - 10) {
                         secondMidi--;
                     }
-                    if (secondMidi >= adjusted.rhLo && secondMidi < bestTarget) {
+                    
+                    // Verify the interval is consonant before adding
+                    int actualInterval = bestTarget - secondMidi;
+                    bool intervalOk = (actualInterval >= 3 && actualInterval <= 9) || 
+                                      (actualInterval == 10 && tensionLevel > 0.5);
+                    
+                    if (intervalOk && secondMidi >= adjusted.rhLo && secondMidi < bestTarget) {
                         rhMidiNotes.insert(rhMidiNotes.begin(), secondMidi);
                         
                         // Add third voice for triads
                         if (buildTriad && thirdPc >= 0) {
                             int thirdMidi = secondMidi - 3;
-                            while (normalizePc(thirdMidi) != thirdPc && thirdMidi > secondMidi - 12) {
+                            while (normalizePc(thirdMidi) != thirdPc && thirdMidi > secondMidi - 10) {
                                 thirdMidi--;
                             }
-                            if (thirdMidi >= adjusted.rhLo && thirdMidi < secondMidi) {
+                            int thirdInterval = secondMidi - thirdMidi;
+                            bool thirdIntervalOk = (thirdInterval >= 3 && thirdInterval <= 9);
+                            
+                            if (thirdIntervalOk && thirdMidi >= adjusted.rhLo && thirdMidi < secondMidi) {
                                 rhMidiNotes.insert(rhMidiNotes.begin(), thirdMidi);
                             }
                         }

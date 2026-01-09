@@ -115,6 +115,16 @@ public:
         // ========== PHRASE TRACKING ==========
         int currentPhrasePeakMidi = 72;     // Highest note in current phrase (for Q/A)
         int currentPhraseLastMidi = 72;     // Last note played in current phrase
+        
+        // ========== PHRASE COMPING PATTERN ==========
+        // The core innovation: RH plays according to a PHRASE-LEVEL pattern,
+        // not beat-by-beat decisions. This creates musical, intentional phrasing.
+        int phrasePatternIndex = -1;        // Which pattern we're using (-1 = choose new)
+        int phrasePatternBar = 0;           // Our position in the phrase pattern (bar)
+        int phrasePatternBeat = 0;          // Our position in the phrase pattern (beat)
+        int phrasePatternHitIndex = 0;      // Which hit in the pattern we're on
+        int phraseMelodicTargetMidi = 74;   // The melodic goal for this phrase
+        int phraseVoicingType = 0;          // 0=Drop2, 1=Triad, 2=Dyad (consistent for phrase)
     };
 
     struct CcIntent {
@@ -381,6 +391,56 @@ private:
     
     // Select next melodic target for RH (stepwise motion preferred)
     int selectNextRhMelodicTarget(const Context& c) const;
+    
+    // ========== PHRASE COMPING PATTERNS (THE CORE INNOVATION) ==========
+    // Instead of deciding beat-by-beat "how many notes", we use PHRASE-LEVEL
+    // patterns that define WHERE to play across 2-4 bars. This is how real
+    // jazz pianists think: "I'll catch beat 1, lay out, hit the 'and of 3',
+    // then land on beat 1 of the next bar."
+    //
+    // Benefits:
+    // - Default is REST (only play when pattern says so)
+    // - Consistent voicing type throughout phrase
+    // - Melodic contour is planned in advance
+    // - Creates musical, intentional phrasing with SPACE
+    
+    struct PhraseCompHit {
+        int barOffset;       // 0-3 (which bar in the phrase)
+        int beatInBar;       // 0-3 (which beat)
+        int subdivision;     // 0-3 (which 16th within the beat, 0=on beat)
+        int voicingType;     // 0=Drop2, 1=Triad, 2=Dyad, 3=Single
+        int velocityDelta;   // -20 to +10 (relative to base)
+        int timingMs;        // Rubato: -50 to +50 ms (negative=early, positive=laid back)
+        bool isAccent;       // Louder, more sustain
+        bool isPickup;       // Anticipates next chord
+        QString intentTag;   // "statement", "response", "breath", "resolution", "pickup"
+    };
+    
+    struct PhraseCompPattern {
+        QString name;                     // e.g., "sparse_ballad", "charleston", "bop_light"
+        int bars;                         // Pattern length (usually 2 or 4)
+        QVector<PhraseCompHit> hits;      // Where and how to play
+        double densityRating;             // 0.0=very sparse, 1.0=busy
+        bool preferHighRegister;          // Melodic tendency
+        QString melodicContour;           // "rise", "fall", "arch", "level"
+    };
+    
+    // Get phrase comping patterns for context
+    QVector<PhraseCompPattern> getAvailablePhrasePatterns(const Context& c) const;
+    
+    // Choose the best pattern for current musical context
+    int selectPhrasePattern(const Context& c, quint32 hash) const;
+    
+    // Check if current position is a "play" position in the phrase pattern
+    bool shouldPlayAtPhrasePosition(const Context& c, const PhraseCompPattern& pattern,
+                                     int barInPattern, int beatInBar) const;
+    
+    // Get the hit info for current position (if any)
+    const PhraseCompHit* getPhraseHitAt(const PhraseCompPattern& pattern,
+                                         int barInPattern, int beatInBar) const;
+    
+    // Plan melodic contour for the entire phrase
+    QVector<int> planPhraseContour(const Context& c, const PhraseCompPattern& pattern) const;
 
     // Realize pitch classes to MIDI notes within register, with melodic top note
     QVector<int> realizePcsToMidi(const QVector<int>& pcs, int lo, int hi,

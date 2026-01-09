@@ -46,6 +46,285 @@ QVector<VoicingTemplate> getVoicingTemplates(bool hasSeventh, bool is6thChord) {
     return templates;
 }
 
+// =============================================================================
+// DROP-2 VOICINGS
+// A Drop-2 voicing takes a close-position chord and drops the 2nd voice from
+// the top down an octave. This creates a more open, pianistic sound.
+// The TOP note becomes the melody - crucial for voice-led playing!
+// =============================================================================
+struct Drop2Voicing {
+    QVector<int> pcs;           // Pitch classes from bottom to top
+    int melodyPc;               // The top note (melody)
+    int melodyDegree;           // What chord degree is the melody (3, 5, 7, 9, etc.)
+    QString name;               // For debugging
+    double tension;             // How tense is this voicing (0.0 = consonant)
+};
+
+// =============================================================================
+// DIATONIC TRIADS
+// Triads built from each scale degree that harmonize with the current chord.
+// These create rich harmonic color while remaining diatonic and beautiful.
+// =============================================================================
+struct DiatonicTriad {
+    int rootPc;                 // Root of the triad
+    bool isMajor;               // Major or minor quality
+    int scaleDegree;            // Which scale degree this triad is built on
+    QVector<int> pcs;           // The 3 pitch classes
+    double harmonyScore;        // How well this harmonizes (higher = better)
+    QString name;
+};
+
+// =============================================================================
+// SINGING MELODY LINE TARGET
+// Calculate the ideal next melody note for a voice-led, expressive line
+// =============================================================================
+struct SingingMelodyTarget {
+    int midiNote;
+    int degree;                 // What chord degree this represents
+    double expressiveness;      // How expressive/emotional this choice is
+    bool isResolution;          // Is this a resolution to a stable tone?
+    bool isLeapTarget;          // Does this require a leap (more dramatic)?
+};
+
+// Find the best melody target that creates a singing, voice-led line
+SingingMelodyTarget findSingingMelodyTarget(
+    int lastMelodyMidi, 
+    int lastMelodyDirection,
+    const music::ChordSymbol& chord,
+    int rhLo, int rhHi,
+    int phraseArcPhase,         // 0=building, 1=peak, 2=resolving
+    double energy,
+    bool isPhrasePeak,
+    bool isPhraseEnd) {
+    
+    SingingMelodyTarget best;
+    best.midiNote = lastMelodyMidi;
+    best.degree = 3;
+    best.expressiveness = 0.0;
+    best.isResolution = false;
+    best.isLeapTarget = false;
+    
+    // Get chord tones - inline calculation to avoid private member access
+    auto pcForDegreeLocal = [&](int deg) -> int {
+        if (deg == 3) {
+            // 3rd: major/augmented = 4 semitones, minor/diminished = 3 semitones
+            bool isMinor = (chord.quality == music::ChordQuality::Minor ||
+                           chord.quality == music::ChordQuality::Diminished ||
+                           chord.quality == music::ChordQuality::HalfDiminished);
+            return normalizePc(chord.rootPc + (isMinor ? 3 : 4));
+        }
+        if (deg == 5) {
+            // 5th: diminished = 6, augmented = 8, otherwise = 7
+            if (chord.quality == music::ChordQuality::Diminished ||
+                chord.quality == music::ChordQuality::HalfDiminished) {
+                return normalizePc(chord.rootPc + 6);
+            }
+            if (chord.quality == music::ChordQuality::Augmented) {
+                return normalizePc(chord.rootPc + 8);
+            }
+            return normalizePc(chord.rootPc + 7);
+        }
+        if (deg == 7) {
+            // 7th depends on quality
+            if (chord.quality == music::ChordQuality::Major) {
+                return normalizePc(chord.rootPc + 11);  // Major 7th
+            }
+            if (chord.quality == music::ChordQuality::Diminished) {
+                return normalizePc(chord.rootPc + 9);   // Diminished 7th
+            }
+            return normalizePc(chord.rootPc + 10);  // Minor/dominant 7th
+        }
+        if (deg == 9) {
+            return normalizePc(chord.rootPc + 2);  // 9th = 2 semitones
+        }
+        return -1;
+    };
+    
+    int third = pcForDegreeLocal(3);
+    int fifth = pcForDegreeLocal(5);
+    int seventh = pcForDegreeLocal(7);
+    int ninth = pcForDegreeLocal(9);
+    
+    // Candidates: prefer stepwise motion (1-2 semitones)
+    // Guide tones (3, 7) are most expressive
+    // 9th adds color for building phrases
+    // 5th is stable for resolution
+    
+    struct Candidate {
+        int pc;
+        int degree;
+        double baseScore;
+    };
+    QVector<Candidate> candidates;
+    
+    // Prioritize based on phrase arc
+    if (phraseArcPhase == 2 || isPhraseEnd) {
+        // Resolving: prefer stable tones (3rd, 5th)
+        if (third >= 0) candidates.push_back({third, 3, 3.0});
+        if (fifth >= 0) candidates.push_back({fifth, 5, 2.5});
+        if (seventh >= 0) candidates.push_back({seventh, 7, 1.5});
+    } else if (phraseArcPhase == 1 || isPhrasePeak) {
+        // Peak: prefer expressive tones (7th, 9th)
+        if (seventh >= 0) candidates.push_back({seventh, 7, 3.0});
+        if (ninth >= 0) candidates.push_back({ninth, 9, 2.8});
+        if (third >= 0) candidates.push_back({third, 3, 2.0});
+        if (fifth >= 0) candidates.push_back({fifth, 5, 1.5});
+    } else {
+        // Building: balanced, with slight preference for movement
+        if (third >= 0) candidates.push_back({third, 3, 2.5});
+        if (seventh >= 0) candidates.push_back({seventh, 7, 2.3});
+        if (ninth >= 0 && energy > 0.3) candidates.push_back({ninth, 9, 2.0});
+        if (fifth >= 0) candidates.push_back({fifth, 5, 1.8});
+    }
+    
+    if (candidates.isEmpty()) return best;
+    
+    double bestScore = -999.0;
+    
+    for (const auto& cand : candidates) {
+        // Find the nearest MIDI note to last melody
+        for (int oct = 5; oct <= 7; ++oct) {
+            int midi = cand.pc + 12 * oct;
+            if (midi < rhLo || midi > rhHi) continue;
+            
+            int motion = midi - lastMelodyMidi;
+            int absMotion = qAbs(motion);
+            
+            double score = cand.baseScore;
+            
+            // SINGING LINE: Prefer stepwise motion (1-3 semitones)
+            if (absMotion == 1 || absMotion == 2) {
+                score += 2.0;  // Perfect stepwise - beautiful!
+            } else if (absMotion == 3 || absMotion == 4) {
+                score += 1.0;  // Small interval - still good
+            } else if (absMotion == 0) {
+                score += 0.5;  // Holding - OK for emphasis
+            } else if (absMotion <= 7) {
+                score += 0.0;  // Larger interval - neutral
+            } else {
+                score -= 1.0;  // Large leap - use sparingly
+            }
+            
+            // Prefer continuing in same direction (melodic momentum)
+            if (lastMelodyDirection != 0) {
+                bool sameDir = (lastMelodyDirection > 0 && motion > 0) ||
+                               (lastMelodyDirection < 0 && motion < 0);
+                if (sameDir) score += 0.5;
+            }
+            
+            // Boundary handling: reverse at extremes
+            if (midi >= rhHi - 3 && motion > 0) score -= 1.0;
+            if (midi <= rhLo + 3 && motion < 0) score -= 1.0;
+            
+            // Sweet spot bonus (around C5-G5 for singing quality)
+            if (midi >= 72 && midi <= 79) score += 0.3;
+            
+            if (score > bestScore) {
+                bestScore = score;
+                best.midiNote = midi;
+                best.degree = cand.degree;
+                best.expressiveness = score;
+                best.isResolution = (cand.degree == 3 || cand.degree == 5) && absMotion <= 2;
+                best.isLeapTarget = absMotion > 4;
+            }
+        }
+    }
+    
+    return best;
+}
+
+// =============================================================================
+// BROKEN TIME FEEL
+// Calculate timing variations that create a fluid, breathing rhythm
+// Not random - based on musical phrase position and emotional intent
+// =============================================================================
+struct BrokenTimeFeel {
+    int timingOffsetMs;         // Milliseconds to shift (positive = late, negative = early)
+    double velocityMult;        // Velocity multiplier for dynamic shaping
+    double durationMult;        // Duration multiplier for articulation
+    bool isBreath;              // Is this a breath moment (longer, softer)?
+};
+
+BrokenTimeFeel calculateBrokenTimeFeel(
+    int beatInBar,
+    int subBeat,                // 0-3 for 16th notes
+    int phraseArcPhase,
+    double energy,
+    int bpm,
+    bool isChordChange,
+    bool isPhrasePeak,
+    bool isPhraseEnd) {
+    
+    BrokenTimeFeel feel;
+    feel.timingOffsetMs = 0;
+    feel.velocityMult = 1.0;
+    feel.durationMult = 1.0;
+    feel.isBreath = false;
+    
+    // Slower tempos allow MORE rubato - make it really noticeable!
+    double tempoFactor = (bpm < 70) ? 2.5 : ((bpm < 90) ? 1.8 : 1.2);
+    
+    // PHRASE BREATHING: Significant stretching at phrase endings
+    if (isPhraseEnd) {
+        feel.timingOffsetMs = int(25 * tempoFactor);  // Quite late - lingering, breathing
+        feel.velocityMult = 0.75;                      // Much softer for resolution
+        feel.durationMult = 1.6;                       // Longer - let it breathe and ring
+        feel.isBreath = true;
+    }
+    // PHRASE PEAK: Emphasis, slightly ahead for urgency
+    else if (isPhrasePeak) {
+        feel.timingOffsetMs = int(-8 * tempoFactor);  // Slightly early - urgent, passionate
+        feel.velocityMult = 1.15;                      // Louder at climax
+        feel.durationMult = 1.1;                       // Full, present
+    }
+    // BUILDING: Forward momentum - eager, anticipating
+    else if (phraseArcPhase == 0) {
+        feel.timingOffsetMs = int(-12 * tempoFactor); // Early - pushing forward eagerly
+        feel.velocityMult = 0.90 + 0.15 * energy;     // Build dynamically
+        feel.durationMult = 0.85;                      // Shorter - articulate, rhythmic
+    }
+    // RESOLVING: Relaxing, slowing, breathing
+    else if (phraseArcPhase == 2) {
+        feel.timingOffsetMs = int(18 * tempoFactor);  // Late - relaxed, unwinding
+        feel.velocityMult = 0.70;                      // Softer - intimate
+        feel.durationMult = 1.4;                       // Longer - legato, sustained
+        feel.isBreath = true;
+    }
+    
+    // BEAT PLACEMENT: Strong metric contrast
+    if (beatInBar == 0) {
+        // Beat 1: anchor point - slightly early for strength
+        feel.timingOffsetMs -= 5;
+        feel.velocityMult *= 1.05;
+    } else if (beatInBar == 2) {
+        // Beat 3: secondary strength
+        feel.timingOffsetMs -= 3;
+    } else {
+        // Beats 2 & 4: weak - laid back and softer
+        feel.timingOffsetMs += int(10 * tempoFactor);
+        feel.velocityMult *= 0.85;
+    }
+    
+    // SYNCOPATION: Off-beat 16ths swing and breathe
+    if (subBeat == 1 || subBeat == 3) {
+        feel.timingOffsetMs += int(15 * tempoFactor);  // Laid back, swinging
+        feel.velocityMult *= 0.9;                       // Lighter
+    }
+    
+    // CHORD CHANGES: Ground the harmony but still breathe
+    if (isChordChange && beatInBar == 0) {
+        feel.timingOffsetMs = qBound(-20, feel.timingOffsetMs, 15);  // Controlled but expressive
+        feel.durationMult = 1.3;                                     // Let harmony ring
+    }
+    
+    // Cap timing offset - allow more rubato than before!
+    feel.timingOffsetMs = qBound(-50, feel.timingOffsetMs, 60);
+    feel.velocityMult = qBound(0.55, feel.velocityMult, 1.25);
+    feel.durationMult = qBound(0.6, feel.durationMult, 1.8);
+    
+    return feel;
+}
+
 } // namespace
 
 // =============================================================================
@@ -3469,6 +3748,298 @@ QVector<JazzBalladPianoPlanner::FragmentNote> JazzBalladPianoPlanner::applyMelod
     return notes;
 }
 
+// =============================================================================
+// PHRASE COMPING PATTERNS - The Core Innovation for Beautiful Phrasing
+// =============================================================================
+// 
+// These patterns define WHERE to play across a 2-4 bar phrase.
+// The key insight: real jazz pianists think in PHRASES, not beats.
+// They plan: "catch beat 1, lay out, hit 'and of 3', land beat 1 next bar"
+//
+// Benefits over beat-by-beat decisions:
+// 1. Default is REST - only play when pattern says so
+// 2. Consistent voicing style throughout phrase
+// 3. Melodic contour planned in advance
+// 4. Creates musical SPACE - the hallmark of great ballad playing
+// =============================================================================
+
+QVector<JazzBalladPianoPlanner::PhraseCompPattern> JazzBalladPianoPlanner::getAvailablePhrasePatterns(
+    const Context& c) const {
+    
+    QVector<PhraseCompPattern> patterns;
+    
+    // ========================================================================
+    // PATTERN 1: "Sparse Ballad" - The Bill Evans signature
+    // Just 2-3 voicings across 4 bars. Maximum space, maximum beauty.
+    // ========================================================================
+    {
+        PhraseCompPattern p;
+        p.name = "sparse_ballad";
+        p.bars = 4;
+        p.densityRating = 0.15;
+        p.preferHighRegister = false;
+        p.melodicContour = "arch";
+        
+        // Bar 1, beat 1: Statement voicing
+        p.hits.push_back({0, 0, 0, 0, 0, 0, true, false, "statement"});
+        
+        // Bar 2, beat 3 and-of: Soft response
+        p.hits.push_back({1, 2, 2, 1, -8, 15, false, false, "response"});
+        
+        // Bar 3, beat 1: Resolution/restatement
+        p.hits.push_back({2, 0, 0, 0, -3, -10, true, false, "resolution"});
+        
+        patterns.push_back(p);
+    }
+    
+    // ========================================================================
+    // PATTERN 2: "Charleston Feel" - Classic jazz rhythm
+    // Beat 1, then "and of 2" - creates forward motion
+    // ========================================================================
+    {
+        PhraseCompPattern p;
+        p.name = "charleston";
+        p.bars = 2;
+        p.densityRating = 0.25;
+        p.preferHighRegister = true;
+        p.melodicContour = "rise";
+        
+        // Bar 1, beat 1: On the beat
+        p.hits.push_back({0, 0, 0, 0, 0, -5, true, false, "statement"});
+        
+        // Bar 1, and-of-2: The "Charleston" hit
+        p.hits.push_back({0, 1, 2, 1, -5, 0, false, false, "syncopation"});
+        
+        // Bar 2, beat 1: Resolution
+        p.hits.push_back({1, 0, 0, 0, -3, 5, false, false, "resolution"});
+        
+        patterns.push_back(p);
+    }
+    
+    // ========================================================================
+    // PATTERN 3: "Breath" - Ultra sparse, just one chord statement
+    // For moments when less is more
+    // ========================================================================
+    {
+        PhraseCompPattern p;
+        p.name = "breath";
+        p.bars = 4;
+        p.densityRating = 0.08;
+        p.preferHighRegister = false;
+        p.melodicContour = "level";
+        
+        // Just one voicing at the start
+        p.hits.push_back({0, 0, 0, 0, 0, 0, true, false, "statement"});
+        
+        // Maybe a soft touch on bar 3
+        p.hits.push_back({2, 2, 0, 2, -12, 20, false, false, "breath"});
+        
+        patterns.push_back(p);
+    }
+    
+    // ========================================================================
+    // PATTERN 4: "Anticipation" - Pickup to next phrase
+    // Builds toward the next chord change
+    // ========================================================================
+    {
+        PhraseCompPattern p;
+        p.name = "anticipation";
+        p.bars = 2;
+        p.densityRating = 0.20;
+        p.preferHighRegister = true;
+        p.melodicContour = "rise";
+        
+        // Bar 1, beat 1: Grounding
+        p.hits.push_back({0, 0, 0, 0, 0, 0, true, false, "statement"});
+        
+        // Bar 2, and-of-4: Pickup (anticipates next bar)
+        p.hits.push_back({1, 3, 2, 1, -5, -20, false, true, "pickup"});
+        
+        patterns.push_back(p);
+    }
+    
+    // ========================================================================
+    // PATTERN 5: "Dialogue" - Question and answer within phrase
+    // Two statements that relate to each other
+    // ========================================================================
+    {
+        PhraseCompPattern p;
+        p.name = "dialogue";
+        p.bars = 4;
+        p.densityRating = 0.22;
+        p.preferHighRegister = true;
+        p.melodicContour = "arch";
+        
+        // Bar 1, beat 1: Question
+        p.hits.push_back({0, 0, 0, 0, 0, 0, true, false, "question"});
+        
+        // Bar 2, beat 3: Let question breathe, then soft touch
+        p.hits.push_back({1, 2, 0, 2, -10, 10, false, false, "breath"});
+        
+        // Bar 3, beat 1: Answer (lower register)
+        p.hits.push_back({2, 0, 0, 1, 0, 0, true, false, "answer"});
+        
+        // Bar 4, beat 2: Resolution
+        p.hits.push_back({3, 1, 2, 2, -8, 15, false, false, "resolution"});
+        
+        patterns.push_back(p);
+    }
+    
+    // ========================================================================
+    // PATTERN 6: "Rubato Phrase" - Free timing feel
+    // Hits are intentionally laid back or pushed
+    // ========================================================================
+    {
+        PhraseCompPattern p;
+        p.name = "rubato";
+        p.bars = 2;
+        p.densityRating = 0.20;
+        p.preferHighRegister = false;
+        p.melodicContour = "fall";
+        
+        // Beat 1 laid back
+        p.hits.push_back({0, 0, 0, 0, 0, 35, true, false, "statement"});
+        
+        // Beat 3 early (anticipating)
+        p.hits.push_back({0, 2, 2, 1, -5, -25, false, false, "anticipation"});
+        
+        // Next bar beat 1 on time
+        p.hits.push_back({1, 0, 0, 0, -3, 0, false, false, "resolution"});
+        
+        patterns.push_back(p);
+    }
+    
+    // ========================================================================
+    // PATTERN 7: "Active" - More hits for high energy moments
+    // Still sparse compared to old code, but more motion
+    // ========================================================================
+    if (c.energy >= 0.5) {
+        PhraseCompPattern p;
+        p.name = "active";
+        p.bars = 2;
+        p.densityRating = 0.40;
+        p.preferHighRegister = true;
+        p.melodicContour = "rise";
+        
+        // Bar 1: Statement and syncopation
+        p.hits.push_back({0, 0, 0, 0, 0, 0, true, false, "statement"});
+        p.hits.push_back({0, 2, 2, 1, -3, 0, false, false, "syncopation"});
+        
+        // Bar 2: More motion
+        p.hits.push_back({1, 0, 0, 1, 0, 0, false, false, "continuation"});
+        p.hits.push_back({1, 2, 0, 2, -5, 10, false, false, "breath"});
+        
+        patterns.push_back(p);
+    }
+    
+    return patterns;
+}
+
+int JazzBalladPianoPlanner::selectPhrasePattern(const Context& c, quint32 hash) const {
+    const auto patterns = getAvailablePhrasePatterns(c);
+    if (patterns.isEmpty()) return -1;
+    
+    // Select based on musical context
+    double targetDensity = 0.15; // Default: very sparse
+    
+    // Higher energy = slightly more active
+    targetDensity += c.energy * 0.15;
+    
+    // Near cadence = more activity for resolution
+    if (c.cadence01 > 0.5) targetDensity += 0.08;
+    
+    // User active = much sparser (let them lead)
+    if (c.userBusy || c.userDensityHigh) targetDensity = 0.10;
+    
+    // Find pattern with closest density
+    int bestIdx = 0;
+    double bestDiff = 999.0;
+    for (int i = 0; i < patterns.size(); ++i) {
+        double diff = qAbs(patterns[i].densityRating - targetDensity);
+        // Add some randomness to avoid always picking the same pattern
+        diff += (double)((hash + i * 17) % 10) * 0.01;
+        if (diff < bestDiff) {
+            bestDiff = diff;
+            bestIdx = i;
+        }
+    }
+    
+    return bestIdx;
+}
+
+bool JazzBalladPianoPlanner::shouldPlayAtPhrasePosition(
+    const Context& c, 
+    const PhraseCompPattern& pattern,
+    int barInPattern, 
+    int beatInBar) const {
+    
+    // Check if any hit matches this position
+    for (const auto& hit : pattern.hits) {
+        if (hit.barOffset == barInPattern && hit.beatInBar == beatInBar) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const JazzBalladPianoPlanner::PhraseCompHit* JazzBalladPianoPlanner::getPhraseHitAt(
+    const PhraseCompPattern& pattern,
+    int barInPattern, 
+    int beatInBar) const {
+    
+    for (const auto& hit : pattern.hits) {
+        if (hit.barOffset == barInPattern && hit.beatInBar == beatInBar) {
+            return &hit;
+        }
+    }
+    return nullptr;
+}
+
+QVector<int> JazzBalladPianoPlanner::planPhraseContour(
+    const Context& c, 
+    const PhraseCompPattern& pattern) const {
+    
+    QVector<int> contour;
+    if (pattern.hits.isEmpty()) return contour;
+    
+    // Determine register based on phrase characteristics
+    int baseMidi = 72; // Middle C area
+    if (pattern.preferHighRegister) baseMidi = 76;
+    if (m_state.lastPhraseWasHigh) baseMidi -= 5; // Alternate register for variety
+    
+    // Generate contour based on melodic shape
+    const int numHits = pattern.hits.size();
+    
+    if (pattern.melodicContour == "rise") {
+        // Start low, end high
+        for (int i = 0; i < numHits; ++i) {
+            int midi = baseMidi + (i * 3);
+            contour.push_back(qBound(c.rhLo, midi, c.rhHi));
+        }
+    } else if (pattern.melodicContour == "fall") {
+        // Start high, end low
+        for (int i = 0; i < numHits; ++i) {
+            int midi = baseMidi + 8 - (i * 3);
+            contour.push_back(qBound(c.rhLo, midi, c.rhHi));
+        }
+    } else if (pattern.melodicContour == "arch") {
+        // Rise to peak, then fall
+        for (int i = 0; i < numHits; ++i) {
+            int peakPos = numHits / 2;
+            int distFromPeak = qAbs(i - peakPos);
+            int midi = baseMidi + 6 - (distFromPeak * 3);
+            contour.push_back(qBound(c.rhLo, midi, c.rhHi));
+        }
+    } else {
+        // Level: stay in same register
+        for (int i = 0; i < numHits; ++i) {
+            contour.push_back(qBound(c.rhLo, baseMidi, c.rhHi));
+        }
+    }
+    
+    return contour;
+}
+
 // LH: Provides harmonic foundation. ALWAYS plays regardless of user activity.
 // The LH is the anchor - it doesn't back off, only the RH does.
 // 
@@ -3543,92 +4114,107 @@ bool JazzBalladPianoPlanner::shouldLhPlayBeat(const Context& c, quint32 hash) co
     return false;
 }
 
-// RH activity: Melodic color and movement. Backs off when user plays, but doesn't disappear.
+// RH activity: Melodic color and movement. 
+// REVISED: Much more conservative - great pianists leave SPACE!
+// Activity 0-1 is the NORM, 2-3 only at climaxes, 4 is exceptional
 int JazzBalladPianoPlanner::rhActivityLevel(const Context& c, quint32 hash) const {
     // ================================================================
     // WHEN USER IS PLAYING: RH becomes VERY sparse
     // Piano should SUPPORT, not compete with the soloist
-    // Much lower probabilities than before
     // ================================================================
     if (c.userBusy || c.userDensityHigh || c.userIntensityPeak) {
-        // Very sparse mode: rare single notes, mostly on chord changes
         if (c.chordIsNew) {
-            return (hash % 100) < 25 ? 1 : 0; // 25% single note on chord changes (was 50%)
+            return (hash % 100) < 20 ? 1 : 0; // 20% single note on chord changes
         }
-        // Otherwise almost never - let the soloist have space!
-        return (hash % 100) < 3 ? 1 : 0; // 3% chance (was 10%)
+        return 0; // Almost never play when user is active
     }
     
     // ================================================================
-    // USER SILENCE: More active RH fills the space
-    // NORMAL COMPING: Moderate RH activity
-    // PHRASE ARC: Activity increases toward peak, decreases at resolve
+    // MUSICAL PHRASING: RH plays in phrases, not constantly
+    // Great pianists don't play on every beat - they leave space!
     // ================================================================
     
-    double activityScore = c.userSilence ? 0.6 : 0.4; // Base: modest activity, higher when silent
-    
-    // ================================================================
-    // PHRASE ARC INFLUENCE
-    // Building (phase 0): gradually increase activity
-    // Peak (phase 1): maximum activity
-    // Resolving (phase 2): wind down
-    // ================================================================
     const int arcPhase = computePhraseArcPhase(c);
-    switch (arcPhase) {
-        case 0: // Building
-            activityScore += 0.3 * (double(c.barInPhrase) / qMax(1, c.phraseBars));
-            break;
-        case 1: // Peak
-            activityScore += 0.6;  // Boost at phrase climax
-            break;
-        case 2: // Resolving
-            activityScore -= 0.2;  // Wind down
-            break;
+    
+    // ================================================================
+    // RESOLVING PHASE (after phrase peak): Can breathe, but still play
+    // This is where the music breathes - but not silence!
+    // ================================================================
+    if (arcPhase == 2) {
+        // Resolving: sparse but present (1-2)
+        if (c.chordIsNew) return 2;  // Chord changes still get activity
+        return (hash % 100) < 60 ? 1 : 2; // Mostly single notes
     }
     
-    // Energy contribution
-    activityScore += 1.0 * c.energy;
+    // ================================================================
+    // WEAK BEATS (2 and 4): Lighter but not silent
+    // Use for syncopation and color
+    // ================================================================
+    const bool isWeakBeat = (c.beatInBar == 1 || c.beatInBar == 3);
+    if (isWeakBeat && !c.chordIsNew) {
+        // Weak beats: lighter activity
+        return (hash % 100) < 65 ? 1 : 2;
+    }
     
-    // Chord changes: more activity
+    // ================================================================
+    // BUILDING PHASE: Start with 1, gradually increase to 2-3
+    // ================================================================
+    if (arcPhase == 0) {
+        const double phraseProg = double(c.barInPhrase) / qMax(1, c.phraseBars);
+        
+        // Early in phrase: 1-2 notes
+        if (phraseProg < 0.3) {
+            if (c.chordIsNew) return 2;
+            return (hash % 100) < 60 ? 1 : 2;
+        }
+        // Mid-phrase building: 1-2 notes
+        if (phraseProg < 0.7) {
+            if (c.chordIsNew) return (c.energy > 0.5) ? 3 : 2;
+            return (hash % 100) < 50 ? 2 : 1;
+        }
+        // Approaching peak: 2-3 notes
+        if (c.chordIsNew) return qMin(3, int(2 + c.energy));
+        return (hash % 100) < 60 ? 2 : 1;
+    }
+    
+    // ================================================================
+    // PEAK PHASE: Most active - 2-3 hits per beat
+    // Maximum activity here
+    // ================================================================
+    if (arcPhase == 1) {
+        if (c.chordIsNew) {
+            // Chord changes at peak: 3 or even 4 based on energy/density
+            int peakActivity = 3;
+            if (c.energy > 0.7 && c.weights.density > 0.6) {
+                peakActivity = 4;
+            }
+            return peakActivity;
+        }
+        // Non-chord-change beats at peak: 2-3
+        return (c.energy > 0.5) ? 3 : 2;
+    }
+    
+    // ================================================================
+    // CADENCE: Punctuate clearly
+    // ================================================================
+    if (c.cadence01 > 0.6) {
+        if (c.beatInBar == 0) {
+            // Cadence resolution beat: definite statement
+            return 3;
+        }
+        // After cadence beat: lighter
+        return 1;
+    }
+    
+    // ================================================================
+    // DEFAULT: 1-2 notes, not silence
+    // ================================================================
     if (c.chordIsNew) {
-        activityScore += 0.8;
+        return 2; // Dyad on chord changes
     }
     
-    // User silence: fill opportunity
-    if (c.userSilence) {
-        activityScore += 0.5 * c.weights.interactivity;
-    }
-    
-    // Density weight
-    activityScore += 0.6 * c.weights.density;
-    
-    // Cadence/phrase endings
-    if (c.cadence01 >= 0.4) {
-        activityScore += 0.4 * c.cadence01;
-    }
-    
-    // Phrase breathing: reduce in middle of building phase
-    const bool earlyInPhrase = (arcPhase == 0 && c.barInPhrase >= 1);
-    if (earlyInPhrase && !c.chordIsNew) {
-        activityScore *= 0.7;  // Gentler reduction to allow arc building
-    }
-    
-    // Offbeats: reduce unless energetic
-    if ((c.beatInBar == 1 || c.beatInBar == 3) && !c.chordIsNew) {
-        activityScore *= (0.3 + 0.5 * c.energy);
-    }
-    
-    // Random variation
-    int variation = (hash % 3) - 1; // -1, 0, +1
-    
-    int activity = qBound(0, int(activityScore) + variation, 4);
-    
-    // Final gate: low density = cap at 2
-    if (c.weights.density < 0.35) {
-        activity = qMin(activity, 2);
-    }
-    
-    return activity;
+    // Non-chord-change, non-special context: still play!
+    return (hash % 100) < 50 ? 1 : 2;
 }
 
 // Select next melodic target for RH top voice (stepwise preferred)
@@ -4301,44 +4887,21 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     }
     
     // ==========================================================================
-    // RIGHT HAND: Melodic dyads with voice-leading
-    // More active, creates an independent melodic line in the upper register
+    // RIGHT HAND: PHRASE-PATTERN-BASED COMPING (THE CORE INNOVATION!)
+    // ==========================================================================
+    // 
+    // Instead of deciding beat-by-beat "how many notes to play", we use 
+    // PHRASE-LEVEL PATTERNS that define WHERE to play across 2-4 bars.
+    // 
+    // This is how real jazz pianists think:
+    //   "I'll catch beat 1, lay out for a bar, hit the 'and of 3' 
+    //    in bar 2, then land on beat 1 of bar 3."
+    //
+    // The default is REST. Only play when the pattern says so.
+    // This creates musical SPACE - the hallmark of great ballad playing.
     // ==========================================================================
     
-    int rhActivity = rhActivityLevel(adjusted, rhHash);
-    
-    // ================================================================
-    // CRITICAL: When user is actively playing, HARD CAP RH activity
-    // Piano must never compete with the soloist - only support
-    // ================================================================
     const bool userActive = adjusted.userBusy || adjusted.userDensityHigh || adjusted.userIntensityPeak;
-    
-    if (userActive) {
-        // HARD CAP: Maximum 1 hit, and only sparse single notes
-        rhActivity = qMin(rhActivity, 1);
-    } else {
-        // ================================================================
-        // CALL-AND-RESPONSE: Boost activity when filling user's silence
-        // Creates tasteful fills after user phrases
-        // ================================================================
-        if (responding) {
-            rhActivity = qMin(rhActivity + responseBoost, 4);
-        }
-    }
-    
-    // ================================================================
-    // TEXTURE MODE: Adjust activity and voicing preferences
-    // Different modes for comp, fill, solo, sparse, lush
-    // ================================================================
-    const TextureMode textureMode = determineTextureMode(adjusted);
-    bool texturePreferDyads = !userActive;  // Single notes when user is active
-    bool texturePreferTriads = false;
-    int dummyLhActivity = 1;  // LH activity is handled separately
-    
-    // Skip texture mode adjustments when user is active
-    if (!userActive) {
-        applyTextureMode(textureMode, dummyLhActivity, rhActivity, texturePreferDyads, texturePreferTriads);
-    }
     
     // Reset RH motion counter on chord change
     if (chordChanged) {
@@ -4346,861 +4909,329 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         m_state.lastChordForRh = c.chord;
     }
     
-    if (rhActivity > 0) {
-        // Generate RH hits based on activity level
-        // EACH hit moves melodically - no repetition!
+    // ========================================================================
+    // PHRASE PATTERN MANAGEMENT
+    // At phrase start (bar 0, beat 0), select a new pattern
+    // Otherwise, continue using the current pattern
+    // ========================================================================
+    
+    // Note: newPhrase already defined above
+    
+    if (newPhrase || m_state.phrasePatternIndex < 0) {
+        // Select a new phrase pattern for this phrase
+        m_state.phrasePatternIndex = selectPhrasePattern(adjusted, rhHash);
+        m_state.phrasePatternBar = 0;
+        m_state.phrasePatternBeat = 0;
+        m_state.phrasePatternHitIndex = 0;
         
-        QVector<std::tuple<int, int, bool>> rhTimings; // sub, velDelta, preferDyad
+        // Alternate high/low register for variety
+        m_state.lastPhraseWasHigh = !m_state.lastPhraseWasHigh;
+    }
+    
+    // Get current pattern
+    const auto patterns = getAvailablePhrasePatterns(adjusted);
+    const bool hasPattern = m_state.phrasePatternIndex >= 0 && 
+                            m_state.phrasePatternIndex < patterns.size();
+    
+    // ========================================================================
+    // PHRASE POSITION CHECK: Should we play at this position?
+    // This is the KEY INNOVATION: default is REST, only play when pattern says so
+    // ========================================================================
+    
+    bool shouldPlayRh = false;
+    const PhraseCompHit* currentHit = nullptr;
+    
+    if (hasPattern) {
+        const auto& pattern = patterns[m_state.phrasePatternIndex];
         
-        // ================================================================
-        // RHYTHMIC FEEL: Choose triplet, swing, hemiola, etc.
-        // Adds rhythmic sophistication beyond straight 16ths
-        // ================================================================
-        const RhythmicFeel rhythmFeel = chooseRhythmicFeel(adjusted, rhHash);
+        // Calculate our position within the pattern
+        const int barInPattern = adjusted.barInPhrase % pattern.bars;
         
-        // ================================================================
-        // MUSICAL INTENT: RH patterns based on phrase position and context
-        // NOT random hash - purposeful rhythmic choices
-        // ================================================================
-        const bool phraseStart = (adjusted.barInPhrase == 0);
-        const bool phraseMid = (adjusted.barInPhrase >= 1 && adjusted.barInPhrase < adjusted.phraseBars - 1);
-        const bool phraseEnd = adjusted.phraseEndBar;
-        const bool isCadence = (adjusted.cadence01 >= 0.4);
-        const bool isDownbeat = (adjusted.beatInBar == 0);
-        const bool isBeat3 = (adjusted.beatInBar == 2);
-        const bool isWeakBeat = (adjusted.beatInBar == 1 || adjusted.beatInBar == 3);
-        const bool preferSparse = (c.energy < 0.4) || (c.weights.density < 0.4);
-        const bool preferRich = (c.energy >= 0.7) || (c.weights.density >= 0.7);
+        // Check if this position has a hit
+        currentHit = getPhraseHitAt(pattern, barInPattern, adjusted.beatInBar);
+        shouldPlayRh = (currentHit != nullptr);
+    }
+    
+    // ========================================================================
+    // OVERRIDE: When user is active, be MUCH more sparse
+    // Only play on chord changes, and only dyads
+    // ========================================================================
+    if (userActive) {
+        // Override pattern - only play on chord changes, and rarely
+        shouldPlayRh = adjusted.chordIsNew && ((rhHash % 100) < 25);
+    }
+    
+    // ========================================================================
+    // GENERATE RH NOTES ONLY IF PATTERN SAYS TO PLAY
+    // ========================================================================
+    
+    if (shouldPlayRh) {
+        // Get hit parameters (or defaults if no pattern)
+        const int hitVoicingType = currentHit ? currentHit->voicingType : 0;
+        const int hitVelDelta = currentHit ? currentHit->velocityDelta : 0;
+        const int hitTimingMs = currentHit ? currentHit->timingMs : 0;
+        const int hitSubdivision = currentHit ? currentHit->subdivision : 0;
+        const bool hitIsAccent = currentHit ? currentHit->isAccent : false;
+        const QString hitIntent = currentHit ? currentHit->intentTag : "statement";
         
-        // ================================================================
-        // WHEN USER IS ACTIVE: Extremely simple patterns only
-        // Just simple supporting harmony, no complex rhythms
-        // ================================================================
-        bool useSpecialPattern = false;
+        // Voicing type from pattern (0=Drop2, 1=Triad, 2=Dyad, 3=Single)
+        enum class RhVoicingType { Drop2, Triad, Dyad, Single };
+        RhVoicingType voicingType = RhVoicingType::Drop2;
         
         if (userActive) {
-            // User is playing - only simple single dyad/note on beat
-            if (rhActivity > 0) {
-                rhTimings.push_back({0, -5, false}); // Single soft note on beat
+            voicingType = RhVoicingType::Dyad;  // Simple when user is playing
+        } else {
+            switch (hitVoicingType) {
+                case 0: voicingType = RhVoicingType::Drop2; break;
+                case 1: voicingType = RhVoicingType::Triad; break;
+                case 2: voicingType = RhVoicingType::Dyad; break;
+                case 3: voicingType = RhVoicingType::Single; break;
             }
-            useSpecialPattern = true;
-        } else if (rhythmFeel == RhythmicFeel::Triplet && rhActivity >= 2) {
-            // Use triplet pattern
-            rhTimings = generateTripletPattern(adjusted, rhActivity);
-            useSpecialPattern = true;
-        } else if (rhythmFeel == RhythmicFeel::Hemiola && isDownbeat && rhActivity >= 2) {
-            // Hemiola only on downbeats with enough activity
-            rhTimings = generateHemiolaPattern(adjusted);
-            useSpecialPattern = true;
         }
-        
-        // Favor dyads in jazz context (richer harmony)
-        // Singles for melodic lines, dyads for color
-        
-        if (!useSpecialPattern) switch (rhActivity) {
-            case 1:
-                // ============================================================
-                // SINGLE HIT: Placement matters for phrasing
-                // ============================================================
-                if (phraseStart && isDownbeat) {
-                    // Phrase opening: clear dyad on the beat
-                    rhTimings.push_back({0, 0, true});
-                } else if (phraseEnd && isCadence) {
-                    // Cadence resolution: dyad on beat
-                    rhTimings.push_back({0, 0, true});
-                } else if (isBeat3 && !preferSparse) {
-                    // Beat 3: secondary emphasis, slight delay for groove
-                    rhTimings.push_back({1, -3, !preferSparse}); // Slightly off the beat
-                } else if (isWeakBeat) {
-                    // Weak beats: syncopated fill, single note for lightness
-                    rhTimings.push_back({2, -5, false});
-                } else if (preferSparse) {
-                    // Sparse: single note on the beat
-                    rhTimings.push_back({0, 0, false});
-                } else {
-                    // Default: dyad on the beat
-                    rhTimings.push_back({0, 0, true});
-                }
-                break;
-                
-            case 2:
-                // ============================================================
-                // TWO HITS: Create forward motion, avoid static patterns
-                // ============================================================
-                if (phraseStart && isDownbeat) {
-                    // Phrase opening: establish, then move forward
-                    rhTimings.push_back({0, 0, true});  // Statement
-                    rhTimings.push_back({2, -8, false}); // Motion
-                } else if (phraseEnd && isCadence) {
-                    // Cadence: resolve clearly
-                    rhTimings.push_back({0, 0, true});
-                    if (c.energy >= 0.5) {
-                        rhTimings.push_back({3, -6, true}); // Pickup to next bar
-                    }
-                } else if (isBeat3) {
-                    // Beat 3: syncopated, create anticipation
-                    rhTimings.push_back({2, -2, true}); // And of 3
-                } else if (isWeakBeat && !preferSparse) {
-                    // Weak beat: offbeat interest
-                    rhTimings.push_back({1, -3, false});
-                    rhTimings.push_back({3, -8, true});
-                } else if (preferRich) {
-                    // Rich texture: two dyads
-                    rhTimings.push_back({0, 0, true});
-                    rhTimings.push_back({2, -6, true});
-                } else {
-                    // Standard: beat + and
-                    rhTimings.push_back({0, 0, true});
-                    rhTimings.push_back({2, -10, false});
-                }
-                break;
-                
-            case 3:
-                // ============================================================
-                // THREE HITS: Active comping, melodic development
-                // ============================================================
-                if (phraseStart) {
-                    // Phrase opening: establish and develop
-                    rhTimings.push_back({0, 0, true});   // Statement
-                    rhTimings.push_back({2, -6, false}); // Development
-                    rhTimings.push_back({3, -10, false}); // Motion
-                } else if (phraseEnd || isCadence) {
-                    // Cadence: build and resolve
-                    rhTimings.push_back({0, 0, true});
-                    rhTimings.push_back({2, -4, true});
-                    rhTimings.push_back({3, -8, false});
-                } else if (phraseMid && preferRich) {
-                    // Mid-phrase climax: lush texture
-                    rhTimings.push_back({0, 0, true});
-                    rhTimings.push_back({1, -4, true});
-                    rhTimings.push_back({3, -8, true});
-                } else {
-                    // Standard melodic line
-                    rhTimings.push_back({0, 0, true});
-                    rhTimings.push_back({2, -5, false});
-                    rhTimings.push_back({3, -10, false});
-                }
-                break;
-                
-            case 4:
-                // ============================================================
-                // FOUR HITS: Climax/high energy only
-                // ============================================================
-                if (phraseEnd && isCadence) {
-                    // Climactic cadence
-                    rhTimings.push_back({0, 0, true});
-                    rhTimings.push_back({1, -4, true});
-                    rhTimings.push_back({2, -3, true});
-                    rhTimings.push_back({3, -8, false});
-                } else if (phraseStart && preferRich) {
-                    // Bold phrase opening
-                    rhTimings.push_back({0, 0, true});
-                    rhTimings.push_back({1, -6, false});
-                    rhTimings.push_back({2, -4, true});
-                    rhTimings.push_back({3, -10, false});
-                } else {
-                    // Standard 4-hit: swing feel
-                    rhTimings.push_back({0, 0, true});
-                    rhTimings.push_back({2, -3, true});
-                    rhTimings.push_back({3, -8, false});
-                }
-                break;
-                
-            default:
-                break;
-        }
-        
-        // Slight delay for RH relative to LH (rubato feel)
-        // REDUCED base offset to prevent sloppiness when stacked with rhythmic feel
-        int rhTimingOffset = int(computeTimingOffsetMs(adjusted, rhHash) * 0.5) + 3;
-        
-        // Store rhythmic feel for per-note offset application
-        const bool applyFeelPerNote = (rhythmFeel == RhythmicFeel::Swing || 
-                                        rhythmFeel == RhythmicFeel::Triplet);
-
-        // For displaced feel, apply a global offset
-        if (rhythmFeel == RhythmicFeel::Displaced) {
-            rhTimingOffset += applyRhythmicFeel(RhythmicFeel::Displaced, 0, adjusted.beatInBar, adjusted.bpm);
-        }
-        
-        // SAFETY CAP: Total base offset should not exceed 45ms to avoid sloppiness
-        rhTimingOffset = qBound(-45, rhTimingOffset, 45);
         
         // ================================================================
-        // UPPER STRUCTURE TRIAD DECISION
-        // Bill Evans signature: sometimes play a simple triad that creates
-        // sophisticated extensions. Use more at higher creativity/tension.
-        // NEVER when user is active - keep RH simple for accompaniment
+        // PHRASE-PATTERN-DRIVEN VOICING GENERATION
+        // Only ONE voicing per phrase hit - no beat-level loops!
         // ================================================================
-        const double tensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
-        const double creativityLevel = c.weights.creativity;
         
-        // Probability of using UST instead of regular melodic voicing
-        // UST can introduce complex colors - use VERY sparingly to avoid dissonance
-        // DISABLE when user is active or on dominant chords
-        double ustProb = 0.0;
+        // Get phrase context
+        const int curArcPhase = computePhraseArcPhase(adjusted);
+        const bool isCadence = (adjusted.cadence01 >= 0.4);
         
-        const bool isDominant = (adjusted.chord.quality == music::ChordQuality::Dominant);
-        const bool isAugmented = (adjusted.chord.quality == music::ChordQuality::Augmented);
-        const bool isDiminished = (adjusted.chord.quality == music::ChordQuality::Diminished);
-        const bool isProblematic = userActive || isDominant || isAugmented || isDiminished;
-        
-        // Only use UST on "safe" chords (major/minor 7ths) and at high creativity
-        // And NEVER when user is playing
-        if (!isProblematic && creativityLevel > 0.6 && tensionLevel > 0.4) {
-            if (chordChanged) {
-                ustProb = 0.08 + 0.12 * (creativityLevel - 0.6);
-            }
+        // Contextual overrides to voicing type
+        if (adjusted.phraseEndBar && isCadence) {
+            voicingType = RhVoicingType::Drop2;  // Full voicing for resolution
+        }
+        if (curArcPhase == 2 && !isCadence) {
+            voicingType = RhVoicingType::Dyad;   // Breathing, lighter
+        }
+        if (curArcPhase == 1) {
+            voicingType = RhVoicingType::Drop2;  // Full at peak
         }
         
-        // Get available USTs
-        const auto ustCandidates = getUpperStructureTriads(adjusted.chord);
-        const bool useUst = !ustCandidates.isEmpty() && ((rhHash % 100) < int(ustProb * 100));
+        // ================================================================
+        // PHRASE-LEVEL RUBATO: Use the hit's timing offset
+        // This is REAL rubato - planned at phrase level, not random!
+        // ================================================================
+        int rhTimingOffset = hitTimingMs;
         
-        // If using UST, select one based on tension level
-        RhMelodic ustVoicing;
-        if (useUst) {
-            // Select UST: lower tension = safer (earlier in list), higher = more tense
-            int ustIndex = 0;
-            if (tensionLevel > 0.6 && ustCandidates.size() > 1) {
-                // Allow more tense options
-                ustIndex = qMin(int(tensionLevel * ustCandidates.size()), ustCandidates.size() - 1);
-            } else if (tensionLevel > 0.4 && ustCandidates.size() > 1) {
-                ustIndex = 1; // Second safest
-            }
-            
-            ustVoicing = buildUstVoicing(adjusted, ustCandidates[ustIndex]);
-        }
+        // Add subtle broken time feel
+        const BrokenTimeFeel baseBrokenFeel = calculateBrokenTimeFeel(
+            adjusted.beatInBar,
+            hitSubdivision,
+            curArcPhase,
+            c.energy,
+            adjusted.bpm,
+            chordChanged,
+            (curArcPhase == 1),      // isPhrasePeak
+            adjusted.phraseEndBar    // isPhraseEnd
+        );
         
-        // Track melodic line through this beat - each hit advances the melody
+        rhTimingOffset += baseBrokenFeel.timingOffsetMs;
+        
+        // Cap but allow real expressive timing (not micro-offsets)
+        const int maxOffset = (adjusted.bpm < 70) ? 60 : 45;
+        rhTimingOffset = qBound(-maxOffset, rhTimingOffset, maxOffset);
+        
+        // ================================================================
+        // MELODIC TARGET SELECTION: Use singing, voice-led approach
+        // ================================================================
+        
         int currentTopMidi = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 74;
         int currentDirection = m_state.rhMelodicDirection;
-        int motionCount = 0;
         
-        // Motivic memory: occasionally return to a "home" note for coherence
-        const int motifHomeMidi = (m_state.rhMotionsThisChord == 0) ? currentTopMidi : 
-                                   ((currentTopMidi + 74) / 2); // Tend toward middle register
+        // Use phrase contour for melodic direction
+        if (hasPattern) {
+            const auto& pattern = patterns[m_state.phrasePatternIndex];
+            const auto contour = planPhraseContour(adjusted, pattern);
+            
+            // If we have a contour, aim for the appropriate target
+            if (m_state.phrasePatternHitIndex < contour.size()) {
+                m_state.phraseMelodicTargetMidi = contour[m_state.phrasePatternHitIndex];
+            }
+        }
         
-        for (int hitIndex = 0; hitIndex < rhTimings.size(); ++hitIndex) {
-            const auto& timing = rhTimings[hitIndex];
-            const int sub = std::get<0>(timing);
-            const int velDelta = std::get<1>(timing);
-            const bool preferDyad = std::get<2>(timing);
-            
-            // ================================================================
-            // UPPER STRUCTURE TRIAD: Use on FIRST hit of beat if selected
-            // This creates the Bill Evans signature sound
-            // ================================================================
-            if (useUst && hitIndex == 0 && !ustVoicing.midiNotes.isEmpty()) {
-                // Play the UST triad as the first hit
-                virtuoso::groove::GridPos rhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-                    adjusted.playbackBarIndex, adjusted.beatInBar, sub, 4, ts);
-                rhPos = applyTimingOffset(rhPos, rhTimingOffset, adjusted.bpm, ts);
-                
-                int rhVel = int(baseVel * mappings.velocityMod + velDelta);
-                // Cap RH velocity when user is active - stay out of the way!
-                int maxRhVel = (adjusted.userBusy || adjusted.userDensityHigh) ? 55 : 80;
-                rhVel = qBound(35, rhVel, maxRhVel);
-                
-                // Longer duration for UST triads (they ring beautifully)
-                const virtuoso::groove::Rational rhDurWhole(qint64(0.85 * mappings.durationMod * 1000), 4000);
-                
-                for (int midi : ustVoicing.midiNotes) {
-                    virtuoso::engine::AgentIntentNote note;
-                    note.agent = "Piano";
-                    note.channel = midiChannel;
-                    note.note = midi;
-                    note.baseVelocity = rhVel;
-                    note.startPos = rhPos;
-                    note.durationWhole = rhDurWhole;
-                    note.structural = (hitIndex == 0 && adjusted.chordIsNew);
-                    note.chord_context = adjusted.chordText;
-                    note.voicing_type = ustVoicing.ontologyKey;
-                    note.logic_tag = "RH_UST";
-                    
-                    plan.notes.push_back(note);
-                }
-                
-                // Update state for melodic continuity
-                currentTopMidi = ustVoicing.topNoteMidi;
-                currentDirection = ustVoicing.melodicDirection;
-                motionCount++;
-                m_state.rhMotionsThisChord++;
-                m_state.lastRhTopMidi = ustVoicing.topNoteMidi;
-                m_state.rhMelodicDirection = ustVoicing.melodicDirection;
-                
-                continue; // Skip regular voicing for this hit
+        // Find melody note using singing approach
+        const SingingMelodyTarget melodyTarget = findSingingMelodyTarget(
+            currentTopMidi,
+            currentDirection,
+            adjusted.chord,
+            adjusted.rhLo, adjusted.rhHi,
+            curArcPhase,
+            c.energy,
+            (curArcPhase == 1),       // isPhrasePeak
+            adjusted.phraseEndBar     // isPhraseEnd
+        );
+        
+        int bestTarget = melodyTarget.midiNote;
+        
+        // Helper: Check if RH note would clash with LH voicing
+        auto wouldClashWithLh = [&](int rhMidi) -> bool {
+            int rhPc = normalizePc(rhMidi);
+            for (int lhNote : m_state.lastLhMidi) {
+                int lhPc = normalizePc(lhNote);
+                int pcInterval = qAbs(rhPc - lhPc);
+                if (pcInterval > 6) pcInterval = 12 - pcInterval;
+                if (pcInterval == 1 && qAbs(rhMidi - lhNote) <= 24) return true;
+                int midiDist = qAbs(rhMidi - lhNote);
+                if (midiDist > 0 && midiDist <= 2) return true;
             }
-            
-            // ================================================================
-            // MUSICAL DECISION: Move, Hold, or Return?
-            // Great pianists don't always move - they make choices
-            // ================================================================
-            
-            enum class MelodicChoice { Move, Hold, ReturnHome };
-            MelodicChoice choice = MelodicChoice::Move;
-            
-            // Probability of hold (staying on same note) - more common at low energy
-            const double holdProb = 0.10 + 0.20 * (1.0 - c.energy) + 0.15 * (1.0 - c.weights.variability);
-            // Probability of return (going back to motif home)
-            const double returnProb = (m_state.rhMotionsThisChord >= 3) ? 0.25 : 0.08;
-            
-            const int choiceRoll = (rhHash + hitIndex * 17) % 100;
-            if (choiceRoll < int(holdProb * 100) && hitIndex > 0) {
-                choice = MelodicChoice::Hold;
-            } else if (choiceRoll < int((holdProb + returnProb) * 100) && m_state.rhMotionsThisChord >= 2) {
-                choice = MelodicChoice::ReturnHome;
-            }
-            
-            // ================================================================
-            // CONSONANCE-FIRST NOTE SELECTION
-            // Prioritize chord tones that define the harmony beautifully
-            // Extensions only when energy/tension warrant it
-            // ================================================================
-            
-            // Helper: Check if RH note would clash with LH voicing
-            // A clash is when:
-            // 1. PITCH CLASSES are a minor 2nd apart (1 semitone)
-            //    This catches clashes like E (in C7) vs F (avoid note)
-            // 2. OR actual MIDI notes are very close (within 3 semitones)
-            //    This catches muddy voicings where notes are too close
-            auto wouldClashWithLh = [&](int rhMidi) -> bool {
-                int rhPc = normalizePc(rhMidi);
-                for (int lhNote : m_state.lastLhMidi) {
-                    int lhPc = normalizePc(lhNote);
-                    
-                    // Check 1: Pitch class minor 2nd (will clash regardless of octave)
-                    int pcInterval = qAbs(rhPc - lhPc);
-                    if (pcInterval > 6) pcInterval = 12 - pcInterval; // Normalize
-                    if (pcInterval == 1) {
-                        // Minor 2nd pitch class clash - always bad if within 2 octaves
-                        if (qAbs(rhMidi - lhNote) <= 24) {
-                            return true;
-                        }
-                    }
-                    
-                    // Check 2: Too close in absolute MIDI (muddy)
-                    int midiDist = qAbs(rhMidi - lhNote);
-                    if (midiDist > 0 && midiDist <= 2) {
-                        // Very close notes (within 2 semitones) = muddy
-                        return true;
-                    }
-                }
-                return false;
-            };
-            
-            QVector<int> melodicPcs;
-            
-            // Core chord tones - always safe and beautiful
-            int third = pcForDegree(adjusted.chord, 3);
-            int fifth = pcForDegree(adjusted.chord, 5);
-            int seventh = pcForDegree(adjusted.chord, 7);
-            int root = adjusted.chord.rootPc;
-            
-            // Extensions - use carefully based on chord quality and energy
-            int ninth = pcForDegree(adjusted.chord, 9);
-            int thirteenth = pcForDegree(adjusted.chord, 13);
-            
-            // Determine how "safe" we should be based on energy and tension
-            const double hitTensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
-            const bool allowExtensions = hitTensionLevel > 0.3;
-            const bool allowColorTones = hitTensionLevel > 0.5;
-            
-            // Is this a dominant chord? Extensions are more natural on dominants
-            const bool hitIsDominant = (adjusted.chord.quality == music::ChordQuality::Dominant);
-            const bool isMajor = (adjusted.chord.quality == music::ChordQuality::Major);
-            const bool isMinor = (adjusted.chord.quality == music::ChordQuality::Minor);
-            
-            // PRIORITY 1: Guide tones (3 and 7) - these DEFINE the chord
-            // They are the most consonant and characteristic
-            if (third >= 0) melodicPcs.push_back(third);
-            if (seventh >= 0) melodicPcs.push_back(seventh);
-            
-            // PRIORITY 2: Fifth - safe, consonant, but less characteristic
-            if (fifth >= 0) melodicPcs.push_back(fifth);
-            
-            // PRIORITY 3: Extensions - pcForDegree now handles restrictions
-            // It returns -1 for unavailable/inappropriate extensions
-            if (allowExtensions) {
-                // 9th - pcForDegree only returns it when appropriate for chord type
-                if (ninth >= 0) {
-                    melodicPcs.push_back(ninth);
-                }
-                
-                // 13th - pcForDegree only returns it when appropriate
-                if (thirteenth >= 0 && allowColorTones) {
-                    melodicPcs.push_back(thirteenth);
-                }
-            }
-            
-            // Root is OK for passing tones UNLESS there's a b9 (minor 2nd clash!)
-            // Check if the 9th is a b9 (half step above root)
-            bool hasFlat9 = false;
-            if (ninth >= 0) {
-                int expectedB9 = normalizePc(root + 1);
-                hasFlat9 = (ninth == expectedB9);
-            }
-            if (root >= 0 && motionCount > 0 && !hasFlat9) {
-                melodicPcs.push_back(root);
-            }
-            
-            if (melodicPcs.isEmpty()) continue;
-            
-            int bestTarget = currentTopMidi;
-            
-            if (choice == MelodicChoice::Hold) {
-                // Stay on current note (creates sustain effect)
-                bestTarget = currentTopMidi;
-            } else if (choice == MelodicChoice::ReturnHome) {
-                // Return toward motif home (creates coherence)
-                bestTarget = motifHomeMidi;
-                // Snap to nearest chord tone (avoiding LH clashes)
-                int bestDist = 999;
-                for (int pc : melodicPcs) {
-                    for (int oct = 5; oct <= 7; ++oct) {
-                        int midi = pc + 12 * oct;
-                        if (midi < adjusted.rhLo || midi > adjusted.rhHi) continue;
-                        if (wouldClashWithLh(midi)) continue; // Skip clashing notes
-                        int dist = qAbs(midi - motifHomeMidi);
-                        if (dist < bestDist) {
-                            bestDist = dist;
-                            bestTarget = midi;
-                        }
-                    }
-                }
-            } else {
-                // Move: find next scale tone in direction
-                // Determine direction: tend to continue, reverse near boundaries
-                if (currentTopMidi >= 82) currentDirection = -1;
-                else if (currentTopMidi <= 68) currentDirection = 1;
-                else if (motionCount >= 3 && ((rhHash + hitIndex) % 4) == 0) currentDirection = -currentDirection;
-                
-                // ================================================================
-                // QUESTION-ANSWER PHRASING: Shape melodic direction
-                // Questions rise/open, Answers resolve/mirror
-                // SKIP when user is active - don't add melodic complexity
-                // ================================================================
-                if (!userActive && shouldUseQuestionContour(adjusted)) {
-                    const int qaTarget = getQuestionAnswerTargetMidi(adjusted);
-                    if (qaTarget > 0) {
-                        // Blend Q/A target with natural melodic motion
-                        // If Q/A target is higher, bias upward; lower, bias downward
-                        if (qaTarget > currentTopMidi + 2) {
-                            currentDirection = 1;  // Tend upward toward Q/A target
-                        } else if (qaTarget < currentTopMidi - 2) {
-                            currentDirection = -1; // Tend downward toward resolution
-                        }
-                    }
-                }
-                
-                int bestScore = 999;
-            
-                for (int pc : melodicPcs) {
-                    for (int oct = 5; oct <= 7; ++oct) {
-                        int midi = pc + 12 * oct;
-                        if (midi < adjusted.rhLo || midi > adjusted.rhHi) continue;
-                        
-                        int motion = midi - currentTopMidi;
-                        int absMotion = qAbs(motion);
-                        
-                        // Skip if no motion (we want MOVEMENT!)
-                        if (absMotion == 0) continue;
-                        
-                        // DISSONANCE CHECK: Skip if would clash with LH
-                        if (wouldClashWithLh(midi)) continue;
-                        
-                        // Prefer stepwise motion (1-3 semitones)
-                        int score = 0;
-                        if (absMotion <= 2) score = 0;
-                        else if (absMotion <= 4) score = 2;
-                        else if (absMotion <= 7) score = 5;
-                        else score = 10;
-                        
-                        // Bonus for matching direction
-                        bool rightDirection = (currentDirection == 0) ||
-                                              (currentDirection > 0 && motion > 0) ||
-                                              (currentDirection < 0 && motion < 0);
-                        if (!rightDirection) score += 3;
-                        
-                        // Slight preference for color tones (9, 13)
-                        if (pc == ninth || pc == thirteenth) score -= 1;
-                        
-                        // Sweet spot bonus
-                        if (midi >= 72 && midi <= 80) score -= 1;
-                        
-                        if (score < bestScore) {
-                            bestScore = score;
-                            bestTarget = midi;
-                        }
-                    }
-                }
-            } // end of Move choice
-            
-            // ================================================================
-            // MELODIC FRAGMENT DECISION
-            // Fragments can introduce non-chord tones - use VERY sparingly
-            // Only at high creativity AND only on non-dominant chords
-            // NEVER when user is playing - would be distracting!
-            // ================================================================
-            double fragmentProb = 0.0;
-            
-            // DISABLE fragments when user is active or on problematic chords
-            const bool avoidFragments = userActive || hitIsDominant || 
-                (adjusted.chord.quality == music::ChordQuality::Augmented) ||
-                (adjusted.chord.quality == music::ChordQuality::Diminished);
-            
-            if (!avoidFragments && c.weights.creativity > 0.5) {
-                // Very low probability - only at high creativity
-                fragmentProb = 0.05 + 0.10 * (c.weights.creativity - 0.5);
-            }
-            
-            const bool useFragment = (sub == 0 || sub == 2) && // Only on main subdivisions
-                                     ((rhHash + hitIndex * 23) % 100) < int(fragmentProb * 100);
-            
-            if (useFragment) {
-                // Get available fragments for this context
-                const auto fragments = getMelodicFragments(adjusted, normalizePc(bestTarget));
-                
-                if (!fragments.isEmpty()) {
-                    // Select fragment based on tension level
-                    int fragIdx = 0;
-                    if (hitTensionLevel > 0.5 && fragments.size() > 2) {
-                        fragIdx = qMin(int(hitTensionLevel * fragments.size() * 0.6), fragments.size() - 1);
-                    } else if (hitTensionLevel > 0.3 && fragments.size() > 1) {
-                        fragIdx = 1;
-                    }
-                    
-                    // Apply the fragment
-                    const auto& frag = fragments[fragIdx];
-                    const auto fragNotes = applyMelodicFragment(adjusted, frag, bestTarget, sub);
-                    
-                    if (!fragNotes.isEmpty()) {
-                        // Add all fragment notes
-                        for (const auto& fn : fragNotes) {
-                            virtuoso::groove::GridPos fnPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-                                adjusted.playbackBarIndex, adjusted.beatInBar, fn.subBeatOffset, 4, ts);
-                            fnPos = applyTimingOffset(fnPos, rhTimingOffset, adjusted.bpm, ts);
-                            
-                            int fnVel = int(baseVel * mappings.velocityMod + velDelta + fn.velocityDelta);
-                            // Fragment notes should be even softer when user is playing
-                            int maxFnVel = (adjusted.userBusy || adjusted.userDensityHigh) ? 50 : 75;
-                            fnVel = qBound(35, fnVel, maxFnVel);
-                            
-                            double fnDur = 0.35 * fn.durationMult * mappings.durationMod;
-                            const virtuoso::groove::Rational fnDurWhole(qint64(fnDur * 1000), 4000);
-                            
-                            virtuoso::engine::AgentIntentNote note;
-                            note.agent = "Piano";
-                            note.channel = midiChannel;
-                            note.note = fn.midiNote;
-                            note.baseVelocity = fnVel;
-                            note.startPos = fnPos;
-                            note.durationWhole = fnDurWhole;
-                            note.structural = false;
-                            note.chord_context = adjusted.chordText;
-                            note.voicing_type = QString("RH_Fragment_%1").arg(frag.name);
-                            note.logic_tag = "RH_Frag";
-                            
-                            plan.notes.push_back(note);
-                        }
-                        
-                        // Update state - last note of fragment becomes the new reference
-                        currentTopMidi = fragNotes.last().midiNote;
-                        if (fragNotes.size() > 1) {
-                            int prevNote = fragNotes[fragNotes.size() - 2].midiNote;
-                            currentDirection = (currentTopMidi > prevNote) ? 1 : 
-                                              ((currentTopMidi < prevNote) ? -1 : 0);
-                        }
-                        motionCount++;
-                        m_state.rhMotionsThisChord++;
-                        
-                        continue; // Skip regular voicing for this hit
-                    }
-                }
-            }
-            
-            // Create voicing for this target
-            QVector<int> rhMidiNotes;
-            int topPc = normalizePc(bestTarget);
-            
+            return false;
+        };
+        
+        // ================================================================
+        // CHORD TONES FOR VOICING
+        // ================================================================
+        int third = pcForDegree(adjusted.chord, 3);
+        int fifth = pcForDegree(adjusted.chord, 5);
+        int seventh = pcForDegree(adjusted.chord, 7);
+        int root = adjusted.chord.rootPc;
+        int ninth = pcForDegree(adjusted.chord, 9);
+        
+        const double hitTensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
+        const bool allowExtensions = hitTensionLevel > 0.3;
+        
+        // ================================================================
+        // BUILD SINGLE VOICING FOR THIS PHRASE HIT
+        // (No more beat-level loop - one voicing per phrase hit!)
+        // ================================================================
+        
+        QVector<int> rhMidiNotes;
+        int topPc = normalizePc(bestTarget);
+        QString voicingName = "RH_Drop2";
+        
+        // Get all available chord tones for voicing
+        QVector<int> voicingPcs;
+        if (third >= 0) voicingPcs.push_back(third);
+        if (fifth >= 0) voicingPcs.push_back(fifth);
+        if (seventh >= 0) voicingPcs.push_back(seventh);
+        if (ninth >= 0 && allowExtensions) voicingPcs.push_back(ninth);
+        
+        // ================================================================
+        // DROP-2 VOICING (Default for ballads!)
+        // ================================================================
+        if (voicingType == RhVoicingType::Drop2 && voicingPcs.size() >= 3) {
             rhMidiNotes.push_back(bestTarget);
             
-            // Determine if we should build a triad (3 notes) vs dyad (2 notes)
-            // Triads for climactic moments at high energy
-            const bool buildTriad = preferDyad && (c.energy > 0.7) && 
-                                   (c.weights.density > 0.6) && ((rhHash + hitIndex) % 4 == 0);
+            QVector<int> closePositionPcs;
+            for (int pc : voicingPcs) {
+                if (pc != topPc) closePositionPcs.push_back(pc);
+            }
             
-            // ================================================================
-            // CONSONANT DYAD/TRIAD BUILDING
-            // Prefer intervals that sound beautiful: 3rds (3-4 semitones)
-            // and 6ths (8-9 semitones). Avoid 2nds and tritones.
-            // ================================================================
-            if (preferDyad) {
-                int secondPc = -1;
-                int thirdPc = -1; // For triads
-                int bestInterval = 99;
-                
-                // Find best second voice - prioritize CONSONANT intervals
-                // Perfect intervals: 3rds (3-4), 6ths (8-9), 4ths (5), 5ths (7)
-                // Avoid: 2nds (1-2), tritones (6), 7ths (10-11)
-                for (int pc : melodicPcs) {
-                    if (pc == topPc) continue;
-                    int interval = (topPc - pc + 12) % 12;
-                    
-                    // Score intervals by consonance (lower is better)
-                    int consonanceScore = 99;
-                    if (interval == 3 || interval == 4) consonanceScore = 0;  // Minor/major 3rd - sweetest
-                    else if (interval == 8 || interval == 9) consonanceScore = 1;  // Minor/major 6th - beautiful
-                    else if (interval == 5) consonanceScore = 2;  // Perfect 4th - stable
-                    else if (interval == 7) consonanceScore = 3;  // Perfect 5th - open
-                    else if (interval == 10 || interval == 11) consonanceScore = 5; // 7ths - some tension
-                    else if (interval == 1 || interval == 2) consonanceScore = 8; // 2nds - avoid
-                    else if (interval == 6) consonanceScore = 9; // Tritone - avoid unless dominant
-                    
-                    // Allow tritone on dominant chords for color
-                    if (interval == 6 && hitIsDominant && hitTensionLevel > 0.6) {
-                        consonanceScore = 4; // OK on dominants
-                    }
-                    
-                    if (consonanceScore < bestInterval) {
-                        bestInterval = consonanceScore;
-                        secondPc = pc;
-                    }
-                }
-                
-                // Fallback to 7th or 3rd of the chord (guaranteed consonant)
-                if (secondPc < 0 || bestInterval > 5) {
-                    secondPc = (seventh >= 0 && seventh != topPc) ? seventh : third;
-                }
-                
-                // For triads, find a third voice that creates a consonant stack
-                if (buildTriad && secondPc >= 0) {
-                    int bestTriadScore = 99;
-                    for (int pc : melodicPcs) {
-                        if (pc == topPc || pc == secondPc) continue;
-                        
-                        // Check interval from second voice
-                        int interval = (secondPc - pc + 12) % 12;
-                        int consonanceScore = 99;
-                        if (interval == 3 || interval == 4) consonanceScore = 0;
-                        else if (interval == 5 || interval == 7) consonanceScore = 2;
-                        else if (interval == 8 || interval == 9) consonanceScore = 1;
-                        
-                        if (consonanceScore < bestTriadScore) {
-                            bestTriadScore = consonanceScore;
-                            thirdPc = pc;
-                        }
-                    }
-                }
-                
-                // Build the MIDI notes with proper spacing
-                if (secondPc >= 0) {
-                    // Find second note 3-9 semitones below top (sweet spot for dyads)
-                    int secondMidi = bestTarget - 3;
-                    while (normalizePc(secondMidi) != secondPc && secondMidi > bestTarget - 10) {
-                        secondMidi--;
-                    }
-                    
-                    // Verify the interval is consonant before adding
-                    int actualInterval = bestTarget - secondMidi;
-                    bool intervalOk = (actualInterval >= 3 && actualInterval <= 9) || 
-                                      (actualInterval == 10 && hitTensionLevel > 0.5);
-                    
-                    // Also check for LH clash
-                    bool noLhClash = !wouldClashWithLh(secondMidi);
-                    
-                    if (intervalOk && noLhClash && secondMidi >= adjusted.rhLo && secondMidi < bestTarget) {
-                        rhMidiNotes.insert(rhMidiNotes.begin(), secondMidi);
-                        
-                        // Add third voice for triads
-                        if (buildTriad && thirdPc >= 0) {
-                            int thirdMidi = secondMidi - 3;
-                            while (normalizePc(thirdMidi) != thirdPc && thirdMidi > secondMidi - 10) {
-                                thirdMidi--;
-                            }
-                            int thirdInterval = secondMidi - thirdMidi;
-                            bool thirdIntervalOk = (thirdInterval >= 3 && thirdInterval <= 9);
-                            bool thirdNoLhClash = !wouldClashWithLh(thirdMidi);
-                            
-                            if (thirdIntervalOk && thirdNoLhClash && thirdMidi >= adjusted.rhLo && thirdMidi < secondMidi) {
-                                rhMidiNotes.insert(rhMidiNotes.begin(), thirdMidi);
-                            }
-                        }
-                    }
+            std::sort(closePositionPcs.begin(), closePositionPcs.end(), [topPc](int a, int b) {
+                int distA = (topPc - a + 12) % 12;
+                int distB = (topPc - b + 12) % 12;
+                return distA < distB;
+            });
+            
+            int cursor = bestTarget;
+            QVector<int> closePositionMidi;
+            for (int i = 0; i < qMin(3, closePositionPcs.size()); ++i) {
+                int pc = closePositionPcs[i];
+                int midi = cursor - 1;
+                while (normalizePc(midi) != pc && midi > adjusted.rhLo - 12) midi--;
+                if (midi >= adjusted.rhLo - 12) {
+                    closePositionMidi.push_back(midi);
+                    cursor = midi;
                 }
             }
             
-            if (rhMidiNotes.isEmpty()) continue;
-            
-            // ================================================================
-            // FINAL SAFETY FILTER: Be VERY conservative about chord tones
-            // On dominant/altered chords, extensions can clash badly
-            // Stick to CORE chord tones (root, 3rd, 5th, 7th) for safety
-            // Only allow 9th/13th if they're EXPLICITLY in the chord symbol
-            // ================================================================
-            
-            // Determine if this is a "dangerous" chord where extensions can clash
-            const bool isProblematicChord = hitIsDominant || 
-                (adjusted.chord.quality == music::ChordQuality::Augmented) ||
-                (adjusted.chord.quality == music::ChordQuality::Diminished);
-            
-            // For problematic chords, only use core tones unless extension is explicit
-            const bool explicitNinth = (adjusted.chord.extension >= 9);
-            const bool explicitThirteenth = (adjusted.chord.extension >= 13);
-            
-            QVector<int> safeRhNotes;
-            for (int midi : rhMidiNotes) {
-                int pc = normalizePc(midi);
-                
-                // Core chord tones - ALWAYS safe
-                bool isCoreChordTone = (pc == root || pc == third || 
-                                        pc == fifth || pc == seventh);
-                
-                // Extensions - only safe if chord explicitly has them
-                bool isSafeExtension = false;
-                if (!isProblematicChord) {
-                    // Non-dominant chords: extensions are generally safer
-                    isSafeExtension = (pc == ninth || pc == thirteenth);
-                } else {
-                    // Dominant/augmented/dim chords: only explicit extensions
-                    if (pc == ninth && explicitNinth && ninth >= 0) {
-                        isSafeExtension = true;
-                    }
-                    if (pc == thirteenth && explicitThirteenth && thirteenth >= 0) {
-                        isSafeExtension = true;
-                    }
+            for (int i = 0; i < closePositionMidi.size(); ++i) {
+                int midi = closePositionMidi[i];
+                if (i == 0 && closePositionMidi.size() >= 2) midi -= 12;
+                const int drop2Floor = adjusted.lhHi - 8;
+                if (midi >= drop2Floor && !wouldClashWithLh(midi)) {
+                    rhMidiNotes.push_back(midi);
                 }
-                
-                bool noLhClash = !wouldClashWithLh(midi);
-                
-                if ((isCoreChordTone || isSafeExtension) && noLhClash) {
-                    safeRhNotes.push_back(midi);
+            }
+            voicingName = "RH_Drop2";
+        }
+        // ================================================================
+        // TRIAD VOICING
+        // ================================================================
+        else if (voicingType == RhVoicingType::Triad || voicingPcs.size() < 3) {
+            rhMidiNotes.push_back(bestTarget);
+            
+            for (int interval : {4, 3, 5}) {
+                int candidate = bestTarget - interval;
+                if (candidate >= adjusted.lhHi - 5 && !wouldClashWithLh(candidate)) {
+                    rhMidiNotes.push_back(candidate);
+                    break;
                 }
             }
             
-            // Fallback: If we filtered everything, use the 3rd or 7th (guide tones)
-            if (safeRhNotes.isEmpty() && !rhMidiNotes.isEmpty()) {
-                // Try to use the 7th (defines chord quality)
-                if (seventh >= 0) {
-                    int targetPc = seventh;
-                    for (int midi : rhMidiNotes) {
-                        if (normalizePc(midi) == targetPc && !wouldClashWithLh(midi)) {
-                            safeRhNotes.push_back(midi);
-                            break;
-                        }
-                    }
-                }
-                // If still empty, try the 3rd
-                if (safeRhNotes.isEmpty() && third >= 0) {
-                    int targetPc = third;
-                    for (int midi : rhMidiNotes) {
-                        if (normalizePc(midi) == targetPc && !wouldClashWithLh(midi)) {
-                            safeRhNotes.push_back(midi);
-                            break;
-                        }
+            for (int interval : {8, 9, 7, 10}) {
+                int candidate = bestTarget - interval;
+                if (candidate >= adjusted.lhHi - 8 && !wouldClashWithLh(candidate)) {
+                    if (rhMidiNotes.size() < 2 || candidate != rhMidiNotes.last()) {
+                        rhMidiNotes.push_back(candidate);
+                        break;
                     }
                 }
             }
+            voicingName = "RH_Triad";
+        }
+        // ================================================================
+        // DYAD VOICING
+        // ================================================================
+        else if (voicingType == RhVoicingType::Dyad) {
+            rhMidiNotes.push_back(bestTarget);
             
-            if (safeRhNotes.isEmpty()) continue;
-            rhMidiNotes = safeRhNotes;
+            for (int interval : {4, 3, 5, 8, 9, 7, 6}) {
+                int candidateMidi = bestTarget - interval;
+                if (candidateMidi >= adjusted.lhHi - 5 && !wouldClashWithLh(candidateMidi)) {
+                    rhMidiNotes.push_back(candidateMidi);
+                    break;
+                }
+            }
+            if (rhMidiNotes.size() < 2) {
+                int fallback = bestTarget - 4;
+                if (fallback >= adjusted.lhHi - 8) rhMidiNotes.push_back(fallback);
+            }
+            voicingName = "RH_Dyad";
+        }
+        // ================================================================
+        // SINGLE NOTE (only when user is playing)
+        // ================================================================
+        else {
+            rhMidiNotes.push_back(bestTarget);
+            if (!userActive) {
+                int support = bestTarget - 4;
+                if (support >= adjusted.lhHi - 5 && !wouldClashWithLh(support)) {
+                    rhMidiNotes.push_back(support);
+                }
+            }
+            voicingName = userActive ? "RH_Single" : "RH_Dyad_Min";
+        }
+        
+        std::sort(rhMidiNotes.begin(), rhMidiNotes.end());
+        
+        if (rhMidiNotes.isEmpty()) {
+            // If no notes, skip but still update state
+            m_state.phrasePatternHitIndex++;
+        } else {
+            // ================================================================
+            // CREATE NOTES FOR THIS VOICING
+            // ================================================================
             
             virtuoso::groove::GridPos rhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-                adjusted.playbackBarIndex, adjusted.beatInBar, sub, 4, ts);
+                adjusted.playbackBarIndex, adjusted.beatInBar, hitSubdivision, 4, ts);
+            rhPos = applyTimingOffset(rhPos, rhTimingOffset, adjusted.bpm, ts);
             
-            // Apply per-note rhythmic feel offset (swing, triplet timing)
-            int perNoteOffset = rhTimingOffset;
-            if (applyFeelPerNote) {
-                perNoteOffset += applyRhythmicFeel(rhythmFeel, sub, adjusted.beatInBar, adjusted.bpm);
-            }
-            // FINAL SAFETY CAP: Total offset should never exceed 60ms to avoid sloppiness
-            perNoteOffset = qBound(-60, perNoteOffset, 60);
-            rhPos = applyTimingOffset(rhPos, perNoteOffset, adjusted.bpm, ts);
+            // Velocity based on phrase hit accent and user activity
+            int rhVel = int(baseVel * mappings.velocityMod * baseBrokenFeel.velocityMult + hitVelDelta);
+            if (hitIsAccent) rhVel += 5;
+            int maxRhVel = userActive ? 50 : 75;
+            rhVel = qBound(32, rhVel, maxRhVel);
             
-            // ================================================================
-            // ORNAMENTAL GESTURES: Grace notes, turns, etc.
-            // Add tasteful embellishment ~8-12% of the time in ballads
-            // ================================================================
-            const quint32 ornHash = rhHash ^ (hitIndex * 41);
-            const bool addOrnament = shouldAddOrnament(adjusted, ornHash) && 
-                                     hitIndex == 0 && sub == 0;  // Only on first beat
+            // Duration: longer for accented hits
+            double rhDurBeats = hitIsAccent ? 0.80 : 0.60;
+            rhDurBeats *= baseBrokenFeel.durationMult * mappings.durationMod;
+            const virtuoso::groove::Rational rhDurWhole(qint64(rhDurBeats * 1000), 4000);
             
-            // SAFETY: Only add ornaments when user is NOT playing (no distraction)
-            if (addOrnament && !rhMidiNotes.isEmpty() && !adjusted.userBusy) {
-                const int targetMidi = rhMidiNotes.last();  // Top note gets ornament
-                const Ornament orn = generateOrnament(adjusted, targetMidi, ornHash);
-                
-                // SAFETY: Validate all vectors have same size to prevent crash
-                const int ornNoteCount = orn.notes.size();
-                const bool vectorsSafe = (ornNoteCount > 0) && 
-                                         (orn.velocities.size() == ornNoteCount) &&
-                                         (orn.durationsMs.size() == ornNoteCount);
-                
-                if (orn.type != OrnamentType::None && vectorsSafe) {
-                    // Calculate ornament start position (before main note)
-                    double ornStartMs = -double(orn.mainNoteDelayMs);
-                    virtuoso::groove::GridPos ornPos = rhPos;
-                    ornPos = applyTimingOffset(ornPos, int(ornStartMs) + rhTimingOffset, adjusted.bpm, ts);
-                    
-                    // Add ornament notes
-                    int ornOffset = 0;
-                    for (int i = 0; i < ornNoteCount; ++i) {
-                        virtuoso::engine::AgentIntentNote ornNote;
-                        ornNote.agent = "Piano";
-                        ornNote.channel = midiChannel;
-                        ornNote.note = orn.notes[i];
-                        ornNote.baseVelocity = orn.velocities[i];
-                        
-                        virtuoso::groove::GridPos ornNotePos = applyTimingOffset(
-                            ornPos, ornOffset, adjusted.bpm, ts);
-                        ornNote.startPos = ornNotePos;
-                        
-                        // Very short duration for ornament notes
-                        const virtuoso::groove::Rational ornDur(orn.durationsMs[i] * 10, 40000);
-                        ornNote.durationWhole = ornDur;
-                        ornNote.structural = false;
-                        ornNote.chord_context = adjusted.chordText;
-                        ornNote.voicing_type = "RH_Ornament";
-                        ornNote.logic_tag = "RH_Orn";
-                        
-                        plan.notes.push_back(ornNote);
-                        ornOffset += orn.durationsMs[i];
-                    }
-                }
-            }
-            
-            // ================================================================
-            // ARTICULATION: Determine touch for this phrase position
-            // ================================================================
-            const ArticulationType art = determineArticulation(adjusted, true, hitIndex);
-            
-            // Velocity: emphasize downbeats, softer passing tones
-            // When user is active, MUCH lower velocity to support, not compete
-            int rhVel = int(baseVel * mappings.velocityMod + velDelta);
-            if (sub == 0) rhVel += 3; // Slight emphasis on beat (reduced from 5)
-            int maxRhVel = (adjusted.userBusy || adjusted.userDensityHigh) ? 55 : 80;
-            rhVel = qBound(35, rhVel, maxRhVel);
-            
-            // Duration: shorter for faster passages, longer for sustained
-            double rhDurBeats = (sub == 0) ? 0.65 : 0.4;
-            if (rhTimings.size() >= 3) rhDurBeats *= 0.8; // Tighter for busier patterns
-            
-            // Apply articulation to duration and velocity
-            applyArticulation(art, rhDurBeats, rhVel, true);
-            
-            const virtuoso::groove::Rational rhDurWhole(qint64(rhDurBeats * mappings.durationMod * 1000), 4000);
-            
-            QString ontologyKey = (rhMidiNotes.size() >= 3) ? "RH_Melodic_Triad" : 
-                                  (preferDyad ? "RH_Melodic_Dyad" : "RH_Melodic_Single");
-            if (topPc == ninth || topPc == thirteenth) ontologyKey += "_Color";
-            
-            // ================================================================
-            // VELOCITY CONTOURING: Melody voice louder than inner voices
-            // ================================================================
+            // Add all notes of voicing
             for (int noteIdx = 0; noteIdx < rhMidiNotes.size(); ++noteIdx) {
                 int midi = rhMidiNotes[noteIdx];
-                
-                // Apply velocity contouring - top note (melody) is louder
                 int contouredVel = contourVelocity(rhVel, noteIdx, rhMidiNotes.size(), true);
                 
                 virtuoso::engine::AgentIntentNote note;
@@ -5210,28 +5241,21 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 note.baseVelocity = contouredVel;
                 note.startPos = rhPos;
                 note.durationWhole = rhDurWhole;
-                note.structural = false;
+                note.structural = adjusted.chordIsNew;
                 note.chord_context = adjusted.chordText;
-                note.voicing_type = ontologyKey;
-                note.logic_tag = "RH";
+                note.voicing_type = voicingName;
+                note.logic_tag = QString("RH_%1").arg(hitIntent);
                 
                 plan.notes.push_back(note);
             }
             
-            // ================================================================
-            // CRITICAL: Update state for NEXT hit to continue melodic motion
-            // ================================================================
-            int oldTop = currentTopMidi;
-            currentTopMidi = bestTarget;
-            if (bestTarget > oldTop) currentDirection = 1;
-            else if (bestTarget < oldTop) currentDirection = -1;
-            motionCount++;
+            // Update state
+            m_state.lastRhTopMidi = bestTarget;
+            if (bestTarget > currentTopMidi) m_state.rhMelodicDirection = 1;
+            else if (bestTarget < currentTopMidi) m_state.rhMelodicDirection = -1;
+            m_state.rhMotionsThisChord++;
+            m_state.phrasePatternHitIndex++;
         }
-        
-        // Persist final melodic state for next beat
-        m_state.lastRhTopMidi = currentTopMidi;
-        m_state.rhMelodicDirection = currentDirection;
-        m_state.rhMotionsThisChord += motionCount;
         
         // Update register tracking for variety calculation - SAFETY: bounds check
         if (currentTopMidi >= 0 && currentTopMidi <= 127) {

@@ -2394,61 +2394,70 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             const bool slightVariation = ((lhHash / 7) % 3) == 0;
             
             // ================================================================
-            // JAZZ "LAY BACK" FEEL: Play slightly LATE (not early!)
-            // This avoids clashing with the bass which hits on the beat
-            // Jazz pianists typically "lay back" behind the beat for a relaxed feel
+            // PROFESSIONAL JAZZ COMPING APPROACH:
+            // 1. Play on the chord change (usually on the beat, rarely lay back)
+            // 2. Add 1-2 tasteful additional hits per chord (not every chord)
+            // 3. Lay back is RARE (10-15%), used for special moments
+            // 4. Additional hits use same or slightly varied voicing
             // ================================================================
-            const bool layBackRoll = ((lhHash % 100) < 40 + int(15 * adjusted.weights.rhythm));
-            const bool shouldLayBack = layBackRoll && !phraseStart; // Always on beat for phrase starts
+            
+            // Lay back is RARE - only ~12% of the time, and only on specific beats
+            const bool shouldLayBack = ((lhHash % 100) < 12) && !phraseStart && isDownbeat;
             
             if (adjusted.chordIsNew) {
                 // ============================================================
-                // CHORD CHANGES: LH defines the new harmony
-                // RHYTHMIC INTENT based on musical context:
-                // - Downbeats: Strong, slightly behind beat (lay back)
-                // - Beat 2/4: Syncopated feel - play on the "and" (sub=2)
-                // - Beat 3: Secondary accent, can push or lay back
+                // CHORD CHANGE: Always play, usually on the beat
                 // ============================================================
                 
-                if (isDownbeat) {
-                    // Beat 1: Strong and clear, lay back behind bass
-                    if (phraseStart) {
-                        lhHits.push_back({0, 0, false, false}); // On the beat for phrase start
-                    } else {
-                        lhHits.push_back({0, 0, false, true}); // Lay back
-                    }
-                    // At higher energy, add a push on the "and"
-                    if (isHighEnergy && slightVariation) {
-                        lhHits.push_back({2, -8, false, false}); // sub=2 = "and of 1"
-                    }
-                } else if (isSecondaryDownbeat) {
-                    // Beat 3: Secondary accent - can be on or slightly late
-                    lhHits.push_back({0, 0, false, shouldLayBack});
-                } else if (isWeakBeat) {
-                    // Beats 2 and 4: Syncopated - play on the "and" for swing feel
-                    lhHits.push_back({2, -5, false, false}); // sub=2 = syncopated
+                // Main hit: on the beat (rarely lay back)
+                lhHits.push_back({0, 0, false, shouldLayBack});
+                
+                // ============================================================
+                // ADDITIONAL COMPING HITS (1-2 per chord, tastefully placed)
+                // These create rhythmic interest without being busy
+                // ============================================================
+                
+                // Determine how many additional hits (0, 1, or 2)
+                int extraHits = 0;
+                if (isHighEnergy) {
+                    extraHits = (lhHash % 3); // 0, 1, or 2
+                } else if (isMedEnergy) {
+                    extraHits = (lhHash % 3 == 0) ? 1 : 0; // ~33% chance of 1
+                } else {
+                    extraHits = (lhHash % 5 == 0) ? 1 : 0; // ~20% chance of 1
                 }
+                
+                // Place extra hits on musically sensible subdivisions
+                if (extraHits >= 1) {
+                    // First extra hit: "and of the beat" or beat 3
+                    if (isDownbeat) {
+                        // Add on the "and" (sub=2)
+                        lhHits.push_back({2, -6, false, false});
+                    } else {
+                        // Add on beat 3 if we're on an earlier beat
+                        lhHits.push_back({0, -5, false, false}); // Will be on next beat
+                    }
+                }
+                if (extraHits >= 2 && isHighEnergy) {
+                    // Second extra hit: "and of 2" or similar
+                    lhHits.push_back({2, -10, true, false}); // Alternate voicing
+                }
+                
             } else {
                 // ============================================================
-                // NON-CHORD-CHANGE: Comp on the sustained chord
-                // Use intentional rhythm patterns, not just hitting the beat
+                // NON-CHORD-CHANGE: Occasional supportive comp
+                // Much sparser - only on beat 3 or for pickups
                 // ============================================================
                 
-                if (isDownbeat) {
-                    // Beat 1 (no chord change): reinforce, lay back
-                    lhHits.push_back({0, 0, false, true}); // Lay back behind bass
-                } else if (isSecondaryDownbeat) {
+                if (isSecondaryDownbeat && (isMedEnergy || isHighEnergy)) {
                     // Beat 3: Good for a supportive hit
-                    if (isMedEnergy || isHighEnergy) {
-                        lhHits.push_back({0, 0, false, shouldLayBack});
-                    }
-                } else if (adjusted.beatInBar == 3) {
-                    // Beat 4: Anticipate next bar with an "and of 4" hit
-                    if (isHighEnergy || (isCadence && slightVariation)) {
-                        lhHits.push_back({2, -8, false, false}); // "and of 4" = pickup
-                    }
+                    bool useAltVoicing = (lhHash % 4 == 0); // 25% use alternate voicing
+                    lhHits.push_back({0, -3, useAltVoicing, false});
+                } else if (adjusted.beatInBar == 3 && isHighEnergy && isCadence) {
+                    // Beat 4 approaching cadence: pickup to next bar
+                    lhHits.push_back({2, -8, false, false}); // "and of 4"
                 }
-                // Beat 2: Generally rest for breathing room
+                // Beats 1 and 2 without chord change: REST (breathing room)
             }
             
             // Safety: ensure at least one hit on chord changes
@@ -2474,16 +2483,14 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 // This ensures timing feels musical regardless of tempo
                 int timingSub = hit.sub;  // Base subdivision (0=beat, 1=e, 2=and, 3=a)
                 
-                if (hit.layBack) {
-                    // LAY BACK: Play on the "e" of the beat (1/16 note late)
-                    // This creates space for the bass and gives a relaxed jazz feel
-                    // Instead of adding ms, we shift to the next subdivision
-                    timingSub = 1;  // Play on the "e" instead of the beat
+                if (hit.layBack && timingSub == 0) {
+                    // LAY BACK: Shift from beat to the "e" (1/16 note late)
+                    // This is RARE and tasteful, not sloppy
+                    timingSub = 1;
                 }
                 
-                // Apply small humanization offset (but much smaller than before)
-                int timingOffsetMs = computeTimingOffsetMs(adjusted, timingHash + hit.sub);
-                timingOffsetMs = timingOffsetMs / 3; // Reduce randomness significantly
+                // Minimal humanization - just a few ms, not enough to be noticeable
+                int timingOffsetMs = ((timingHash + hit.sub) % 11) - 5; // -5 to +5 ms only
                 
                 virtuoso::groove::GridPos lhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
                     adjusted.playbackBarIndex, adjusted.beatInBar, timingSub, 4, ts);

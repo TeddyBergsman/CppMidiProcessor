@@ -1676,25 +1676,71 @@ QVector<JazzBalladPianoPlanner::FragmentNote> JazzBalladPianoPlanner::applyMelod
     if (thirteenth >= 0) chordScalePcs.push_back(thirteenth);
     
     // Add scale tones based on chord quality (fill gaps for stepwise motion)
+    // BE CAREFUL: avoid notes that create minor 2nds with chord tones!
     const bool isDominant = (c.chord.quality == music::ChordQuality::Dominant);
     const bool isMajor = (c.chord.quality == music::ChordQuality::Major);
     const bool isMinor = (c.chord.quality == music::ChordQuality::Minor);
+    const bool isAugmented = (c.chord.quality == music::ChordQuality::Augmented);
+    
+    // Check for altered 5ths
+    bool hasSharp5 = false;
+    bool hasFlat5 = false;
+    for (const auto& alt : c.chord.alterations) {
+        if (alt.degree == 5) {
+            if (alt.delta > 0) hasSharp5 = true;
+            if (alt.delta < 0) hasFlat5 = true;
+        }
+    }
     
     if (isMajor) {
-        // Major scale: add 2 (9), 6 (13) if not already present
+        // Major/Lydian: add 2 (9), #4 (lydian), 6 (13)
         if (ninth < 0) chordScalePcs.push_back(normalizePc(root + 2));
+        // DON'T add natural 4 on major (it's the avoid note!)
+        // Only add #4 if it's a lydian chord
         if (thirteenth < 0) chordScalePcs.push_back(normalizePc(root + 9));
     } else if (isMinor) {
         // Dorian: add 2, 4, 6
         if (ninth < 0) chordScalePcs.push_back(normalizePc(root + 2));
-        chordScalePcs.push_back(normalizePc(root + 5)); // 11 (4th)
-        chordScalePcs.push_back(normalizePc(root + 9)); // 13 (6th)
+        chordScalePcs.push_back(normalizePc(root + 5)); // 11 (4th) - OK on minor!
+        chordScalePcs.push_back(normalizePc(root + 9)); // 13 (6th) - dorian
     } else if (isDominant) {
-        // Mixolydian: add 2, 4, 6
+        // Mixolydian: add 2, 6
+        // DON'T add the 4th (F over C7) - it's a minor 2nd above the 3rd (E)!
         if (ninth < 0) chordScalePcs.push_back(normalizePc(root + 2));
-        chordScalePcs.push_back(normalizePc(root + 5)); // 4th (avoid as target, OK as passing)
         if (thirteenth < 0) chordScalePcs.push_back(normalizePc(root + 9));
+        
+        // If chord has #5, don't add natural 5
+        // If chord has natural 5, add it as passing tone
+        if (!hasSharp5 && !hasFlat5 && fifth >= 0) {
+            // Natural 5 is already in chord tones, OK
+        }
+    } else if (isAugmented) {
+        // Whole tone scale fragments for augmented
+        if (ninth < 0) chordScalePcs.push_back(normalizePc(root + 2));
+        // #4/b5 is in the whole tone scale
+        chordScalePcs.push_back(normalizePc(root + 6)); // #4/b5
     }
+    
+    // SAFETY: Remove any notes that are a minor 2nd from chord tones
+    // This prevents clashes like F against E (4th vs 3rd on C7)
+    QVector<int> safeScalePcs;
+    for (int scalePc : chordScalePcs) {
+        bool clashes = false;
+        // Check against core chord tones
+        for (int chordPc : {third, fifth, seventh}) {
+            if (chordPc < 0) continue;
+            int interval = qAbs(scalePc - chordPc);
+            if (interval > 6) interval = 12 - interval; // Normalize to smaller interval
+            if (interval == 1) {
+                clashes = true;
+                break;
+            }
+        }
+        if (!clashes) {
+            safeScalePcs.push_back(scalePc);
+        }
+    }
+    chordScalePcs = safeScalePcs;
     
     // Sort and deduplicate
     std::sort(chordScalePcs.begin(), chordScalePcs.end());

@@ -1071,51 +1071,137 @@ JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::generateRhMelodicVoici
 }
 
 // LH plays sparsely: primarily on beat 1, sometimes beat 3
+// RESPONSIVE to weights and user activity
 bool JazzBalladPianoPlanner::shouldLhPlayBeat(const Context& c, quint32 hash) const {
-    // Always play on chord changes
-    if (c.chordIsNew) return true;
-    
-    // Beat 1: usually yes
-    if (c.beatInBar == 0) {
-        return (hash % 100) < 85;
+    // ================================================================
+    // INTERACTION: When user is playing, dramatically reduce LH
+    // ================================================================
+    if (c.userBusy || c.userDensityHigh || c.userIntensityPeak) {
+        // Only play on chord changes when user is active
+        if (!c.chordIsNew) return false;
+        // Even on chord changes, sometimes stay silent
+        return (hash % 100) < 60;
     }
     
-    // Beat 3: sometimes (more often at cadences)
-    if (c.beatInBar == 2) {
-        double prob = 0.25;
-        if (c.cadence01 >= 0.5) prob = 0.55;
-        if (c.phraseEndBar) prob = 0.65;
+    // Weights-driven base probability
+    const double densityWeight = qBound(0.0, c.weights.density, 1.0);
+    const double interactWeight = qBound(0.0, c.weights.interactivity, 1.0);
+    
+    // Always play on chord changes (but softer via velocity, not absence)
+    if (c.chordIsNew) return true;
+    
+    // Beat 1: usually yes, scaled by density
+    if (c.beatInBar == 0) {
+        double prob = 0.50 + 0.40 * densityWeight;
         return (hash % 100) < int(prob * 100);
     }
     
-    // Beats 2/4: rarely
-    return (hash % 100) < 8;
+    // Beat 3: context-dependent
+    if (c.beatInBar == 2) {
+        double prob = 0.10 + 0.25 * densityWeight;
+        if (c.cadence01 >= 0.5) prob += 0.20 * c.cadence01;
+        if (c.phraseEndBar) prob += 0.15;
+        // User silence: can fill more
+        if (c.userSilence) prob += 0.15 * interactWeight;
+        return (hash % 100) < int(prob * 100);
+    }
+    
+    // Beats 2/4: very rarely (only at high energy climaxes)
+    if (c.energy >= 0.75 && densityWeight >= 0.7) {
+        return (hash % 100) < 5;
+    }
+    return false;
 }
 
-// RH activity: more frequent melodic movement
+// RH activity: DRAMATICALLY scaled by weights and interaction
+// Great pianists leave SPACE - activity 0 (silence) should be common!
 int JazzBalladPianoPlanner::rhActivityLevel(const Context& c, quint32 hash) const {
-    // Base activity from energy
-    double baseActivity = 1.0 + 2.0 * c.energy;
+    // ================================================================
+    // CRITICAL: When user is playing, RH should mostly be SILENT
+    // This is the #1 characteristic of great accompanists
+    // ================================================================
+    if (c.userBusy || c.userDensityHigh) {
+        // Dramatic back-off: 70% chance of complete silence
+        if ((hash % 100) < 70) return 0;
+        // Otherwise, minimal (single note or nothing)
+        return (hash % 100) < 85 ? 0 : 1;
+    }
     
-    // Chord changes: more movement
-    if (c.chordIsNew) baseActivity += 1.0;
+    if (c.userIntensityPeak) {
+        // When user is really going for it, stay completely out
+        return 0;
+    }
     
-    // User silence: fill more
-    if (c.userSilence) baseActivity += 1.0;
+    // ================================================================
+    // Weights-driven activity (respecting density, rhythm, interactivity)
+    // ================================================================
+    const double densityWeight = qBound(0.0, c.weights.density, 1.0);
+    const double rhythmWeight = qBound(0.0, c.weights.rhythm, 1.0);
+    const double interactWeight = qBound(0.0, c.weights.interactivity, 1.0);
+    const double dynamismWeight = qBound(0.0, c.weights.dynamism, 1.0);
     
-    // User busy: back off
-    if (c.userBusy || c.userDensityHigh) baseActivity *= 0.4;
+    // Base activity: very sparse by default (0.3 = mostly silent)
+    double baseActivity = 0.3;
     
-    // Phrase endings: add movement
-    if (c.phraseEndBar) baseActivity += 0.5;
+    // Energy contribution (0.0-1.0 adds up to +1.5 activity)
+    baseActivity += 1.5 * c.energy;
     
-    // Cadence: more active
-    if (c.cadence01 >= 0.5) baseActivity += 0.5 * c.cadence01;
+    // Weights contribution
+    baseActivity += 0.8 * densityWeight;
+    baseActivity += 0.5 * rhythmWeight;
+    baseActivity += 0.3 * dynamismWeight;
     
-    // Add some randomness
-    int variation = (hash % 3) - 1; // -1, 0, or +1
+    // ================================================================
+    // BREATH/PHRASE: Add intentional silence for musical phrasing
+    // ================================================================
     
+    // Every 2-4 beats, consider taking a breath (0 activity)
+    const int phrasePosition = (c.playbackBarIndex * 4 + c.beatInBar);
+    const bool breathMoment = ((phrasePosition + (hash % 3)) % 4) == 3; // ~25% of beats
+    if (breathMoment && c.energy < 0.6) {
+        baseActivity *= 0.3; // Dramatically reduce on breath moments
+    }
+    
+    // Bar 2 of phrase: often lay out (building anticipation)
+    if (c.barInPhrase == 1 && c.beatInBar >= 2 && c.energy < 0.5) {
+        baseActivity *= 0.4;
+    }
+    
+    // ================================================================
+    // Context modifiers
+    // ================================================================
+    
+    // Chord changes: moderate increase (but not overwhelming)
+    if (c.chordIsNew) baseActivity += 0.4;
+    
+    // User silence: can fill, but tastefully
+    if (c.userSilence) {
+        baseActivity += 0.5 * interactWeight;
+    }
+    
+    // Phrase endings: add a bit more movement for resolution
+    if (c.phraseEndBar && c.beatInBar >= 2) {
+        baseActivity += 0.3 * c.cadence01;
+    }
+    
+    // ================================================================
+    // Randomness for human feel (but controlled)
+    // ================================================================
+    int variation = int(hash % 5) - 2; // -2 to +2
+    
+    // Final activity level
     int level = qBound(0, int(baseActivity) + variation, 4);
+    
+    // ================================================================
+    // FINAL GATE: Low energy/density should mean more silence
+    // ================================================================
+    if (level > 0 && c.energy < 0.35 && densityWeight < 0.4) {
+        // Roll again - 50% chance to reduce to 0 or 1
+        if ((hash % 100) < 50) {
+            level = (hash % 100) < 30 ? 0 : 1;
+        }
+    }
+    
     return level;
 }
 
@@ -1306,32 +1392,85 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     }
     
     if (rhActivity > 0) {
-        // Generate multiple RH hits based on activity level
+        // Generate RH hits based on activity level
         // EACH hit moves melodically - no repetition!
+        // Use varied patterns for interest, not the same pattern every time
         
         QVector<std::tuple<int, int, bool>> rhTimings; // sub, velDelta, preferDyad
         
+        // Pattern selection based on context for variety
+        const int patternSeed = (rhHash / 7) % 6;
+        const bool preferSparse = (c.energy < 0.4) || (c.weights.density < 0.4);
+        
         switch (rhActivity) {
             case 1:
-                rhTimings.push_back({0, 0, true});
-                break;
-            case 2:
-                rhTimings.push_back({0, 0, true});
-                rhTimings.push_back({2, -8, (rhHash % 3) != 0}); // and-of-beat
-                break;
-            case 3:
-                rhTimings.push_back({0, 0, true});
-                rhTimings.push_back({2, -5, true});
-                if ((rhHash % 2) == 0) {
-                    rhTimings.push_back({3, -10, false}); // single note pickup
+                // Single hit - vary between dyad and single note
+                if (preferSparse || (patternSeed % 2) == 0) {
+                    rhTimings.push_back({0, 0, false}); // Single note
+                } else {
+                    rhTimings.push_back({0, 0, true}); // Dyad
                 }
                 break;
-            case 4:
-                rhTimings.push_back({0, 0, true});
-                rhTimings.push_back({1, -6, false}); // passing tone (single)
-                rhTimings.push_back({2, -4, true});
-                rhTimings.push_back({3, -8, false}); // pickup (single)
+                
+            case 2:
+                // Two hits - multiple pattern options
+                switch (patternSeed % 4) {
+                    case 0: // Beat + and
+                        rhTimings.push_back({0, 0, true});
+                        rhTimings.push_back({2, -10, false});
+                        break;
+                    case 1: // Just and (syncopated)
+                        rhTimings.push_back({2, -3, true});
+                        break;
+                    case 2: // Beat + pickup
+                        rhTimings.push_back({0, 0, true});
+                        rhTimings.push_back({3, -12, false});
+                        break;
+                    case 3: // E-and + and (offbeat feel)
+                        rhTimings.push_back({1, -5, false});
+                        rhTimings.push_back({2, -3, true});
+                        break;
+                }
                 break;
+                
+            case 3:
+                // Three hits - still varied
+                switch (patternSeed % 3) {
+                    case 0: // Beat + and + pickup
+                        rhTimings.push_back({0, 0, true});
+                        rhTimings.push_back({2, -6, false});
+                        rhTimings.push_back({3, -12, false});
+                        break;
+                    case 1: // E-and + and + a-and
+                        rhTimings.push_back({1, -4, false});
+                        rhTimings.push_back({2, -2, true});
+                        rhTimings.push_back({3, -10, false});
+                        break;
+                    case 2: // Beat + e-and + and (front-loaded)
+                        rhTimings.push_back({0, 0, true});
+                        rhTimings.push_back({1, -8, false});
+                        rhTimings.push_back({2, -4, true});
+                        break;
+                }
+                break;
+                
+            case 4:
+                // Four hits - climax moments only, still musical
+                switch (patternSeed % 2) {
+                    case 0:
+                        rhTimings.push_back({0, 0, true});
+                        rhTimings.push_back({1, -8, false});
+                        rhTimings.push_back({2, -4, true});
+                        rhTimings.push_back({3, -10, false});
+                        break;
+                    case 1: // Swing feel (1-and-a)
+                        rhTimings.push_back({0, 0, true});
+                        rhTimings.push_back({2, -3, true});
+                        rhTimings.push_back({3, -8, false});
+                        break;
+                }
+                break;
+                
             default:
                 break;
         }
@@ -1344,15 +1483,35 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         int currentDirection = m_state.rhMelodicDirection;
         int motionCount = 0;
         
-        for (const auto& timing : rhTimings) {
+        // Motivic memory: occasionally return to a "home" note for coherence
+        const int motifHomeMidi = (m_state.rhMotionsThisChord == 0) ? currentTopMidi : 
+                                   ((currentTopMidi + 74) / 2); // Tend toward middle register
+        
+        for (int hitIndex = 0; hitIndex < rhTimings.size(); ++hitIndex) {
+            const auto& timing = rhTimings[hitIndex];
             const int sub = std::get<0>(timing);
             const int velDelta = std::get<1>(timing);
             const bool preferDyad = std::get<2>(timing);
             
             // ================================================================
-            // KEY: Generate a NEW melodic target for EACH hit
-            // This creates flowing motion, not repetitive hammering
+            // MUSICAL DECISION: Move, Hold, or Return?
+            // Great pianists don't always move - they make choices
             // ================================================================
+            
+            enum class MelodicChoice { Move, Hold, ReturnHome };
+            MelodicChoice choice = MelodicChoice::Move;
+            
+            // Probability of hold (staying on same note) - more common at low energy
+            const double holdProb = 0.10 + 0.20 * (1.0 - c.energy) + 0.15 * (1.0 - c.weights.variability);
+            // Probability of return (going back to motif home)
+            const double returnProb = (m_state.rhMotionsThisChord >= 3) ? 0.25 : 0.08;
+            
+            const int choiceRoll = (rhHash + hitIndex * 17) % 100;
+            if (choiceRoll < int(holdProb * 100) && hitIndex > 0) {
+                choice = MelodicChoice::Hold;
+            } else if (choiceRoll < int((holdProb + returnProb) * 100) && m_state.rhMotionsThisChord >= 2) {
+                choice = MelodicChoice::ReturnHome;
+            }
             
             // Collect scale/chord tones for melodic motion
             QVector<int> melodicPcs;
@@ -1373,51 +1532,73 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             
             if (melodicPcs.isEmpty()) continue;
             
-            // Determine direction: tend to continue, reverse near boundaries
-            if (currentTopMidi >= 82) currentDirection = -1;
-            else if (currentTopMidi <= 68) currentDirection = 1;
-            else if (motionCount >= 3 && (rhHash % 4) == 0) currentDirection = -currentDirection;
-            
-            // Find next scale tone in direction (stepwise: 1-4 semitones)
             int bestTarget = currentTopMidi;
-            int bestScore = 999;
             
-            for (int pc : melodicPcs) {
-                for (int oct = 5; oct <= 7; ++oct) {
-                    int midi = pc + 12 * oct;
-                    if (midi < adjusted.rhLo || midi > adjusted.rhHi) continue;
-                    
-                    int motion = midi - currentTopMidi;
-                    int absMotion = qAbs(motion);
-                    
-                    // Skip if no motion (we want MOVEMENT!)
-                    if (absMotion == 0) continue;
-                    
-                    // Prefer stepwise motion (1-3 semitones)
-                    int score = 0;
-                    if (absMotion <= 2) score = 0;
-                    else if (absMotion <= 4) score = 2;
-                    else if (absMotion <= 7) score = 5;
-                    else score = 10;
-                    
-                    // Bonus for matching direction
-                    bool rightDirection = (currentDirection == 0) ||
-                                          (currentDirection > 0 && motion > 0) ||
-                                          (currentDirection < 0 && motion < 0);
-                    if (!rightDirection) score += 3;
-                    
-                    // Slight preference for color tones (9, 13)
-                    if (pc == ninth || pc == thirteenth) score -= 1;
-                    
-                    // Sweet spot bonus
-                    if (midi >= 72 && midi <= 80) score -= 1;
-                    
-                    if (score < bestScore) {
-                        bestScore = score;
-                        bestTarget = midi;
+            if (choice == MelodicChoice::Hold) {
+                // Stay on current note (creates sustain effect)
+                bestTarget = currentTopMidi;
+            } else if (choice == MelodicChoice::ReturnHome) {
+                // Return toward motif home (creates coherence)
+                bestTarget = motifHomeMidi;
+                // Snap to nearest chord tone
+                int bestDist = 999;
+                for (int pc : melodicPcs) {
+                    for (int oct = 5; oct <= 7; ++oct) {
+                        int midi = pc + 12 * oct;
+                        if (midi < adjusted.rhLo || midi > adjusted.rhHi) continue;
+                        int dist = qAbs(midi - motifHomeMidi);
+                        if (dist < bestDist) {
+                            bestDist = dist;
+                            bestTarget = midi;
+                        }
                     }
                 }
-            }
+            } else {
+                // Move: find next scale tone in direction
+                // Determine direction: tend to continue, reverse near boundaries
+                if (currentTopMidi >= 82) currentDirection = -1;
+                else if (currentTopMidi <= 68) currentDirection = 1;
+                else if (motionCount >= 3 && ((rhHash + hitIndex) % 4) == 0) currentDirection = -currentDirection;
+                
+                int bestScore = 999;
+            
+                for (int pc : melodicPcs) {
+                    for (int oct = 5; oct <= 7; ++oct) {
+                        int midi = pc + 12 * oct;
+                        if (midi < adjusted.rhLo || midi > adjusted.rhHi) continue;
+                        
+                        int motion = midi - currentTopMidi;
+                        int absMotion = qAbs(motion);
+                        
+                        // Skip if no motion (we want MOVEMENT!)
+                        if (absMotion == 0) continue;
+                        
+                        // Prefer stepwise motion (1-3 semitones)
+                        int score = 0;
+                        if (absMotion <= 2) score = 0;
+                        else if (absMotion <= 4) score = 2;
+                        else if (absMotion <= 7) score = 5;
+                        else score = 10;
+                        
+                        // Bonus for matching direction
+                        bool rightDirection = (currentDirection == 0) ||
+                                              (currentDirection > 0 && motion > 0) ||
+                                              (currentDirection < 0 && motion < 0);
+                        if (!rightDirection) score += 3;
+                        
+                        // Slight preference for color tones (9, 13)
+                        if (pc == ninth || pc == thirteenth) score -= 1;
+                        
+                        // Sweet spot bonus
+                        if (midi >= 72 && midi <= 80) score -= 1;
+                        
+                        if (score < bestScore) {
+                            bestScore = score;
+                            bestTarget = midi;
+                        }
+                    }
+                }
+            } // end of Move choice
             
             // Create voicing for this target
             QVector<int> rhMidiNotes;

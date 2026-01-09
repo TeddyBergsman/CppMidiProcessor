@@ -876,98 +876,120 @@ int JazzBalladPianoPlanner::getDegreeForPc(int pc, const music::ChordSymbol& cho
 }
 
 // =============================================================================
-// Pedal Logic - Realistic jazz piano pedaling with clean chord transitions
+// Pedal Logic - Professional Jazz Piano Sustain Technique
 // =============================================================================
-// Critical rules to prevent harmonic blur:
-// 1. ALWAYS lift BEFORE any chord change (let old chord decay)
-// 2. Lift early if approaching a new bar with chord change
-// 3. Keep pedal shallower when chords are changing quickly
-// 4. Periodic refresh on sustained chords for clarity
+// KEY PRINCIPLES:
+// 1. "Legato pedaling": Lift RIGHT BEFORE (not at) the new chord, then re-catch
+// 2. NEVER let pedal blur two different chords together
+// 3. Use half-pedal for clarity, full pedal only for effect
+// 4. When in doubt, lift the pedal - dry is better than muddy
 // =============================================================================
 
 QVector<JazzBalladPianoPlanner::CcIntent> JazzBalladPianoPlanner::planPedal(
     const Context& c, const virtuoso::groove::TimeSignature& ts) const {
 
     QVector<CcIntent> ccs;
-
-    // How frequently are chords changing? (used for pedal depth decisions)
-    const bool frequentChanges = (c.beatsUntilChordChange <= 2);
     
+    // Calculate how quickly chords are changing
+    const bool veryFrequentChanges = (c.beatsUntilChordChange <= 1);
+    const bool frequentChanges = (c.beatsUntilChordChange <= 2);
+
     // ========================================================================
-    // RULE 1: ALWAYS lift on chord changes (prevents harmonic blur!)
-    // The lift happens AT the chord change, BEFORE re-engaging
+    // RULE 1: On EVERY chord change, do a clean lift-and-catch
+    // The lift happens JUST BEFORE the beat, the catch happens AFTER the attack
     // ========================================================================
     if (c.chordIsNew) {
-        // LIFT pedal completely at the start of the new chord
+        // LIFT: Happens slightly BEFORE the chord change
+        // This is achieved by a negative timing offset or by placing at previous beat's end
+        // For simplicity, we lift AT the beat but the short gap clears the old sound
         CcIntent lift;
         lift.cc = 64;
         lift.value = 0;
         lift.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
             c.playbackBarIndex, c.beatInBar, 0, 4, ts);
         lift.structural = true;
-        lift.logic_tag = "chord_change_lift";
+        lift.logic_tag = "pedal_lift";
         ccs.push_back(lift);
 
-        // Re-engage pedal - use SHALLOW pedal if chords are changing fast
-        // This prevents buildup when moving through many chords
+        // CATCH: Re-engage AFTER the chord attack has sounded
+        // Delay depends on how fast chords are changing
+        int catchDelay = veryFrequentChanges ? 2 : 1;  // 2/16 or 1/16 of a beat
+        int catchDenom = 16;
+        
+        // Pedal depth: shallower for fast changes, deeper for slow passages
         int pedalDepth;
-        if (frequentChanges) {
-            pedalDepth = 40 + int(30.0 * c.energy);  // Shallow: 40-70
+        if (veryFrequentChanges) {
+            pedalDepth = 30 + int(25.0 * c.energy);  // Light: 30-55
+        } else if (frequentChanges) {
+            pedalDepth = 45 + int(30.0 * c.energy);  // Medium: 45-75
         } else {
-            pedalDepth = 60 + int(50.0 * c.energy);  // Normal: 60-110
+            pedalDepth = 55 + int(40.0 * c.energy);  // Fuller: 55-95
         }
-        pedalDepth = qMin(pedalDepth, 110);  // Never go full 127
+        pedalDepth = qBound(30, pedalDepth, 95);  // Never too light or too heavy
         
         CcIntent engage;
         engage.cc = 64;
         engage.value = pedalDepth;
         engage.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-            c.playbackBarIndex, c.beatInBar, 1, 16, ts);
+            c.playbackBarIndex, c.beatInBar, catchDelay, catchDenom, ts);
         engage.structural = true;
-        engage.logic_tag = "chord_change_engage";
+        engage.logic_tag = "pedal_catch";
         ccs.push_back(engage);
     }
     
     // ========================================================================
-    // RULE 2: Pre-emptive lift BEFORE chord change (if change is coming)
-    // This ensures the old chord has time to decay before the new one hits
+    // RULE 2: Pre-emptive lift when a chord change is approaching
+    // Lift ~200ms before the next chord to let the sound decay cleanly
     // ========================================================================
     if (!c.chordIsNew && c.beatsUntilChordChange == 1) {
-        // Next beat is a chord change - lift pedal on beat 4 (or equivalent)
-        // This gives ~500ms for decay before new chord
+        // Lift at the "and" of the current beat (halfway through)
         CcIntent preemptiveLift;
         preemptiveLift.cc = 64;
         preemptiveLift.value = 0;
         preemptiveLift.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-            c.playbackBarIndex, c.beatInBar, 2, 4, ts);  // Halfway through the beat
+            c.playbackBarIndex, c.beatInBar, 2, 4, ts);
         preemptiveLift.structural = false;
-        preemptiveLift.logic_tag = "preemptive_lift";
+        preemptiveLift.logic_tag = "pedal_pre_lift";
         ccs.push_back(preemptiveLift);
     }
     
     // ========================================================================
-    // RULE 3: Periodic pedal refresh within sustained chords
-    // Prevents resonance buildup on long-held chords
+    // RULE 3: For sustained chords (2+ beats), do a subtle refresh on beat 3
+    // This prevents resonance buildup without being noticeable
     // ========================================================================
-    if (!c.chordIsNew && c.beatInBar == 2 && c.beatsUntilChordChange > 2) {
-        // Only refresh if we have time before next chord change
-        CcIntent lift;
-        lift.cc = 64;
-        lift.value = 0;
-        lift.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+    if (!c.chordIsNew && c.beatInBar == 2 && c.beatsUntilChordChange >= 2) {
+        // Quick lift-and-catch (almost imperceptible)
+        CcIntent quickLift;
+        quickLift.cc = 64;
+        quickLift.value = 0;
+        quickLift.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
             c.playbackBarIndex, c.beatInBar, 0, 8, ts);
-        lift.structural = false;
-        lift.logic_tag = "pedal_refresh_lift";
-        ccs.push_back(lift);
+        quickLift.structural = false;
+        quickLift.logic_tag = "pedal_refresh_lift";
+        ccs.push_back(quickLift);
         
-        CcIntent engage;
-        engage.cc = 64;
-        engage.value = 50 + int(40.0 * c.energy);
-        engage.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+        CcIntent quickCatch;
+        quickCatch.cc = 64;
+        quickCatch.value = 40 + int(30.0 * c.energy);  // Lighter on refresh
+        quickCatch.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
             c.playbackBarIndex, c.beatInBar, 1, 8, ts);
-        engage.structural = false;
-        engage.logic_tag = "pedal_refresh_engage";
-        ccs.push_back(engage);
+        quickCatch.structural = false;
+        quickCatch.logic_tag = "pedal_refresh_catch";
+        ccs.push_back(quickCatch);
+    }
+    
+    // ========================================================================
+    // RULE 4: Full lift at end of phrases for clean separation
+    // ========================================================================
+    if (c.phraseEndBar && c.beatInBar == 3) {
+        CcIntent phraseLift;
+        phraseLift.cc = 64;
+        phraseLift.value = 0;
+        phraseLift.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+            c.playbackBarIndex, c.beatInBar, 2, 4, ts);
+        phraseLift.structural = false;
+        phraseLift.logic_tag = "phrase_end_lift";
+        ccs.push_back(phraseLift);
     }
 
     return ccs;
@@ -984,103 +1006,218 @@ void JazzBalladPianoPlanner::applyGesture(const Context& /*c*/,
 }
 
 // =============================================================================
-// NEW: Bill Evans Style LH/RH Separation
+// LH Voicing: Simple, Correct, Guaranteed Consonant
+// =============================================================================
+// Jazz LH voicings are built from chord tones stacked in close position.
+// We use a straightforward approach:
+// 1. Get pitch classes for 3rd, 5th, 7th (and optionally 6th for 6 chords)
+// 2. Stack them in the LH register (C3-G4, MIDI 48-67)
+// 3. Keep the voicing tight (within ~10 semitones span)
+// 4. Voice-lead from previous chord for smooth transitions
 // =============================================================================
 
-// Bill Evans convention:
-// - Type A (3-5-7-9): Use when root is C, Db, D, Eb, E, F (lower half)
-// - Type B (7-9-3-5): Use when root is Gb, G, Ab, A, Bb, B (upper half)
-// This creates smooth voice-leading as chords progress around the circle.
 JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::generateLhRootlessVoicing(const Context& c) const {
     LhVoicing lh;
     const auto& chord = c.chord;
     
     if (chord.placeholder || chord.noChord || chord.rootPc < 0) return lh;
     
-    const bool hasSeventh = (seventhInterval(chord) >= 0);
+    // ================================================================
+    // STEP 1: Get the pitch classes we need
+    // For jazz voicings, we use 3rd, 5th, and 7th (no root - bass plays that)
+    // CRITICAL: Check for clusters (adjacent notes 1-2 semitones apart)
+    // ================================================================
+    const int root = chord.rootPc;
+    const int third = pcForDegree(chord, 3);
+    const int fifth = pcForDegree(chord, 5);
+    const int seventh = pcForDegree(chord, 7);
+    const int sixth = pcForDegree(chord, 6); // For 6th chords
+    
     const bool is6thChord = (chord.extension == 6 && chord.seventh == music::SeventhQuality::None);
+    const bool hasSeventh = (seventh >= 0);
     
-    // Determine Type A or B based on root and voice-leading from previous
-    // Root in [0,5] (C-F) -> Type A; Root in [6,11] (F#-B) -> Type B
-    // BUT: alternate if staying on same type creates large motion
-    bool preferTypeA = (chord.rootPc <= 5);
+    // Helper to check if two pitch classes are too close (1-2 semitones)
+    auto tooClose = [](int pc1, int pc2) -> bool {
+        if (pc1 < 0 || pc2 < 0) return false;
+        int interval = qAbs(pc1 - pc2);
+        if (interval > 6) interval = 12 - interval; // Normalize to smaller interval
+        return (interval <= 2);
+    };
     
-    // Voice-leading consideration: if last was Type A and this root is close,
-    // prefer opposite type for smoother motion
-    if (!m_state.lastLhMidi.isEmpty()) {
-        // Simple heuristic: alternate when possible for variety
-        preferTypeA = !m_state.lastLhWasTypeA;
-    }
+    // Check for potential clusters
+    const bool fifthSeventhCluster = tooClose(fifth, seventh);
+    const bool thirdFifthCluster = tooClose(third, fifth);
+    const bool fifthSixthCluster = tooClose(fifth, sixth);
     
-    // Build the voicing
-    QVector<int> degrees;
-    int baseMidi;
+    // Collect the pitch classes, AVOIDING clusters
+    QVector<int> targetPcs;
     
-    // Check if 9th is available for this chord
-    const int ninth = pcForDegree(chord, 9);
-    const bool hasNinth = (ninth >= 0);
+    // 3rd is always included (it's the most important for chord quality)
+    if (third >= 0) targetPcs.push_back(third);
     
-    if (preferTypeA) {
-        // Type A: 3-5-7-9 (stacked from 3rd)
-        // If no 9th available, use 3-5-7 shell
-        if (hasNinth) {
-            degrees = {3, 5, 7, 9};
-            lh.ontologyKey = "LH_RootlessA";
-        } else {
-            degrees = {3, 5, 7};
-            lh.ontologyKey = "LH_RootlessA_Shell";
+    // 5th: include only if it doesn't create clusters
+    // On #5 chords, the 5th often clusters with the 7th - OMIT IT
+    if (fifth >= 0) {
+        bool includeFifth = true;
+        if (fifthSeventhCluster) includeFifth = false;  // Omit 5th if too close to 7th
+        if (thirdFifthCluster) includeFifth = false;    // Omit 5th if too close to 3rd
+        if (is6thChord && fifthSixthCluster) includeFifth = false;
+        
+        if (includeFifth) {
+            targetPcs.push_back(fifth);
         }
-        lh.isTypeA = true;
-        baseMidi = 52; // Start around E3
-    } else {
-        // Type B: 7-9-3-5 (stacked from 7th)
-        // If no 9th available, use 7-3-5 shell
-        if (hasNinth) {
-            degrees = {7, 9, 3, 5};
-            lh.ontologyKey = "LH_RootlessB";
-        } else {
-            degrees = {7, 3, 5};
-            lh.ontologyKey = "LH_RootlessB_Shell";
+    }
+    
+    // 7th or 6th: include (defines chord quality)
+    if (is6thChord && sixth >= 0) {
+        targetPcs.push_back(sixth);
+    } else if (hasSeventh) {
+        targetPcs.push_back(seventh);
+    }
+    
+    // Must have at least 2 notes for a proper voicing
+    if (targetPcs.size() < 2) {
+        // Fallback: just use 3rd and 7th (guaranteed to be >2 semitones apart on any chord)
+        targetPcs.clear();
+        if (third >= 0) targetPcs.push_back(third);
+        if (hasSeventh) {
+            targetPcs.push_back(seventh);
+        } else if (fifth >= 0) {
+            targetPcs.push_back(fifth);
         }
-        lh.isTypeA = false;
-        baseMidi = 48; // Start around C3 (7th is lower)
     }
     
-    // For triads without 7th, use simpler shell
-    if (!hasSeventh && !is6thChord) {
-        degrees = {3, 5};
-        lh.ontologyKey = "LH_Shell";
-        baseMidi = 52;
-    }
+    if (targetPcs.isEmpty()) return lh;
     
-    // Realize the voicing - only include valid degrees
-    QVector<int> pcs;
-    for (int deg : degrees) {
-        int pc = pcForDegree(chord, deg);
-        if (pc >= 0) pcs.push_back(pc);
-    }
+    // ================================================================
+    // STEP 2: Determine the starting register
+    // Voice-lead from previous chord, or start around E3 (MIDI 52)
+    // ================================================================
+    int startMidi = 52; // E3 - good starting point for LH
     
-    if (pcs.isEmpty()) return lh;
-    
-    // Voice-lead from previous LH voicing
     if (!m_state.lastLhMidi.isEmpty()) {
+        // Center around the previous voicing for smooth voice-leading
         int lastCenter = 0;
         for (int m : m_state.lastLhMidi) lastCenter += m;
         lastCenter /= m_state.lastLhMidi.size();
-        baseMidi = qBound(48, lastCenter - 4, 60);
+        startMidi = qBound(50, lastCenter, 60);
     }
     
-    // Stack notes upward from base
-    lh.midiNotes = realizeVoicingTemplate(degrees, chord, baseMidi, c.lhHi);
+    // ================================================================
+    // STEP 3: Build the voicing by stacking notes upward
+    // Start with the lowest pitch class, then stack the rest above it
+    // ================================================================
     
-    // Ensure within LH range (48-68)
-    for (int& m : lh.midiNotes) {
-        while (m < 48) m += 12;
-        while (m > 68) m -= 12;
+    // Find the first note: closest instance of first PC to startMidi
+    int firstPc = targetPcs[0];
+    int firstMidi = startMidi;
+    
+    // Search for the closest instance of firstPc
+    int bestFirst = -1;
+    int bestFirstDist = 999;
+    for (int m = 48; m <= 64; ++m) {
+        if (normalizePc(m) == firstPc) {
+            int dist = qAbs(m - startMidi);
+            if (dist < bestFirstDist) {
+                bestFirstDist = dist;
+                bestFirst = m;
+            }
+        }
     }
+    
+    if (bestFirst < 0) return lh; // Shouldn't happen
+    
+    lh.midiNotes.push_back(bestFirst);
+    int cursor = bestFirst;
+    
+    // Stack remaining notes above the first
+    for (int i = 1; i < targetPcs.size(); ++i) {
+        int pc = targetPcs[i];
+        
+        // Find the next instance of this PC above cursor
+        int nextMidi = cursor + 1;
+        while (normalizePc(nextMidi) != pc && nextMidi < cursor + 12) {
+            nextMidi++;
+        }
+        
+        // If we went too high, wrap down
+        if (nextMidi >= cursor + 12) {
+            nextMidi = cursor + 1;
+            while (normalizePc(nextMidi) != pc) {
+                nextMidi++;
+            }
+        }
+        
+        // Ensure it's in range
+        if (nextMidi > 67) nextMidi -= 12;
+        if (nextMidi < 48) nextMidi += 12;
+        
+        lh.midiNotes.push_back(nextMidi);
+        cursor = nextMidi;
+    }
+    
+    // Sort the notes
     std::sort(lh.midiNotes.begin(), lh.midiNotes.end());
     
-    // Calculate voice-leading cost
+    // ================================================================
+    // STEP 4: Validate - ensure notes are properly spaced
+    // If voicing spans more than 12 semitones, compress it
+    // ================================================================
+    if (lh.midiNotes.size() >= 2) {
+        int span = lh.midiNotes.last() - lh.midiNotes.first();
+        if (span > 12) {
+            // Too spread out - move highest note down an octave
+            lh.midiNotes.last() -= 12;
+            std::sort(lh.midiNotes.begin(), lh.midiNotes.end());
+        }
+        
+        // Ensure all notes are in the LH range
+        for (int& m : lh.midiNotes) {
+            while (m < 48) m += 12;
+            while (m > 67) m -= 12;
+        }
+        std::sort(lh.midiNotes.begin(), lh.midiNotes.end());
+    }
+    
+    // ================================================================
+    // STEP 5: Final validation - check for clusters (shouldn't happen with 3-5-7)
+    // ================================================================
+    bool hasCluster = false;
+    for (int i = 0; i < lh.midiNotes.size() - 1; ++i) {
+        if (lh.midiNotes[i + 1] - lh.midiNotes[i] <= 1) {
+            hasCluster = true;
+            break;
+        }
+    }
+    
+    if (hasCluster) {
+        // This shouldn't happen with proper 3-5-7 voicings
+        // Fall back to just 3rd and 7th (guaranteed 3+ semitones apart)
+        lh.midiNotes.clear();
+        if (third >= 0) {
+            int thirdMidi = 52;
+            while (normalizePc(thirdMidi) != third) thirdMidi++;
+            lh.midiNotes.push_back(thirdMidi);
+        }
+        if (seventh >= 0 || (is6thChord && sixth >= 0)) {
+            int topPc = is6thChord ? sixth : seventh;
+            int topMidi = lh.midiNotes.isEmpty() ? 52 : lh.midiNotes.last() + 3;
+            while (normalizePc(topMidi) != topPc && topMidi < 67) topMidi++;
+            if (topMidi <= 67) lh.midiNotes.push_back(topMidi);
+        }
+        std::sort(lh.midiNotes.begin(), lh.midiNotes.end());
+    }
+    
+    // Set ontology key based on voicing size
+    if (lh.midiNotes.size() >= 3) {
+        lh.ontologyKey = "LH_Voicing_3";
+    } else if (lh.midiNotes.size() == 2) {
+        lh.ontologyKey = "LH_Shell";
+    } else {
+        lh.ontologyKey = "LH_Single";
+    }
+    
+    lh.isTypeA = (chord.rootPc <= 5);
     lh.cost = voiceLeadingCost(m_state.lastLhMidi, lh.midiNotes);
     
     return lh;
@@ -2228,7 +2365,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 int sub = 0;           // subdivision (0=beat, 1=e, 2=and, 3=a)
                 int velDelta = 0;      // velocity adjustment
                 bool useAltVoicing = false; // use alternate voicing (Type B if was A, etc.)
-                bool anticipate = false;    // play early (syncopation)
+                bool layBack = false;       // play slightly late (jazz feel)
             };
             
             QVector<LhHit> lhHits;
@@ -2256,75 +2393,62 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             // Use minimal variation from hash (just for small details, not pattern choice)
             const bool slightVariation = ((lhHash / 7) % 3) == 0;
             
+            // ================================================================
+            // JAZZ "LAY BACK" FEEL: Play slightly LATE (not early!)
+            // This avoids clashing with the bass which hits on the beat
+            // Jazz pianists typically "lay back" behind the beat for a relaxed feel
+            // ================================================================
+            const bool layBackRoll = ((lhHash % 100) < 40 + int(15 * adjusted.weights.rhythm));
+            const bool shouldLayBack = layBackRoll && !phraseStart; // Always on beat for phrase starts
+            
             if (adjusted.chordIsNew) {
                 // ============================================================
-                // CHORD CHANGES: Emphasize the harmonic change
+                // CHORD CHANGES: LH defines the new harmony
+                // RHYTHMIC INTENT based on musical context:
+                // - Downbeats: Strong, slightly behind beat (lay back)
+                // - Beat 2/4: Syncopated feel - play on the "and" (sub=2)
+                // - Beat 3: Secondary accent, can push or lay back
                 // ============================================================
+                
                 if (isDownbeat) {
-                    // Beat 1 chord change: strong, clear statement
-                    if (phraseStart || phraseEnd) {
-                        // Phrase boundaries: simple, clear
-                        lhHits.push_back({0, 0, false, false});
-                        if (isCadence && isHighEnergy) {
-                            // Add emphasis at cadence
-                            lhHits.push_back({2, -8, true, false});
-                        }
-                    } else if (isHighEnergy) {
-                        // High energy mid-phrase: more motion
-                        lhHits.push_back({0, 0, false, false});
-                        lhHits.push_back({2, -8, true, false});
-                        if (isCadence) {
-                            lhHits.push_back({3, -12, false, false});
-                        }
-                    } else if (isMedEnergy) {
-                        // Medium energy: occasional second hit
-                        lhHits.push_back({0, 0, false, false});
-                        if (slightVariation) {
-                            lhHits.push_back({2, -10, false, false});
-                        }
+                    // Beat 1: Strong and clear, lay back behind bass
+                    if (phraseStart) {
+                        lhHits.push_back({0, 0, false, false}); // On the beat for phrase start
                     } else {
-                        // Low energy: just the beat
-                        lhHits.push_back({0, 0, false, false});
+                        lhHits.push_back({0, 0, false, true}); // Lay back
+                    }
+                    // At higher energy, add a push on the "and"
+                    if (isHighEnergy && slightVariation) {
+                        lhHits.push_back({2, -8, false, false}); // sub=2 = "and of 1"
                     }
                 } else if (isSecondaryDownbeat) {
-                    // Beat 3 chord change: can be more playful
-                    if (isHighEnergy) {
-                        // Anticipate (syncopate) at high energy
-                        lhHits.push_back({0, 0, false, true}); // Anticipate
-                        lhHits.push_back({2, -6, false, false});
-                    } else {
-                        // Clean hit on the beat
-                        lhHits.push_back({0, 0, false, false});
-                    }
-                } else {
-                    // Weak beat chord change: syncopation opportunity
-                    if (isHighEnergy && slightVariation) {
-                        lhHits.push_back({0, 0, false, true}); // Anticipate
-                    } else if (isMedEnergy) {
-                        // Delayed hit for groove
-                        lhHits.push_back({2, -3, false, false});
-                    } else {
-                        lhHits.push_back({0, 0, false, false});
-                    }
+                    // Beat 3: Secondary accent - can be on or slightly late
+                    lhHits.push_back({0, 0, false, shouldLayBack});
+                } else if (isWeakBeat) {
+                    // Beats 2 and 4: Syncopated - play on the "and" for swing feel
+                    lhHits.push_back({2, -5, false, false}); // sub=2 = syncopated
                 }
             } else {
                 // ============================================================
-                // NON-CHORD-CHANGE: Reinforce and comp over sustained chord
-                // If shouldLhPlayBeat returned true, we MUST generate at least one hit!
-                // The decision to play was already made - now we just decide HOW
+                // NON-CHORD-CHANGE: Comp on the sustained chord
+                // Use intentional rhythm patterns, not just hitting the beat
                 // ============================================================
                 
-                // ALWAYS add a hit on the current beat - that's why we're here!
-                lhHits.push_back({0, 0, false, false});
-                
-                // Optionally add more motion based on energy
-                if (isDownbeat && isHighEnergy && !phraseStart) {
-                    // Add second touch on downbeats at high energy
-                    lhHits.push_back({2, -10, false, false});
-                } else if (isSecondaryDownbeat && isHighEnergy) {
-                    // Add second touch on beat 3 at high energy
-                    lhHits.push_back({2, -8, false, false});
+                if (isDownbeat) {
+                    // Beat 1 (no chord change): reinforce, lay back
+                    lhHits.push_back({0, 0, false, true}); // Lay back behind bass
+                } else if (isSecondaryDownbeat) {
+                    // Beat 3: Good for a supportive hit
+                    if (isMedEnergy || isHighEnergy) {
+                        lhHits.push_back({0, 0, false, shouldLayBack});
+                    }
+                } else if (adjusted.beatInBar == 3) {
+                    // Beat 4: Anticipate next bar with an "and of 4" hit
+                    if (isHighEnergy || (isCadence && slightVariation)) {
+                        lhHits.push_back({2, -8, false, false}); // "and of 4" = pickup
+                    }
                 }
+                // Beat 2: Generally rest for breathing room
             }
             
             // Safety: ensure at least one hit on chord changes
@@ -2346,15 +2470,23 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     hitKey = lhVoicing.isTypeA ? "LH_RootlessB_Alt" : "LH_RootlessA_Alt";
                 }
                 
-                // Calculate timing
-                int timingOffsetMs = computeTimingOffsetMs(adjusted, timingHash + hit.sub);
-                if (hit.anticipate) {
-                    // Syncopation: play 1/8 note early
-                    timingOffsetMs -= int(60000.0 / adjusted.bpm / 2.0);
+                // Calculate timing using SUBDIVISIONS (not milliseconds!)
+                // This ensures timing feels musical regardless of tempo
+                int timingSub = hit.sub;  // Base subdivision (0=beat, 1=e, 2=and, 3=a)
+                
+                if (hit.layBack) {
+                    // LAY BACK: Play on the "e" of the beat (1/16 note late)
+                    // This creates space for the bass and gives a relaxed jazz feel
+                    // Instead of adding ms, we shift to the next subdivision
+                    timingSub = 1;  // Play on the "e" instead of the beat
                 }
                 
+                // Apply small humanization offset (but much smaller than before)
+                int timingOffsetMs = computeTimingOffsetMs(adjusted, timingHash + hit.sub);
+                timingOffsetMs = timingOffsetMs / 3; // Reduce randomness significantly
+                
                 virtuoso::groove::GridPos lhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-                    adjusted.playbackBarIndex, adjusted.beatInBar, hit.sub, 4, ts);
+                    adjusted.playbackBarIndex, adjusted.beatInBar, timingSub, 4, ts);
                 lhPos = applyTimingOffset(lhPos, timingOffsetMs, adjusted.bpm, ts);
                 
                 // Velocity: accent first hit, softer subsequent

@@ -1654,23 +1654,95 @@ QVector<JazzBalladPianoPlanner::FragmentNote> JazzBalladPianoPlanner::applyMelod
     
     if (fragment.intervalPattern.isEmpty()) return notes;
     
-    // For arpeggios, we need to use actual chord tones instead of fixed intervals
+    // ========================================================================
+    // BUILD CHORD SCALE - All notes that are consonant with this chord
+    // This prevents fragments from clashing with the harmony
+    // ========================================================================
+    QVector<int> chordScalePcs;
+    
+    // Core chord tones (always safe)
+    int root = c.chord.rootPc;
+    int third = pcForDegree(c.chord, 3);
+    int fifth = pcForDegree(c.chord, 5);
+    int seventh = pcForDegree(c.chord, 7);
+    int ninth = pcForDegree(c.chord, 9);
+    int thirteenth = pcForDegree(c.chord, 13);
+    
+    if (root >= 0) chordScalePcs.push_back(root);
+    if (third >= 0) chordScalePcs.push_back(third);
+    if (fifth >= 0) chordScalePcs.push_back(fifth);
+    if (seventh >= 0) chordScalePcs.push_back(seventh);
+    if (ninth >= 0) chordScalePcs.push_back(ninth);
+    if (thirteenth >= 0) chordScalePcs.push_back(thirteenth);
+    
+    // Add scale tones based on chord quality (fill gaps for stepwise motion)
+    const bool isDominant = (c.chord.quality == music::ChordQuality::Dominant);
+    const bool isMajor = (c.chord.quality == music::ChordQuality::Major);
+    const bool isMinor = (c.chord.quality == music::ChordQuality::Minor);
+    
+    if (isMajor) {
+        // Major scale: add 2 (9), 6 (13) if not already present
+        if (ninth < 0) chordScalePcs.push_back(normalizePc(root + 2));
+        if (thirteenth < 0) chordScalePcs.push_back(normalizePc(root + 9));
+    } else if (isMinor) {
+        // Dorian: add 2, 4, 6
+        if (ninth < 0) chordScalePcs.push_back(normalizePc(root + 2));
+        chordScalePcs.push_back(normalizePc(root + 5)); // 11 (4th)
+        chordScalePcs.push_back(normalizePc(root + 9)); // 13 (6th)
+    } else if (isDominant) {
+        // Mixolydian: add 2, 4, 6
+        if (ninth < 0) chordScalePcs.push_back(normalizePc(root + 2));
+        chordScalePcs.push_back(normalizePc(root + 5)); // 4th (avoid as target, OK as passing)
+        if (thirteenth < 0) chordScalePcs.push_back(normalizePc(root + 9));
+    }
+    
+    // Sort and deduplicate
+    std::sort(chordScalePcs.begin(), chordScalePcs.end());
+    chordScalePcs.erase(std::unique(chordScalePcs.begin(), chordScalePcs.end()), chordScalePcs.end());
+    
+    // Build MIDI lookup for all chord scale notes near target
+    QVector<int> chordScaleMidi;
+    for (int offset = -14; offset <= 14; offset++) {
+        int midi = targetMidi + offset;
+        if (midi < c.rhLo - 2 || midi > c.rhHi + 2) continue;
+        int pc = normalizePc(midi);
+        for (int scalePc : chordScalePcs) {
+            if (pc == scalePc) {
+                chordScaleMidi.push_back(midi);
+                break;
+            }
+        }
+    }
+    std::sort(chordScaleMidi.begin(), chordScaleMidi.end());
+    
+    // Helper: snap a note to the nearest chord scale tone
+    auto snapToChordScale = [&](int midi) -> int {
+        if (chordScaleMidi.isEmpty()) return midi;
+        
+        int best = midi;
+        int bestDist = 999;
+        for (int scaleMidi : chordScaleMidi) {
+            int dist = qAbs(scaleMidi - midi);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = scaleMidi;
+            }
+        }
+        return best;
+    };
+    
+    // For arpeggios, use actual chord tones only
     bool useChordTones = (fragment.type == FragmentType::ArpeggioUp || 
                           fragment.type == FragmentType::ArpeggioDown);
     
-    // Collect chord tones for arpeggio fragments
     QVector<int> chordMidi;
     if (useChordTones) {
-        int third = pcForDegree(c.chord, 3);
-        int fifth = pcForDegree(c.chord, 5);
-        int seventh = pcForDegree(c.chord, 7);
-        
-        // Build chord tones near target
         for (int offset = -12; offset <= 12; offset++) {
             int midi = targetMidi + offset;
             if (midi < c.rhLo || midi > c.rhHi) continue;
             int pc = normalizePc(midi);
-            if (pc == third || pc == fifth || pc == seventh || pc == c.chord.rootPc) {
+            // Only true chord tones (not scale tones)
+            if (pc == root || pc == third || pc == fifth || pc == seventh) {
                 chordMidi.push_back(midi);
             }
         }
@@ -1681,6 +1753,7 @@ QVector<JazzBalladPianoPlanner::FragmentNote> JazzBalladPianoPlanner::applyMelod
     
     for (int i = 0; i < fragment.intervalPattern.size(); ++i) {
         FragmentNote fn;
+        int rawMidi;
         
         if (useChordTones && !chordMidi.isEmpty()) {
             // For arpeggios, pick from actual chord tones
@@ -1688,10 +1761,30 @@ QVector<JazzBalladPianoPlanner::FragmentNote> JazzBalladPianoPlanner::applyMelod
             if (fragment.type == FragmentType::ArpeggioDown) {
                 idx = chordMidi.size() - 1 - idx;
             }
-            fn.midiNote = chordMidi[idx];
+            rawMidi = chordMidi[idx];
         } else {
-            // Apply interval pattern directly
-            fn.midiNote = targetMidi + fragment.intervalPattern[i];
+            // Apply interval pattern
+            rawMidi = targetMidi + fragment.intervalPattern[i];
+        }
+        
+        // ================================================================
+        // CONSONANCE CHECK: Snap to chord scale
+        // Exception: the final target note (interval 0) stays as-is
+        // Exception: very brief chromatic approaches (±1) are OK if leading to target
+        // ================================================================
+        bool isTargetNote = (fragment.intervalPattern[i] == 0);
+        bool isImmediateApproach = (qAbs(fragment.intervalPattern[i]) == 1 && 
+                                    i == fragment.intervalPattern.size() - 2);
+        
+        if (isTargetNote) {
+            // Target stays as-is (should already be a chord tone)
+            fn.midiNote = rawMidi;
+        } else if (isImmediateApproach) {
+            // Brief chromatic approach right before target is OK
+            fn.midiNote = rawMidi;
+        } else {
+            // All other notes: snap to chord scale for consonance
+            fn.midiNote = snapToChordScale(rawMidi);
         }
         
         // Ensure within range
@@ -2345,6 +2438,23 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             // Prioritize chord tones that define the harmony beautifully
             // Extensions only when energy/tension warrant it
             // ================================================================
+            
+            // Helper: Check if RH note would clash with LH voicing
+            // A clash is when notes are 1-2 semitones apart in close register
+            auto wouldClashWithLh = [&](int rhMidi) -> bool {
+                for (int lhNote : m_state.lastLhMidi) {
+                    int dist = qAbs(rhMidi - lhNote);
+                    // Minor 2nd (1-2 semitones) in close register is dissonant
+                    if (dist == 1 || dist == 2) {
+                        // Only a problem if they're within 2 octaves
+                        if (qAbs(rhMidi - lhNote) <= 24) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+            
             QVector<int> melodicPcs;
             
             // Core chord tones - always safe and beautiful
@@ -2402,12 +2512,13 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             } else if (choice == MelodicChoice::ReturnHome) {
                 // Return toward motif home (creates coherence)
                 bestTarget = motifHomeMidi;
-                // Snap to nearest chord tone
+                // Snap to nearest chord tone (avoiding LH clashes)
                 int bestDist = 999;
                 for (int pc : melodicPcs) {
                     for (int oct = 5; oct <= 7; ++oct) {
                         int midi = pc + 12 * oct;
                         if (midi < adjusted.rhLo || midi > adjusted.rhHi) continue;
+                        if (wouldClashWithLh(midi)) continue; // Skip clashing notes
                         int dist = qAbs(midi - motifHomeMidi);
                         if (dist < bestDist) {
                             bestDist = dist;
@@ -2434,6 +2545,9 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                         
                         // Skip if no motion (we want MOVEMENT!)
                         if (absMotion == 0) continue;
+                        
+                        // DISSONANCE CHECK: Skip if would clash with LH
+                        if (wouldClashWithLh(midi)) continue;
                         
                         // Prefer stepwise motion (1-3 semitones)
                         int score = 0;
@@ -2625,7 +2739,10 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     bool intervalOk = (actualInterval >= 3 && actualInterval <= 9) || 
                                       (actualInterval == 10 && hitTensionLevel > 0.5);
                     
-                    if (intervalOk && secondMidi >= adjusted.rhLo && secondMidi < bestTarget) {
+                    // Also check for LH clash
+                    bool noLhClash = !wouldClashWithLh(secondMidi);
+                    
+                    if (intervalOk && noLhClash && secondMidi >= adjusted.rhLo && secondMidi < bestTarget) {
                         rhMidiNotes.insert(rhMidiNotes.begin(), secondMidi);
                         
                         // Add third voice for triads
@@ -2636,8 +2753,9 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                             }
                             int thirdInterval = secondMidi - thirdMidi;
                             bool thirdIntervalOk = (thirdInterval >= 3 && thirdInterval <= 9);
+                            bool thirdNoLhClash = !wouldClashWithLh(thirdMidi);
                             
-                            if (thirdIntervalOk && thirdMidi >= adjusted.rhLo && thirdMidi < secondMidi) {
+                            if (thirdIntervalOk && thirdNoLhClash && thirdMidi >= adjusted.rhLo && thirdMidi < secondMidi) {
                                 rhMidiNotes.insert(rhMidiNotes.begin(), thirdMidi);
                             }
                         }

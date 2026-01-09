@@ -34,6 +34,8 @@ signals:
     void virtuosoTheoryEventJson(const QString& json);
     void virtuosoPlannedTheoryEventJson(const QString& json);
     void virtuosoLookaheadPlanJson(const QString& json);
+    // Piano debug log for main console
+    void pianoDebugLogMessage(const QString& text);
 
 public slots:
     // Used by MainWindow on app quit to guarantee we stop generating/scheduling notes.

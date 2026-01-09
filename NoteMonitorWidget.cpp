@@ -618,6 +618,18 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
             this, [this](const QString& s) {
                 if (m_virtuosoHud) m_virtuosoHud->setText(s);
             });
+    
+    // Piano debug log - forward to main console and theory log for comprehensive debugging
+    connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::pianoDebugLog,
+            this, [this](const QString& s) {
+                // Emit to theory log for visibility
+                if (m_virtuosoTheoryLog) {
+                    m_virtuosoTheoryLog->append(s);
+                }
+                // Also forward to main MidiProcessor log
+                emit pianoDebugLogMessage(s);
+            });
+    
     connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::theoryEventJson,
             this, [this](const QString& json) {
                 if (!m_virtuosoTheoryLog) return;

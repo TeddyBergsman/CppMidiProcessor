@@ -214,11 +214,17 @@ bool parseChordSymbol(const QString& chordText, ChordSymbol& out) {
     if (startsWithIgnoreCase(head, "aug")) { out.quality = ChordQuality::Augmented; stripPrefixIgnoreCase(head, "aug"); }
     if (startsWithIgnoreCase(head, "+"))   { out.quality = ChordQuality::Augmented; head.remove(0, 1); }
 
-    // m7b5 is a common ASCII half-diminished form
-    if (startsWithIgnoreCase(head, "7b5") && out.quality == ChordQuality::Minor) {
-        // Don't special-case; it becomes minor with altered 5 unless explicitly ø.
+    // m7b5 / min7b5 is a common ASCII half-diminished form
+    // IMPORTANT: Check tailRaw (original) because 'm' was already stripped from head
+    if (tailRaw.contains("m7b5", Qt::CaseInsensitive) ||
+        tailRaw.contains("min7b5", Qt::CaseInsensitive) ||
+        tailRaw.contains("hdim", Qt::CaseInsensitive) ||
+        tailRaw.contains(QString::fromUtf8("ø"), Qt::CaseInsensitive)) {
+        out.quality = ChordQuality::HalfDiminished;
     }
-    if (head.contains("m7b5", Qt::CaseInsensitive) || head.contains("min7b5", Qt::CaseInsensitive) || head.contains("hdim", Qt::CaseInsensitive)) {
+    // Also handle the case where quality is Minor and we have 7b5 remaining
+    // (e.g., "Dm7b5" → quality=Minor, head="7b5")
+    if (out.quality == ChordQuality::Minor && head.contains("7b5", Qt::CaseInsensitive)) {
         out.quality = ChordQuality::HalfDiminished;
     }
 

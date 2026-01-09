@@ -185,6 +185,7 @@ VirtuosoBalladMvpPlaybackEngine::VirtuosoBalladMvpPlaybackEngine(QObject* parent
 
     // Harmony context uses ontology as its substrate.
     m_harmony.setOntology(&m_ontology);
+    m_harmony.setOwner(this);
 }
 
 void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
@@ -335,6 +336,57 @@ void VirtuosoBalladMvpPlaybackEngine::play() {
     m_harmony.resetRuntimeState();
     m_bassPlanner.reset();
     m_pianoPlanner.reset();
+    
+    // DEBUG: Dump full chart structure at start of playback (emit to UI)
+    // This is CRITICAL for diagnosing chord timing issues
+    {
+        QString dump = "\n╔══════════════════════════════════════════════════════════════════════╗\n";
+        dump += "║                     CHART STRUCTURE DUMP                              ║\n";
+        dump += "╠══════════════════════════════════════════════════════════════════════╣\n";
+        dump += QString("║ Time Signature: %1/%2                                                   ║\n")
+            .arg(m_model.timeSigNum).arg(m_model.timeSigDen);
+        dump += "╠══════════════════════════════════════════════════════════════════════╣\n";
+        
+        int globalBarIdx = 0;
+        int globalCellIdx = 0;
+        for (int lineIdx = 0; lineIdx < m_model.lines.size(); ++lineIdx) {
+            const auto& line = m_model.lines[lineIdx];
+            if (!line.sectionLabel.isEmpty()) {
+                dump += QString("║ --- Section: %1 ---\n").arg(line.sectionLabel);
+            }
+            for (int barIdx = 0; barIdx < line.bars.size(); ++barIdx) {
+                const auto& bar = line.bars[barIdx];
+                QStringList cells;
+                for (int cellIdx = 0; cellIdx < bar.cells.size(); ++cellIdx) {
+                    QString c = bar.cells[cellIdx].chord.trimmed();
+                    if (c.isEmpty()) c = "·"; // Empty cell indicator
+                    // Show global cell index in brackets for cross-reference with HARMONY traces
+                    cells.push_back(QString("[%1]%2").arg(globalCellIdx).arg(c));
+                    globalCellIdx++;
+                }
+                dump += QString("║ Bar %1: %2\n")
+                    .arg(globalBarIdx, 2).arg(cells.join("  "));
+                globalBarIdx++;
+            }
+        }
+        
+        dump += "╠══════════════════════════════════════════════════════════════════════╣\n";
+        dump += QString("║ Total bars: %1  Total cells: %2  Sequence length: %3\n")
+            .arg(globalBarIdx).arg(globalCellIdx).arg(m_sequence.size());
+        
+        // Show first 32 sequence entries (8 bars worth) to verify step-to-cell mapping
+        dump += "║ Sequence (step→cell) first 32 entries:\n║   ";
+        QStringList seqParts;
+        for (int i = 0; i < qMin(32, m_sequence.size()); ++i) {
+            seqParts.push_back(QString("%1→%2").arg(i).arg(m_sequence[i]));
+            if ((i + 1) % 8 == 0 && i < 31) {
+                seqParts.push_back("\n║   ");
+            }
+        }
+        dump += seqParts.join(" ");
+        dump += "\n╚══════════════════════════════════════════════════════════════════════╝\n";
+        emit pianoDebugLog(dump);
+    }
     m_interaction.reset();
     m_motivicMemory.clear();
     m_story.reset();

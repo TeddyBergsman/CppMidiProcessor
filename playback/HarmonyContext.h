@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QObject>
+#include <QPointer>
 #include <QSet>
 #include <QString>
 #include <QVector>
@@ -17,6 +19,7 @@ namespace playback {
 class HarmonyContext final {
 public:
     void setOntology(const virtuoso::ontology::OntologyRegistry* ont) { m_ont = ont; }
+    void setOwner(QObject* owner) { m_owner = owner; }
 
     void resetRuntimeState();
 
@@ -45,6 +48,14 @@ public:
 
     bool hasLastChord() const { return m_hasLastChord; }
     const music::ChordSymbol& lastChord() const { return m_lastChord; }
+    
+    // Save/restore runtime chord state (for phrase planners that need to scan ahead without corrupting state)
+    struct RuntimeState {
+        music::ChordSymbol lastChord;
+        bool hasLastChord = false;
+    };
+    RuntimeState saveRuntimeState() const { return {m_lastChord, m_hasLastChord}; }
+    void restoreRuntimeState(const RuntimeState& s) { m_lastChord = s.lastChord; m_hasLastChord = s.hasLastChord; }
 
     // Analysis helpers
     static bool sameChordKey(const music::ChordSymbol& a, const music::ChordSymbol& b);
@@ -93,6 +104,7 @@ private:
                                                      virtuoso::theory::KeyMode fallbackMode) const;
 
     const virtuoso::ontology::OntologyRegistry* m_ont = nullptr; // not owned
+    QPointer<QObject> m_owner; // for debug logging
 
     // Runtime chord tracking
     music::ChordSymbol m_lastChord;

@@ -2,6 +2,8 @@
 
 #include "virtuoso/theory/ScaleSuggester.h"
 
+#include <QDebug>
+#include <QMetaObject>
 #include <QtGlobal>
 #include <algorithm>
 
@@ -370,27 +372,75 @@ music::ChordSymbol HarmonyContext::parseCellChordNoState(const chart::ChartModel
 bool HarmonyContext::chordForCellIndex(const chart::ChartModel& model, int cellIndex, music::ChordSymbol& outChord, bool& isNewChord) {
     isNewChord = false;
     const chart::Cell* c = cellForFlattenedIndexLocal(model, cellIndex);
-    if (!c) return false;
+    
+    // HARMONY_TRACE: Debug logging (use DirectConnection for synchronous/ordered output)
+    auto emitTrace = [this](const QString& msg) {
+        if (m_owner) {
+            // Use DirectConnection so traces appear in correct chronological order
+            QMetaObject::invokeMethod(m_owner, "pianoDebugLog", Qt::DirectConnection,
+                Q_ARG(QString, msg));
+        }
+    };
+    
+    const int barIdx = cellIndex / 4;
+    const int cellInBar = cellIndex % 4;
+    
+    if (!c) {
+        emitTrace(QString("HARMONY[%1]: cell=%2 (bar%3.%4) -> NO CELL FOUND")
+            .arg(cellIndex).arg(cellIndex).arg(barIdx).arg(cellInBar));
+        return false;
+    }
 
     const QString t = c->chord.trimmed();
+    const QString prevChordText = m_hasLastChord ? m_lastChord.originalText : "(none)";
+    
     if (t.isEmpty()) {
-        if (m_hasLastChord) { outChord = m_lastChord; return true; }
+        if (m_hasLastChord) {
+            outChord = m_lastChord;
+            emitTrace(QString("HARMONY[%1]: cell=%2 (bar%3.%4) RAW='' (empty) -> CONTINUE prev='%5'")
+                .arg(cellIndex).arg(cellIndex).arg(barIdx).arg(cellInBar).arg(m_lastChord.originalText));
+            return true;
+        }
+        emitTrace(QString("HARMONY[%1]: cell=%2 (bar%3.%4) RAW='' (empty), no prev -> FALSE")
+            .arg(cellIndex).arg(cellIndex).arg(barIdx).arg(cellInBar));
         return false;
     }
 
     music::ChordSymbol parsed;
     if (!music::parseChordSymbol(t, parsed)) {
-        if (m_hasLastChord) { outChord = m_lastChord; return true; }
+        if (m_hasLastChord) {
+            outChord = m_lastChord;
+            emitTrace(QString("HARMONY[%1]: cell=%2 (bar%3.%4) RAW='%5' PARSE_FAIL -> CONTINUE prev='%6'")
+                .arg(cellIndex).arg(cellIndex).arg(barIdx).arg(cellInBar).arg(t).arg(m_lastChord.originalText));
+            return true;
+        }
+        emitTrace(QString("HARMONY[%1]: cell=%2 (bar%3.%4) RAW='%5' PARSE_FAIL, no prev -> FALSE")
+            .arg(cellIndex).arg(cellIndex).arg(barIdx).arg(cellInBar).arg(t));
         return false;
     }
     if (parsed.placeholder) {
-        if (m_hasLastChord) { outChord = m_lastChord; return true; }
+        if (m_hasLastChord) {
+            outChord = m_lastChord;
+            emitTrace(QString("HARMONY[%1]: cell=%2 (bar%3.%4) RAW='%5' PLACEHOLDER -> CONTINUE prev='%6'")
+                .arg(cellIndex).arg(cellIndex).arg(barIdx).arg(cellInBar).arg(t).arg(m_lastChord.originalText));
+            return true;
+        }
+        emitTrace(QString("HARMONY[%1]: cell=%2 (bar%3.%4) RAW='%5' PLACEHOLDER, no prev -> FALSE")
+            .arg(cellIndex).arg(cellIndex).arg(barIdx).arg(cellInBar).arg(t));
         return false;
     }
 
     outChord = parsed;
     if (!m_hasLastChord) isNewChord = true;
     else isNewChord = !sameChordKey(outChord, m_lastChord);
+    
+    // THIS IS WHERE m_lastChord CHANGES - critical to trace!
+    emitTrace(QString("HARMONY[%1]: cell=%2 (bar%3.%4) RAW='%5' -> PARSED='%6' %7 (prev='%8')")
+        .arg(cellIndex).arg(cellIndex).arg(barIdx).arg(cellInBar)
+        .arg(t).arg(parsed.originalText)
+        .arg(isNewChord ? "NEW!" : "same")
+        .arg(prevChordText));
+    
     m_lastChord = outChord;
     m_hasLastChord = true;
     return true;

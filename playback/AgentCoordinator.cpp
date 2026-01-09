@@ -46,6 +46,42 @@ static QString representativeVoicingType(const QVector<virtuoso::engine::AgentIn
     return best;
 }
 
+// Convert MIDI note to human-readable note name (e.g., 60 -> "C4", 64 -> "E4")
+static QString midiToNoteName(int midi) {
+    static const char* noteNames[] = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
+    if (midi < 0 || midi > 127) return "?";
+    const int octave = (midi / 12) - 1;
+    const int pc = midi % 12;
+    return QString("%1%2").arg(noteNames[pc]).arg(octave);
+}
+
+// Convert pitch class to note name without octave (e.g., 0 -> "C", 4 -> "E")
+static QString pcToNoteName(int pc) {
+    static const char* noteNames[] = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
+    pc = ((pc % 12) + 12) % 12;
+    return noteNames[pc];
+}
+
+// Format a list of MIDI notes as readable note names
+static QString midiListToNoteNames(const QVector<int>& midiNotes) {
+    if (midiNotes.isEmpty()) return "-";
+    QStringList parts;
+    for (int m : midiNotes) {
+        parts.push_back(midiToNoteName(m));
+    }
+    return parts.join(" ");
+}
+
+// Format pitch classes as note names
+static QString pcsToNoteNames(const QVector<int>& pcs) {
+    if (pcs.isEmpty()) return "-";
+    QStringList parts;
+    for (int pc : pcs) {
+        parts.push_back(pcToNoteName(pc));
+    }
+    return parts.join(" ");
+}
+
 static int normalizePcLocal(int pc) {
     int v = pc % 12;
     if (v < 0) v += 12;
@@ -260,6 +296,43 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     const int beatsPerBar = qMax(1, ts.num);
     const int playbackBarIndex = stepIndex / beatsPerBar;
     const int beatInBar = stepIndex % beatsPerBar;
+    
+    // DEBUG: Trace cell index and raw chord content to diagnose timing issues
+    // Note: HARMONY traces (from chordForCellIndex) appear BEFORE this because they're called
+    // during buildLookaheadWindow above. This just summarizes the result.
+    if (in.owner) {
+        const int cellIndex = seq[stepIndex % seqLen];
+        const int barIdx = cellIndex / 4;
+        const int cellInBar = cellIndex % 4;
+        
+        // Get raw cell text using flattened bar index (correct approach)
+        QString rawCellText = "?";
+        QVector<const chart::Bar*> allBars;
+        for (const auto& line : in.model->lines) {
+            for (const auto& bar : line.bars) {
+                allBars.push_back(&bar);
+            }
+        }
+        if (barIdx >= 0 && barIdx < allBars.size()) {
+            const chart::Bar* b = allBars[barIdx];
+            if (cellInBar >= 0 && cellInBar < b->cells.size()) {
+                rawCellText = b->cells[cellInBar].chord.trimmed();
+                if (rawCellText.isEmpty()) rawCellText = "(empty)";
+            }
+        }
+        
+        QString parsedChord = look.haveCurrentChord ? look.currentChord.originalText : "(no chord)";
+        
+        // Use DirectConnection for synchronous output (appears in correct order)
+        QString cellDebug = QString("STEP[%1]: cell=%2 (bar%3.%4) RAW='%5' -> using '%6' %7")
+            .arg(stepIndex, 3).arg(cellIndex, 3)
+            .arg(barIdx).arg(cellInBar)
+            .arg(rawCellText)
+            .arg(parsedChord)
+            .arg(look.chordIsNew ? "NEW!" : "");
+        
+        QMetaObject::invokeMethod(in.owner, "pianoDebugLog", Qt::DirectConnection, Q_ARG(QString, cellDebug));
+    }
 
     const bool haveChord = look.haveCurrentChord;
     const music::ChordSymbol chord = look.currentChord;
@@ -1473,12 +1546,6 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                               .arg(pianoChoiceId);
         const QString s2 = s.arg(notesStr.isEmpty() ? QString("-") : notesStr);
 
-        auto pcsToStr = [](const QVector<int>& pcs) -> QString {
-            if (pcs.isEmpty()) return "-";
-            QStringList parts;
-            for (int pc : pcs) parts.push_back(QString::number((pc % 12 + 12) % 12));
-            return parts.join(",");
-        };
         QVector<int> playedPcsVec = playedPcs.values().toVector();
         std::sort(playedPcsVec.begin(), playedPcsVec.end());
         QVector<int> chordPcs = chordPitchClassesForDebug(chord, /*basicOnly=*/false);
@@ -1517,23 +1584,49 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         }
         const QString altStr = al.isEmpty() ? "-" : al.join(",");
 
-        const QString s3 = QString("%1  bar=%2 beat=%3 new=%4  chord=%5  sym[root=%6 bass=%7 q=%8 sev=%9 ext=%10 alt=%11 alts=%12]  pcsPlayed=%13  pcsChord=%14  pcsBasic=%15")
-                               .arg(debugPrefix + s2)
+        // Get MIDI notes for readable output
+        QVector<int> sortedMidiNotes;
+        sortedMidiNotes.reserve(pianoPlan.notes.size());
+        for (const auto& nn : pianoPlan.notes) {
+            sortedMidiNotes.push_back(nn.note);
+        }
+        std::sort(sortedMidiNotes.begin(), sortedMidiNotes.end());
+
+        // Get voicing type from the plan
+        const QString voicingType = pianoPlan.chosenVoicingKey.isEmpty() 
+            ? representativeVoicingType(pianoPlan.notes) 
+            : pianoPlan.chosenVoicingKey;
+
+        // Build comprehensive debug string with note names
+        const QString s3 = QString("\n=== PIANO DEBUG ===\n"
+                                   "Bar: %1  Beat: %2  ChordNew: %3\n"
+                                   "Chord: %4  Root: %5  Quality: %6  7th: %7  Ext: %8\n"
+                                   "Voicing: %9\n"
+                                   "MIDI Notes: %10\n"
+                                   "Note Names: %11\n"
+                                   "Played PCs: %12 (%13)\n"
+                                   "Chord PCs:  %14 (%15)\n"
+                                   "==================")
                                .arg(playbackBarIndex)
                                .arg(beatInBar)
-                               .arg(chordIsNew ? "1" : "0")
+                               .arg(chordIsNew ? "YES" : "no")
                                .arg(chordText)
-                               .arg(chord.rootPc)
-                               .arg(chord.bassPc)
+                               .arg(pcToNoteName(chord.rootPc))
                                .arg(qualStr(chord.quality))
                                .arg(sevStr(chord.seventh))
                                .arg(chord.extension)
-                               .arg(chord.alt ? "1" : "0")
-                               .arg(altStr)
-                               .arg(pcsToStr(playedPcsVec))
-                               .arg(pcsToStr(chordPcs))
-                               .arg(pcsToStr(basicPcs));
+                               .arg(voicingType)
+                               .arg(notesStr.isEmpty() ? "-" : notesStr)
+                               .arg(midiListToNoteNames(sortedMidiNotes))
+                               .arg(pcsToNoteNames(playedPcsVec))
+                               .arg(playedPcsVec.size())
+                               .arg(pcsToNoteNames(chordPcs))
+                               .arg(chordPcs.size());
+        
         QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, s3));
+        
+        // Also emit to main console log for comprehensive debugging
+        QMetaObject::invokeMethod(in.owner, "pianoDebugLog", Qt::QueuedConnection, Q_ARG(QString, s3));
     }
     if (in.story && pianoN > 0) {
         in.story->lastPianoCenterMidi = clampPianoCenterMidi(int(llround(double(pianoSum) / double(pianoN))));

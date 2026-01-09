@@ -418,6 +418,11 @@ void MainWindow::createConnections() {
 
     // Wire pitch updates to minimal NoteMonitor UI
     if (noteMonitorWidget) {
+        // Connect piano debug log to main console
+        connect(noteMonitorWidget, &NoteMonitorWidget::pianoDebugLogMessage,
+                this, &MainWindow::logToConsole,
+                static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+        
         connect(m_midiProcessor, &MidiProcessor::guitarPitchUpdated,
                 noteMonitorWidget, &NoteMonitorWidget::setGuitarNote,
                 static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));

@@ -157,17 +157,24 @@ private:
 
     // Core voicing types from ontology
     enum class VoicingType {
-        RootlessA,      // 3-5-7-9
-        RootlessB,      // 7-9-3-5
-        Shell,          // 3-7
+        RootlessA,      // 3-5-7-9 (Bill Evans Type A)
+        RootlessB,      // 7-9-3-5 (Bill Evans Type B)
+        Shell,          // 3-7 guide tones
         GuideTones,     // 3-7 (same as shell but explicit)
-        Quartal,        // stacked 4ths
-        UST             // Upper Structure Triad
+        Quartal,        // stacked 4ths (McCoy Tyner)
+        UST,            // Upper Structure Triad
+        Drop2,          // Drop 2 voicing (2nd from top drops octave)
+        Cluster,        // Close position with seconds (modern)
+        Spread,         // Wide intervals (ballad texture)
+        Block           // George Shearing style locked hands
     };
 
     enum class VoicingDensity {
-        Guide,  // minimal: shells only
-        Full    // extended: shells + colors
+        Sparse,   // minimal: 2 notes (shells)
+        Guide,    // 2-3 notes (guide tones)
+        Medium,   // 3-4 notes (typical comping)
+        Full,     // 4-5 notes (richer texture)
+        Lush      // 5+ notes (climax moments)
     };
 
     struct Voicing {
@@ -177,16 +184,32 @@ private:
         QVector<int> midiNotes;     // realized MIDI notes
         QString ontologyKey;
         double cost = 0.0;          // voice-leading cost
+        bool avoidsSlashBass = false; // true if slash bass PC was filtered out
+        int topNotePc = -1;         // preferred top note PC for melodic continuity
+        int topNoteMidi = -1;       // realized top note MIDI
     };
 
     // Generate candidate voicings for a chord
     QVector<Voicing> generateVoicingCandidates(const Context& c, VoicingDensity density) const;
 
-    // Realize pitch classes to MIDI notes within register
-    QVector<int> realizePcsToMidi(const QVector<int>& pcs, int lo, int hi,
-                                  const QVector<int>& prevVoicing) const;
+    // Context-aware density: considers phrase position, energy, cadence
+    VoicingDensity computeContextDensity(const Context& c) const;
 
-    // Voice-leading cost (sum of semitone distances, penalize parallel motion)
+    // Realize pitch classes to MIDI notes within register, with melodic top note
+    QVector<int> realizePcsToMidi(const QVector<int>& pcs, int lo, int hi,
+                                  const QVector<int>& prevVoicing,
+                                  int targetTopMidi = -1) const;
+
+    // Realize a voicing template by stacking intervals properly (Bill Evans style)
+    QVector<int> realizeVoicingTemplate(const QVector<int>& degrees,
+                                        const music::ChordSymbol& chord,
+                                        int bassMidi, int ceiling) const;
+
+    // Ensure top note follows melodic principles (stepwise preferred, avoid large leaps)
+    int selectMelodicTopNote(const QVector<int>& candidatePcs, int rhLo, int rhHi,
+                              int lastTopMidi, const Context& c) const;
+
+    // Voice-leading cost (comprehensive: motion, crossing, parallel, soprano)
     double voiceLeadingCost(const QVector<int>& prev, const QVector<int>& next) const;
 
     // Check feasibility with PianoDriver constraints
@@ -201,6 +224,9 @@ private:
     static int thirdInterval(music::ChordQuality q);
     static int fifthInterval(music::ChordQuality q);
     static int seventhInterval(const music::ChordSymbol& c);
+
+    // Determine what chord degree a pitch class represents
+    int getDegreeForPc(int pc, const music::ChordSymbol& chord) const;
 
     // Nearest MIDI note for a pitch class within bounds
     static int nearestMidiForPc(int pc, int around, int lo, int hi);
@@ -221,7 +247,7 @@ private:
     bool hasVocabularyLoaded() const;
 
     // Get rhythm hits from vocabulary (if available)
-    QVector<VocabRhythmHit> queryVocabularyHits(const Context& c) const;
+    QVector<VocabRhythmHit> queryVocabularyHits(const Context& c, QString* outPhraseId = nullptr) const;
 
     // Fallback: should we play on this beat? (deterministic from context)
     bool shouldPlayBeatFallback(const Context& c, quint32 hash) const;

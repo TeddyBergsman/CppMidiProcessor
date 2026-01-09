@@ -41,6 +41,12 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
     if (!p.in.bassPlanner || !p.in.pianoPlanner || !p.in.drummer) return {};
 
     const auto& in = p.in;
+    
+    // CRITICAL: Save harmony state before phrase planning lookahead scan.
+    // Phrase planning scans ahead through many cells using buildLookaheadWindow,
+    // which mutates m_lastChord. We must restore it afterward so runtime scheduling
+    // sees the correct chord state for each step.
+    const auto savedHarmonyState = in.harmony->saveRuntimeState();
     const QVector<int>& seq = *in.sequence;
     const virtuoso::groove::TimeSignature ts = timeSigFromModel(*in.model);
     const int beatsPerBar = qMax(1, ts.num);
@@ -398,13 +404,19 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
         beam = nextBeam;
     }
 
-    if (beam.isEmpty()) return {};
+    if (beam.isEmpty()) {
+        // Restore harmony state even on early return
+        in.harmony->restoreRuntimeState(savedHarmonyState);
+        return {};
+    }
     // Best node is beam[0] after sort above at last iteration.
     std::sort(beam.begin(), beam.end(), [](const BeamNode& a, const BeamNode& b) { return a.cost < b.cost; });
     const auto out = beam.front().choices;
     // IMPORTANT: planning must not mutate live planner state.
     in.bassPlanner->restoreState(bassStart);
     in.pianoPlanner->restoreState(pianoStart);
+    // CRITICAL: Restore harmony state so runtime scheduling sees correct chord progression
+    in.harmony->restoreRuntimeState(savedHarmonyState);
     return out;
 }
 

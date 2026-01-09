@@ -79,6 +79,8 @@ signals:
     void lookaheadPlanJson(const QString& json);
     void debugStatus(const QString& text);
     void debugEnergy(double energy01, bool isAuto);
+    // Comprehensive piano debug log for console output
+    void pianoDebugLog(const QString& text);
     void debugWeightsV2(double density01,
                         double rhythm01,
                         double intensity01,

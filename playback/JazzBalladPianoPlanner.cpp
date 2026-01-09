@@ -399,18 +399,25 @@ int JazzBalladPianoPlanner::pcForDegree(const music::ChordSymbol& c, int degree)
             // - Explicit 9th chord (extension >= 9)
             // - Altered dominants (use b9)
             // - Dominant 7ths (natural 9 is safe)
-            // - Minor 7ths (natural 9 is safe - dorian)
+            // - Minor 7ths (natural 9 is safe - dorian) BUT NOT 6th chords!
             // - AVOID on plain triads and maj7 without explicit extension
             // ================================================================
-            if (isAlt) {
+            if (is6thChord) {
+                // 6th chords should NOT automatically get a 9th
+                // The 6th is the color - adding 9th muddies it
+                return -1;
+            } else if (isAlt) {
                 pc = normalizePc(root + 1); // b9
             } else if (c.extension >= 9 || hasAlteration(9)) {
                 pc = applyAlter(9, normalizePc(root + 2));
-            } else if (isDominant || isMinor) {
-                // Natural 9 is generally safe on dom7 and min7
+            } else if (isDominant) {
+                // Natural 9 is safe on dom7
+                pc = normalizePc(root + 2);
+            } else if (isMinor && c.seventh != music::SeventhQuality::None) {
+                // Natural 9 is safe on min7 (dorian) but NOT on minor triads or min6
                 pc = normalizePc(root + 2);
             } else {
-                // Major 7 without explicit 9 - don't use
+                // Major 7 without explicit 9, minor triads, etc - don't use
                 return -1;
             }
             break;
@@ -1723,12 +1730,20 @@ QVector<JazzBalladPianoPlanner::FragmentNote> JazzBalladPianoPlanner::applyMelod
     
     // SAFETY: Remove any notes that are a minor 2nd from chord tones
     // This prevents clashes like F against E (4th vs 3rd on C7)
+    // Also check root, 9th, and 13th for b9 chords etc.
+    QVector<int> allChordPcs;
+    if (root >= 0) allChordPcs.push_back(root);
+    if (third >= 0) allChordPcs.push_back(third);
+    if (fifth >= 0) allChordPcs.push_back(fifth);
+    if (seventh >= 0) allChordPcs.push_back(seventh);
+    if (ninth >= 0) allChordPcs.push_back(ninth);
+    if (thirteenth >= 0) allChordPcs.push_back(thirteenth);
+    
     QVector<int> safeScalePcs;
     for (int scalePc : chordScalePcs) {
         bool clashes = false;
-        // Check against core chord tones
-        for (int chordPc : {third, fifth, seventh}) {
-            if (chordPc < 0) continue;
+        // Check against ALL chord tones
+        for (int chordPc : allChordPcs) {
             int interval = qAbs(scalePc - chordPc);
             if (interval > 6) interval = 12 - interval; // Normalize to smaller interval
             if (interval == 1) {
@@ -2545,8 +2560,16 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 }
             }
             
-            // Root is OK for passing tones after other motion
-            if (root >= 0 && motionCount > 0) melodicPcs.push_back(root);
+            // Root is OK for passing tones UNLESS there's a b9 (minor 2nd clash!)
+            // Check if the 9th is a b9 (half step above root)
+            bool hasFlat9 = false;
+            if (ninth >= 0) {
+                int expectedB9 = normalizePc(root + 1);
+                hasFlat9 = (ninth == expectedB9);
+            }
+            if (root >= 0 && motionCount > 0 && !hasFlat9) {
+                melodicPcs.push_back(root);
+            }
             
             if (melodicPcs.isEmpty()) continue;
             

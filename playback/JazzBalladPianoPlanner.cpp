@@ -432,11 +432,29 @@ int JazzBalladPianoPlanner::getMotifVariation(const Context& c) const {
 
 QVector<int> JazzBalladPianoPlanner::applyMotifToContext(const Context& c, int variation) const {
     // Apply the stored motif with the given variation
-    // Returns pitch classes relative to current chord
+    // Returns pitch classes that are ALWAYS consonant with current chord
+    // SAFETY: All returned PCs are validated chord tones or safe extensions
     
     if (m_state.phraseMotifPcs.isEmpty()) {
         // No motif stored - return guide tones
         return {pcForDegree(c.chord, 3), pcForDegree(c.chord, 7)};
+    }
+    
+    // Build list of safe pitch classes for this chord
+    QVector<int> safePcs;
+    int third = pcForDegree(c.chord, 3);
+    int fifth = pcForDegree(c.chord, 5);
+    int seventh = pcForDegree(c.chord, 7);
+    int ninth = pcForDegree(c.chord, 9);
+    
+    if (third >= 0) safePcs.push_back(third);
+    if (fifth >= 0) safePcs.push_back(fifth);
+    if (seventh >= 0) safePcs.push_back(seventh);
+    if (ninth >= 0) safePcs.push_back(ninth);
+    
+    if (safePcs.isEmpty()) {
+        // Fallback to root
+        safePcs.push_back(c.chord.rootPc);
     }
     
     QVector<int> result;
@@ -452,17 +470,16 @@ QVector<int> JazzBalladPianoPlanner::applyMotifToContext(const Context& c, int v
     if (startDegree < 1) startDegree = 3;
     if (startDegree > 13) startDegree = 9;
     
-    // Get starting PC
-    const int startPc = pcForDegree(c.chord, startDegree);
-    if (startPc < 0) {
-        // Degree not available, fall back to 5th
-        result.push_back(pcForDegree(c.chord, 5));
-        return result;
+    // Get starting PC - must be a safe chord tone
+    int startPc = pcForDegree(c.chord, startDegree);
+    if (startPc < 0 || !safePcs.contains(startPc)) {
+        // Fall back to the first safe PC
+        startPc = safePcs.first();
     }
     
     result.push_back(startPc);
     
-    // Apply motif intervals
+    // Apply motif intervals - but SNAP to nearest safe PC
     for (int i = 1; i < m_state.phraseMotifPcs.size(); ++i) {
         int interval = m_state.phraseMotifPcs[i];
         
@@ -473,8 +490,23 @@ QVector<int> JazzBalladPianoPlanner::applyMotifToContext(const Context& c, int v
         
         // Convert interval to semitones (roughly: 1 step = 2 semitones)
         const int semitones = interval * 2;
-        const int nextPc = (startPc + semitones + 12) % 12;
-        result.push_back(nextPc);
+        const int rawPc = (startPc + semitones + 12) % 12;
+        
+        // SAFETY: Snap to nearest safe PC
+        int bestPc = safePcs.first();
+        int bestDist = 12;
+        for (int safePc : safePcs) {
+            int dist = qMin(qAbs(safePc - rawPc), 12 - qAbs(safePc - rawPc));
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestPc = safePc;
+            }
+        }
+        
+        // Only add if different from last (avoid repetition)
+        if (result.isEmpty() || bestPc != result.last()) {
+            result.push_back(bestPc);
+        }
     }
     
     return result;
@@ -607,8 +639,12 @@ int JazzBalladPianoPlanner::applyRhythmicFeel(
     
     // Returns timing offset in milliseconds
     // Positive = late (laid back), Negative = early (pushed)
+    // SAFETY: All offsets are CAPPED to prevent sloppiness
     
     const double beatMs = 60000.0 / bpm;  // Duration of one beat in ms
+    
+    // Maximum offset to prevent sloppiness (35ms is noticeable but not sloppy)
+    const int maxOffset = 35;
     
     switch (feel) {
         case RhythmicFeel::Straight:
@@ -616,29 +652,30 @@ int JazzBalladPianoPlanner::applyRhythmicFeel(
             return 0;
             
         case RhythmicFeel::Swing: {
-            // Jazz swing: delay the "e" and "a" subdivisions
-            // Creates the characteristic "lilt"
+            // Jazz swing: SUBTLE delay of upbeats
+            // Much smaller percentages to avoid sloppiness
             // sub 0 = beat, sub 1 = e, sub 2 = and, sub 3 = a
+            int offset = 0;
             switch (subdivision) {
-                case 1: return int(beatMs * 0.08);  // "e" slightly late
-                case 2: return int(beatMs * 0.04);  // "and" slightly late (triplet-ish)
-                case 3: return int(beatMs * 0.06);  // "a" slightly late
-                default: return 0;
+                case 1: offset = int(beatMs * 0.03); break;  // "e" very slightly late
+                case 2: offset = int(beatMs * 0.02); break;  // "and" barely late
+                case 3: offset = int(beatMs * 0.025); break; // "a" slightly late
+                default: break;
             }
+            return qBound(-maxOffset, offset, maxOffset);
         }
         
         case RhythmicFeel::Triplet: {
             // Triplet feel: map 4 subdivisions to triplet positions
-            // sub 0 = beat (triplet 1)
-            // sub 1 = ignored/skip
-            // sub 2 = triplet 2 (2/3 of the way)
-            // sub 3 = triplet 3 (slightly before next beat)
+            // REDUCED offsets to avoid sloppiness
+            int offset = 0;
             switch (subdivision) {
-                case 0: return 0;                    // On the beat
-                case 2: return int(beatMs * 0.17);   // Triplet 2nd (delayed from "and")
-                case 3: return int(-beatMs * 0.08);  // Triplet 3rd (slightly early)
-                default: return 0;
+                case 0: offset = 0; break;                   // On the beat
+                case 2: offset = int(beatMs * 0.08); break;  // Triplet 2nd (reduced)
+                case 3: offset = int(-beatMs * 0.04); break; // Triplet 3rd (reduced)
+                default: break;
             }
+            return qBound(-maxOffset, offset, maxOffset);
         }
         
         case RhythmicFeel::Hemiola: {
@@ -649,9 +686,10 @@ int JazzBalladPianoPlanner::applyRhythmicFeel(
         }
         
         case RhythmicFeel::Displaced: {
-            // Metric displacement: everything shifted by an 8th note
-            // Creates forward momentum
-            return int(-beatMs * 0.5);  // Everything pushed forward by half a beat
+            // Metric displacement: shifted by a 16th note (not half a beat!)
+            // Half a beat was too much - sounds sloppy, not displaced
+            int offset = int(-beatMs * 0.25);  // Quarter beat = one 16th
+            return qBound(-maxOffset * 2, offset, maxOffset * 2);  // Allow slightly more for displacement
         }
     }
     
@@ -2918,13 +2956,17 @@ int JazzBalladPianoPlanner::selectNextRhMelodicTarget(const Context& c) const {
     // ================================================================
     // CALL-AND-RESPONSE: Blend response register when filling
     // Creates conversational interplay with user
+    // SAFETY: Keep target within reasonable bounds, don't over-influence
     // ================================================================
     if (shouldRespondToUser(c)) {
         // Alternate between complement and echo every 2 beats
         const bool complement = (c.beatInBar <= 1);
         const int responseTarget = getResponseRegister(c, complement);
-        // Blend arc target with response target (60% response when responding)
-        arcTarget = int(arcTarget * 0.4 + responseTarget * 0.6);
+        // Blend arc target with response target - REDUCED influence (40% not 60%)
+        // to prevent pulling too far from chord-appropriate notes
+        arcTarget = int(arcTarget * 0.6 + responseTarget * 0.4);
+        // Clamp to safe RH range
+        arcTarget = qBound(c.rhLo + 4, arcTarget, c.rhHi - 4);
     }
     
     // Determine tension level for extension usage
@@ -3712,17 +3754,20 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         }
         
         // Slight delay for RH relative to LH (rubato feel)
-        // Also apply rhythmic feel offset for swing/triplet timing
-        int rhTimingOffset = computeTimingOffsetMs(adjusted, rhHash) + 5;
+        // REDUCED base offset to prevent sloppiness when stacked with rhythmic feel
+        int rhTimingOffset = int(computeTimingOffsetMs(adjusted, rhHash) * 0.5) + 3;
         
         // Store rhythmic feel for per-note offset application
         const bool applyFeelPerNote = (rhythmFeel == RhythmicFeel::Swing || 
                                         rhythmFeel == RhythmicFeel::Triplet);
-        
+
         // For displaced feel, apply a global offset
         if (rhythmFeel == RhythmicFeel::Displaced) {
             rhTimingOffset += applyRhythmicFeel(RhythmicFeel::Displaced, 0, adjusted.beatInBar, adjusted.bpm);
         }
+        
+        // SAFETY CAP: Total base offset should not exceed 45ms to avoid sloppiness
+        rhTimingOffset = qBound(-45, rhTimingOffset, 45);
         
         // ================================================================
         // UPPER STRUCTURE TRIAD DECISION
@@ -4291,6 +4336,8 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             if (applyFeelPerNote) {
                 perNoteOffset += applyRhythmicFeel(rhythmFeel, sub, adjusted.beatInBar, adjusted.bpm);
             }
+            // FINAL SAFETY CAP: Total offset should never exceed 60ms to avoid sloppiness
+            perNoteOffset = qBound(-60, perNoteOffset, 60);
             rhPos = applyTimingOffset(rhPos, perNoteOffset, adjusted.bpm, ts);
             
             // Velocity: emphasize downbeats, softer passing tones

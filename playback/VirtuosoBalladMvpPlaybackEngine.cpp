@@ -736,6 +736,9 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
 
     ai.debugEnergyAuto = m_debugEnergyAuto;
     ai.debugEnergy = m_debugEnergy;
+    ai.debugMutePianoLH = m_debugMutePianoLH;
+    ai.debugMutePianoRH = m_debugMutePianoRH;
+    ai.debugVerbose = m_debugVerbose;
 
     ai.chDrums = m_chDrums;
     ai.chBass = m_chBass;

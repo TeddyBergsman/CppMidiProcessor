@@ -188,14 +188,56 @@ void JointCandidateModel::generateBassPianoCandidates(const GenerationInputs& in
 double JointCandidateModel::spacingPenalty(const QVector<virtuoso::engine::AgentIntentNote>& bassNotes,
                                           const QVector<virtuoso::engine::AgentIntentNote>& pianoNotes) {
     if (bassNotes.isEmpty() || pianoNotes.isEmpty()) return 0.0;
+    
+    double penalty = 0.0;
+    
+    // Register spacing penalty (original)
     int bassHi = 0;
     int pianoLo = 127;
     for (const auto& n : bassNotes) bassHi = qMax(bassHi, qBound(0, n.note, 127));
     for (const auto& n : pianoNotes) pianoLo = qMin(pianoLo, qBound(0, n.note, 127));
     const int spacingMin = 9; // semitones
-    if (pianoLo >= bassHi + spacingMin) return 0.0;
-    const int overlap = (bassHi + spacingMin) - pianoLo;
-    return 6.0 + 0.85 * double(overlap);
+    if (pianoLo < bassHi + spacingMin) {
+        const int overlap = (bassHi + spacingMin) - pianoLo;
+        penalty += 6.0 + 0.85 * double(overlap);
+    }
+    
+    // ================================================================
+    // RHYTHMIC INTERPLAY: Penalize bass/piano hitting at EXACT same time
+    // unless it's beat 1 (where unison is OK for emphasis)
+    // This encourages call-and-response interplay
+    // ================================================================
+    auto posToMs = [](const virtuoso::groove::GridPos& pos) -> qint64 {
+        // Approximate: bar * 4000 + beat-fraction * 1000
+        return qint64(pos.barIndex) * 4000 + qint64(pos.withinBarWhole.toDouble() * 1000.0);
+    };
+    
+    int simultaneousHits = 0;
+    for (const auto& bn : bassNotes) {
+        qint64 bMs = posToMs(bn.startPos);
+        for (const auto& pn : pianoNotes) {
+            qint64 pMs = posToMs(pn.startPos);
+            // Within 50ms = effectively simultaneous
+            if (qAbs(bMs - pMs) < 50) {
+                // Check if this is beat 1 (bar downbeat) - simultaneous is OK there
+                int beatInBar = 0;
+                virtuoso::groove::Rational within{0, 1};
+                virtuoso::groove::GrooveGrid::splitWithinBar(bn.startPos, {4, 4}, beatInBar, within);
+                
+                if (beatInBar != 0 || within.num != 0) {
+                    // Not beat 1 - penalize simultaneous hits
+                    simultaneousHits++;
+                }
+            }
+        }
+    }
+    
+    // Moderate penalty for too much simultaneous hitting (loses interplay)
+    if (simultaneousHits > 1) {
+        penalty += 0.8 * double(simultaneousHits - 1);
+    }
+    
+    return penalty;
 }
 
 JointCandidateModel::BestChoice JointCandidateModel::chooseBestCombo(const ScoringInputs& in,

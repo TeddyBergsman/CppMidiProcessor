@@ -19,16 +19,19 @@ class SemanticMidiAnalyzer {
 public:
     struct Settings {
         // Sliding window length for density (ms)
-        int densityWindowMs = 1200;
+        // LOWERED: Jazz ensemble needs quick reaction to user activity
+        int densityWindowMs = 600;  // Was 1200 - now 0.6 sec for snappier response
         // Silence threshold (ms since last note-on)
-        int silenceMs = 1400;
+        // LOWERED: Detect silence quickly so piano can fill gaps tastefully
+        int silenceMs = 800;  // Was 1400 - now 0.8 sec (still enough to avoid false positives)
 
         // Intent thresholds
-        double densityHighNotesPerSec = 6.0;
+        // LOWERED: Trigger "user busy" at lower activity levels for more responsive backing
+        double densityHighNotesPerSec = 2.5;  // Was 6.0 - now triggers at 2.5 notes/sec
         int registerHighCenterMidi = 72; // C5-ish
         // CC2 (breath/intensity) drives "Intensity Peak" (vocal energy), not voice note events.
-        int intensityPeakCc2 = 65;      // 0..127 (lowered: makes Climax reachable without extreme CC2)
-        int cc2ActivityFloor = 10;      // counts as "user active" (not silence)
+        int intensityPeakCc2 = 55;      // Was 65 - more sensitive to vocal intensity
+        int cc2ActivityFloor = 8;       // Was 10 - counts as "user active" (not silence)
 
         // Outside detection
         int outsideWindowNotes = 24;

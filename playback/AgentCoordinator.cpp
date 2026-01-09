@@ -525,11 +525,30 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     // but still need a fallback: if there is no chord context, run drums-only.
     virtuoso::groove::HumanizedEvent kickHe;
     bool haveKickHe = false;
+    // Track drum info for non-verbose summary
+    QString lastDrumPattern;
+    int lastDrumNoteCount = 0;
+    bool lastDrumHasKick = false;
+    bool lastDrumHasBrush = false;
+    
     auto scheduleDrums = [&](QVector<virtuoso::engine::AgentIntentNote> drumIntents, const QString& jointTag) {
+        // Track for summary
+        lastDrumNoteCount = drumIntents.size();
+        lastDrumHasKick = false;
+        lastDrumHasBrush = false;
+        
         // Separate kick for groove-lock timing anchor.
         int kickIndex = -1;
         for (int i = 0; i < drumIntents.size(); ++i) {
-            if (drumIntents[i].note == in.noteKick) { kickIndex = i; break; }
+            if (drumIntents[i].note == in.noteKick) { 
+                kickIndex = i; 
+                lastDrumHasKick = true;
+                break; 
+            }
+            // Check for brush/snare
+            if (drumIntents[i].note >= 38 && drumIntents[i].note <= 42) {
+                lastDrumHasBrush = true;
+            }
         }
         if (kickIndex >= 0) {
             auto kickIntent = drumIntents[kickIndex];
@@ -568,7 +587,17 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             n.logic_tag = n.logic_tag.isEmpty() ? jointTag : (n.logic_tag + "|" + jointTag);
             in.engine->scheduleNote(n);
             if (in.motivicMemory) in.motivicMemory->push(n);
+            
+            // Check for brush in remaining notes
+            if (n.note >= 38 && n.note <= 42) {
+                lastDrumHasBrush = true;
+            }
         }
+        
+        // Extract pattern type from joint tag
+        if (jointTag.contains("wet")) lastDrumPattern = "wet";
+        else if (jointTag.contains("dry")) lastDrumPattern = "dry";
+        else lastDrumPattern = "basic";
     };
 
     if (!haveChord || chord.noChord) {
@@ -1470,6 +1499,30 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         if (in.story && bassN > 0) {
             in.story->lastBassCenterMidi = clampBassCenterMidi(int(llround(double(bassSum) / double(bassN))));
         }
+        
+        // Non-verbose bass summary on chord changes
+        if (in.owner && !in.debugVerbose && chordIsNew) {
+            QStringList bassNotes;
+            for (const auto& nn : bassPlan.notes) {
+                bassNotes.push_back(pcToNoteName(nn.note % 12));
+            }
+            // Determine approach type from note analysis
+            QString approach = "root";
+            if (bassN > 1) approach = "walking";
+            else if (bassN == 1 && bassPlan.notes.size() > 0) {
+                const int bassNotePc = bassPlan.notes[0].note % 12;
+                if (bassNotePc != chord.rootPc) approach = "approach";
+            }
+            // Get scale from plan
+            const QString scale = bassPlan.chosenScaleKey.isEmpty() ? "-" : bassPlan.chosenScaleKey;
+            const QString summary = QString("🎸 Bass  | %1 | notes:[%2] | %3 | scale:%4")
+                .arg(chordText, -8)
+                .arg(bassNotes.isEmpty() ? "-" : bassNotes.join(","), -8)
+                .arg(approach, -8)
+                .arg(scale);
+            QMetaObject::invokeMethod(in.owner, "pianoDebugLog", Qt::QueuedConnection, Q_ARG(QString, summary));
+        }
+        
         if (usePlannedBeat) {
             in.bassPlanner->restoreState(plannedStep->bassStateAfter);
         }
@@ -1487,6 +1540,12 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     int pianoSum = 0;
     int pianoN = 0;
     for (auto& n : pianoIntents) {
+        // Debug muting: skip LH or RH notes if muted
+        const bool isLH = n.logic_tag.startsWith("LH");
+        const bool isRH = n.logic_tag.startsWith("RH");
+        if (in.debugMutePianoLH && isLH) continue;
+        if (in.debugMutePianoRH && isRH) continue;
+        
         if (!scaleUsed.isEmpty()) n.scale_used = scaleUsed;
         n.key_center = keyCenterStr;
         if (!roman.isEmpty()) n.roman = roman;
@@ -1598,36 +1657,87 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             ? representativeVoicingType(pianoPlan.notes) 
             : pianoPlan.chosenVoicingKey;
 
-        // Build comprehensive debug string with note names
-        const QString s3 = QString("\n=== PIANO DEBUG ===\n"
-                                   "Bar: %1  Beat: %2  ChordNew: %3\n"
-                                   "Chord: %4  Root: %5  Quality: %6  7th: %7  Ext: %8\n"
-                                   "Voicing: %9\n"
-                                   "MIDI Notes: %10\n"
-                                   "Note Names: %11\n"
-                                   "Played PCs: %12 (%13)\n"
-                                   "Chord PCs:  %14 (%15)\n"
-                                   "==================")
-                               .arg(playbackBarIndex)
-                               .arg(beatInBar)
-                               .arg(chordIsNew ? "YES" : "no")
-                               .arg(chordText)
-                               .arg(pcToNoteName(chord.rootPc))
-                               .arg(qualStr(chord.quality))
-                               .arg(sevStr(chord.seventh))
-                               .arg(chord.extension)
-                               .arg(voicingType)
-                               .arg(notesStr.isEmpty() ? "-" : notesStr)
-                               .arg(midiListToNoteNames(sortedMidiNotes))
-                               .arg(pcsToNoteNames(playedPcsVec))
-                               .arg(playedPcsVec.size())
-                               .arg(pcsToNoteNames(chordPcs))
-                               .arg(chordPcs.size());
-        
-        QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, s3));
-        
-        // Also emit to main console log for comprehensive debugging
-        QMetaObject::invokeMethod(in.owner, "pianoDebugLog", Qt::QueuedConnection, Q_ARG(QString, s3));
+        if (in.debugVerbose) {
+            // Build comprehensive debug string with note names
+            const QString s3 = QString("\n=== PIANO DEBUG ===\n"
+                                       "Bar: %1  Beat: %2  ChordNew: %3\n"
+                                       "Chord: %4  Root: %5  Quality: %6  7th: %7  Ext: %8\n"
+                                       "Voicing: %9\n"
+                                       "MIDI Notes: %10\n"
+                                       "Note Names: %11\n"
+                                       "Played PCs: %12 (%13)\n"
+                                       "Chord PCs:  %14 (%15)\n"
+                                       "==================")
+                                   .arg(playbackBarIndex)
+                                   .arg(beatInBar)
+                                   .arg(chordIsNew ? "YES" : "no")
+                                   .arg(chordText)
+                                   .arg(pcToNoteName(chord.rootPc))
+                                   .arg(qualStr(chord.quality))
+                                   .arg(sevStr(chord.seventh))
+                                   .arg(chord.extension)
+                                   .arg(voicingType)
+                                   .arg(notesStr.isEmpty() ? "-" : notesStr)
+                                   .arg(midiListToNoteNames(sortedMidiNotes))
+                                   .arg(pcsToNoteNames(playedPcsVec))
+                                   .arg(playedPcsVec.size())
+                                   .arg(pcsToNoteNames(chordPcs))
+                                   .arg(chordPcs.size());
+            
+            QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, s3));
+            QMetaObject::invokeMethod(in.owner, "pianoDebugLog", Qt::QueuedConnection, Q_ARG(QString, s3));
+        } else if (chordIsNew) {
+            // Non-verbose: detailed one-line summary per chord change
+            // Count LH and RH notes separately
+            QStringList lhNotes, rhNotes;
+            QString rhType;
+            for (const auto& nn : pianoPlan.notes) {
+                const bool isLH = nn.logic_tag.startsWith("LH");
+                if (isLH) {
+                    lhNotes.push_back(pcToNoteName(nn.note % 12));
+                } else {
+                    rhNotes.push_back(pcToNoteName(nn.note % 12));
+                    // Capture RH type (UST, Fragment, or regular)
+                    if (rhType.isEmpty()) {
+                        if (nn.logic_tag.contains("UST")) rhType = "UST";
+                        else if (nn.logic_tag.contains("Frag")) rhType = "Frag";
+                        else rhType = "melodic";
+                    }
+                }
+            }
+            
+            // Get voicing type from the plan
+            QString lhVoicing = voicingType;
+            if (lhVoicing.contains("TypeA") || lhVoicing.contains("RootlessA")) lhVoicing = "TypeA";
+            else if (lhVoicing.contains("TypeB") || lhVoicing.contains("RootlessB")) lhVoicing = "TypeB";
+            else if (lhVoicing.contains("Shell")) lhVoicing = "shell";
+            
+            // Detailed format with voicing info
+            const QString summary = QString("🎹 Piano | %1 | LH:%2[%3] RH:%4[%5]")
+                .arg(chordText, -8)
+                .arg(lhVoicing, -6)
+                .arg(lhNotes.isEmpty() ? "-" : lhNotes.join(","), -12)
+                .arg(rhType.isEmpty() ? "-" : rhType, -7)
+                .arg(rhNotes.isEmpty() ? "-" : rhNotes.join(","));
+            
+            QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, summary));
+            QMetaObject::invokeMethod(in.owner, "pianoDebugLog", Qt::QueuedConnection, Q_ARG(QString, summary));
+            
+            // Non-verbose drum summary on chord changes
+            if (lastDrumNoteCount > 0) {
+                QStringList elements;
+                if (lastDrumHasKick) elements.push_back("kick");
+                if (lastDrumHasBrush) elements.push_back("brush");
+                if (elements.isEmpty()) elements.push_back("hits");
+                
+                const QString drumSummary = QString("🥁 Drums | %1 | pattern:%2 | %3 notes (%4)")
+                    .arg(chordText, -8)
+                    .arg(lastDrumPattern, -5)
+                    .arg(lastDrumNoteCount)
+                    .arg(elements.join("+"));
+                QMetaObject::invokeMethod(in.owner, "pianoDebugLog", Qt::QueuedConnection, Q_ARG(QString, drumSummary));
+            }
+        }
     }
     if (in.story && pianoN > 0) {
         in.story->lastPianoCenterMidi = clampPianoCenterMidi(int(llround(double(pianoSum) / double(pianoN))));

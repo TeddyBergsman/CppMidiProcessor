@@ -134,6 +134,10 @@ private:
     QSlider* m_wWarmth = nullptr;
     QTextEdit* m_virtuosoTheoryLog = nullptr;
     QPropertyAnimation* m_virtuosoEnergyAnim = nullptr;
+    // Debug isolation checkboxes
+    QCheckBox* m_debugMuteLH = nullptr;
+    QCheckBox* m_debugMuteRH = nullptr;
+    QCheckBox* m_debugVerbose = nullptr;
 
     MidiProcessor* m_midiProcessor = nullptr; // not owned
 

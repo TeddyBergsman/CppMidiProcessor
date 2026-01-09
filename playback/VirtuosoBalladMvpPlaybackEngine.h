@@ -72,6 +72,16 @@ public slots:
     void setPerformanceWeightsAuto(bool on) { m_weightsV2Auto = on; }
     void setPerformanceWeightsV2(const virtuoso::control::PerformanceWeightsV2& w) { m_weightsV2Manual = w; }
 
+    // Debug isolation controls: mute LH/RH for easier debugging
+    void setDebugMutePianoLH(bool mute) { m_debugMutePianoLH = mute; }
+    void setDebugMutePianoRH(bool mute) { m_debugMutePianoRH = mute; }
+    bool debugMutePianoLH() const { return m_debugMutePianoLH; }
+    bool debugMutePianoRH() const { return m_debugMutePianoRH; }
+
+    // Verbose debug logging (off = simple one-line summaries per chord)
+    void setDebugVerbose(bool verbose) { m_debugVerbose = verbose; }
+    bool debugVerbose() const { return m_debugVerbose; }
+
 signals:
     void currentCellChanged(int cellIndex);
     void theoryEventJson(const QString& json);
@@ -206,6 +216,11 @@ private:
 
     // Track whether drums were enabled last tick (for stopping loops when drums are disabled by energy layering).
     bool m_drumsEnabledLast = false;
+
+    // Debug isolation (mute LH/RH for easier debugging)
+    bool m_debugMutePianoLH = false;
+    bool m_debugMutePianoRH = false;
+    bool m_debugVerbose = false; // Default OFF for cleaner human-readable summaries
 };
 
 } // namespace playback

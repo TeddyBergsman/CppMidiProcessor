@@ -45,6 +45,9 @@ public:
         // Debug controls
         bool debugEnergyAuto = true;
         double debugEnergy = 0.25;
+        bool debugMutePianoLH = false;
+        bool debugMutePianoRH = false;
+        bool debugVerbose = true;
 
         // Channels + mapping
         int chDrums = 6;

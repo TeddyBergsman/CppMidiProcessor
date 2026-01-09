@@ -876,7 +876,13 @@ int JazzBalladPianoPlanner::getDegreeForPc(int pc, const music::ChordSymbol& cho
 }
 
 // =============================================================================
-// Pedal Logic
+// Pedal Logic - Realistic jazz piano pedaling with clean chord transitions
+// =============================================================================
+// Critical rules to prevent harmonic blur:
+// 1. ALWAYS lift BEFORE any chord change (let old chord decay)
+// 2. Lift early if approaching a new bar with chord change
+// 3. Keep pedal shallower when chords are changing quickly
+// 4. Periodic refresh on sustained chords for clarity
 // =============================================================================
 
 QVector<JazzBalladPianoPlanner::CcIntent> JazzBalladPianoPlanner::planPedal(
@@ -884,7 +890,15 @@ QVector<JazzBalladPianoPlanner::CcIntent> JazzBalladPianoPlanner::planPedal(
 
     QVector<CcIntent> ccs;
 
-    if (c.chordIsNew && c.beatInBar == 0) {
+    // How frequently are chords changing? (used for pedal depth decisions)
+    const bool frequentChanges = (c.beatsUntilChordChange <= 2);
+    
+    // ========================================================================
+    // RULE 1: ALWAYS lift on chord changes (prevents harmonic blur!)
+    // The lift happens AT the chord change, BEFORE re-engaging
+    // ========================================================================
+    if (c.chordIsNew) {
+        // LIFT pedal completely at the start of the new chord
         CcIntent lift;
         lift.cc = 64;
         lift.value = 0;
@@ -894,13 +908,65 @@ QVector<JazzBalladPianoPlanner::CcIntent> JazzBalladPianoPlanner::planPedal(
         lift.logic_tag = "chord_change_lift";
         ccs.push_back(lift);
 
+        // Re-engage pedal - use SHALLOW pedal if chords are changing fast
+        // This prevents buildup when moving through many chords
+        int pedalDepth;
+        if (frequentChanges) {
+            pedalDepth = 40 + int(30.0 * c.energy);  // Shallow: 40-70
+        } else {
+            pedalDepth = 60 + int(50.0 * c.energy);  // Normal: 60-110
+        }
+        pedalDepth = qMin(pedalDepth, 110);  // Never go full 127
+        
         CcIntent engage;
         engage.cc = 64;
-        engage.value = 100;
+        engage.value = pedalDepth;
         engage.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-            c.playbackBarIndex, c.beatInBar, 1, 4, ts);
+            c.playbackBarIndex, c.beatInBar, 1, 16, ts);
         engage.structural = true;
         engage.logic_tag = "chord_change_engage";
+        ccs.push_back(engage);
+    }
+    
+    // ========================================================================
+    // RULE 2: Pre-emptive lift BEFORE chord change (if change is coming)
+    // This ensures the old chord has time to decay before the new one hits
+    // ========================================================================
+    if (!c.chordIsNew && c.beatsUntilChordChange == 1) {
+        // Next beat is a chord change - lift pedal on beat 4 (or equivalent)
+        // This gives ~500ms for decay before new chord
+        CcIntent preemptiveLift;
+        preemptiveLift.cc = 64;
+        preemptiveLift.value = 0;
+        preemptiveLift.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+            c.playbackBarIndex, c.beatInBar, 2, 4, ts);  // Halfway through the beat
+        preemptiveLift.structural = false;
+        preemptiveLift.logic_tag = "preemptive_lift";
+        ccs.push_back(preemptiveLift);
+    }
+    
+    // ========================================================================
+    // RULE 3: Periodic pedal refresh within sustained chords
+    // Prevents resonance buildup on long-held chords
+    // ========================================================================
+    if (!c.chordIsNew && c.beatInBar == 2 && c.beatsUntilChordChange > 2) {
+        // Only refresh if we have time before next chord change
+        CcIntent lift;
+        lift.cc = 64;
+        lift.value = 0;
+        lift.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+            c.playbackBarIndex, c.beatInBar, 0, 8, ts);
+        lift.structural = false;
+        lift.logic_tag = "pedal_refresh_lift";
+        ccs.push_back(lift);
+        
+        CcIntent engage;
+        engage.cc = 64;
+        engage.value = 50 + int(40.0 * c.energy);
+        engage.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+            c.playbackBarIndex, c.beatInBar, 1, 8, ts);
+        engage.structural = false;
+        engage.logic_tag = "pedal_refresh_engage";
         ccs.push_back(engage);
     }
 
@@ -1875,6 +1941,12 @@ QVector<JazzBalladPianoPlanner::FragmentNote> JazzBalladPianoPlanner::applyMelod
 
 // LH: Provides harmonic foundation. ALWAYS plays regardless of user activity.
 // The LH is the anchor - it doesn't back off, only the RH does.
+// 
+// Jazz ballad comping style:
+// - ALWAYS play on chord changes (defines the harmony)
+// - Often add 1-2 additional touches on same chord (tasteful reinforcement)
+// - Sometimes delay first hit for jazz feel (anticipation/syncopation)
+// - More active at higher energy, sparser at low energy
 bool JazzBalladPianoPlanner::shouldLhPlayBeat(const Context& c, quint32 hash) const {
     // ================================================================
     // LH NEVER backs off for user activity - it's the foundation
@@ -1886,23 +1958,45 @@ bool JazzBalladPianoPlanner::shouldLhPlayBeat(const Context& c, quint32 hash) co
         return true;
     }
     
-    // Beat 1 (without chord change): usually play to reinforce
+    // ================================================================
+    // WITHIN A SUSTAINED CHORD: Add tasteful reinforcement hits
+    // Jazz pianists don't just hit once and wait - they add subtle touches
+    // ================================================================
+    
+    // Beat 1 (without chord change): strong probability to reinforce
     if (c.beatInBar == 0) {
-        double prob = 0.55 + 0.30 * c.weights.density;
+        double prob = 0.70 + 0.20 * c.weights.density;
+        // Higher at phrase boundaries (need to be present)
+        if (c.barInPhrase == 0 || c.phraseEndBar) prob = 0.85;
         return (hash % 100) < int(prob * 100);
     }
     
-    // Beat 3: often play for rhythmic pulse
+    // Beat 3: secondary strong beat - good for comping
     if (c.beatInBar == 2) {
-        double prob = 0.30 + 0.25 * c.weights.density;
+        double prob = 0.45 + 0.30 * c.weights.density;
+        // More likely at cadences
         if (c.cadence01 >= 0.4) prob += 0.20;
-        if (c.phraseEndBar) prob += 0.15;
+        // More likely at phrase ends (closing gesture)
+        if (c.phraseEndBar) prob += 0.25;
+        // At high energy, almost always play
+        if (c.energy >= 0.6) prob += 0.20;
         return (hash % 100) < int(prob * 100);
     }
     
-    // Beats 2/4: occasionally at higher energy
-    if (c.energy >= 0.5) {
-        double prob = 0.15 * c.energy;
+    // Beat 2: syncopated anticipation opportunity
+    if (c.beatInBar == 1) {
+        // This is the "and of 1" feel - creates forward motion
+        double prob = 0.15 + 0.30 * c.energy + 0.20 * c.weights.rhythm;
+        // More likely approaching cadences
+        if (c.cadence01 >= 0.3) prob += 0.15;
+        return (hash % 100) < int(prob * 100);
+    }
+    
+    // Beat 4: pickup/anticipation to next bar
+    if (c.beatInBar == 3) {
+        double prob = 0.10 + 0.25 * c.energy;
+        // More likely if next beat is a chord change
+        if (c.beatsUntilChordChange <= 1) prob += 0.25;
         return (hash % 100) < int(prob * 100);
     }
     
@@ -2138,66 +2232,104 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             };
             
             QVector<LhHit> lhHits;
-            const int patternSeed = (lhHash / 11) % 8;
             
-            // Chord changes get more interesting patterns
+            // ================================================================
+            // MUSICAL INTENT: Pattern selection based on phrase position, 
+            // energy, and cadence - NOT random hash
+            // ================================================================
+            
+            // Determine phrase context
+            const bool phraseStart = (adjusted.barInPhrase == 0);
+            const bool phraseMid = (adjusted.barInPhrase >= 1 && adjusted.barInPhrase < adjusted.phraseBars - 1);
+            const bool phraseEnd = adjusted.phraseEndBar || (adjusted.barInPhrase >= adjusted.phraseBars - 1);
+            const bool isCadence = (adjusted.cadence01 >= 0.4);
+            const bool isHighEnergy = (adjusted.energy >= 0.6);
+            const bool isMedEnergy = (adjusted.energy >= 0.35 && adjusted.energy < 0.6);
+            
+            // Beat 1 of a bar is structurally important
+            const bool isDownbeat = (adjusted.beatInBar == 0);
+            // Beat 3 is secondary strong beat
+            const bool isSecondaryDownbeat = (adjusted.beatInBar == 2);
+            // Beats 2 and 4 are weak beats
+            const bool isWeakBeat = (adjusted.beatInBar == 1 || adjusted.beatInBar == 3);
+            
+            // Use minimal variation from hash (just for small details, not pattern choice)
+            const bool slightVariation = ((lhHash / 7) % 3) == 0;
+            
             if (adjusted.chordIsNew) {
-                switch (patternSeed) {
-                    case 0: // Simple: just on the beat
+                // ============================================================
+                // CHORD CHANGES: Emphasize the harmonic change
+                // ============================================================
+                if (isDownbeat) {
+                    // Beat 1 chord change: strong, clear statement
+                    if (phraseStart || phraseEnd) {
+                        // Phrase boundaries: simple, clear
                         lhHits.push_back({0, 0, false, false});
-                        break;
-                    case 1: // Syncopated: anticipate the chord change
-                        lhHits.push_back({0, 0, false, true}); // Plays early
-                        break;
-                    case 2: // Two hits: beat + and
-                        lhHits.push_back({0, 0, false, false});
-                        lhHits.push_back({2, -10, true, false}); // Alt voicing
-                        break;
-                    case 3: // Two hits: syncopated + beat
-                        lhHits.push_back({0, 0, false, true}); // Anticipate
-                        lhHits.push_back({2, -8, false, false}); // Repeat
-                        break;
-                    case 4: // Three hits at higher energy
-                        if (adjusted.energy >= 0.5) {
-                            lhHits.push_back({0, 0, false, false});
+                        if (isCadence && isHighEnergy) {
+                            // Add emphasis at cadence
                             lhHits.push_back({2, -8, true, false});
+                        }
+                    } else if (isHighEnergy) {
+                        // High energy mid-phrase: more motion
+                        lhHits.push_back({0, 0, false, false});
+                        lhHits.push_back({2, -8, true, false});
+                        if (isCadence) {
                             lhHits.push_back({3, -12, false, false});
-                        } else {
-                            lhHits.push_back({0, 0, false, false});
                         }
-                        break;
-                    case 5: // Delayed: and only (very syncopated)
-                        lhHits.push_back({2, -3, false, false});
-                        break;
-                    case 6: // Beat + pickup
+                    } else if (isMedEnergy) {
+                        // Medium energy: occasional second hit
                         lhHits.push_back({0, 0, false, false});
-                        if (adjusted.cadence01 >= 0.3) {
-                            lhHits.push_back({3, -10, true, false});
-                        }
-                        break;
-                    default: // Beat + repeat with same voicing
-                        lhHits.push_back({0, 0, false, false});
-                        if (adjusted.energy >= 0.4) {
-                            lhHits.push_back({2, -6, false, false}); // Same voicing
-                        }
-                        break;
-                }
-            } else {
-                // Non-chord-change: simpler patterns
-                switch (patternSeed % 3) {
-                    case 0:
-                        lhHits.push_back({0, 0, false, false});
-                        break;
-                    case 1:
-                        lhHits.push_back({0, 0, false, false});
-                        if (adjusted.energy >= 0.6) {
+                        if (slightVariation) {
                             lhHits.push_back({2, -10, false, false});
                         }
-                        break;
-                    case 2: // Syncopated
+                    } else {
+                        // Low energy: just the beat
+                        lhHits.push_back({0, 0, false, false});
+                    }
+                } else if (isSecondaryDownbeat) {
+                    // Beat 3 chord change: can be more playful
+                    if (isHighEnergy) {
+                        // Anticipate (syncopate) at high energy
+                        lhHits.push_back({0, 0, false, true}); // Anticipate
+                        lhHits.push_back({2, -6, false, false});
+                    } else {
+                        // Clean hit on the beat
+                        lhHits.push_back({0, 0, false, false});
+                    }
+                } else {
+                    // Weak beat chord change: syncopation opportunity
+                    if (isHighEnergy && slightVariation) {
+                        lhHits.push_back({0, 0, false, true}); // Anticipate
+                    } else if (isMedEnergy) {
+                        // Delayed hit for groove
                         lhHits.push_back({2, -3, false, false});
-                        break;
+                    } else {
+                        lhHits.push_back({0, 0, false, false});
+                    }
                 }
+            } else {
+                // ============================================================
+                // NON-CHORD-CHANGE: Reinforce and comp over sustained chord
+                // If shouldLhPlayBeat returned true, we MUST generate at least one hit!
+                // The decision to play was already made - now we just decide HOW
+                // ============================================================
+                
+                // ALWAYS add a hit on the current beat - that's why we're here!
+                lhHits.push_back({0, 0, false, false});
+                
+                // Optionally add more motion based on energy
+                if (isDownbeat && isHighEnergy && !phraseStart) {
+                    // Add second touch on downbeats at high energy
+                    lhHits.push_back({2, -10, false, false});
+                } else if (isSecondaryDownbeat && isHighEnergy) {
+                    // Add second touch on beat 3 at high energy
+                    lhHits.push_back({2, -8, false, false});
+                }
+            }
+            
+            // Safety: ensure at least one hit on chord changes
+            if (adjusted.chordIsNew && lhHits.isEmpty()) {
+                lhHits.push_back({0, 0, false, false});
             }
             
             // Generate notes for each LH hit
@@ -2273,99 +2405,133 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     if (rhActivity > 0) {
         // Generate RH hits based on activity level
         // EACH hit moves melodically - no repetition!
-        // Use varied patterns for interest, not the same pattern every time
         
         QVector<std::tuple<int, int, bool>> rhTimings; // sub, velDelta, preferDyad
         
-        // Pattern selection based on context for variety
-        const int patternSeed = (rhHash / 7) % 6;
-        const bool preferSparse = (c.energy < 0.4) || (c.weights.density < 0.4);
+        // ================================================================
+        // MUSICAL INTENT: RH patterns based on phrase position and context
+        // NOT random hash - purposeful rhythmic choices
+        // ================================================================
         
-        // Note: preferDyad values: 0=single, 1=dyad, 2=triad (new!)
-        // Using int instead of bool for more voicing variety
+        const bool phraseStart = (adjusted.barInPhrase == 0);
+        const bool phraseMid = (adjusted.barInPhrase >= 1 && adjusted.barInPhrase < adjusted.phraseBars - 1);
+        const bool phraseEnd = adjusted.phraseEndBar;
+        const bool isCadence = (adjusted.cadence01 >= 0.4);
+        const bool isDownbeat = (adjusted.beatInBar == 0);
+        const bool isBeat3 = (adjusted.beatInBar == 2);
+        const bool isWeakBeat = (adjusted.beatInBar == 1 || adjusted.beatInBar == 3);
+        const bool preferSparse = (c.energy < 0.4) || (c.weights.density < 0.4);
+        const bool preferRich = (c.energy >= 0.7) || (c.weights.density >= 0.7);
+        
+        // Favor dyads in jazz context (richer harmony)
+        // Singles for melodic lines, dyads for color
         
         switch (rhActivity) {
             case 1:
-                // Single hit - FAVOR dyads for richness, singles for sparse moments
-                if (preferSparse) {
-                    rhTimings.push_back({0, 0, false}); // Single note
+                // ============================================================
+                // SINGLE HIT: Placement matters for phrasing
+                // ============================================================
+                if (phraseStart && isDownbeat) {
+                    // Phrase opening: clear dyad on the beat
+                    rhTimings.push_back({0, 0, true});
+                } else if (phraseEnd && isCadence) {
+                    // Cadence resolution: dyad on beat
+                    rhTimings.push_back({0, 0, true});
+                } else if (isBeat3 && !preferSparse) {
+                    // Beat 3: secondary emphasis, slight delay for groove
+                    rhTimings.push_back({1, -3, !preferSparse}); // Slightly off the beat
+                } else if (isWeakBeat) {
+                    // Weak beats: syncopated fill, single note for lightness
+                    rhTimings.push_back({2, -5, false});
+                } else if (preferSparse) {
+                    // Sparse: single note on the beat
+                    rhTimings.push_back({0, 0, false});
                 } else {
-                    // 70% dyads, 30% singles at normal density
-                    rhTimings.push_back({0, 0, (patternSeed % 10) < 7}); // Mostly dyads
+                    // Default: dyad on the beat
+                    rhTimings.push_back({0, 0, true});
                 }
                 break;
                 
             case 2:
-                // Two hits - mix of dyads and singles for melodic interest
-                switch (patternSeed % 5) {
-                    case 0: // Beat (dyad) + and (single)
-                        rhTimings.push_back({0, 0, true});
-                        rhTimings.push_back({2, -10, false});
-                        break;
-                    case 1: // Just and (dyad) - syncopated
-                        rhTimings.push_back({2, -3, true});
-                        break;
-                    case 2: // Beat (dyad) + pickup (dyad)
-                        rhTimings.push_back({0, 0, true});
-                        rhTimings.push_back({3, -8, true});
-                        break;
-                    case 3: // E-and (single) + and (dyad) - offbeat
-                        rhTimings.push_back({1, -5, false});
-                        rhTimings.push_back({2, -3, true});
-                        break;
-                    case 4: // Two dyads for rich texture
-                        rhTimings.push_back({0, 0, true});
-                        rhTimings.push_back({2, -6, true});
-                        break;
+                // ============================================================
+                // TWO HITS: Create forward motion, avoid static patterns
+                // ============================================================
+                if (phraseStart && isDownbeat) {
+                    // Phrase opening: establish, then move forward
+                    rhTimings.push_back({0, 0, true});  // Statement
+                    rhTimings.push_back({2, -8, false}); // Motion
+                } else if (phraseEnd && isCadence) {
+                    // Cadence: resolve clearly
+                    rhTimings.push_back({0, 0, true});
+                    if (c.energy >= 0.5) {
+                        rhTimings.push_back({3, -6, true}); // Pickup to next bar
+                    }
+                } else if (isBeat3) {
+                    // Beat 3: syncopated, create anticipation
+                    rhTimings.push_back({2, -2, true}); // And of 3
+                } else if (isWeakBeat && !preferSparse) {
+                    // Weak beat: offbeat interest
+                    rhTimings.push_back({1, -3, false});
+                    rhTimings.push_back({3, -8, true});
+                } else if (preferRich) {
+                    // Rich texture: two dyads
+                    rhTimings.push_back({0, 0, true});
+                    rhTimings.push_back({2, -6, true});
+                } else {
+                    // Standard: beat + and
+                    rhTimings.push_back({0, 0, true});
+                    rhTimings.push_back({2, -10, false});
                 }
                 break;
                 
             case 3:
-                // Three hits - varied textures
-                switch (patternSeed % 4) {
-                    case 0: // Dyad + single + single (melodic line)
-                        rhTimings.push_back({0, 0, true});
-                        rhTimings.push_back({2, -6, false});
-                        rhTimings.push_back({3, -12, false});
-                        break;
-                    case 1: // Single + dyad + single (centered richness)
-                        rhTimings.push_back({1, -4, false});
-                        rhTimings.push_back({2, -2, true});
-                        rhTimings.push_back({3, -10, false});
-                        break;
-                    case 2: // Dyad + single + dyad (bookended)
-                        rhTimings.push_back({0, 0, true});
-                        rhTimings.push_back({1, -8, false});
-                        rhTimings.push_back({2, -4, true});
-                        break;
-                    case 3: // Three dyads for lush texture
-                        rhTimings.push_back({0, 0, true});
-                        rhTimings.push_back({2, -5, true});
-                        rhTimings.push_back({3, -10, true});
-                        break;
+                // ============================================================
+                // THREE HITS: Active comping, melodic development
+                // ============================================================
+                if (phraseStart) {
+                    // Phrase opening: establish and develop
+                    rhTimings.push_back({0, 0, true});   // Statement
+                    rhTimings.push_back({2, -6, false}); // Development
+                    rhTimings.push_back({3, -10, false}); // Motion
+                } else if (phraseEnd || isCadence) {
+                    // Cadence: build and resolve
+                    rhTimings.push_back({0, 0, true});
+                    rhTimings.push_back({2, -4, true});
+                    rhTimings.push_back({3, -8, false});
+                } else if (phraseMid && preferRich) {
+                    // Mid-phrase climax: lush texture
+                    rhTimings.push_back({0, 0, true});
+                    rhTimings.push_back({1, -4, true});
+                    rhTimings.push_back({3, -8, true});
+                } else {
+                    // Standard melodic line
+                    rhTimings.push_back({0, 0, true});
+                    rhTimings.push_back({2, -5, false});
+                    rhTimings.push_back({3, -10, false});
                 }
                 break;
                 
             case 4:
-                // Four hits - climax, can include triads!
-                switch (patternSeed % 3) {
-                    case 0: // Standard: dyad-single-dyad-single
-                        rhTimings.push_back({0, 0, true});
-                        rhTimings.push_back({1, -8, false});
-                        rhTimings.push_back({2, -4, true});
-                        rhTimings.push_back({3, -10, false});
-                        break;
-                    case 1: // Swing: dyad-dyad-single
-                        rhTimings.push_back({0, 0, true});
-                        rhTimings.push_back({2, -3, true});
-                        rhTimings.push_back({3, -8, false});
-                        break;
-                    case 2: // Dense: dyad-dyad-dyad-single
-                        rhTimings.push_back({0, 0, true});
-                        rhTimings.push_back({1, -6, true});
-                        rhTimings.push_back({2, -4, true});
-                        rhTimings.push_back({3, -10, false});
-                        break;
+                // ============================================================
+                // FOUR HITS: Climax/high energy only
+                // ============================================================
+                if (phraseEnd && isCadence) {
+                    // Climactic cadence
+                    rhTimings.push_back({0, 0, true});
+                    rhTimings.push_back({1, -4, true});
+                    rhTimings.push_back({2, -3, true});
+                    rhTimings.push_back({3, -8, false});
+                } else if (phraseStart && preferRich) {
+                    // Bold phrase opening
+                    rhTimings.push_back({0, 0, true});
+                    rhTimings.push_back({1, -6, false});
+                    rhTimings.push_back({2, -4, true});
+                    rhTimings.push_back({3, -10, false});
+                } else {
+                    // Standard 4-hit: swing feel
+                    rhTimings.push_back({0, 0, true});
+                    rhTimings.push_back({2, -3, true});
+                    rhTimings.push_back({3, -8, false});
                 }
                 break;
                 
@@ -2385,17 +2551,21 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         const double creativityLevel = c.weights.creativity;
         
         // Probability of using UST instead of regular melodic voicing
-        // Higher at: chord changes, high creativity, moderate-high tension
+        // UST can introduce complex colors - use VERY sparingly to avoid dissonance
+        // DISABLE on dominant chords for now - too risky for dissonance
         double ustProb = 0.0;
-        if (chordChanged) {
-            ustProb = 0.15 + 0.25 * creativityLevel + 0.20 * tensionLevel;
-        } else if (adjusted.beatInBar == 2) { // Beat 3 is good for color
-            ustProb = 0.08 + 0.20 * creativityLevel + 0.15 * tensionLevel;
-        }
         
-        // Dominant chords: UST sounds especially good
         const bool isDominant = (adjusted.chord.quality == music::ChordQuality::Dominant);
-        if (isDominant) ustProb += 0.10;
+        const bool isAugmented = (adjusted.chord.quality == music::ChordQuality::Augmented);
+        const bool isDiminished = (adjusted.chord.quality == music::ChordQuality::Diminished);
+        const bool isProblematic = isDominant || isAugmented || isDiminished;
+        
+        // Only use UST on "safe" chords (major/minor 7ths) and at high creativity
+        if (!isProblematic && creativityLevel > 0.6 && tensionLevel > 0.4) {
+            if (chordChanged) {
+                ustProb = 0.08 + 0.12 * (creativityLevel - 0.6);
+            }
+        }
         
         // Get available USTs
         const auto ustCandidates = getUpperStructureTriads(adjusted.chord);
@@ -2501,16 +2671,31 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             // ================================================================
             
             // Helper: Check if RH note would clash with LH voicing
-            // A clash is when notes are 1-2 semitones apart in close register
+            // A clash is when:
+            // 1. PITCH CLASSES are a minor 2nd apart (1 semitone)
+            //    This catches clashes like E (in C7) vs F (avoid note)
+            // 2. OR actual MIDI notes are very close (within 3 semitones)
+            //    This catches muddy voicings where notes are too close
             auto wouldClashWithLh = [&](int rhMidi) -> bool {
+                int rhPc = normalizePc(rhMidi);
                 for (int lhNote : m_state.lastLhMidi) {
-                    int dist = qAbs(rhMidi - lhNote);
-                    // Minor 2nd (1-2 semitones) in close register is dissonant
-                    if (dist == 1 || dist == 2) {
-                        // Only a problem if they're within 2 octaves
+                    int lhPc = normalizePc(lhNote);
+                    
+                    // Check 1: Pitch class minor 2nd (will clash regardless of octave)
+                    int pcInterval = qAbs(rhPc - lhPc);
+                    if (pcInterval > 6) pcInterval = 12 - pcInterval; // Normalize
+                    if (pcInterval == 1) {
+                        // Minor 2nd pitch class clash - always bad if within 2 octaves
                         if (qAbs(rhMidi - lhNote) <= 24) {
                             return true;
                         }
+                    }
+                    
+                    // Check 2: Too close in absolute MIDI (muddy)
+                    int midiDist = qAbs(rhMidi - lhNote);
+                    if (midiDist > 0 && midiDist <= 2) {
+                        // Very close notes (within 2 semitones) = muddy
+                        return true;
                     }
                 }
                 return false;
@@ -2647,15 +2832,20 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             
             // ================================================================
             // MELODIC FRAGMENT DECISION
-            // Sometimes use a melodic fragment instead of a plain note/dyad
-            // This creates intentional gestures (approach notes, enclosures)
-            // Fragments work for BOTH single notes and dyads
+            // Fragments can introduce non-chord tones - use VERY sparingly
+            // Only at high creativity AND only on non-dominant chords
             // ================================================================
             double fragmentProb = 0.0;
-            if (c.weights.creativity > 0.2) {
-                fragmentProb = 0.12 + 0.20 * c.weights.creativity + 0.10 * c.energy;
-                // Slightly higher for single notes (more room for melodic movement)
-                if (!preferDyad) fragmentProb += 0.08;
+            
+            // DISABLE fragments on problematic chords (dominant, augmented, diminished)
+            // These are where dissonance is most likely
+            const bool avoidFragments = hitIsDominant || 
+                (adjusted.chord.quality == music::ChordQuality::Augmented) ||
+                (adjusted.chord.quality == music::ChordQuality::Diminished);
+            
+            if (!avoidFragments && c.weights.creativity > 0.5) {
+                // Very low probability - only at high creativity
+                fragmentProb = 0.05 + 0.10 * (c.weights.creativity - 0.5);
             }
             
             const bool useFragment = (sub == 0 || sub == 2) && // Only on main subdivisions
@@ -2833,6 +3023,79 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             }
             
             if (rhMidiNotes.isEmpty()) continue;
+            
+            // ================================================================
+            // FINAL SAFETY FILTER: Be VERY conservative about chord tones
+            // On dominant/altered chords, extensions can clash badly
+            // Stick to CORE chord tones (root, 3rd, 5th, 7th) for safety
+            // Only allow 9th/13th if they're EXPLICITLY in the chord symbol
+            // ================================================================
+            
+            // Determine if this is a "dangerous" chord where extensions can clash
+            const bool isProblematicChord = hitIsDominant || 
+                (adjusted.chord.quality == music::ChordQuality::Augmented) ||
+                (adjusted.chord.quality == music::ChordQuality::Diminished);
+            
+            // For problematic chords, only use core tones unless extension is explicit
+            const bool explicitNinth = (adjusted.chord.extension >= 9);
+            const bool explicitThirteenth = (adjusted.chord.extension >= 13);
+            
+            QVector<int> safeRhNotes;
+            for (int midi : rhMidiNotes) {
+                int pc = normalizePc(midi);
+                
+                // Core chord tones - ALWAYS safe
+                bool isCoreChordTone = (pc == root || pc == third || 
+                                        pc == fifth || pc == seventh);
+                
+                // Extensions - only safe if chord explicitly has them
+                bool isSafeExtension = false;
+                if (!isProblematicChord) {
+                    // Non-dominant chords: extensions are generally safer
+                    isSafeExtension = (pc == ninth || pc == thirteenth);
+                } else {
+                    // Dominant/augmented/dim chords: only explicit extensions
+                    if (pc == ninth && explicitNinth && ninth >= 0) {
+                        isSafeExtension = true;
+                    }
+                    if (pc == thirteenth && explicitThirteenth && thirteenth >= 0) {
+                        isSafeExtension = true;
+                    }
+                }
+                
+                bool noLhClash = !wouldClashWithLh(midi);
+                
+                if ((isCoreChordTone || isSafeExtension) && noLhClash) {
+                    safeRhNotes.push_back(midi);
+                }
+            }
+            
+            // Fallback: If we filtered everything, use the 3rd or 7th (guide tones)
+            if (safeRhNotes.isEmpty() && !rhMidiNotes.isEmpty()) {
+                // Try to use the 7th (defines chord quality)
+                if (seventh >= 0) {
+                    int targetPc = seventh;
+                    for (int midi : rhMidiNotes) {
+                        if (normalizePc(midi) == targetPc && !wouldClashWithLh(midi)) {
+                            safeRhNotes.push_back(midi);
+                            break;
+                        }
+                    }
+                }
+                // If still empty, try the 3rd
+                if (safeRhNotes.isEmpty() && third >= 0) {
+                    int targetPc = third;
+                    for (int midi : rhMidiNotes) {
+                        if (normalizePc(midi) == targetPc && !wouldClashWithLh(midi)) {
+                            safeRhNotes.push_back(midi);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (safeRhNotes.isEmpty()) continue;
+            rhMidiNotes = safeRhNotes;
             
             virtuoso::groove::GridPos rhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
                 adjusted.playbackBarIndex, adjusted.beatInBar, sub, 4, ts);

@@ -604,6 +604,37 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
         m_virtuosoTheoryLog->setMinimumHeight(160);
         m_virtuosoTheoryLog->setStyleSheet("QTextEdit { background: #0b0b0b; color: #ddd; font-family: Menlo, monospace; font-size: 9pt; }");
 
+        // --- Debug Isolation Controls ---
+        {
+            QHBoxLayout* debugRow = new QHBoxLayout();
+            debugRow->setContentsMargins(0, 6, 0, 0);
+            debugRow->setSpacing(12);
+
+            m_debugMuteLH = new QCheckBox("LH", virtuosoDbg);
+            m_debugMuteLH->setChecked(true);
+            m_debugMuteLH->setToolTip("Play left hand (uncheck to mute LH for debugging)");
+            m_debugMuteLH->setStyleSheet("QCheckBox { color: #aaa; }");
+
+            m_debugMuteRH = new QCheckBox("RH", virtuosoDbg);
+            m_debugMuteRH->setChecked(true);
+            m_debugMuteRH->setToolTip("Play right hand (uncheck to mute RH for debugging)");
+            m_debugMuteRH->setStyleSheet("QCheckBox { color: #aaa; }");
+
+            m_debugVerbose = new QCheckBox("Verbose", virtuosoDbg);
+            m_debugVerbose->setChecked(false); // Default OFF for cleaner view
+            m_debugVerbose->setToolTip("Verbose logging (check for detailed data dumps)");
+            m_debugVerbose->setStyleSheet("QCheckBox { color: #aaa; }");
+
+            debugRow->addWidget(new QLabel("Piano:", virtuosoDbg));
+            debugRow->addWidget(m_debugMuteLH);
+            debugRow->addWidget(m_debugMuteRH);
+            debugRow->addSpacing(20);
+            debugRow->addWidget(m_debugVerbose);
+            debugRow->addStretch(1);
+
+            controlsV->addLayout(debugRow);
+        }
+
         dv->addWidget(m_virtuosoHud);
         dv->addLayout(controlsV);
         dv->addWidget(m_virtuosoTheoryLog, 1);
@@ -620,8 +651,18 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
             });
     
     // Piano debug log - forward to main console and theory log for comprehensive debugging
+    // Filter based on verbose mode
     connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::pianoDebugLog,
             this, [this](const QString& s) {
+                // Check verbose mode - if off, only show simple summaries (emoji prefixed)
+                const bool isVerbose = m_debugVerbose && m_debugVerbose->isChecked();
+                const bool isSimpleSummary = s.startsWith("🎹") || s.startsWith("🎸") || s.startsWith("🥁");
+                
+                // Skip non-summary messages when verbose is off
+                if (!isVerbose && !isSimpleSummary) {
+                    return;
+                }
+                
                 // Emit to theory log for visibility
                 if (m_virtuosoTheoryLog) {
                     m_virtuosoTheoryLog->append(s);
@@ -632,6 +673,10 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     
     connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::theoryEventJson,
             this, [this](const QString& json) {
+                // Only show JSON dumps in verbose mode
+                const bool isVerbose = m_debugVerbose && m_debugVerbose->isChecked();
+                if (!isVerbose) return; // Skip all JSON in non-verbose mode
+                
                 if (!m_virtuosoTheoryLog) return;
                 QString line = json;
                 const QJsonDocument d = QJsonDocument::fromJson(json.toUtf8());
@@ -665,6 +710,18 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
         if (m_virtuosoEnergyAuto->isChecked()) return;
         m_virtuosoPlayback->setDebugEnergy(double(v) / 100.0);
     });
+
+    // Debug isolation: LH/RH mute and verbose logging
+    connect(m_debugMuteLH, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_virtuosoPlayback) m_virtuosoPlayback->setDebugMutePianoLH(!on); // Checked = play, unchecked = mute
+    });
+    connect(m_debugMuteRH, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_virtuosoPlayback) m_virtuosoPlayback->setDebugMutePianoRH(!on);
+    });
+    connect(m_debugVerbose, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_virtuosoPlayback) m_virtuosoPlayback->setDebugVerbose(on);
+    });
+
     connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::debugEnergy,
             this, [this](double e01, bool isAuto) {
                 if (!m_virtuosoEnergySlider || !m_virtuosoEnergyAuto) return;

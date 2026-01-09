@@ -344,9 +344,20 @@ int JazzBalladPianoPlanner::pcForDegree(const music::ChordSymbol& c, int degree)
         }
         return normalizePc(basePc);
     };
+    
+    // Check if a specific alteration exists
+    auto hasAlteration = [&](int deg) -> bool {
+        for (const auto& a : c.alterations) {
+            if (a.degree == deg) return true;
+        }
+        return false;
+    };
 
     const bool isAlt = c.alt && (c.quality == music::ChordQuality::Dominant);
     const bool is6thChord = (c.extension == 6 && c.seventh == music::SeventhQuality::None);
+    const bool isMajor = (c.quality == music::ChordQuality::Major);
+    const bool isDominant = (c.quality == music::ChordQuality::Dominant);
+    const bool isMinor = (c.quality == music::ChordQuality::Minor);
 
     int pc = root;
     switch (degree) {
@@ -358,16 +369,23 @@ int JazzBalladPianoPlanner::pcForDegree(const music::ChordSymbol& c, int degree)
             break;
         case 5:
             if (isAlt) {
-                pc = normalizePc(root + 6);
+                // Altered dominant: use b5 or #5 based on alterations
+                pc = hasAlteration(5) ? applyAlter(5, normalizePc(root + 7)) : normalizePc(root + 6);
             } else {
                 pc = applyAlter(5, normalizePc(root + fifthInterval(c.quality)));
             }
             break;
         case 6:
-            pc = applyAlter(6, normalizePc(root + 9));
+            // Only return 6th if chord is a 6th chord or has explicit 6th
+            if (is6thChord || hasAlteration(6)) {
+                pc = applyAlter(6, normalizePc(root + 9));
+            } else {
+                return -1; // No 6th on this chord
+            }
             break;
         case 7:
             if (is6thChord) {
+                // 6th chords use 6th as substitute for 7th
                 pc = normalizePc(root + 9);
             } else {
                 const int iv = seventhInterval(c);
@@ -376,25 +394,66 @@ int JazzBalladPianoPlanner::pcForDegree(const music::ChordSymbol& c, int degree)
             }
             break;
         case 9:
+            // ================================================================
+            // 9TH: Only safe to use in certain contexts
+            // - Explicit 9th chord (extension >= 9)
+            // - Altered dominants (use b9)
+            // - Dominant 7ths (natural 9 is safe)
+            // - Minor 7ths (natural 9 is safe - dorian)
+            // - AVOID on plain triads and maj7 without explicit extension
+            // ================================================================
             if (isAlt) {
-                pc = normalizePc(root + 1);
-            } else {
+                pc = normalizePc(root + 1); // b9
+            } else if (c.extension >= 9 || hasAlteration(9)) {
                 pc = applyAlter(9, normalizePc(root + 2));
+            } else if (isDominant || isMinor) {
+                // Natural 9 is generally safe on dom7 and min7
+                pc = normalizePc(root + 2);
+            } else {
+                // Major 7 without explicit 9 - don't use
+                return -1;
             }
             break;
         case 11:
-            if (isAlt || c.quality == music::ChordQuality::Major ||
-                c.quality == music::ChordQuality::Dominant) {
-                pc = applyAlter(11, normalizePc(root + 6));
+            // ================================================================
+            // 11TH: AVOID on major chords! The 11th (even #11) creates
+            // dissonance with the 3rd. Only use when explicitly indicated.
+            // ================================================================
+            if (isMajor) {
+                // Only use #11 if explicitly indicated in chord symbol
+                if (c.extension >= 11 || hasAlteration(11)) {
+                    pc = applyAlter(11, normalizePc(root + 6)); // #11
+                } else {
+                    return -1; // AVOID 11 on major chords!
+                }
+            } else if (isDominant) {
+                // Dominant: use #11 only if indicated
+                if (isAlt || c.extension >= 11 || hasAlteration(11)) {
+                    pc = applyAlter(11, normalizePc(root + 6)); // #11
+                } else {
+                    return -1; // Don't add 11 to plain dominant
+                }
+            } else if (isMinor) {
+                // Minor: natural 11 is OK (dorian/aeolian)
+                pc = applyAlter(11, normalizePc(root + 5));
             } else {
                 pc = applyAlter(11, normalizePc(root + 5));
             }
             break;
         case 13:
+            // ================================================================
+            // 13TH: Safe on dominants and when explicitly indicated
+            // ================================================================
             if (isAlt) {
-                pc = normalizePc(root + 8);
-            } else {
+                pc = normalizePc(root + 8); // b13
+            } else if (c.extension >= 13 || hasAlteration(13)) {
                 pc = applyAlter(13, normalizePc(root + 9));
+            } else if (isDominant) {
+                // Natural 13 is safe on dominant 7
+                pc = normalizePc(root + 9);
+            } else {
+                // Don't add 13 to other chord types
+                return -1;
             }
             break;
         default:
@@ -884,17 +943,33 @@ JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::generateLhRootlessVoic
     QVector<int> degrees;
     int baseMidi;
     
+    // Check if 9th is available for this chord
+    const int ninth = pcForDegree(chord, 9);
+    const bool hasNinth = (ninth >= 0);
+    
     if (preferTypeA) {
         // Type A: 3-5-7-9 (stacked from 3rd)
-        degrees = {3, 5, 7, 9};
+        // If no 9th available, use 3-5-7 shell
+        if (hasNinth) {
+            degrees = {3, 5, 7, 9};
+            lh.ontologyKey = "LH_RootlessA";
+        } else {
+            degrees = {3, 5, 7};
+            lh.ontologyKey = "LH_RootlessA_Shell";
+        }
         lh.isTypeA = true;
-        lh.ontologyKey = "LH_RootlessA";
         baseMidi = 52; // Start around E3
     } else {
         // Type B: 7-9-3-5 (stacked from 7th)
-        degrees = {7, 9, 3, 5};
+        // If no 9th available, use 7-3-5 shell
+        if (hasNinth) {
+            degrees = {7, 9, 3, 5};
+            lh.ontologyKey = "LH_RootlessB";
+        } else {
+            degrees = {7, 3, 5};
+            lh.ontologyKey = "LH_RootlessB_Shell";
+        }
         lh.isTypeA = false;
-        lh.ontologyKey = "LH_RootlessB";
         baseMidi = 48; // Start around C3 (7th is lower)
     }
     
@@ -905,7 +980,7 @@ JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::generateLhRootlessVoic
         baseMidi = 52;
     }
     
-    // Realize the voicing
+    // Realize the voicing - only include valid degrees
     QVector<int> pcs;
     for (int deg : degrees) {
         int pc = pcForDegree(chord, deg);
@@ -977,21 +1052,10 @@ JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::generateRhMelodicVoici
     // PRIORITY 2: Fifth (safe, consonant)
     if (fifth >= 0) colorPcs.push_back(fifth);
     
-    // PRIORITY 3: Extensions (based on tension)
+    // PRIORITY 3: Extensions (pcForDegree now filters appropriately)
     if (tensionLevel > 0.3) {
-        // Natural 9 is safe on most chords
-        if (ninth >= 0) {
-            int expectedNinth = normalizePc(root + 2);
-            bool isNatural9 = (ninth == expectedNinth);
-            if (isNatural9 || (isDominant && tensionLevel > 0.5)) {
-                colorPcs.push_back(ninth);
-            }
-        }
-        
-        // 13th only when tension warrants
-        if (thirteenth >= 0 && tensionLevel > 0.5) {
-            colorPcs.push_back(thirteenth);
-        }
+        if (ninth >= 0) colorPcs.push_back(ninth);
+        if (thirteenth >= 0 && tensionLevel > 0.5) colorPcs.push_back(thirteenth);
     }
     
     if (colorPcs.isEmpty()) return rh;
@@ -1325,6 +1389,336 @@ JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::buildUstVoicing(
     return rh;
 }
 
+// =============================================================================
+// MELODIC FRAGMENTS (Lick Library)
+// =============================================================================
+// Pre-composed melodic gestures that make the piano sound intentional and
+// musical. These are the building blocks of jazz piano vocabulary.
+//
+// Key concepts:
+//   - Approach notes lead into chord tones chromatically or diatonically
+//   - Enclosures surround a target from above and below
+//   - Scale runs create forward motion
+//   - Turns ornament a sustained note
+//   - Resolutions create tension-release
+// =============================================================================
+
+QVector<JazzBalladPianoPlanner::MelodicFragment> JazzBalladPianoPlanner::getMelodicFragments(
+    const Context& c, int targetPc) const {
+    
+    QVector<MelodicFragment> fragments;
+    
+    const double tensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
+    const double creativity = c.weights.creativity;
+    const bool isDominant = (c.chord.quality == music::ChordQuality::Dominant);
+    
+    // ========================================================================
+    // APPROACH NOTES - Lead into the target
+    // ========================================================================
+    
+    // Chromatic approach from below (very common, sounds great)
+    fragments.push_back({
+        FragmentType::Approach,
+        {-1, 0},           // Half step below, then target
+        {0.3, 0.7},        // Short approach, longer target
+        {-8, 0},           // Softer approach
+        0.1,               // Very safe
+        "ChromApproachBelow"
+    });
+    
+    // Chromatic approach from above
+    fragments.push_back({
+        FragmentType::Approach,
+        {1, 0},            // Half step above, then target
+        {0.3, 0.7},
+        {-8, 0},
+        0.15,
+        "ChromApproachAbove"
+    });
+    
+    // Diatonic approach (whole step below)
+    fragments.push_back({
+        FragmentType::Approach,
+        {-2, 0},           // Whole step below
+        {0.35, 0.65},
+        {-5, 0},
+        0.05,              // Very safe
+        "DiatApproachBelow"
+    });
+    
+    // ========================================================================
+    // DOUBLE APPROACH - Two notes leading to target
+    // ========================================================================
+    
+    // Chromatic double approach (classic bebop)
+    fragments.push_back({
+        FragmentType::DoubleApproach,
+        {-2, -1, 0},       // Whole step, half step, target
+        {0.25, 0.25, 0.5},
+        {-10, -5, 0},
+        0.2,
+        "DoubleChromBelow"
+    });
+    
+    // Scale approach from above
+    fragments.push_back({
+        FragmentType::DoubleApproach,
+        {4, 2, 0},         // Down by steps
+        {0.25, 0.25, 0.5},
+        {-8, -4, 0},
+        0.15,
+        "ScaleApproachAbove"
+    });
+    
+    // ========================================================================
+    // ENCLOSURES - Surround the target
+    // ========================================================================
+    
+    // Classic enclosure: above-below-target
+    fragments.push_back({
+        FragmentType::Enclosure,
+        {1, -1, 0},        // Half above, half below, target
+        {0.25, 0.25, 0.5},
+        {-6, -6, 0},
+        0.25,
+        "EnclosureAboveBelow"
+    });
+    
+    // Reverse enclosure: below-above-target
+    fragments.push_back({
+        FragmentType::Enclosure,
+        {-1, 1, 0},
+        {0.25, 0.25, 0.5},
+        {-6, -6, 0},
+        0.25,
+        "EnclosureBelowAbove"
+    });
+    
+    // Wide enclosure (more dramatic)
+    if (tensionLevel > 0.4) {
+        fragments.push_back({
+            FragmentType::Enclosure,
+            {2, -1, 0},    // Whole step above, half below
+            {0.3, 0.2, 0.5},
+            {-4, -8, 0},
+            0.35,
+            "WideEnclosure"
+        });
+    }
+    
+    // ========================================================================
+    // TURNS - Ornamental figures
+    // ========================================================================
+    
+    if (creativity > 0.3) {
+        // Upper turn
+        fragments.push_back({
+            FragmentType::Turn,
+            {0, 2, 0, -1, 0},  // Note, step up, back, step down, back
+            {0.2, 0.15, 0.15, 0.15, 0.35},
+            {0, -5, -3, -8, 0},
+            0.3,
+            "UpperTurn"
+        });
+        
+        // Lower turn (mordent-like)
+        fragments.push_back({
+            FragmentType::Turn,
+            {0, -1, 0},
+            {0.4, 0.2, 0.4},
+            {0, -10, 0},
+            0.2,
+            "LowerMordent"
+        });
+    }
+    
+    // ========================================================================
+    // ARPEGGIOS - Broken chord figures
+    // ========================================================================
+    
+    // Ascending arpeggio (root-3-5 or 3-5-7)
+    fragments.push_back({
+        FragmentType::ArpeggioUp,
+        {0, 3, 7},         // Triad intervals (will be adjusted to chord)
+        {0.3, 0.3, 0.4},
+        {-5, -3, 0},
+        0.1,
+        "ArpUp_Triad"
+    });
+    
+    // Descending arpeggio
+    fragments.push_back({
+        FragmentType::ArpeggioDown,
+        {7, 3, 0},
+        {0.3, 0.3, 0.4},
+        {0, -3, -5},
+        0.1,
+        "ArpDown_Triad"
+    });
+    
+    // ========================================================================
+    // SCALE RUNS - Forward motion
+    // ========================================================================
+    
+    if (c.energy > 0.4) {
+        // 3-note ascending scale
+        fragments.push_back({
+            FragmentType::ScaleRun3,
+            {-4, -2, 0},   // Scale degrees leading to target
+            {0.25, 0.25, 0.5},
+            {-8, -4, 0},
+            0.2,
+            "ScaleRun3Up"
+        });
+        
+        // 3-note descending scale
+        fragments.push_back({
+            FragmentType::ScaleRun3,
+            {4, 2, 0},
+            {0.25, 0.25, 0.5},
+            {0, -4, -8},
+            0.2,
+            "ScaleRun3Down"
+        });
+    }
+    
+    if (c.energy > 0.6 && creativity > 0.4) {
+        // 4-note scale run (more dramatic)
+        fragments.push_back({
+            FragmentType::ScaleRun4,
+            {-7, -5, -2, 0},
+            {0.2, 0.2, 0.2, 0.4},
+            {-10, -6, -3, 0},
+            0.35,
+            "ScaleRun4Up"
+        });
+    }
+    
+    // ========================================================================
+    // RESOLUTION - Tension to resolution
+    // ========================================================================
+    
+    if (isDominant && tensionLevel > 0.3) {
+        // Tritone resolution (classic jazz)
+        fragments.push_back({
+            FragmentType::Resolution,
+            {6, 0},        // Tritone resolving down
+            {0.4, 0.6},
+            {5, 0},        // Tension note slightly louder
+            0.5,
+            "TritoneRes"
+        });
+        
+        // b9 to root resolution
+        fragments.push_back({
+            FragmentType::Resolution,
+            {1, 0},        // Half step down resolution
+            {0.35, 0.65},
+            {3, 0},
+            0.45,
+            "b9Resolution"
+        });
+    }
+    
+    // ========================================================================
+    // OCTAVE DISPLACEMENT - For drama
+    // ========================================================================
+    
+    if (c.energy > 0.7 && creativity > 0.5) {
+        fragments.push_back({
+            FragmentType::Octave,
+            {-12, 0},      // Octave below then target
+            {0.4, 0.6},
+            {-3, 5},       // Crescendo into target
+            0.3,
+            "OctaveLeap"
+        });
+    }
+    
+    // Sort by tension level (safest first for lower tension contexts)
+    std::sort(fragments.begin(), fragments.end(),
+              [](const MelodicFragment& a, const MelodicFragment& b) {
+                  return a.tensionLevel < b.tensionLevel;
+              });
+    
+    return fragments;
+}
+
+QVector<JazzBalladPianoPlanner::FragmentNote> JazzBalladPianoPlanner::applyMelodicFragment(
+    const Context& c,
+    const MelodicFragment& fragment,
+    int targetMidi,
+    int startSub) const {
+    
+    QVector<FragmentNote> notes;
+    
+    if (fragment.intervalPattern.isEmpty()) return notes;
+    
+    // For arpeggios, we need to use actual chord tones instead of fixed intervals
+    bool useChordTones = (fragment.type == FragmentType::ArpeggioUp || 
+                          fragment.type == FragmentType::ArpeggioDown);
+    
+    // Collect chord tones for arpeggio fragments
+    QVector<int> chordMidi;
+    if (useChordTones) {
+        int third = pcForDegree(c.chord, 3);
+        int fifth = pcForDegree(c.chord, 5);
+        int seventh = pcForDegree(c.chord, 7);
+        
+        // Build chord tones near target
+        for (int offset = -12; offset <= 12; offset++) {
+            int midi = targetMidi + offset;
+            if (midi < c.rhLo || midi > c.rhHi) continue;
+            int pc = normalizePc(midi);
+            if (pc == third || pc == fifth || pc == seventh || pc == c.chord.rootPc) {
+                chordMidi.push_back(midi);
+            }
+        }
+        std::sort(chordMidi.begin(), chordMidi.end());
+    }
+    
+    int currentSub = startSub;
+    
+    for (int i = 0; i < fragment.intervalPattern.size(); ++i) {
+        FragmentNote fn;
+        
+        if (useChordTones && !chordMidi.isEmpty()) {
+            // For arpeggios, pick from actual chord tones
+            int idx = qBound(0, i, chordMidi.size() - 1);
+            if (fragment.type == FragmentType::ArpeggioDown) {
+                idx = chordMidi.size() - 1 - idx;
+            }
+            fn.midiNote = chordMidi[idx];
+        } else {
+            // Apply interval pattern directly
+            fn.midiNote = targetMidi + fragment.intervalPattern[i];
+        }
+        
+        // Ensure within range
+        fn.midiNote = qBound(c.rhLo, fn.midiNote, c.rhHi);
+        
+        // Calculate timing
+        fn.subBeatOffset = currentSub;
+        
+        // Duration from pattern
+        fn.durationMult = (i < fragment.rhythmPattern.size()) ? fragment.rhythmPattern[i] : 0.5;
+        
+        // Velocity from pattern
+        fn.velocityDelta = (i < fragment.velocityPattern.size()) ? fragment.velocityPattern[i] : 0;
+        
+        notes.push_back(fn);
+        
+        // Advance sub-beat position (simplified - assumes 4 subs per beat)
+        if (i < fragment.rhythmPattern.size() - 1) {
+            double nextDur = fragment.rhythmPattern[i];
+            currentSub += qMax(1, int(nextDur * 4)); // Convert to 16th note position
+            if (currentSub >= 4) currentSub = 3; // Cap at end of beat
+        }
+    }
+    
+    return notes;
+}
+
 // LH: Provides harmonic foundation. ALWAYS plays regardless of user activity.
 // The LH is the anchor - it doesn't back off, only the RH does.
 bool JazzBalladPianoPlanner::shouldLhPlayBeat(const Context& c, quint32 hash) const {
@@ -1431,13 +1825,12 @@ int JazzBalladPianoPlanner::rhActivityLevel(const Context& c, quint32 hash) cons
 // CONSONANCE-FIRST: Prioritize guide tones, extensions only when tension warrants
 int JazzBalladPianoPlanner::selectNextRhMelodicTarget(const Context& c) const {
     int lastTop = (m_state.lastRhTopMidi > 0) ? m_state.lastRhTopMidi : 74;
-    int root = c.chord.rootPc;
     
     // Determine tension level for extension usage
     const double tensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
-    const bool isDominant = (c.chord.quality == music::ChordQuality::Dominant);
     
     // Collect scale tones for melodic motion - CONSONANCE FIRST
+    // pcForDegree now returns -1 for inappropriate extensions
     QVector<int> scalePcs;
     int third = pcForDegree(c.chord, 3);
     int fifth = pcForDegree(c.chord, 5);
@@ -1452,17 +1845,10 @@ int JazzBalladPianoPlanner::selectNextRhMelodicTarget(const Context& c) const {
     // PRIORITY 2: Fifth
     if (fifth >= 0) scalePcs.push_back(fifth);
     
-    // PRIORITY 3: Extensions (only if tension warrants)
+    // PRIORITY 3: Extensions (pcForDegree already filters appropriately)
     if (tensionLevel > 0.3) {
-        if (ninth >= 0) {
-            int expectedNinth = normalizePc(root + 2);
-            if (ninth == expectedNinth || (isDominant && tensionLevel > 0.5)) {
-                scalePcs.push_back(ninth);
-            }
-        }
-        if (thirteenth >= 0 && tensionLevel > 0.5) {
-            scalePcs.push_back(thirteenth);
-        }
+        if (ninth >= 0) scalePcs.push_back(ninth);
+        if (thirteenth >= 0 && tensionLevel > 0.5) scalePcs.push_back(thirteenth);
     }
     
     if (scalePcs.isEmpty()) return lastTop;
@@ -1989,30 +2375,17 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             // PRIORITY 2: Fifth - safe, consonant, but less characteristic
             if (fifth >= 0) melodicPcs.push_back(fifth);
             
-            // PRIORITY 3: Extensions - only if energy/tension warrants
+            // PRIORITY 3: Extensions - pcForDegree now handles restrictions
+            // It returns -1 for unavailable/inappropriate extensions
             if (allowExtensions) {
-                // 9th is generally safe on most chords (except when b9 on non-dominant)
+                // 9th - pcForDegree only returns it when appropriate for chord type
                 if (ninth >= 0) {
-                    // Check if it's a natural 9 (whole step above root)
-                    int expectedNinth = normalizePc(root + 2);
-                    bool isNatural9 = (ninth == expectedNinth);
-                    
-                    // Natural 9 is safe on almost any chord
-                    // b9/#9 only on dominants when we want tension
-                    if (isNatural9 || (hitIsDominant && allowColorTones)) {
-                        melodicPcs.push_back(ninth);
-                    }
+                    melodicPcs.push_back(ninth);
                 }
                 
-                // 13th is beautiful on dominants and minor 7ths
+                // 13th - pcForDegree only returns it when appropriate
                 if (thirteenth >= 0 && allowColorTones) {
-                    // Natural 13 is a 9th above 5th - generally safe
-                    int expectedThirteenth = normalizePc(root + 9);
-                    bool isNatural13 = (thirteenth == expectedThirteenth);
-                    
-                    if (isNatural13 || hitIsDominant) {
-                        melodicPcs.push_back(thirteenth);
-                    }
+                    melodicPcs.push_back(thirteenth);
                 }
             }
             
@@ -2088,6 +2461,82 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     }
                 }
             } // end of Move choice
+            
+            // ================================================================
+            // MELODIC FRAGMENT DECISION
+            // Sometimes use a melodic fragment instead of a plain note/dyad
+            // This creates intentional gestures (approach notes, enclosures)
+            // Fragments work for BOTH single notes and dyads
+            // ================================================================
+            double fragmentProb = 0.0;
+            if (c.weights.creativity > 0.2) {
+                fragmentProb = 0.12 + 0.20 * c.weights.creativity + 0.10 * c.energy;
+                // Slightly higher for single notes (more room for melodic movement)
+                if (!preferDyad) fragmentProb += 0.08;
+            }
+            
+            const bool useFragment = (sub == 0 || sub == 2) && // Only on main subdivisions
+                                     ((rhHash + hitIndex * 23) % 100) < int(fragmentProb * 100);
+            
+            if (useFragment) {
+                // Get available fragments for this context
+                const auto fragments = getMelodicFragments(adjusted, normalizePc(bestTarget));
+                
+                if (!fragments.isEmpty()) {
+                    // Select fragment based on tension level
+                    int fragIdx = 0;
+                    if (hitTensionLevel > 0.5 && fragments.size() > 2) {
+                        fragIdx = qMin(int(hitTensionLevel * fragments.size() * 0.6), fragments.size() - 1);
+                    } else if (hitTensionLevel > 0.3 && fragments.size() > 1) {
+                        fragIdx = 1;
+                    }
+                    
+                    // Apply the fragment
+                    const auto& frag = fragments[fragIdx];
+                    const auto fragNotes = applyMelodicFragment(adjusted, frag, bestTarget, sub);
+                    
+                    if (!fragNotes.isEmpty()) {
+                        // Add all fragment notes
+                        for (const auto& fn : fragNotes) {
+                            virtuoso::groove::GridPos fnPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                                adjusted.playbackBarIndex, adjusted.beatInBar, fn.subBeatOffset, 4, ts);
+                            fnPos = applyTimingOffset(fnPos, rhTimingOffset, adjusted.bpm, ts);
+                            
+                            int fnVel = int(baseVel * mappings.velocityMod + velDelta + fn.velocityDelta);
+                            fnVel = qBound(40, fnVel, 105);
+                            
+                            double fnDur = 0.35 * fn.durationMult * mappings.durationMod;
+                            const virtuoso::groove::Rational fnDurWhole(qint64(fnDur * 1000), 4000);
+                            
+                            virtuoso::engine::AgentIntentNote note;
+                            note.agent = "Piano";
+                            note.channel = midiChannel;
+                            note.note = fn.midiNote;
+                            note.baseVelocity = fnVel;
+                            note.startPos = fnPos;
+                            note.durationWhole = fnDurWhole;
+                            note.structural = false;
+                            note.chord_context = adjusted.chordText;
+                            note.voicing_type = QString("RH_Fragment_%1").arg(frag.name);
+                            note.logic_tag = "RH_Frag";
+                            
+                            plan.notes.push_back(note);
+                        }
+                        
+                        // Update state - last note of fragment becomes the new reference
+                        currentTopMidi = fragNotes.last().midiNote;
+                        if (fragNotes.size() > 1) {
+                            int prevNote = fragNotes[fragNotes.size() - 2].midiNote;
+                            currentDirection = (currentTopMidi > prevNote) ? 1 : 
+                                              ((currentTopMidi < prevNote) ? -1 : 0);
+                        }
+                        motionCount++;
+                        m_state.rhMotionsThisChord++;
+                        
+                        continue; // Skip regular voicing for this hit
+                    }
+                }
+            }
             
             // Create voicing for this target
             QVector<int> rhMidiNotes;

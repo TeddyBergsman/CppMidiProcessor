@@ -252,6 +252,58 @@ private:
     // Build a UST voicing in the RH register
     RhMelodic buildUstVoicing(const Context& c, const UpperStructureTriad& ust) const;
     
+    // ========== MELODIC FRAGMENTS (Lick Library) ==========
+    // Pre-composed melodic gestures that sound pianistic and intentional.
+    // These replace random chord-tone movement with beautiful phrases.
+    //
+    // Fragment types:
+    //   - Approach: chromatic or diatonic lead-in to target
+    //   - Enclosure: surround target from above and below
+    //   - Arpeggio: broken chord figure
+    //   - Turn: ornamental figure around a note
+    //   - Scale Run: short scalar passage
+    //   - Resolution: tension-to-resolution gesture
+    
+    enum class FragmentType {
+        Approach,       // Single approach note to target
+        DoubleApproach, // Two approach notes (e.g., chromatic from below)
+        Enclosure,      // Above-below-target or below-above-target
+        Turn,           // Target-above-target-below-target (ornament)
+        ArpeggioUp,     // Broken chord ascending
+        ArpeggioDown,   // Broken chord descending
+        ScaleRun3,      // 3-note scale fragment
+        ScaleRun4,      // 4-note scale fragment
+        Resolution,     // Tension note resolving to chord tone
+        Pedal,          // Repeated note with changing harmony
+        Octave          // Octave displacement for drama
+    };
+    
+    struct MelodicFragment {
+        FragmentType type;
+        QVector<int> intervalPattern;  // Intervals from target note (negative = below)
+        QVector<double> rhythmPattern; // Duration multipliers (1.0 = normal)
+        QVector<int> velocityPattern;  // Velocity deltas
+        double tensionLevel;           // How "out" this fragment sounds (0-1)
+        QString name;                  // For debugging/logging
+    };
+    
+    // Get appropriate melodic fragments for current context
+    QVector<MelodicFragment> getMelodicFragments(const Context& c, int targetPc) const;
+    
+    // Apply a melodic fragment starting from a target note
+    // Returns the MIDI notes with timing offsets
+    struct FragmentNote {
+        int midiNote;
+        int subBeatOffset;    // 0-3 for 16th note subdivisions
+        double durationMult;  // Multiplier for base duration
+        int velocityDelta;    // Adjustment to base velocity
+    };
+    QVector<FragmentNote> applyMelodicFragment(
+        const Context& c, 
+        const MelodicFragment& fragment,
+        int targetMidi,
+        int startSub) const;
+    
     // Determine if LH should play this beat (sparse: beat 1, sometimes 3)
     bool shouldLhPlayBeat(const Context& c, quint32 hash) const;
     

@@ -62,6 +62,33 @@ public:
         int rhMelodicDirection = 0;      // -1 descending, 0 neutral, +1 ascending
         int rhMotionsThisChord = 0;      // Count of RH melodic movements on current chord
         music::ChordSymbol lastChordForRh; // Track when chord changes for RH reset
+        
+        // ========== PHRASE-LEVEL PLANNING ==========
+        // Tracks melodic arcs, motifs, and phrase-level intent across multiple bars
+        int lastPhraseStartBar = -1;     // Bar index when current phrase started
+        int phraseArcPhase = 0;          // 0=building, 1=peak, 2=resolving
+        int phraseTargetMidi = 76;       // The note we're building toward (phrase peak)
+        int phraseResolveMidi = 72;      // The note we resolve to at phrase end
+        QVector<int> phraseMotifPcs;     // 2-3 pitch classes of our motif (relative to chord)
+        int phraseMotifStartDegree = 5;  // Starting degree of motif (3, 5, 7, 9, etc.)
+        bool phraseMotifAscending = true;// Direction of original motif
+        int phraseMotifVariation = 0;    // 0=original, 1=transposed, 2=inverted, 3=rhythmic
+        
+        // ========== REGISTER VARIETY ==========
+        // Tracks register usage over time to ensure variety and musical contour
+        int recentRegisterSum = 0;       // Running sum of recent MIDI notes (for average)
+        int recentRegisterCount = 0;     // Count for averaging
+        int preferredRegisterOffset = 0; // Offset to apply to target register (-6 to +6)
+        int barsInCurrentRegister = 0;   // How long we've been in current register zone
+        bool lastPhraseWasHigh = false;  // Alternate between high/low phrase peaks
+        
+        // ========== CALL-AND-RESPONSE ==========
+        // Tracks user activity for interactive fill/response behavior
+        bool userWasBusy = false;        // Was user playing on the previous beat?
+        int responseWindowBeats = 0;     // Beats remaining in response window
+        bool inResponseMode = false;     // Currently responding to user?
+        int userLastRegisterHigh = 72;   // Last high note user played
+        int userLastRegisterLow = 60;    // Last low note user played
     };
 
     struct CcIntent {
@@ -109,6 +136,9 @@ public:
         bool userRegisterHigh = false;
         bool userSilence = false;
         bool userBusy = false;
+        int userMeanMidi = 72;           // Mean MIDI note of recent user activity
+        int userHighMidi = 84;           // Highest recent user note
+        int userLowMidi = 60;            // Lowest recent user note
 
         // Macro dynamics
         bool forceClimax = false;
@@ -415,6 +445,132 @@ private:
 
     // Adjust register to avoid bass collision
     void adjustRegisterForBass(Context& c) const;
+    
+    // ============= Phrase-Level Planning =============
+    
+    // Compute the phrase arc phase (0=building, 1=peak, 2=resolving)
+    int computePhraseArcPhase(const Context& c) const;
+    
+    // Get the target register for the current arc phase
+    // Building: mid-register, gradually ascending
+    // Peak: high register, maximum activity
+    // Resolving: descending toward rest
+    int getArcTargetMidi(const Context& c, int arcPhase) const;
+    
+    // Generate a new motif for the phrase (called at phrase start)
+    void generatePhraseMotif(const Context& c);
+    
+    // Get the motif variation for current position in phrase
+    // Returns: 0=original, 1=transposed up, 2=inverted, 3=transposed down
+    int getMotifVariation(const Context& c) const;
+    
+    // Apply motif to create melodic targets (returns target PCs for RH)
+    QVector<int> applyMotifToContext(const Context& c, int variation) const;
+    
+    // Get melodic direction based on arc phase
+    // Building: ascending, Peak: sustained high, Resolving: descending
+    int getArcMelodicDirection(int arcPhase, int barInPhase, int phraseBars) const;
+    
+    // ============= Register Variety =============
+    
+    // Update register tracking with a new note
+    void updateRegisterTracking(int midiNote);
+    
+    // Get register adjustment based on recent usage and phrase context
+    // Returns an offset (-6 to +6) to apply to target registers
+    int computeRegisterVariety(const Context& c) const;
+    
+    // Decide if this phrase should peak high or low (alternates)
+    bool shouldPhrasePeakHigh(const Context& c) const;
+    
+    // ============= Rhythmic Vocabulary =============
+    
+    // Rhythmic feel types for advanced patterns
+    enum class RhythmicFeel {
+        Straight,     // Standard 16th note grid
+        Swing,        // Jazz swing feel (delayed "and")
+        Triplet,      // Triplet-based patterns
+        Hemiola,      // 3-against-4 polyrhythm
+        Displaced     // Metric displacement (shifted 8th)
+    };
+    
+    // Get appropriate rhythmic feel for current context
+    RhythmicFeel chooseRhythmicFeel(const Context& c, quint32 hash) const;
+    
+    // Apply rhythmic feel to a subdivision position
+    // Returns timing offset in milliseconds
+    int applyRhythmicFeel(RhythmicFeel feel, int subdivision, int beatInBar, int bpm) const;
+    
+    // Generate triplet-based RH pattern (3 notes per beat)
+    QVector<std::tuple<int, int, bool>> generateTripletPattern(const Context& c, int activity) const;
+    
+    // Generate hemiola pattern (3 notes across 2 beats)
+    QVector<std::tuple<int, int, bool>> generateHemiolaPattern(const Context& c) const;
+    
+    // ============= Call-and-Response =============
+    
+    // Update response state based on user activity
+    void updateResponseState(const Context& c);
+    
+    // Check if we should respond (user just stopped playing)
+    bool shouldRespondToUser(const Context& c) const;
+    
+    // Get register for response (complement or echo user's register)
+    int getResponseRegister(const Context& c, bool complement) const;
+    
+    // Boost activity level for response fills
+    int getResponseActivityBoost(const Context& c) const;
+    
+    // ============= Texture Modes =============
+    // Different playing modes for various musical situations
+    
+    enum class TextureMode {
+        Comp,       // Standard comping: LH + minimal RH
+        Fill,       // Fill mode: active RH melodic fills
+        Solo,       // Solo mode: virtuosic RH with LH support
+        Sparse,     // Ultra-sparse: shells only, minimal activity
+        Lush        // Lush mode: full voicings, rich texture
+    };
+    
+    // Determine appropriate texture mode from context
+    TextureMode determineTextureMode(const Context& c) const;
+    
+    // Apply texture mode modifications
+    void applyTextureMode(TextureMode mode, int& lhActivity, int& rhActivity, 
+                          bool& preferDyads, bool& preferTriads) const;
+    
+    // ============= Style Presets =============
+    // Different pianist styles with characteristic voicings and rhythms
+    
+    enum class PianistStyle {
+        BillEvans,      // Introspective, quartal voicings, sparse but rich
+        RussFreeman,    // West coast cool, melodic, bluesy touches
+        OscarPeterson,  // Driving, virtuosic, block chords
+        KeithJarrett,   // Gospel touches, singing lines, spontaneous
+        Default         // Neutral balanced style
+    };
+    
+    // Style profile data
+    struct StyleProfile {
+        double voicingSparseness = 0.5;   // 0=full, 1=sparse
+        double rhythmicDrive = 0.5;       // 0=laid back, 1=driving
+        double melodicFocus = 0.5;        // 0=chordal, 1=melodic
+        double useQuartalVoicings = 0.0;  // 0-1 probability
+        double useBlockChords = 0.0;      // 0-1 probability
+        double bluesInfluence = 0.0;      // 0-1 blue notes
+        double gospelTouches = 0.0;       // 0-1 gospel influence
+        int preferredRegisterLow = 48;
+        int preferredRegisterHigh = 84;
+    };
+    
+    // Get profile for a style
+    static StyleProfile getStyleProfile(PianistStyle style);
+    
+    // Current style (can be set externally)
+    PianistStyle m_currentStyle = PianistStyle::BillEvans;
+    
+    // Apply style profile modifications
+    void applyStyleProfile(const StyleProfile& profile, Context& c) const;
 
     // ============= State =============
 

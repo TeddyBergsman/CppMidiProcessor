@@ -42,7 +42,7 @@ class JazzBalladPianoPlanner {
 public:
     // State for snapshot/restore (used by phrase planner and lookahead)
     struct PlannerState {
-        QVector<int> lastVoicingMidi;    // last realized MIDI notes
+        QVector<int> lastVoicingMidi;    // last realized MIDI notes (combined)
         int lastTopMidi = -1;            // for RH continuity
         QString lastVoicingKey;          // ontology key of last voicing used
 
@@ -52,6 +52,16 @@ public:
 
         // Constraints state (needed by JointCandidateModel for feasibility evaluation)
         virtuoso::constraints::PerformanceState perf;
+        
+        // ========== NEW: Separate LH/RH state for Bill Evans style ==========
+        QVector<int> lastLhMidi;         // LH rootless voicing (3-4 notes)
+        QVector<int> lastRhMidi;         // RH melodic dyad/triad (2-3 notes)
+        int lastRhTopMidi = 74;          // RH melodic line top note tracking
+        int lastRhSecondMidi = 69;       // RH second voice for melodic dyads
+        bool lastLhWasTypeA = true;      // Alternate Type A/B for voice-leading
+        int rhMelodicDirection = 0;      // -1 descending, 0 neutral, +1 ascending
+        int rhMotionsThisChord = 0;      // Count of RH melodic movements on current chord
+        music::ChordSymbol lastChordForRh; // Track when chord changes for RH reset
     };
 
     struct CcIntent {
@@ -194,6 +204,42 @@ private:
 
     // Context-aware density: considers phrase position, energy, cadence
     VoicingDensity computeContextDensity(const Context& c) const;
+    
+    // ========== NEW: Separate LH/RH Bill Evans Style Generation ==========
+    
+    // Left Hand: Rootless voicing (Type A or Type B)
+    // Type A: 3-5-7-9 (when chord root is in lower half of cycle)
+    // Type B: 7-9-3-5 (when chord root is in upper half of cycle)
+    // Returns 3-4 notes in register 48-68
+    struct LhVoicing {
+        QVector<int> midiNotes;
+        bool isTypeA = true;
+        QString ontologyKey;
+        double cost = 0.0;
+    };
+    LhVoicing generateLhRootlessVoicing(const Context& c) const;
+    
+    // Right Hand: Melodic dyads/triads for color and movement
+    // Based on chord extensions (9, 11, 13) and guide tones
+    // Creates stepwise melodic motion in top voice
+    // Returns 2-3 notes in register 69-88
+    struct RhMelodic {
+        QVector<int> midiNotes;
+        int topNoteMidi = -1;        // The melodic line note
+        int melodicDirection = 0;    // -1=down, 0=hold, +1=up
+        QString ontologyKey;         // e.g., "RH_Dyad_37", "RH_Triad_UST"
+        bool isColorTone = false;    // Uses extensions (9/11/13)?
+    };
+    RhMelodic generateRhMelodicVoicing(const Context& c, int targetTopMidi) const;
+    
+    // Determine if LH should play this beat (sparse: beat 1, sometimes 3)
+    bool shouldLhPlayBeat(const Context& c, quint32 hash) const;
+    
+    // Determine RH activity level (0-4 hits per beat based on context)
+    int rhActivityLevel(const Context& c, quint32 hash) const;
+    
+    // Select next melodic target for RH (stepwise motion preferred)
+    int selectNextRhMelodicTarget(const Context& c) const;
 
     // Realize pitch classes to MIDI notes within register, with melodic top note
     QVector<int> realizePcsToMidi(const QVector<int>& pcs, int lo, int hi,

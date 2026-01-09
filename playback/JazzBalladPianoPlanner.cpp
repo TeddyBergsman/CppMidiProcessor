@@ -852,6 +852,344 @@ void JazzBalladPianoPlanner::applyGesture(const Context& /*c*/,
 }
 
 // =============================================================================
+// NEW: Bill Evans Style LH/RH Separation
+// =============================================================================
+
+// Bill Evans convention:
+// - Type A (3-5-7-9): Use when root is C, Db, D, Eb, E, F (lower half)
+// - Type B (7-9-3-5): Use when root is Gb, G, Ab, A, Bb, B (upper half)
+// This creates smooth voice-leading as chords progress around the circle.
+JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::generateLhRootlessVoicing(const Context& c) const {
+    LhVoicing lh;
+    const auto& chord = c.chord;
+    
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return lh;
+    
+    const bool hasSeventh = (seventhInterval(chord) >= 0);
+    const bool is6thChord = (chord.extension == 6 && chord.seventh == music::SeventhQuality::None);
+    
+    // Determine Type A or B based on root and voice-leading from previous
+    // Root in [0,5] (C-F) -> Type A; Root in [6,11] (F#-B) -> Type B
+    // BUT: alternate if staying on same type creates large motion
+    bool preferTypeA = (chord.rootPc <= 5);
+    
+    // Voice-leading consideration: if last was Type A and this root is close,
+    // prefer opposite type for smoother motion
+    if (!m_state.lastLhMidi.isEmpty()) {
+        // Simple heuristic: alternate when possible for variety
+        preferTypeA = !m_state.lastLhWasTypeA;
+    }
+    
+    // Build the voicing
+    QVector<int> degrees;
+    int baseMidi;
+    
+    if (preferTypeA) {
+        // Type A: 3-5-7-9 (stacked from 3rd)
+        degrees = {3, 5, 7, 9};
+        lh.isTypeA = true;
+        lh.ontologyKey = "LH_RootlessA";
+        baseMidi = 52; // Start around E3
+    } else {
+        // Type B: 7-9-3-5 (stacked from 7th)
+        degrees = {7, 9, 3, 5};
+        lh.isTypeA = false;
+        lh.ontologyKey = "LH_RootlessB";
+        baseMidi = 48; // Start around C3 (7th is lower)
+    }
+    
+    // For triads without 7th, use simpler shell
+    if (!hasSeventh && !is6thChord) {
+        degrees = {3, 5};
+        lh.ontologyKey = "LH_Shell";
+        baseMidi = 52;
+    }
+    
+    // Realize the voicing
+    QVector<int> pcs;
+    for (int deg : degrees) {
+        int pc = pcForDegree(chord, deg);
+        if (pc >= 0) pcs.push_back(pc);
+    }
+    
+    if (pcs.isEmpty()) return lh;
+    
+    // Voice-lead from previous LH voicing
+    if (!m_state.lastLhMidi.isEmpty()) {
+        int lastCenter = 0;
+        for (int m : m_state.lastLhMidi) lastCenter += m;
+        lastCenter /= m_state.lastLhMidi.size();
+        baseMidi = qBound(48, lastCenter - 4, 60);
+    }
+    
+    // Stack notes upward from base
+    lh.midiNotes = realizeVoicingTemplate(degrees, chord, baseMidi, c.lhHi);
+    
+    // Ensure within LH range (48-68)
+    for (int& m : lh.midiNotes) {
+        while (m < 48) m += 12;
+        while (m > 68) m -= 12;
+    }
+    std::sort(lh.midiNotes.begin(), lh.midiNotes.end());
+    
+    // Calculate voice-leading cost
+    lh.cost = voiceLeadingCost(m_state.lastLhMidi, lh.midiNotes);
+    
+    return lh;
+}
+
+// RH Melodic: Create dyads/triads that move melodically
+// Top note follows stepwise motion, inner voice provides harmony
+JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::generateRhMelodicVoicing(
+    const Context& c, int targetTopMidi) const {
+    
+    RhMelodic rh;
+    const auto& chord = c.chord;
+    
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
+    
+    // Collect available color tones for RH (prefer extensions)
+    QVector<int> colorPcs;
+    
+    // Priority order: 9, 13, 11, then guide tones 7, 3
+    int ninth = pcForDegree(chord, 9);
+    int thirteenth = pcForDegree(chord, 13);
+    int eleventh = pcForDegree(chord, 11);
+    int seventh = pcForDegree(chord, 7);
+    int third = pcForDegree(chord, 3);
+    int fifth = pcForDegree(chord, 5);
+    
+    if (ninth >= 0) colorPcs.push_back(ninth);
+    if (thirteenth >= 0) colorPcs.push_back(thirteenth);
+    if (seventh >= 0) colorPcs.push_back(seventh);
+    if (third >= 0) colorPcs.push_back(third);
+    if (eleventh >= 0 && chord.quality != music::ChordQuality::Major) {
+        colorPcs.push_back(eleventh); // Avoid 11 on major chords
+    }
+    if (fifth >= 0) colorPcs.push_back(fifth);
+    
+    if (colorPcs.isEmpty()) return rh;
+    
+    // Select top note: prefer stepwise motion from previous
+    int lastTop = (m_state.lastRhTopMidi > 0) ? m_state.lastRhTopMidi : 74;
+    if (targetTopMidi > 0) lastTop = targetTopMidi;
+    
+    // Find best top note candidate (within 2-4 semitones of last)
+    QVector<std::pair<int, double>> candidates;
+    for (int pc : colorPcs) {
+        for (int oct = 5; oct <= 7; ++oct) {
+            int midi = pc + 12 * oct;
+            if (midi < c.rhLo || midi > c.rhHi) continue;
+            
+            double cost = 0.0;
+            int motion = qAbs(midi - lastTop);
+            
+            // Prefer stepwise (1-2 semitones)
+            if (motion <= 2) cost = 0.0;
+            else if (motion <= 4) cost = 1.0;
+            else if (motion <= 7) cost = 3.0;
+            else cost = 6.0;
+            
+            // Slight preference for extensions (9, 13)
+            if (pc == ninth || pc == thirteenth) cost -= 0.5;
+            
+            // Prefer staying in sweet spot (72-82)
+            if (midi >= 72 && midi <= 82) cost -= 0.3;
+            
+            candidates.push_back({midi, cost});
+        }
+    }
+    
+    if (candidates.isEmpty()) return rh;
+    
+    std::sort(candidates.begin(), candidates.end(),
+              [](const auto& a, const auto& b) { return a.second < b.second; });
+    
+    rh.topNoteMidi = candidates.first().first;
+    int topPc = normalizePc(rh.topNoteMidi);
+    
+    // Determine melodic direction
+    if (rh.topNoteMidi > lastTop + 1) rh.melodicDirection = 1;
+    else if (rh.topNoteMidi < lastTop - 1) rh.melodicDirection = -1;
+    else rh.melodicDirection = 0;
+    
+    // Find a second voice (3rd or 6th below top)
+    int secondPc = -1;
+    int secondMidi = -1;
+    
+    // Try 3rd below (interval of 3-4 semitones)
+    for (int pc : colorPcs) {
+        if (pc == topPc) continue;
+        int interval = (topPc - pc + 12) % 12;
+        if (interval >= 3 && interval <= 5) { // Minor 3rd to perfect 4th
+            secondPc = pc;
+            break;
+        }
+    }
+    
+    // Fallback: try 6th below
+    if (secondPc < 0) {
+        for (int pc : colorPcs) {
+            if (pc == topPc) continue;
+            int interval = (topPc - pc + 12) % 12;
+            if (interval >= 8 && interval <= 10) { // Major 6th to minor 7th
+                secondPc = pc;
+                break;
+            }
+        }
+    }
+    
+    // Last resort: just use the 7th or 3rd
+    if (secondPc < 0) {
+        secondPc = (seventh >= 0 && seventh != topPc) ? seventh : third;
+    }
+    
+    if (secondPc >= 0) {
+        // Place second voice 3-6 semitones below top
+        secondMidi = rh.topNoteMidi - 3;
+        while (normalizePc(secondMidi) != secondPc && secondMidi > rh.topNoteMidi - 12) {
+            secondMidi--;
+        }
+        if (secondMidi >= c.rhLo) {
+            rh.midiNotes.push_back(secondMidi);
+        }
+    }
+    
+    rh.midiNotes.push_back(rh.topNoteMidi);
+    std::sort(rh.midiNotes.begin(), rh.midiNotes.end());
+    
+    // Determine ontology key
+    if (topPc == ninth || topPc == thirteenth) {
+        rh.isColorTone = true;
+        rh.ontologyKey = (rh.midiNotes.size() == 2) ? "RH_Dyad_Color" : "RH_Single_Color";
+    } else {
+        rh.isColorTone = false;
+        rh.ontologyKey = (rh.midiNotes.size() == 2) ? "RH_Dyad_Guide" : "RH_Single_Guide";
+    }
+    
+    return rh;
+}
+
+// LH plays sparsely: primarily on beat 1, sometimes beat 3
+bool JazzBalladPianoPlanner::shouldLhPlayBeat(const Context& c, quint32 hash) const {
+    // Always play on chord changes
+    if (c.chordIsNew) return true;
+    
+    // Beat 1: usually yes
+    if (c.beatInBar == 0) {
+        return (hash % 100) < 85;
+    }
+    
+    // Beat 3: sometimes (more often at cadences)
+    if (c.beatInBar == 2) {
+        double prob = 0.25;
+        if (c.cadence01 >= 0.5) prob = 0.55;
+        if (c.phraseEndBar) prob = 0.65;
+        return (hash % 100) < int(prob * 100);
+    }
+    
+    // Beats 2/4: rarely
+    return (hash % 100) < 8;
+}
+
+// RH activity: more frequent melodic movement
+int JazzBalladPianoPlanner::rhActivityLevel(const Context& c, quint32 hash) const {
+    // Base activity from energy
+    double baseActivity = 1.0 + 2.0 * c.energy;
+    
+    // Chord changes: more movement
+    if (c.chordIsNew) baseActivity += 1.0;
+    
+    // User silence: fill more
+    if (c.userSilence) baseActivity += 1.0;
+    
+    // User busy: back off
+    if (c.userBusy || c.userDensityHigh) baseActivity *= 0.4;
+    
+    // Phrase endings: add movement
+    if (c.phraseEndBar) baseActivity += 0.5;
+    
+    // Cadence: more active
+    if (c.cadence01 >= 0.5) baseActivity += 0.5 * c.cadence01;
+    
+    // Add some randomness
+    int variation = (hash % 3) - 1; // -1, 0, or +1
+    
+    int level = qBound(0, int(baseActivity) + variation, 4);
+    return level;
+}
+
+// Select next melodic target for RH top voice (stepwise preferred)
+int JazzBalladPianoPlanner::selectNextRhMelodicTarget(const Context& c) const {
+    int lastTop = (m_state.lastRhTopMidi > 0) ? m_state.lastRhTopMidi : 74;
+    
+    // Collect scale tones for melodic motion
+    QVector<int> scalePcs;
+    int third = pcForDegree(c.chord, 3);
+    int fifth = pcForDegree(c.chord, 5);
+    int seventh = pcForDegree(c.chord, 7);
+    int ninth = pcForDegree(c.chord, 9);
+    int thirteenth = pcForDegree(c.chord, 13);
+    
+    if (ninth >= 0) scalePcs.push_back(ninth);
+    if (thirteenth >= 0) scalePcs.push_back(thirteenth);
+    if (seventh >= 0) scalePcs.push_back(seventh);
+    if (third >= 0) scalePcs.push_back(third);
+    if (fifth >= 0) scalePcs.push_back(fifth);
+    
+    if (scalePcs.isEmpty()) return lastTop;
+    
+    // Determine direction based on recent motion and register
+    int dir = m_state.rhMelodicDirection;
+    
+    // Tendency to reverse near boundaries
+    if (lastTop >= 80) dir = -1;
+    else if (lastTop <= 70) dir = 1;
+    else if (m_state.rhMotionsThisChord >= 3) {
+        // After a few motions, tend to reverse
+        dir = -dir;
+    }
+    
+    // Find nearest scale tone in preferred direction
+    int bestTarget = lastTop;
+    int bestDist = 999;
+    
+    for (int pc : scalePcs) {
+        for (int oct = 5; oct <= 7; ++oct) {
+            int midi = pc + 12 * oct;
+            if (midi < c.rhLo || midi > c.rhHi) continue;
+            
+            int motion = midi - lastTop;
+            bool rightDirection = (dir == 0) || (dir > 0 && motion > 0) || (dir < 0 && motion < 0);
+            
+            if (rightDirection && qAbs(motion) >= 1 && qAbs(motion) <= 4) {
+                if (qAbs(motion) < bestDist) {
+                    bestDist = qAbs(motion);
+                    bestTarget = midi;
+                }
+            }
+        }
+    }
+    
+    // If no good target in direction, allow contrary motion
+    if (bestDist == 999) {
+        for (int pc : scalePcs) {
+            for (int oct = 5; oct <= 7; ++oct) {
+                int midi = pc + 12 * oct;
+                if (midi < c.rhLo || midi > c.rhHi) continue;
+                int motion = qAbs(midi - lastTop);
+                if (motion >= 1 && motion <= 5 && motion < bestDist) {
+                    bestDist = motion;
+                    bestTarget = midi;
+                }
+            }
+        }
+    }
+    
+    return bestTarget;
+}
+
+// =============================================================================
 // Main Planning Function
 // =============================================================================
 
@@ -869,26 +1207,27 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
 
     Context adjusted = c;
     adjustRegisterForBass(adjusted);
-
-    bool shouldPlay = false;
-    QVector<VocabRhythmHit> vocabHits;
-    QString phraseId;
+    
+    // Check if chord changed - reset RH melodic motion counter
+    const bool chordChanged = c.chordIsNew || 
+        (c.chord.rootPc != m_state.lastChordForRh.rootPc) ||
+        (c.chord.quality != m_state.lastChordForRh.quality);
+    
+    // Determinism hashes
+    const quint32 lhHash = virtuoso::util::StableHash::mix(
+        adjusted.determinismSeed, adjusted.playbackBarIndex * 17 + adjusted.beatInBar);
+    const quint32 rhHash = virtuoso::util::StableHash::mix(
+        adjusted.determinismSeed, adjusted.playbackBarIndex * 23 + adjusted.beatInBar * 3);
+    const quint32 timingHash = virtuoso::util::StableHash::mix(
+        adjusted.determinismSeed, adjusted.playbackBarIndex * 31 + adjusted.beatInBar * 7);
+    
+    const auto mappings = computeWeightMappings(adjusted);
+    const int baseVel = 55 + int(25.0 * adjusted.energy);
+    
     QString pedalId;
-
+    
+    // Get pedal from vocabulary if available
     if (hasVocabularyLoaded()) {
-        vocabHits = queryVocabularyHits(adjusted, &phraseId);
-        if (!vocabHits.isEmpty()) {
-            shouldPlay = true;
-        } else if (adjusted.chordIsNew && adjusted.beatInBar == 0) {
-            shouldPlay = true;
-            VocabRhythmHit defaultHit;
-            defaultHit.sub = 0;
-            defaultHit.count = 1;
-            defaultHit.density = VoicingDensity::Full;
-            vocabHits.push_back(defaultHit);
-        }
-        
-        // Get pedal choice
         virtuoso::vocab::VocabularyRegistry::PianoPedalQuery pedalQ;
         pedalQ.ts = {4, 4};
         pedalQ.playbackBarIndex = adjusted.playbackBarIndex;
@@ -904,118 +1243,171 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         pedalQ.determinismSeed = adjusted.determinismSeed;
         const auto pedalChoice = m_vocab->choosePianoPedal(pedalQ);
         pedalId = pedalChoice.id;
-    } else {
-        const quint32 hash = virtuoso::util::StableHash::mix(
-            adjusted.determinismSeed, adjusted.playbackBarIndex * 17 + adjusted.beatInBar);
-        shouldPlay = shouldPlayBeatFallback(adjusted, hash);
-        if (shouldPlay) {
-            VocabRhythmHit defaultHit;
-            defaultHit.sub = 0;
-            defaultHit.count = 1;
-            defaultHit.density = computeContextDensity(adjusted);
-            vocabHits.push_back(defaultHit);
+    }
+    
+    // ==========================================================================
+    // LEFT HAND: Sparse rootless voicing (Bill Evans Type A/B)
+    // Plays on chord changes and beat 1, occasionally beat 3
+    // ==========================================================================
+    
+    const bool lhPlays = shouldLhPlayBeat(adjusted, lhHash);
+    LhVoicing lhVoicing;
+    
+    if (lhPlays) {
+        lhVoicing = generateLhRootlessVoicing(adjusted);
+        
+        if (!lhVoicing.midiNotes.isEmpty()) {
+            const int lhTimingOffset = computeTimingOffsetMs(adjusted, timingHash);
+            virtuoso::groove::GridPos lhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                adjusted.playbackBarIndex, adjusted.beatInBar, 0, 4, ts);
+            lhPos = applyTimingOffset(lhPos, lhTimingOffset, adjusted.bpm, ts);
+            
+            // LH: longer duration, softer velocity
+            int lhVel = int(baseVel * mappings.velocityMod * 0.85);
+            lhVel = qBound(35, lhVel, 95);
+            
+            // Duration: LH sustains longer (1.5-2 beats)
+            const double lhDurBeats = 1.5 * mappings.durationMod;
+            const virtuoso::groove::Rational lhDurWhole(qint64(lhDurBeats * 1000), 4000);
+            
+            for (int midi : lhVoicing.midiNotes) {
+                virtuoso::engine::AgentIntentNote note;
+                note.agent = "Piano";
+                note.channel = midiChannel;
+                note.note = midi;
+                note.baseVelocity = lhVel;
+                note.startPos = lhPos;
+                note.durationWhole = lhDurWhole;
+                note.structural = (adjusted.chordIsNew && adjusted.beatInBar == 0);
+                note.chord_context = adjusted.chordText;
+                note.voicing_type = lhVoicing.ontologyKey;
+                note.logic_tag = "LH";
+                
+                plan.notes.push_back(note);
+            }
+            
+            // Update LH state
+            m_state.lastLhMidi = lhVoicing.midiNotes;
+            m_state.lastLhWasTypeA = lhVoicing.isTypeA;
         }
     }
-
-    if (!shouldPlay || vocabHits.isEmpty()) {
-        return plan;
+    
+    // ==========================================================================
+    // RIGHT HAND: Melodic dyads with voice-leading
+    // More active, creates an independent melodic line in the upper register
+    // ==========================================================================
+    
+    const int rhActivity = rhActivityLevel(adjusted, rhHash);
+    
+    // Reset RH motion counter on chord change
+    if (chordChanged) {
+        m_state.rhMotionsThisChord = 0;
+        m_state.lastChordForRh = c.chord;
     }
-
-    VoicingDensity density = computeContextDensity(adjusted);
-
-    for (const auto& hit : vocabHits) {
-        if (hit.density < density) {
-            density = hit.density;
-        }
-    }
-
-    QVector<Voicing> candidates = generateVoicingCandidates(adjusted, density);
-    if (candidates.isEmpty()) {
-        return plan;
-    }
-
-    Voicing bestVoicing = candidates.first();
-    for (const auto& cand : candidates) {
-        if (cand.cost < bestVoicing.cost) {
-            bestVoicing = cand;
-        }
-    }
-
-    // Variability: prefer different voicing from last
-    if (!m_state.lastVoicingKey.isEmpty() && candidates.size() > 1) {
-        if (bestVoicing.ontologyKey == m_state.lastVoicingKey) {
-            for (const auto& cand : candidates) {
-                if (cand.ontologyKey != m_state.lastVoicingKey) {
-                    if (cand.cost < bestVoicing.cost + 3.0) {
-                        bestVoicing = cand;
-                        break;
-                    }
+    
+    if (rhActivity > 0) {
+        // Generate multiple RH hits based on activity level
+        // Activity 1: single hit on beat
+        // Activity 2: hit on beat + and-of-beat
+        // Activity 3-4: more melodic motion
+        
+        QVector<std::pair<int, int>> rhTimings; // sub, velDelta
+        
+        switch (rhActivity) {
+            case 1:
+                rhTimings.push_back({0, 0});
+                break;
+            case 2:
+                rhTimings.push_back({0, 0});
+                if ((rhHash % 2) == 0) {
+                    rhTimings.push_back({2, -8}); // and-of-beat, softer
                 }
+                break;
+            case 3:
+                rhTimings.push_back({0, 0});
+                rhTimings.push_back({2, -5});
+                break;
+            case 4:
+                rhTimings.push_back({0, 0});
+                rhTimings.push_back({1, -6});
+                rhTimings.push_back({2, -4});
+                rhTimings.push_back({3, -8});
+                break;
+            default:
+                break;
+        }
+        
+        // Slight delay for RH relative to LH (rubato feel)
+        const int rhTimingOffset = computeTimingOffsetMs(adjusted, rhHash) + 5;
+        
+        for (const auto& timing : rhTimings) {
+            // Find melodic target for this hit
+            int targetTop = selectNextRhMelodicTarget(adjusted);
+            
+            RhMelodic rhVoicing = generateRhMelodicVoicing(adjusted, targetTop);
+            
+            if (!rhVoicing.midiNotes.isEmpty()) {
+                virtuoso::groove::GridPos rhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                    adjusted.playbackBarIndex, adjusted.beatInBar, timing.first, 4, ts);
+                rhPos = applyTimingOffset(rhPos, rhTimingOffset, adjusted.bpm, ts);
+                
+                // RH: shorter duration, varied velocity for melodic interest
+                int rhVel = int(baseVel * mappings.velocityMod + timing.second);
+                rhVel = qBound(40, rhVel, 105);
+                
+                // Duration: RH notes shorter for melodic clarity
+                const double rhDurBeats = (timing.first == 0) ? 0.75 : 0.5;
+                const virtuoso::groove::Rational rhDurWhole(qint64(rhDurBeats * mappings.durationMod * 1000), 4000);
+                
+                for (int midi : rhVoicing.midiNotes) {
+                    virtuoso::engine::AgentIntentNote note;
+                    note.agent = "Piano";
+                    note.channel = midiChannel;
+                    note.note = midi;
+                    note.baseVelocity = rhVel;
+                    note.startPos = rhPos;
+                    note.durationWhole = rhDurWhole;
+                    note.structural = false;
+                    note.chord_context = adjusted.chordText;
+                    note.voicing_type = rhVoicing.ontologyKey;
+                    note.logic_tag = "RH";
+                    
+                    plan.notes.push_back(note);
+                }
+                
+                // Update RH melodic state
+                m_state.lastRhMidi = rhVoicing.midiNotes;
+                m_state.lastRhTopMidi = rhVoicing.topNoteMidi;
+                m_state.rhMelodicDirection = rhVoicing.melodicDirection;
+                m_state.rhMotionsThisChord++;
             }
         }
     }
-
-    if (bestVoicing.midiNotes.isEmpty()) {
+    
+    // Return early if no notes generated
+    if (plan.notes.isEmpty()) {
         return plan;
     }
-
-    const quint32 timingHash = virtuoso::util::StableHash::mix(
-        adjusted.determinismSeed, adjusted.playbackBarIndex * 31 + adjusted.beatInBar * 7);
-    const int timingOffsetMs = computeTimingOffsetMs(adjusted, timingHash);
-
-    const auto mappings = computeWeightMappings(adjusted);
-    const int baseVel = 60 + int(20.0 * adjusted.energy);
-    int velocity = int(baseVel * mappings.velocityMod);
-    velocity = qBound(40, velocity, 110);
-
-    const double durationBeats = 1.0 * mappings.durationMod;
-    const virtuoso::groove::Rational durWhole(qint64(durationBeats * 1000), 4000);
-
-    for (const auto& hit : vocabHits) {
-        virtuoso::groove::GridPos pos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-            adjusted.playbackBarIndex, adjusted.beatInBar, hit.sub, 4, ts);
-        pos = applyTimingOffset(pos, timingOffsetMs, adjusted.bpm, ts);
-
-        const int noteCount = bestVoicing.midiNotes.size();
-        int lhCount = 0;
-
-        if (noteCount <= 2) lhCount = 1;
-        else if (noteCount <= 3) lhCount = 1;
-        else lhCount = 2;
-
-        for (int i = 0; i < noteCount; ++i) {
-            virtuoso::engine::AgentIntentNote note;
-            note.agent = "Piano";
-            note.channel = midiChannel;
-            note.note = bestVoicing.midiNotes[i];
-            note.baseVelocity = qBound(40, velocity + hit.velDelta, 110);
-            note.startPos = pos;
-            note.durationWhole = durWhole;
-            note.structural = (adjusted.chordIsNew && adjusted.beatInBar == 0);
-            note.chord_context = adjusted.chordText;
-            note.voicing_type = bestVoicing.ontologyKey;
-            note.logic_tag = (i < lhCount) ? "LH" : "RH";
-
-            plan.notes.push_back(note);
+    
+    // Combine for legacy state tracking
+    QVector<int> combinedMidi;
+    for (const auto& n : plan.notes) {
+        if (!combinedMidi.contains(n.note)) {
+            combinedMidi.push_back(n.note);
         }
     }
+    std::sort(combinedMidi.begin(), combinedMidi.end());
+    m_state.lastVoicingMidi = combinedMidi;
+    m_state.lastTopMidi = combinedMidi.isEmpty() ? -1 : combinedMidi.last();
+    m_state.lastVoicingKey = lhVoicing.ontologyKey.isEmpty() ? "RH_Melodic" : lhVoicing.ontologyKey;
 
-    m_state.lastVoicingMidi = bestVoicing.midiNotes;
-    m_state.lastTopMidi = bestVoicing.topNoteMidi;
-    m_state.lastVoicingKey = bestVoicing.ontologyKey;
-    
-    // Update phrase state
-    if (!phraseId.isEmpty()) {
-        m_state.currentPhraseId = phraseId;
-    }
-
-    plan.chosenVoicingKey = bestVoicing.ontologyKey;
+    plan.chosenVoicingKey = m_state.lastVoicingKey;
     plan.ccs = planPedal(adjusted, ts);
 
     virtuoso::piano::PianoPerformancePlan perf;
-    perf.compPhraseId = phraseId.isEmpty() ? m_state.currentPhraseId : phraseId;
+    perf.compPhraseId = m_state.currentPhraseId;
     perf.pedalId = pedalId;
-    perf.gestureProfile = bestVoicing.ontologyKey;
+    perf.gestureProfile = m_state.lastVoicingKey;
     plan.performance = perf;
 
     return plan;

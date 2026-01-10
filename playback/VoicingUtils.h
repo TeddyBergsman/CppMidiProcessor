@@ -52,5 +52,31 @@ QVector<int> realizeVoicingTemplate(const QVector<int>& degrees,
 int selectMelodicTopNote(const QVector<int>& candidatePcs, int lo, int hi,
                          int lastTopMidi);
 
+// =============================================================================
+// CONSONANCE VALIDATION
+// Ensure notes are musically appropriate for the current chord
+// =============================================================================
+
+/// Check if a pitch class is a chord tone (1, 3, 5, 7, or valid extension)
+bool isChordTone(int pc, const music::ChordSymbol& chord);
+
+/// Check if a pitch class is in the chord's scale (safe passing tone)
+bool isScaleTone(int pc, const music::ChordSymbol& chord);
+
+/// Get all valid pitch classes for a chord (chord tones + safe extensions)
+QVector<int> getChordTonePcs(const music::ChordSymbol& chord);
+
+/// Get all scale pitch classes for a chord
+QVector<int> getScalePcs(const music::ChordSymbol& chord);
+
+/// Validate and correct a MIDI note to be consonant with the chord
+/// Returns the nearest consonant MIDI note (prefers chord tones, then scale tones)
+int validateToConsonant(int midi, const music::ChordSymbol& chord, int lo, int hi);
+
+/// Validate an entire voicing - returns corrected voicing
+QVector<int> validateVoicing(const QVector<int>& midiNotes, 
+                             const music::ChordSymbol& chord,
+                             int lo, int hi);
+
 } // namespace voicing_utils
 } // namespace playback

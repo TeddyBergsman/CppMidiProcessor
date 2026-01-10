@@ -339,5 +339,177 @@ int selectMelodicTopNote(const QVector<int>& candidatePcs, int lo, int hi, int l
     return (bestMidi > 0) ? bestMidi : (lo + hi) / 2;
 }
 
+// =============================================================================
+// CONSONANCE VALIDATION
+// =============================================================================
+
+bool isChordTone(int pc, const music::ChordSymbol& chord) {
+    pc = normalizePc(pc);
+    
+    // Check core chord tones: 1, 3, 5, 7
+    for (int deg : {1, 3, 5, 7}) {
+        int chordPc = pcForDegree(chord, deg);
+        if (chordPc >= 0 && normalizePc(chordPc) == pc) {
+            return true;
+        }
+    }
+    
+    // Check valid extensions: 9, 11, 13 (if chord includes them)
+    for (int deg : {9, 11, 13}) {
+        int chordPc = pcForDegree(chord, deg);
+        if (chordPc >= 0 && normalizePc(chordPc) == pc) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+bool isScaleTone(int pc, const music::ChordSymbol& chord) {
+    pc = normalizePc(pc);
+    const int root = chord.rootPc;
+    if (root < 0) return false;
+    
+    // If it's already a chord tone, it's definitely a scale tone
+    if (isChordTone(pc, chord)) return true;
+    
+    // Build appropriate scale based on chord quality
+    QVector<int> scaleIntervals;
+    
+    const bool isMajor = (chord.quality == music::ChordQuality::Major);
+    const bool isMinor = (chord.quality == music::ChordQuality::Minor);
+    const bool isDominant = (chord.quality == music::ChordQuality::Dominant);
+    const bool isHalfDim = (chord.quality == music::ChordQuality::HalfDiminished);
+    const bool isAlt = chord.alt && isDominant;
+    
+    if (isMajor) {
+        // Major scale (Ionian) or Lydian
+        scaleIntervals = {0, 2, 4, 5, 7, 9, 11};  // Ionian
+        // Check if #11 is explicitly present -> Lydian
+        for (const auto& a : chord.alterations) {
+            if (a.degree == 11 && a.delta > 0) {
+                scaleIntervals[3] = 6;  // #4/11
+            }
+        }
+    } else if (isMinor) {
+        // Dorian (natural 6) by default
+        scaleIntervals = {0, 2, 3, 5, 7, 9, 10};
+    } else if (isDominant) {
+        if (isAlt) {
+            // Altered scale: 1 b9 #9 3 b5 b13 b7
+            scaleIntervals = {0, 1, 3, 4, 6, 8, 10};
+        } else {
+            // Mixolydian
+            scaleIntervals = {0, 2, 4, 5, 7, 9, 10};
+        }
+    } else if (isHalfDim) {
+        // Locrian natural 2
+        scaleIntervals = {0, 2, 3, 5, 6, 8, 10};
+    } else {
+        // Default to major scale
+        scaleIntervals = {0, 2, 4, 5, 7, 9, 11};
+    }
+    
+    // Check if pc is in the scale
+    int interval = (pc - root + 12) % 12;
+    return scaleIntervals.contains(interval);
+}
+
+QVector<int> getChordTonePcs(const music::ChordSymbol& chord) {
+    QVector<int> pcs;
+    
+    for (int deg : {1, 3, 5, 7, 9, 11, 13}) {
+        int pc = pcForDegree(chord, deg);
+        if (pc >= 0 && !pcs.contains(pc)) {
+            pcs.push_back(pc);
+        }
+    }
+    
+    return pcs;
+}
+
+QVector<int> getScalePcs(const music::ChordSymbol& chord) {
+    QVector<int> pcs;
+    const int root = chord.rootPc;
+    if (root < 0) return pcs;
+    
+    // Start with chord tones
+    pcs = getChordTonePcs(chord);
+    
+    // Add remaining scale tones
+    for (int i = 0; i < 12; ++i) {
+        int pc = (root + i) % 12;
+        if (!pcs.contains(pc) && isScaleTone(pc, chord)) {
+            pcs.push_back(pc);
+        }
+    }
+    
+    return pcs;
+}
+
+int validateToConsonant(int midi, const music::ChordSymbol& chord, int lo, int hi) {
+    const int pc = normalizePc(midi);
+    
+    // Already consonant? Return as-is
+    if (isChordTone(pc, chord)) {
+        return qBound(lo, midi, hi);
+    }
+    
+    // Check if it's at least a scale tone
+    if (isScaleTone(pc, chord)) {
+        return qBound(lo, midi, hi);
+    }
+    
+    // Not consonant - find the nearest chord tone
+    QVector<int> chordTones = getChordTonePcs(chord);
+    if (chordTones.isEmpty()) {
+        return qBound(lo, midi, hi);  // Can't validate, return as-is
+    }
+    
+    // Find nearest chord tone by minimal semitone movement
+    int bestMidi = midi;
+    int bestDist = 999;
+    
+    for (int chordPc : chordTones) {
+        // Try moving up
+        for (int delta = 0; delta <= 3; ++delta) {
+            int candidate = midi + delta;
+            if (candidate > hi) break;
+            if (normalizePc(candidate) == chordPc && delta < bestDist) {
+                bestDist = delta;
+                bestMidi = candidate;
+            }
+        }
+        // Try moving down
+        for (int delta = 1; delta <= 3; ++delta) {
+            int candidate = midi - delta;
+            if (candidate < lo) break;
+            if (normalizePc(candidate) == chordPc && delta < bestDist) {
+                bestDist = delta;
+                bestMidi = candidate;
+            }
+        }
+    }
+    
+    return bestMidi;
+}
+
+QVector<int> validateVoicing(const QVector<int>& midiNotes, 
+                             const music::ChordSymbol& chord,
+                             int lo, int hi) {
+    QVector<int> validated;
+    validated.reserve(midiNotes.size());
+    
+    for (int midi : midiNotes) {
+        validated.push_back(validateToConsonant(midi, chord, lo, hi));
+    }
+    
+    // Remove duplicates and sort
+    std::sort(validated.begin(), validated.end());
+    validated.erase(std::unique(validated.begin(), validated.end()), validated.end());
+    
+    return validated;
+}
+
 } // namespace voicing_utils
 } // namespace playback

@@ -38,10 +38,18 @@ public:
         int coolDownEnterMs = 2400; // don't drop to cooldown on brief rests
 
         // Energy smoothing (continuous transitions).
-        int energyRiseTauMs = 520;   // faster attack
-        int energyFallTauMs = 1500;  // slower release
-        int energyFallTauMsClimax = 3400; // even slower release while in Climax
-        int energyFallTauMsBuild = 2200;  // slightly slower release while in Build
+        // Musicians respond over PHRASES, not notes - these should be slow!
+        int energyRiseTauMs = 1800;   // ~2 bars at 120bpm - gradual build
+        int energyFallTauMs = 5000;   // VERY slow release - musicians don't drop on pauses
+        int energyFallTauMsClimax = 8000; // extremely sticky at climax
+        int energyFallTauMsBuild = 6000;  // very sticky in build mode
+        
+        // Grace period: don't start falling AT ALL for this duration after activity stops
+        // This handles natural breathing/phrasing without any energy loss
+        int energyFallGracePeriodMs = 2000;  // 2 seconds of pause before ANY decay starts
+        
+        // Input smoothing - smooth the raw intensity signals before using them
+        int inputSmoothingTauMs = 1200; // increased - hear trends over longer window
     };
 
     struct Output {
@@ -74,6 +82,16 @@ private:
 
     double m_energy = 0.35;
     qint64 m_lastEnergyUpdateMs = -1;
+    
+    // Smoothed input signals (to avoid reacting to individual notes)
+    double m_smoothedNps = 0.0;      // smoothed notes-per-second
+    double m_smoothedCc2 = 0.0;      // smoothed CC2 (expression)
+    double m_smoothedRegister = 0.0; // smoothed register-high signal
+    double m_smoothedDensity = 0.0;  // smoothed density-high signal
+    
+    // Grace period tracking - don't decay during brief pauses
+    qint64 m_lastActivityMs = -1;    // when we last saw meaningful input
+    double m_peakEnergy = 0.35;      // highest energy reached (for grace period)
 };
 
 } // namespace playback

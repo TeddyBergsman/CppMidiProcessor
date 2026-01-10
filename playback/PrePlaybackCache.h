@@ -103,11 +103,29 @@ struct PrePlaybackCache {
         return &energyBranches[e][stepIndex];
     }
     
-    // Map energy01 value to EnergyBand
+    // Map energy01 value to EnergyBand (simple, no hysteresis - for cache building)
     static EnergyBand energyToBand(double energy01) {
         if (energy01 < 0.25) return EnergyBand::Simmer;
         if (energy01 < 0.55) return EnergyBand::Build;
         if (energy01 < 0.85) return EnergyBand::Climax;
+        return EnergyBand::CoolDown;
+    }
+    
+    // Map energy01 to EnergyBand WITH HYSTERESIS (for runtime playback)
+    // This prevents oscillation at boundaries and makes transitions feel smoother
+    static EnergyBand energyToBandWithHysteresis(double energy01, EnergyBand currentBand) {
+        // Hysteresis margin: must cross threshold by this amount to switch
+        constexpr double margin = 0.08;
+        
+        // Thresholds with hysteresis
+        const double simmerToBuild = (currentBand == EnergyBand::Simmer) ? 0.25 + margin : 0.25 - margin;
+        const double buildToClimax = (currentBand == EnergyBand::Build) ? 0.55 + margin : 0.55 - margin;
+        const double climaxToCoolDown = (currentBand == EnergyBand::Climax) ? 0.85 + margin : 0.85 - margin;
+        
+        // Determine new band based on hysteresis thresholds
+        if (energy01 < simmerToBuild) return EnergyBand::Simmer;
+        if (energy01 < buildToClimax) return EnergyBand::Build;
+        if (energy01 < climaxToCoolDown) return EnergyBand::Climax;
         return EnergyBand::CoolDown;
     }
     

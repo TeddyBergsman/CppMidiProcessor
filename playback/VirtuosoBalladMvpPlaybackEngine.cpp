@@ -331,6 +331,9 @@ void VirtuosoBalladMvpPlaybackEngine::play() {
 
     applyPresetToEngine();
     
+    // Reset energy band for fresh playback (start at Simmer)
+    m_currentEnergyBand = EnergyBand::Simmer;
+    
     // PERF: Build the complete pre-playback cache BEFORE starting playback.
     // This ensures ZERO computation during actual playback - only O(1) lookups.
     // Per product spec: "lag can never happen while the actual music has started playing"
@@ -596,8 +599,14 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
     // Lookahead scheduling window (tight timing).
     // We need to schedule far enough ahead for sample-library articulations that must be pressed
     // before the "previous note" (e.g. Ample Upright Legato Slide).
-    // PERF: Increased from 2600ms to 4000ms to provide more buffer for expensive planning.
-    constexpr int kLookaheadMs = 4000;
+    //
+    // IMPORTANT: With pre-computed cache, we can use a MUCH shorter lookahead!
+    // - Old: 4000ms (needed buffer for expensive real-time computation)
+    // - New: ~500ms when using cache (just enough for sample lib articulations)
+    // 
+    // This dramatically improves band responsiveness to energy changes!
+    // Energy is read at scheduling time, so shorter lookahead = more responsive.
+    const int kLookaheadMs = (m_usePreCache && m_preCache.isValid()) ? 500 : 4000;
     const int scheduleUntil = int(double(songMs + kLookaheadMs) / beatMs);
     const int maxStepToSchedule = std::min(total - 1, scheduleUntil);
 
@@ -945,12 +954,12 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStepFromCache(int stepIndex) {
         energy01 = snap.energy01;
     }
     
-    // Select energy branch
-    const EnergyBand band = PrePlaybackCache::energyToBand(energy01);
-    const PreComputedBeat* beat = m_preCache.getBeat(stepIndex, band);
+    // Select energy branch with hysteresis (prevents oscillation at boundaries)
+    m_currentEnergyBand = PrePlaybackCache::energyToBandWithHysteresis(energy01, m_currentEnergyBand);
+    const PreComputedBeat* beat = m_preCache.getBeat(stepIndex, m_currentEnergyBand);
     
     if (!beat) {
-        qWarning() << "scheduleStepFromCache: No beat at step" << stepIndex << "band" << static_cast<int>(band);
+        qWarning() << "scheduleStepFromCache: No beat at step" << stepIndex << "band" << static_cast<int>(m_currentEnergyBand);
         return;
     }
     
@@ -1016,8 +1025,8 @@ void VirtuosoBalladMvpPlaybackEngine::emitTheoryEventForStep(int stepIndex) {
         energy01 = snap.energy01;
     }
     
-    const EnergyBand band = PrePlaybackCache::energyToBand(energy01);
-    const PreComputedBeat* beat = m_preCache.getBeat(stepIndex, band);
+    // Use the tracked current band (already has hysteresis applied)
+    const PreComputedBeat* beat = m_preCache.getBeat(stepIndex, m_currentEnergyBand);
     if (!beat) return;
     
     virtuoso::groove::TimeSignature ts{4, 4};

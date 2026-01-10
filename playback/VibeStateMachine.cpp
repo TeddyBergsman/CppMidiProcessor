@@ -15,6 +15,16 @@ void VibeStateMachine::reset() {
     m_climaxDownSinceMs = -1;
     m_energy = 0.35;
     m_lastEnergyUpdateMs = -1;
+    
+    // Reset smoothed inputs
+    m_smoothedNps = 0.0;
+    m_smoothedCc2 = 0.0;
+    m_smoothedRegister = 0.0;
+    m_smoothedDensity = 0.0;
+    
+    // Reset grace period tracking
+    m_lastActivityMs = -1;
+    m_peakEnergy = 0.35;
 }
 
 QString VibeStateMachine::vibeName(Vibe v) {
@@ -135,7 +145,36 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
     }
 
     out.vibe = m_vibe;
-    // Continuous energy target: base vibe + continuous contributions.
+    
+    // ================================================================
+    // INPUT SMOOTHING: Musicians don't react to individual notes!
+    // They hear trends over several beats/bars.
+    // ================================================================
+    const qint64 prevMs = (m_lastEnergyUpdateMs >= 0) ? m_lastEnergyUpdateMs : nowMs;
+    const double dt = double(qMax<qint64>(0, nowMs - prevMs));
+    m_lastEnergyUpdateMs = nowMs;
+    
+    // Smooth all input signals with a single time constant
+    const int inputTau = qMax(1, m_s.inputSmoothingTauMs);
+    const double inputAlpha = 1.0 - std::exp(-dt / double(inputTau));
+    
+    // Raw input values (0-1 normalized)
+    const double rawNps = qBound(0.0, intent.notesPerSec / 8.0, 1.0);
+    const double rawCc2 = cc201;  // already computed above
+    const double rawRegister = intent.registerHigh ? 1.0 : 0.0;
+    const double rawDensity = intent.densityHigh ? 1.0 : 0.0;
+    
+    // Apply smoothing (exponential moving average)
+    m_smoothedNps = m_smoothedNps + inputAlpha * (rawNps - m_smoothedNps);
+    m_smoothedCc2 = m_smoothedCc2 + inputAlpha * (rawCc2 - m_smoothedCc2);
+    m_smoothedRegister = m_smoothedRegister + inputAlpha * (rawRegister - m_smoothedRegister);
+    m_smoothedDensity = m_smoothedDensity + inputAlpha * (rawDensity - m_smoothedDensity);
+    
+    // ================================================================
+    // ENERGY TARGET: Base from vibe state + smoothed input contributions
+    // Note: Reduced coefficients since musicians don't respond as much
+    // to moment-to-moment variations
+    // ================================================================
     double base = 0.35;
     switch (m_vibe) {
         case Vibe::Simmer: base = 0.34; break;
@@ -143,24 +182,99 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
         case Vibe::Climax: base = 0.88; break;
         case Vibe::CoolDown: base = 0.22; break;
     }
-    const double nps01 = qBound(0.0, intent.notesPerSec / 8.0, 1.0);
-    // (cc201 computed above for down-signal)
+    
+    // Use SMOOTHED inputs with REDUCED coefficients
+    // (musicians respond to sustained intensity, not spikes)
     double target = base
-        + 0.10 * nps01
-        + 0.08 * cc201
-        + 0.05 * (intent.registerHigh ? 1.0 : 0.0)
-        + 0.04 * (intent.densityHigh ? 1.0 : 0.0);
+        + 0.06 * m_smoothedNps       // reduced from 0.10
+        + 0.05 * m_smoothedCc2       // reduced from 0.08
+        + 0.03 * m_smoothedRegister  // reduced from 0.05
+        + 0.02 * m_smoothedDensity;  // reduced from 0.04
     target = qBound(0.0, target, 1.0);
 
-    // Smooth energy (attack/release).
-    const qint64 prevMs = (m_lastEnergyUpdateMs >= 0) ? m_lastEnergyUpdateMs : nowMs;
-    const double dt = double(qMax<qint64>(0, nowMs - prevMs));
-    m_lastEnergyUpdateMs = nowMs;
-    int tauMs = (target >= m_energy) ? qMax(1, m_s.energyRiseTauMs) : qMax(1, m_s.energyFallTauMs);
-    if (target < m_energy) {
-        if (m_vibe == Vibe::Climax) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsClimax));
-        if (m_vibe == Vibe::Build) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsBuild));
+    // ================================================================
+    // ACTIVITY TRACKING: Detect when user is actively playing
+    // ================================================================
+    const bool hasActivity = (rawNps > 0.05) || (rawCc2 > 0.1) || rawRegister > 0.5 || rawDensity > 0.5;
+    if (hasActivity) {
+        m_lastActivityMs = nowMs;
     }
+    
+    // ================================================================
+    // CC2 DYNAMICS: Soft playing = faster decay signal
+    // This is a PRIMARY musical signal from the performer!
+    // ================================================================
+    // If user is playing (notes happening) but CC2 is low, they're signaling "bring it down"
+    const bool isPlayingSoftly = (rawNps > 0.05) && (rawCc2 < 0.35);
+    const bool isPlayingVerySoftly = (rawNps > 0.05) && (rawCc2 < 0.20);
+    
+    // ================================================================
+    // ENERGY SMOOTHING: Gradual transitions (attack/release)
+    // Musicians build and release over PHRASES, not beats
+    // ================================================================
+    
+    // Track peak energy for grace period (don't decay below recent peak during pause)
+    if (target > m_peakEnergy) {
+        m_peakEnergy = target;
+    }
+    
+    int tauMs;
+    if (target >= m_energy) {
+        // RISING: use rise tau, BUT soft playing slows/prevents rise
+        if (isPlayingVerySoftly) {
+            // Very soft playing: DON'T build energy at all
+            tauMs = 999999;  // Effectively frozen
+        } else if (isPlayingSoftly) {
+            // Soft playing: build VERY slowly (4x slower)
+            tauMs = qMax(1, m_s.energyRiseTauMs) * 4;
+        } else {
+            // Normal/loud playing: standard rise
+            tauMs = qMax(1, m_s.energyRiseTauMs);
+        }
+        // Update peak when rising
+        m_peakEnergy = m_energy;
+    } else {
+        // FALLING: check grace period first (but soft playing bypasses it!)
+        const qint64 timeSinceActivity = (m_lastActivityMs >= 0) ? (nowMs - m_lastActivityMs) : 999999;
+        
+        // Soft playing SHORTENS or BYPASSES the grace period
+        // (playing softly is an active signal to bring energy down)
+        int effectiveGracePeriod = m_s.energyFallGracePeriodMs;
+        if (isPlayingVerySoftly) {
+            effectiveGracePeriod = 0;  // No grace - start decaying immediately
+        } else if (isPlayingSoftly) {
+            effectiveGracePeriod = m_s.energyFallGracePeriodMs / 3;  // Shortened grace
+        }
+        
+        if (timeSinceActivity < qint64(effectiveGracePeriod)) {
+            // GRACE PERIOD: Don't decay at all! Hold at current energy.
+            // This handles natural breathing/phrasing.
+            tauMs = 999999; // effectively infinite - no decay
+        } else {
+            // Past grace period: calculate fall tau
+            tauMs = qMax(1, m_s.energyFallTauMs);
+            
+            // Extra stickiness when in elevated states
+            if (m_vibe == Vibe::Climax) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsClimax));
+            if (m_vibe == Vibe::Build) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsBuild));
+            
+            // BUT: Soft playing ACCELERATES decay (shorter tau = faster fall)
+            // Low CC2 while playing = "bring it down please"
+            if (isPlayingVerySoftly) {
+                tauMs = tauMs / 4;  // 4x faster decay when playing very softly
+            } else if (isPlayingSoftly) {
+                tauMs = tauMs / 2;  // 2x faster decay when playing softly
+            }
+            
+            tauMs = qMax(500, tauMs);  // Floor: never faster than 500ms
+        }
+        
+        // Reset peak tracking once we start actually falling
+        if (timeSinceActivity >= qint64(effectiveGracePeriod)) {
+            m_peakEnergy = m_energy;
+        }
+    }
+    
     const double a = 1.0 - std::exp(-dt / double(tauMs));
     m_energy = m_energy + a * (target - m_energy);
     out.energy = m_energy;

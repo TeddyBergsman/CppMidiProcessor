@@ -209,6 +209,7 @@ private:
     PrePlaybackCache m_preCache;
     bool m_usePreCache = true;  // When true, use pre-computed cache instead of real-time planning
     PrePlanningDialog* m_prePlanningDialog = nullptr;  // Popup shown during pre-planning
+    EnergyBand m_currentEnergyBand = EnergyBand::Simmer;  // Track current band for hysteresis
 
     // Channels (1..16)
     int m_chDrums = 6;

@@ -292,9 +292,10 @@ LhVoicingGenerator::LhVoicing LhVoicingGenerator::applyInnerVoiceMovement(
     int ninth = pcForDegree(c.chord, 9);
     int thirteenth = pcForDegree(c.chord, 13);
     
-    if (c.weights.tension > 0.4 && ninth >= 0) {
+    // Use energy for tension (more color tones at higher energy)
+    if (c.energy > 0.4 && ninth >= 0) {
         targetPc = ninth;
-    } else if (c.weights.tension > 0.6 && thirteenth >= 0) {
+    } else if (c.energy > 0.6 && thirteenth >= 0) {
         targetPc = thirteenth;
     }
     
@@ -337,28 +338,58 @@ bool LhVoicingGenerator::shouldPlayBeat(const Context& c, quint32 hash) const {
     // Chord changes: always play
     if (c.chordIsNew) return true;
     
-    // Beat 1: strong probability to reinforce
+    const double e = c.energy;
+    
+    // ========================================================================
+    // HIGH ENERGY MODE: LH drives the rhythm on almost every beat!
+    // ========================================================================
+    if (e >= 0.6) {
+        // Beat 1: anchor (90-98%)
+        if (c.beatInBar == 0) {
+            double prob = 0.90 + 0.08 * e;
+            return (hash % 100) < int(prob * 100);
+        }
+        // Beat 3: backbeat (85-95%)
+        if (c.beatInBar == 2) {
+            double prob = 0.85 + 0.10 * e;
+            return (hash % 100) < int(prob * 100);
+        }
+        // Beat 2: push (70-85%)
+        if (c.beatInBar == 1) {
+            double prob = 0.70 + 0.15 * e;
+            return (hash % 100) < int(prob * 100);
+        }
+        // Beat 4: pickup (75-88%)
+        if (c.beatInBar == 3) {
+            double prob = 0.75 + 0.13 * e;
+            return (hash % 100) < int(prob * 100);
+        }
+    }
+    
+    // ========================================================================
+    // LOWER ENERGY: Sparser, more traditional jazz comping
+    // ========================================================================
+    // Beat 1: strong probability to reinforce (65-85%)
     if (c.beatInBar == 0) {
-        double prob = 0.70 + 0.20 * c.weights.density;
+        double prob = 0.65 + 0.20 * e;
         return (hash % 100) < int(prob * 100);
     }
     
-    // Beat 3: secondary strong beat
+    // Beat 3: secondary strong beat (40-70%)
     if (c.beatInBar == 2) {
-        double prob = 0.45 + 0.30 * c.weights.density;
-        if (c.energy >= 0.6) prob += 0.20;
+        double prob = 0.40 + 0.30 * e;
         return (hash % 100) < int(prob * 100);
     }
     
-    // Beat 2: syncopation opportunity
+    // Beat 2: syncopation opportunity (15-45%)
     if (c.beatInBar == 1) {
-        double prob = 0.15 + 0.30 * c.energy + 0.20 * c.weights.rhythm;
+        double prob = 0.15 + 0.30 * e;
         return (hash % 100) < int(prob * 100);
     }
     
-    // Beat 4: pickup
+    // Beat 4: pickup (10-35%)
     if (c.beatInBar == 3) {
-        double prob = 0.10 + 0.25 * c.energy;
+        double prob = 0.10 + 0.25 * e;
         return (hash % 100) < int(prob * 100);
     }
     
@@ -370,8 +401,8 @@ bool LhVoicingGenerator::shouldPlayBeat(const Context& c, quint32 hash) const {
 // =============================================================================
 
 LhVoicingGenerator::LhVoicing LhVoicingGenerator::generateBest(const Context& c) const {
-    // Choose voicing type based on context
-    const double quartalChance = c.weights.creativity * 0.3;
+    // Choose voicing type based on context (quartal voicings at higher energy)
+    const double quartalChance = c.energy * 0.25;  // More quartal at higher energy
     const bool useQuartal = (c.energy > 0.5) && ((c.chord.rootPc * 7 + c.beatInBar) % 100 < int(quartalChance * 100));
     
     // Shell for very sparse moments

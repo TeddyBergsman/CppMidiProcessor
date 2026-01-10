@@ -271,67 +271,73 @@ BrokenTimeFeel calculateBrokenTimeFeel(
     feel.isBreath = false;
     
     // ==========================================================================
-    // REDUCED TIMING OFFSETS: Previous values caused "stumbled" feel
-    // The key insight: timing should be CONSISTENT, not random
-    // Rubato should be phrase-coherent, not beat-by-beat jitter
+    // ENERGY-AWARE TIMING: 
+    // - Low energy: More rubato, breathing, laid-back feel
+    // - High energy: LOCKED TO GRID - driving, metronomic, forward momentum!
+    // This is counterintuitive but correct for jazz piano.
     // ==========================================================================
     
-    // Tempo factor reduced: subtle rubato even at slow tempos
-    double tempoFactor = (bpm < 70) ? 1.2 : 1.0;
+    // Grid lock factor: 0.0 at low energy (more rubato), 1.0 at high (locked)
+    const double gridLock = energy;  // Direct correlation
     
-    // PHRASE BREATHING: Only at phrase END - not building/resolving
-    if (isPhraseEnd) {
-        feel.timingOffsetMs = int(8 * tempoFactor);  // Modest delay - tasteful breathing
-        feel.velocityMult = 0.80;                     // Softer for resolution
-        feel.durationMult = 1.3;                      // Slightly longer
+    // Rubato multiplier: inverse of grid lock
+    const double rubatoMult = 1.0 - 0.8 * gridLock;  // 1.0 at e=0, 0.2 at e=1
+    
+    // Tempo factor reduced: subtle rubato even at slow tempos
+    double tempoFactor = ((bpm < 70) ? 1.2 : 1.0) * rubatoMult;
+    
+    // PHRASE BREATHING: Only at low energy - at high energy, keep pushing!
+    if (isPhraseEnd && energy < 0.6) {
+        feel.timingOffsetMs = int(8 * tempoFactor);
+        feel.velocityMult = 0.80;
+        feel.durationMult = 1.3;
         feel.isBreath = true;
     }
-    // PHRASE PEAK: Very subtle emphasis
+    // PHRASE PEAK: Slight emphasis (more at high energy)
     else if (isPhrasePeak) {
-        feel.timingOffsetMs = int(-3 * tempoFactor);  // Tiny push forward
-        feel.velocityMult = 1.10;                      // Slightly louder
-        feel.durationMult = 1.05;
+        feel.timingOffsetMs = int(-3 * tempoFactor);  // Tiny push
+        feel.velocityMult = 1.05 + 0.10 * energy;     // More punch at high energy
+        feel.durationMult = 1.0 + 0.05 * energy;
     }
-    // BUILDING: Slight forward lean
+    // BUILDING: Forward lean (less at high energy - already driving)
     else if (phraseArcPhase == 0) {
-        feel.timingOffsetMs = int(-5 * tempoFactor);  // Gentle push
-        feel.velocityMult = 0.90 + 0.10 * energy;
+        feel.timingOffsetMs = int(-5 * tempoFactor);
+        feel.velocityMult = 0.90 + 0.15 * energy;
         feel.durationMult = 0.95;
     }
-    // RESOLVING: Slight relaxation
-    else if (phraseArcPhase == 2) {
-        feel.timingOffsetMs = int(5 * tempoFactor);   // Gentle delay
-        feel.velocityMult = 0.75;
+    // RESOLVING: Relaxation (less at high energy - keep the drive)
+    else if (phraseArcPhase == 2 && energy < 0.7) {
+        feel.timingOffsetMs = int(5 * tempoFactor);
+        feel.velocityMult = 0.75 + 0.15 * energy;
         feel.durationMult = 1.15;
     }
     
-    // BEAT PLACEMENT: Minimal - avoid the "stumbled" feel
-    // Piano should feel metronomic with only phrase-level rubato
+    // BEAT PLACEMENT: More locked at high energy
+    const int beatLockRange = int(5 * (1.0 - 0.6 * gridLock));  // 5ms at e=0, 2ms at e=1
     if (beatInBar == 0) {
-        // Beat 1: anchor - always on time
-        feel.timingOffsetMs = qBound(-5, feel.timingOffsetMs, 5);  // Lock to grid
-        feel.velocityMult *= 1.03;
+        feel.timingOffsetMs = qBound(-beatLockRange, feel.timingOffsetMs, beatLockRange);
+        feel.velocityMult *= 1.03 + 0.05 * energy;  // More punch at high energy
     } else if (beatInBar == 2) {
-        // Beat 3: stable
-        feel.timingOffsetMs = qBound(-5, feel.timingOffsetMs, 5);
+        feel.timingOffsetMs = qBound(-beatLockRange, feel.timingOffsetMs, beatLockRange);
     }
-    // DON'T add extra offset for beats 2 & 4 - this was causing drunken feel
     
-    // SYNCOPATION: Minimal swing - just enough to feel human
+    // SYNCOPATION: Less at high energy for solid pulse!
     if (subBeat == 1 || subBeat == 3) {
-        feel.timingOffsetMs += 3;  // Very subtle laid back
-        feel.velocityMult *= 0.95;
+        // At low energy: laid back (3ms), at high energy: barely any (1ms)
+        feel.timingOffsetMs += int(3 * rubatoMult);
+        feel.velocityMult *= (0.95 + 0.03 * energy);  // Less soft at high energy
     }
     
-    // CHORD CHANGES: Anchor point - lock to grid!
+    // CHORD CHANGES: Always anchor!
     if (isChordChange && beatInBar == 0) {
-        feel.timingOffsetMs = 0;  // Dead on time for harmonic clarity
-        feel.durationMult = 1.2;  // Let harmony ring
+        feel.timingOffsetMs = 0;  // Dead on time
+        feel.durationMult = 1.1 + 0.1 * energy;  // Longer at high energy (power)
     }
     
-    // TIGHT bounds to prevent sloppiness
-    feel.timingOffsetMs = qBound(-15, feel.timingOffsetMs, 15);
-    feel.velocityMult = qBound(0.70, feel.velocityMult, 1.15);
+    // TIGHTER bounds at high energy
+    const int maxOffset = int(15 * (1.0 - 0.7 * gridLock));  // 15ms at e=0, 5ms at e=1
+    feel.timingOffsetMs = qBound(-maxOffset, feel.timingOffsetMs, maxOffset);
+    feel.velocityMult = qBound(0.70, feel.velocityMult, 1.20);
     feel.durationMult = qBound(0.8, feel.durationMult, 1.4);
     
     return feel;
@@ -3695,61 +3701,74 @@ int JazzBalladPianoPlanner::rhActivityLevel(const Context& c, quint32 hash) cons
     const int arcPhase = computePhraseArcPhase(c);
     
     // ================================================================
-    // RESOLVING PHASE (after phrase peak): Can breathe, but still play
-    // This is where the music breathes - but not silence!
+    // ENERGY BOOST: At high energy, RH is MORE active across all phases
+    // This creates the driving, exciting feel of an energized performance
+    // ================================================================
+    const int energyBoost = (c.energy > 0.6) ? 1 : 0;  // +1 at high energy
+    
+    // ================================================================
+    // RESOLVING PHASE (after phrase peak): Can breathe at low energy
+    // At high energy: maintain momentum!
     // ================================================================
     if (arcPhase == 2) {
-        // Resolving: sparse but present (1-2)
-        if (c.chordIsNew) return 2;  // Chord changes still get activity
-        return (hash % 100) < 60 ? 1 : 2; // Mostly single notes
+        if (c.chordIsNew) return 2 + energyBoost;
+        // At high energy: keep 2-3 notes even during resolution
+        if (c.energy > 0.6) {
+            return (hash % 100) < 70 ? 2 : 3;
+        }
+        return (hash % 100) < 60 ? 1 : 2;
     }
     
     // ================================================================
-    // WEAK BEATS (2 and 4): Lighter but not silent
-    // Use for syncopation and color
+    // WEAK BEATS: More active at high energy for driving rhythm
+    // At low energy: lighter for breathing room
     // ================================================================
     const bool isWeakBeat = (c.beatInBar == 1 || c.beatInBar == 3);
     if (isWeakBeat && !c.chordIsNew) {
-        // Weak beats: lighter activity
+        if (c.energy > 0.7) {
+            // At high energy: weak beats are STRONG! (drives the rhythm)
+            return (hash % 100) < 50 ? 2 : 3;
+        }
         return (hash % 100) < 65 ? 1 : 2;
     }
     
     // ================================================================
-    // BUILDING PHASE: Start with 1, gradually increase to 2-3
+    // BUILDING PHASE: Scales with energy
     // ================================================================
     if (arcPhase == 0) {
         const double phraseProg = double(c.barInPhrase) / qMax(1, c.phraseBars);
         
-        // Early in phrase: 1-2 notes
+        // Early in phrase: 1-2 notes (2-3 at high energy)
         if (phraseProg < 0.3) {
-            if (c.chordIsNew) return 2;
-            return (hash % 100) < 60 ? 1 : 2;
+            if (c.chordIsNew) return 2 + energyBoost;
+            return (hash % 100) < 60 ? 1 + energyBoost : 2 + energyBoost;
         }
-        // Mid-phrase building: 1-2 notes
+        // Mid-phrase building: 1-2 notes (2-3 at high energy)
         if (phraseProg < 0.7) {
-            if (c.chordIsNew) return (c.energy > 0.5) ? 3 : 2;
-            return (hash % 100) < 50 ? 2 : 1;
+            if (c.chordIsNew) return (c.energy > 0.4) ? 3 : 2;
+            return (hash % 100) < 50 ? 2 : 1 + energyBoost;
         }
-        // Approaching peak: 2-3 notes
-        if (c.chordIsNew) return qMin(3, int(2 + c.energy));
-        return (hash % 100) < 60 ? 2 : 1;
+        // Approaching peak: 2-3 notes (3-4 at high energy)
+        if (c.chordIsNew) return qMin(4, int(2 + c.energy * 2));
+        return (hash % 100) < 60 ? 2 + energyBoost : 1 + energyBoost;
     }
     
     // ================================================================
-    // PEAK PHASE: Most active - 2-3 hits per beat
-    // Maximum activity here
+    // PEAK PHASE: Maximum activity - scales strongly with energy
+    // At high energy: FULL DRIVE (3-4 notes)
     // ================================================================
     if (arcPhase == 1) {
         if (c.chordIsNew) {
-            // Chord changes at peak: 3 or even 4 based on energy/density
+            // Chord changes at peak: 3-5 based on energy
             int peakActivity = 3;
-            if (c.energy > 0.7 && energyToDensity(c.energy) > 0.6) {
-                peakActivity = 4;
-            }
+            if (c.energy > 0.5) peakActivity = 4;
+            if (c.energy > 0.8) peakActivity = 5;
             return peakActivity;
         }
-        // Non-chord-change beats at peak: 2-3
-        return (c.energy > 0.5) ? 3 : 2;
+        // Non-chord-change beats at peak: 2-4 based on energy
+        if (c.energy > 0.7) return 4;
+        if (c.energy > 0.4) return 3;
+        return 2;
     }
     
     // ================================================================
@@ -4058,51 +4077,53 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     const auto mappings = computeWeightMappings(adjusted);
     
     // ================================================================
-    // VELOCITY: Must respect user's dynamics!
+    // VELOCITY: STRONGLY scales with energy!
+    // At high energy, piano should DRIVE the band with stronger touch
     // When user is playing/singing, piano BACKS OFF significantly
-    // Base velocity is lower and scales with user activity
     // ================================================================
     int baseVel;
+    const double e = adjusted.energy;
     
     if (adjusted.userBusy || adjusted.userDensityHigh || adjusted.userIntensityPeak) {
         // USER IS ACTIVE: Play SOFT to support, not overpower
-        // Base around 40-55, much lower than solo playing
-        baseVel = 40 + int(15.0 * adjusted.energy);
+        // But still scale somewhat with energy (40-65 range)
+        baseVel = 40 + int(25.0 * e);
     } else if (adjusted.userSilence) {
-        // USER IS SILENT: Can play with more presence
-        // Base around 50-70
-        baseVel = 50 + int(20.0 * adjusted.energy);
+        // USER IS SILENT: Full presence! (52-97 range - raised floor for audibility)
+        // At high energy, we're DRIVING the music!
+        baseVel = 52 + int(45.0 * e);
     } else {
-        // NORMAL: Moderate dynamics
-        baseVel = 45 + int(20.0 * adjusted.energy);
+        // NORMAL: Moderate but responsive (48-85 range)
+        baseVel = 48 + int(37.0 * e);
     }
     
-    // Additional velocity reduction based on intensity weight (respects CC2)
-    // If user is playing softly (low intensity), we should also be soft
-    // Intensity follows energy directly
-    if (energyToIntensity(adjusted.energy) < 0.4) {
-        baseVel = int(baseVel * (0.7 + 0.3 * energyToIntensity(adjusted.energy) / 0.4));
+    // At very low energy, slightly softer but still audible
+    if (e < 0.2) {
+        baseVel = int(baseVel * 0.92);  // Less reduction than before
     }
     
     // ================================================================
     // PHRASE ARC DYNAMICS: Shape velocity across the phrase
     // Building: crescendo toward peak
-    // Peak: maximum dynamics
+    // Peak: boost (bigger at high energy)
     // Resolving: diminuendo
     // ================================================================
     switch (arcPhase) {
-        case 0: { // Building - gradual crescendo
-            const double buildProgress = double(adjusted.barInPhrase) / (0.4 * adjusted.phraseBars);
-            baseVel = int(baseVel * (0.85 + 0.15 * buildProgress));
+        case 0: { // Building - start at base, grow by up to 10%
+            const double buildProgress = qBound(0.0, double(adjusted.barInPhrase) / (0.4 * adjusted.phraseBars), 1.0);
+            // At start of phrase: 100% of base; at end of building: 110%
+            baseVel = int(baseVel * (1.0 + 0.10 * buildProgress));
             break;
         }
-        case 1: // Peak - full dynamics
-            baseVel = int(baseVel * 1.08); // Slight boost at climax
+        case 1: // Peak - full dynamics (bigger boost at high energy)
+            // At peak: 105-115% boost depending on energy
+            baseVel = int(baseVel * (1.05 + 0.10 * e));
             break;
-        case 2: { // Resolving - diminuendo
+        case 2: { // Resolving - diminuendo from base down to 85%
             const int resolveStart = adjusted.barInPhrase - int(0.7 * adjusted.phraseBars);
             const int resolveTotal = adjusted.phraseBars - int(0.7 * adjusted.phraseBars);
-            const double resolveProgress = double(resolveStart) / qMax(1, resolveTotal);
+            const double resolveProgress = qBound(0.0, double(resolveStart) / qMax(1, resolveTotal), 1.0);
+            // Fade from 100% to 85%
             baseVel = int(baseVel * (1.0 - 0.15 * resolveProgress));
             break;
         }
@@ -4513,8 +4534,44 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     
     bool shouldPlayRh = false;
     const PhraseCompHit* currentHit = nullptr;
+    // Note: 'e' already defined earlier as adjusted.energy
     
-    if (hasPattern) {
+    // ========================================================================
+    // HIGH ENERGY MODE: At high energy, RH should be DRIVING and RHYTHMIC
+    // Override the sparse pattern system with aggressive energy-based playing
+    // ========================================================================
+    if (e >= 0.6 && !userActive) {
+        // HIGH ENERGY: Play on almost every beat, driving rhythm!
+        double playProb = 0.0;
+        
+        if (adjusted.chordIsNew) {
+            playProb = 0.98;  // Almost always on chord changes
+        } else if (adjusted.beatInBar == 0) {
+            // Beat 1: driving anchor (85-95%)
+            playProb = 0.85 + 0.10 * e;
+        } else if (adjusted.beatInBar == 2) {
+            // Beat 3: strong backbeat (75-90%)
+            playProb = 0.75 + 0.15 * e;
+        } else if (adjusted.beatInBar == 1) {
+            // Beat 2: push the groove (60-80%)
+            playProb = 0.60 + 0.20 * e;
+        } else {
+            // Beat 4: pickup energy (65-85%)
+            playProb = 0.65 + 0.20 * e;
+        }
+        
+        shouldPlayRh = ((rhHash % 100) < int(playProb * 100));
+        
+        // At very high energy (>0.8), even add offbeat 8th notes occasionally
+        if (e > 0.8 && !shouldPlayRh) {
+            const bool addOffbeat = ((rhHash % 100) < 30);  // 30% chance of offbeat
+            shouldPlayRh = addOffbeat;
+        }
+    }
+    // ========================================================================
+    // NORMAL/LOW ENERGY: Use pattern-based sparse playing
+    // ========================================================================
+    else if (hasPattern && !userActive) {
         const auto& pattern = patterns[m_state.phrasePatternIndex];
         
         // Calculate our position within the pattern
@@ -4524,13 +4581,29 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         currentHit = getPhraseHitAt(pattern, barInPattern, adjusted.beatInBar);
         shouldPlayRh = (currentHit != nullptr);
     }
+    // ========================================================================
+    // FALLBACK: No pattern and low/medium energy
+    // ========================================================================
+    else if (!userActive) {
+        double playProb = 0.0;
+        
+        if (adjusted.chordIsNew) {
+            playProb = 0.85;
+        } else if (adjusted.beatInBar == 0) {
+            playProb = 0.40 + 0.30 * e;
+        } else if (adjusted.beatInBar == 2) {
+            playProb = 0.25 + 0.25 * e;
+        } else {
+            playProb = 0.10 + 0.20 * e;
+        }
+        
+        shouldPlayRh = ((rhHash % 100) < int(playProb * 100));
+    }
     
     // ========================================================================
-    // OVERRIDE: When user is active, be MUCH more sparse
-    // Only play on chord changes, and only dyads
+    // USER ACTIVE: Be sparse to support, not compete
     // ========================================================================
     if (userActive) {
-        // Override pattern - only play on chord changes, and rarely
         shouldPlayRh = adjusted.chordIsNew && ((rhHash % 100) < 25);
     }
     
@@ -4551,11 +4624,24 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         enum class RhVoicingType { Drop2, Triad, Dyad, Single };
         RhVoicingType voicingType = RhVoicingType::Drop2;
         
+        // Get phrase context early for energy-based decisions
+        const int curArcPhase = computePhraseArcPhase(adjusted);
+        const bool isCadence = (adjusted.cadence01 >= 0.4);
+        const double e = c.energy;
+        
         if (userActive) {
             voicingType = RhVoicingType::Dyad;  // Simple when user is playing
+        } else if (e >= 0.7) {
+            // ================================================================
+            // HIGH ENERGY: ALWAYS use full Drop2 voicings for driving sound!
+            // This creates the dense, rhythmic, powerful jazz piano sound
+            // ================================================================
+            voicingType = RhVoicingType::Drop2;
+        } else if (e >= 0.5) {
+            // MEDIUM-HIGH ENERGY: Triads or Drop2
+            voicingType = ((rhHash % 100) < 60) ? RhVoicingType::Drop2 : RhVoicingType::Triad;
         } else {
-            // BIAS TOWARD RICHER VOICINGS for more harmonic content
-            // Instead of following pattern strictly, upgrade sparse voicings
+            // LOWER ENERGY: Use pattern-based voicing with upgrades
             switch (hitVoicingType) {
                 case 0: voicingType = RhVoicingType::Drop2; break;
                 case 1: voicingType = RhVoicingType::Triad; break;
@@ -4565,21 +4651,18 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         }
         
         // ================================================================
-        // PHRASE-PATTERN-DRIVEN VOICING GENERATION
-        // Only ONE voicing per phrase hit - no beat-level loops!
+        // PHRASE-CONTEXT OVERRIDES (only at lower energy)
+        // At high energy, we DRIVE - no breathing back
         // ================================================================
-        
-        // Get phrase context
-        const int curArcPhase = computePhraseArcPhase(adjusted);
-        const bool isCadence = (adjusted.cadence01 >= 0.4);
-        
-        // Contextual overrides to voicing type
-        if (adjusted.phraseEndBar && isCadence) {
-            voicingType = RhVoicingType::Drop2;  // Full voicing for resolution
+        if (e < 0.6) {
+            if (adjusted.phraseEndBar && isCadence) {
+                voicingType = RhVoicingType::Drop2;  // Full voicing for resolution
+            }
+            if (curArcPhase == 2 && !isCadence) {
+                voicingType = RhVoicingType::Dyad;   // Breathing, lighter
+            }
         }
-        if (curArcPhase == 2 && !isCadence) {
-            voicingType = RhVoicingType::Dyad;   // Breathing, lighter
-        }
+        // At any energy, peak phase gets full voicing
         if (curArcPhase == 1) {
             voicingType = RhVoicingType::Drop2;  // Full at peak
         }
@@ -4647,13 +4730,17 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         QVector<FragmentNote> fragmentNotes;
         bool usedFragment = false;
         
-        if (m_enableMelodicFragments && !userActive) {
+        // HIGH ENERGY: No melodic fragments! They're too ornate for driving rhythmic playing.
+        // Fragments are for intimate, expressive low-energy moments.
+        const bool highEnergyMode = (adjusted.energy >= 0.6);
+        
+        if (m_enableMelodicFragments && !userActive && !highEnergyMode) {
             // Probability of using a fragment depends on:
-            // - Creativity weight (higher = more fragments)
-            // - Phrase position (more at phrase peaks)
+            // - Energy level (LOWER energy = MORE fragments)
+            // - Phrase position (more at phrase peaks only at lower energy)
             // - NOT on chord changes (keep those clean)
-            const double fragmentProb = 0.15 + (energyToCreativity(adjusted.energy) * 0.25) + 
-                                        (curArcPhase == 1 ? 0.15 : 0.0);
+            const double fragmentProb = 0.10 + (0.5 - adjusted.energy) * 0.30 + 
+                                        ((curArcPhase == 1 && adjusted.energy < 0.5) ? 0.10 : 0.0);
             const bool wantsFragment = !adjusted.chordIsNew && 
                                        ((rhHash % 100) < int(fragmentProb * 100));
             
@@ -4723,13 +4810,17 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                                adjusted.chord.seventh == music::SeventhQuality::Major7);
         const bool isMinor7 = (adjusted.chord.quality == music::ChordQuality::Minor);
         // UST on dominant, major7, AND minor7 chords (all sound beautiful!)
+        // At high energy: more USTs even during resolution (driving colorful harmony)
+        const bool allowInResolve = (c.energy > 0.6);  // At high energy, USTs anywhere!
         const bool wantsUST = (isDominant || isMajor7 || isMinor7) && 
-                              hitTensionLevel > 0.20 &&   // Lowered threshold
+                              hitTensionLevel > 0.15 &&   // Lower threshold for more color
                               !userActive &&
-                              curArcPhase != 2;  // Not during resolution phase
+                              (curArcPhase != 2 || allowInResolve);
         
-        // Probability of using UST: ~40-70% on qualifying chords (was 30-50%)
-        const bool useUST = wantsUST && ((rhHash % 100) < int(hitTensionLevel * 50 + 40));
+        // Probability of using UST: scales with ENERGY now, not just tension
+        // Low energy: 30-50%, High energy: 60-90%!
+        const int ustProb = int(30 + c.energy * 40 + hitTensionLevel * 20);
+        const bool useUST = wantsUST && ((rhHash % 100) < ustProb);
         
         QVector<int> rhMidiNotes;
         QString voicingName;

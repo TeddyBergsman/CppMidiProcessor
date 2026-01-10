@@ -362,11 +362,13 @@ QVector<PreComputedBeat> PrePlaybackBuilder::buildBranchFromContexts(
         bc.approachProbBeat3 = tune.bassApproachProbBeat3;
         bc.skipBeat3ProbStable = tune.bassSkipBeat3ProbStable;
         bc.allowApproachFromAbove = tune.bassAllowApproachFromAbove;
+        // NOTE: All user* flags should be FALSE in pre-computation!
+        // These indicate USER input, not global energy.
         bc.userDensityHigh = false;
-        bc.userIntensityPeak = (baseEnergy >= 0.85);
+        bc.userIntensityPeak = false;  // CRITICAL: This is about USER, not energy!
         bc.chordFunction = ctx.chordFunction;
         bc.roman = ctx.roman;
-        bc.userSilence = false;
+        bc.userSilence = true;  // User is "silent" = bass can play freely
         bc.forceClimax = (baseEnergy >= 0.85);
         bc.energy = bassEnergy;
         
@@ -396,10 +398,13 @@ QVector<PreComputedBeat> PrePlaybackBuilder::buildBranchFromContexts(
         pc.addSecondColorProb = tune.pianoAddSecondColorProb;
         pc.sparkleProbBeat4 = tune.pianoSparkleProbBeat4;
         pc.preferShells = tune.pianoPreferShells;
+        // NOTE: All user* flags should be FALSE in pre-computation!
+        // These flags indicate USER input activity, not global energy.
+        // Setting them incorrectly causes the piano to back off at high energy.
         pc.userDensityHigh = false;
-        pc.userIntensityPeak = (baseEnergy >= 0.85);
+        pc.userIntensityPeak = false;  // CRITICAL: This is about USER, not energy!
         pc.userRegisterHigh = false;
-        pc.userSilence = false;
+        pc.userSilence = true;  // User is "silent" = piano can play freely
         pc.userBusy = false;
         pc.forceClimax = (baseEnergy >= 0.85);
         pc.energy = pianoEnergy;

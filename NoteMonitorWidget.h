@@ -128,17 +128,7 @@ private:
     QLabel* m_virtuosoHud = nullptr;
     QCheckBox* m_virtuosoEnergyAuto = nullptr;
     QSlider* m_virtuosoEnergySlider = nullptr;
-    QCheckBox* m_virtuosoWeightsAuto = nullptr;
-    QSlider* m_wDensity = nullptr;
-    QSlider* m_wRhythm = nullptr;
-    QSlider* m_wIntensity = nullptr;
-    QSlider* m_wDynamism = nullptr;
-    QSlider* m_wEmotion = nullptr;
-    QSlider* m_wCreativity = nullptr;
-    QSlider* m_wTension = nullptr;
-    QSlider* m_wInteractivity = nullptr;
-    QSlider* m_wVariability = nullptr;
-    QSlider* m_wWarmth = nullptr;
+    // (Weights v2 sliders removed - now energy-only)
     QTextEdit* m_virtuosoTheoryLog = nullptr;
     QPropertyAnimation* m_virtuosoEnergyAnim = nullptr;
     // Debug isolation checkboxes

@@ -160,8 +160,8 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateDyad(const Context& c)
     if (seventh >= 0) colorPcs.push_back(seventh);
     if (fifth >= 0) colorPcs.push_back(fifth);
     
-    // Extensions based on tension
-    double tensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
+    // Extensions based on energy (tension derived from energy)
+    double tensionLevel = c.energy;  // Direct correlation with energy
     if (tensionLevel > 0.3 && ninth >= 0) colorPcs.push_back(ninth);
     if (tensionLevel > 0.5 && thirteenth >= 0) colorPcs.push_back(thirteenth);
     
@@ -285,7 +285,7 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateSingle(const Context& 
     
     if (third >= 0) candidatePcs.push_back(third);
     if (seventh >= 0) candidatePcs.push_back(seventh);
-    if (ninth >= 0 && c.weights.tension > 0.3) candidatePcs.push_back(ninth);
+    if (ninth >= 0 && c.energy > 0.3) candidatePcs.push_back(ninth);
     
     if (candidatePcs.isEmpty()) candidatePcs.push_back(chord.rootPc);
     
@@ -418,12 +418,12 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateUST(const Context& c) 
         return generateDyad(c);  // Fallback
     }
     
-    // Choose based on tension weight
+    // Choose based on energy (tension correlates with energy)
     int idx = 0;
-    if (c.weights.tension > 0.7 && triads.size() > 2) {
-        idx = 2;
-    } else if (c.weights.tension > 0.4 && triads.size() > 1) {
-        idx = 1;
+    if (c.energy > 0.7 && triads.size() > 2) {
+        idx = 2;  // Most colorful UST at high energy
+    } else if (c.energy > 0.4 && triads.size() > 1) {
+        idx = 1;  // More color at medium-high energy
     }
     
     return buildUstVoicing(c, triads[idx]);
@@ -436,13 +436,13 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateUST(const Context& c) 
 RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateBest(const Context& c) const {
     const bool isDominant = (c.chord.quality == music::ChordQuality::Dominant);
     
-    // UST for dominants with high creativity
-    if (isDominant && c.weights.creativity > 0.4) {
+    // UST for dominants at medium-high energy
+    if (isDominant && c.energy > 0.4) {
         return generateUST(c);
     }
     
-    // Drop-2 for high energy/density
-    if (c.energy > 0.6 && c.weights.density > 0.5) {
+    // Drop-2 for high energy (always at high energy for full sound)
+    if (c.energy > 0.5) {
         return generateDrop2(c);
     }
     
@@ -451,8 +451,8 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateBest(const Context& c)
         return generateTriad(c);
     }
     
-    // Dyad for sparse/ballad texture
-    if (c.weights.density < 0.4) {
+    // Dyad for lower energy/ballad texture
+    if (c.energy < 0.4) {
         return generateDyad(c);
     }
     
@@ -497,7 +497,7 @@ int RhVoicingGenerator::activityLevel(const Context& c, quint32 hash) const {
     // Peak phase
     if (c.energy > 0.6) {
         if (c.chordIsNew) {
-            return (c.weights.density > 0.6) ? 4 : 3;
+            return (c.energy > 0.75) ? 4 : 3;  // More notes at higher energy
         }
         return (c.energy > 0.5) ? 3 : 2;
     }
@@ -524,7 +524,7 @@ int RhVoicingGenerator::selectNextMelodicTarget(const Context& c) const {
     
     if (third >= 0) candidatePcs.push_back(third);
     if (seventh >= 0) candidatePcs.push_back(seventh);
-    if (ninth >= 0 && c.weights.tension > 0.3) candidatePcs.push_back(ninth);
+    if (ninth >= 0 && c.energy > 0.3) candidatePcs.push_back(ninth);
     
     if (candidatePcs.isEmpty()) candidatePcs.push_back(c.chord.rootPc);
     
@@ -536,11 +536,15 @@ int RhVoicingGenerator::selectNextMelodicTarget(const Context& c) const {
 // =============================================================================
 
 bool RhVoicingGenerator::shouldAddOrnament(const Context& c, quint32 hash) const {
-    // Ornaments at cadences and emotional moments
-    double prob = 0.05 + c.weights.emotion * 0.15 + c.weights.variability * 0.10;
+    // HIGH ENERGY: No ornaments! Clean, punchy, rhythmic playing.
+    // Ornaments are for intimate, expressive low-energy moments.
+    if (c.energy > 0.6) return false;
     
-    if (c.cadence01 > 0.5) prob += 0.15;
-    if (c.phraseEndBar) prob += 0.10;
+    // At lower energy: ornaments at cadences and expressive moments
+    double prob = 0.08 + (0.5 - c.energy) * 0.15;  // MORE ornaments at LOWER energy
+    
+    if (c.cadence01 > 0.5) prob += 0.12;
+    if (c.phraseEndBar) prob += 0.08;
     
     return (hash % 100) < int(prob * 100);
 }

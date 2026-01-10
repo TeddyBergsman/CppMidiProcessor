@@ -557,50 +557,6 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
             controlsV->addLayout(row);
         }
 
-        // --- Global Weights v2 (primary sliders) ---
-        {
-            auto mkSlider = [&](QGridLayout* grid, int row, const QString& label, QSlider*& s, const QString& tip, int def) {
-                auto* l = new QLabel(label, virtuosoDbg);
-                l->setStyleSheet("QLabel { color: #bbb; }");
-                s = new QSlider(Qt::Horizontal, virtuosoDbg);
-                s->setRange(0, 100);
-                s->setValue(def);
-                s->setEnabled(false); // disabled while Auto is on
-                s->setToolTip(tip);
-                grid->addWidget(l, row, 0);
-                grid->addWidget(s, row, 1);
-            };
-
-            QHBoxLayout* hdr = new QHBoxLayout();
-            hdr->setContentsMargins(0, 0, 0, 0);
-            hdr->setSpacing(8);
-            hdr->addWidget(new QLabel("Weights v2:", virtuosoDbg));
-            m_virtuosoWeightsAuto = new QCheckBox("Auto", virtuosoDbg);
-            m_virtuosoWeightsAuto->setChecked(true);
-            m_virtuosoWeightsAuto->setToolTip("When enabled, sliders follow automatic song-form + interaction targets.");
-            hdr->addWidget(m_virtuosoWeightsAuto, 0);
-            hdr->addStretch(1);
-            controlsV->addLayout(hdr);
-
-            QGridLayout* grid = new QGridLayout();
-            grid->setContentsMargins(0, 0, 0, 0);
-            grid->setHorizontalSpacing(10);
-            grid->setVerticalSpacing(6);
-
-            mkSlider(grid, 0, "Density", m_wDensity, "Overall activity (0..1): space vs notes.", 35);
-            mkSlider(grid, 1, "Rhythm", m_wRhythm, "Rhythmic complexity (0..1): more 8th/16th variety at higher values.", 35);
-            mkSlider(grid, 2, "Intensity", m_wIntensity, "Touch/velocity (0..1).", 40);
-            mkSlider(grid, 3, "Dynamism", m_wDynamism, "Dynamic shaping across phrases (0..1).", 45);
-            mkSlider(grid, 4, "Emotion", m_wEmotion, "Time-feel freedom (0..1): more laid-back/elastic at higher values.", 35);
-            mkSlider(grid, 5, "Creativity", m_wCreativity, "Harmonic adventurousness (0..1).", 25);
-            mkSlider(grid, 6, "Tension", m_wTension, "Tension→release shaping near cadences (0..1).", 45);
-            mkSlider(grid, 7, "Interactivity", m_wInteractivity, "Responsiveness to user (0..1).", 55);
-            mkSlider(grid, 8, "Variability", m_wVariability, "Anti-repetition / concept variety (0..1).", 35);
-            mkSlider(grid, 9, "Warmth", m_wWarmth, "Timbre warmth (0..1): 0 bright/dry, 1 warm/dark.", 60);
-
-            controlsV->addLayout(grid);
-        }
-
         m_virtuosoTheoryLog = new QTextEdit(virtuosoDbg);
         m_virtuosoTheoryLog->setReadOnly(true);
         m_virtuosoTheoryLog->setMinimumHeight(160);
@@ -763,77 +719,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
                 }
             });
 
-    // Global Weights v2 wiring (primary sliders).
-    auto pushWeights = [this]() {
-        if (!m_virtuosoPlayback || !m_virtuosoWeightsAuto) return;
-        if (m_virtuosoWeightsAuto->isChecked()) return;
-        virtuoso::control::PerformanceWeightsV2 w;
-        w.density = m_wDensity ? double(m_wDensity->value()) / 100.0 : w.density;
-        w.rhythm = m_wRhythm ? double(m_wRhythm->value()) / 100.0 : w.rhythm;
-        w.intensity = m_wIntensity ? double(m_wIntensity->value()) / 100.0 : w.intensity;
-        w.dynamism = m_wDynamism ? double(m_wDynamism->value()) / 100.0 : w.dynamism;
-        w.emotion = m_wEmotion ? double(m_wEmotion->value()) / 100.0 : w.emotion;
-        w.creativity = m_wCreativity ? double(m_wCreativity->value()) / 100.0 : w.creativity;
-        w.tension = m_wTension ? double(m_wTension->value()) / 100.0 : w.tension;
-        w.interactivity = m_wInteractivity ? double(m_wInteractivity->value()) / 100.0 : w.interactivity;
-        w.variability = m_wVariability ? double(m_wVariability->value()) / 100.0 : w.variability;
-        w.warmth = m_wWarmth ? double(m_wWarmth->value()) / 100.0 : w.warmth;
-        w.clamp01();
-        m_virtuosoPlayback->setPerformanceWeightsV2(w);
-    };
-    connect(m_virtuosoWeightsAuto, &QCheckBox::toggled, this, [this, pushWeights](bool on) mutable {
-        if (!m_virtuosoPlayback) return;
-        for (QSlider* s : {m_wDensity, m_wRhythm, m_wIntensity, m_wDynamism, m_wEmotion,
-                           m_wCreativity, m_wTension, m_wInteractivity, m_wVariability, m_wWarmth}) {
-            if (s) s->setEnabled(!on);
-        }
-        m_virtuosoPlayback->setPerformanceWeightsAuto(on);
-        if (!on) pushWeights();
-    });
-    for (QSlider* s : {m_wDensity, m_wRhythm, m_wIntensity, m_wDynamism, m_wEmotion,
-                       m_wCreativity, m_wTension, m_wInteractivity, m_wVariability, m_wWarmth}) {
-        if (!s) continue;
-        connect(s, &QSlider::valueChanged, this, [pushWeights](int) mutable { pushWeights(); });
-    }
-
-    connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::debugWeightsV2,
-            this, [this](double density01,
-                         double rhythm01,
-                         double intensity01,
-                         double dynamism01,
-                         double emotion01,
-                         double creativity01,
-                         double tension01,
-                         double interactivity01,
-                         double variability01,
-                         double warmth01,
-                         bool isAuto) {
-                if (!m_virtuosoWeightsAuto) return;
-
-                const bool prevAuto = m_virtuosoWeightsAuto->blockSignals(true);
-                m_virtuosoWeightsAuto->setChecked(isAuto);
-                m_virtuosoWeightsAuto->blockSignals(prevAuto);
-
-                auto set = [&](QSlider* s, double v01) {
-                    if (!s) return;
-                    s->setEnabled(!isAuto);
-                    const int target = qBound(0, int(llround(v01 * 100.0)), 100);
-                    const bool prev = s->blockSignals(true);
-                    s->setValue(target);
-                    s->blockSignals(prev);
-                };
-
-                set(m_wDensity, density01);
-                set(m_wRhythm, rhythm01);
-                set(m_wIntensity, intensity01);
-                set(m_wDynamism, dynamism01);
-                set(m_wEmotion, emotion01);
-                set(m_wCreativity, creativity01);
-                set(m_wTension, tension01);
-                set(m_wInteractivity, interactivity01);
-                set(m_wVariability, variability01);
-                set(m_wWarmth, warmth01);
-            });
+    // (Weights v2 sliders removed - all parameters now derived from Energy)
 
     auto makeSection = [&](const QString& title,
                            QLabel*& titleLbl,

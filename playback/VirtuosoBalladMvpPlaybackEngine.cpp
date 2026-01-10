@@ -540,6 +540,16 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
         // (not the scheduled lookahead position)
         emitTheoryEventForStep(stepNow);
 
+        // Emit energy (for UI slider animation)
+        {
+            double currentEnergy = m_debugEnergy;
+            if (m_debugEnergyAuto) {
+                const auto energySnap = m_interaction.snapshot(nowWallMs, true, m_debugEnergy);
+                currentEnergy = energySnap.energy01;
+            }
+            emit debugEnergy(currentEnergy, m_debugEnergyAuto);
+        }
+        
         // Emit weights v2 (for UI slider animation / debugging).
         {
             const int beatsPerBar = qMax(1, (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4);
@@ -969,8 +979,15 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStepFromCache(int stepIndex) {
     
     // Note: Bass BeatPlan doesn't have CCs (bass uses keyswitches for articulation)
     
-    // Schedule piano notes
+    // Schedule piano notes (respecting LH/RH mute flags)
     for (const auto& pn : beat->pianoPlan.notes) {
+        // Filter by hand based on logic_tag
+        const bool isLH = pn.logic_tag.startsWith("LH");
+        const bool isRH = pn.logic_tag.startsWith("RH");
+        
+        if (isLH && m_debugMutePianoLH) continue;  // LH is muted
+        if (isRH && m_debugMutePianoRH) continue;  // RH is muted
+        
         m_engine.scheduleNote(pn);
     }
     

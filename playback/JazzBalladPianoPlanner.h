@@ -17,6 +17,8 @@
 #include "virtuoso/piano/PianoPerformancePlan.h"
 #include "virtuoso/control/PerformanceWeightsV2.h"
 #include "virtuoso/vocab/VocabularyRegistry.h"
+#include "playback/LhVoicingGenerator.h"
+#include "playback/RhVoicingGenerator.h"
 
 namespace playback {
 
@@ -217,7 +219,7 @@ public:
     void restoreState(const PlannerState& s);
 
     void setVocabulary(const virtuoso::vocab::VocabularyRegistry* vocab) { m_vocab = vocab; }
-    void setOntology(const virtuoso::ontology::OntologyRegistry* ont) { m_ont = ont; }
+    void setOntology(const virtuoso::ontology::OntologyRegistry* ont);
     void setMotivicMemory(const virtuoso::memory::MotivicMemory* mem) { m_mem = mem; }
 
     QVector<virtuoso::engine::AgentIntentNote> planBeat(const Context& c,
@@ -773,6 +775,14 @@ private:
     const virtuoso::ontology::OntologyRegistry* m_ont = nullptr;
     const virtuoso::memory::MotivicMemory* m_mem = nullptr;
     const virtuoso::vocab::VocabularyRegistry* m_vocab = nullptr;
+    
+    // ============= Voicing Generators (Refactored) =============
+    mutable LhVoicingGenerator m_lhGen;
+    mutable RhVoicingGenerator m_rhGen;
+    
+    // Synchronize generator state with planner state
+    void syncGeneratorState() const;
+    void updateStateFromGenerators();
 };
 
 } // namespace playback

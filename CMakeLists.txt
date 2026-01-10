@@ -97,6 +97,9 @@ add_executable(VirtuosoPlaybackTests
   playback/KeyAnalyzer.cpp
   playback/JazzBalladBassPlanner.cpp
   playback/JazzBalladPianoPlanner.cpp
+  playback/VoicingUtils.cpp
+  playback/LhVoicingGenerator.cpp
+  playback/RhVoicingGenerator.cpp
   playback/BrushesBalladDrummer.cpp
   playback/SemanticMidiAnalyzer.cpp
   playback/VibeStateMachine.cpp
@@ -186,6 +189,12 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/JazzBalladBassPlanner.cpp
   playback/JazzBalladPianoPlanner.h
   playback/JazzBalladPianoPlanner.cpp
+  playback/VoicingUtils.h
+  playback/VoicingUtils.cpp
+  playback/LhVoicingGenerator.h
+  playback/LhVoicingGenerator.cpp
+  playback/RhVoicingGenerator.h
+  playback/RhVoicingGenerator.cpp
   playback/BrushesBalladDrummer.h
   playback/BrushesBalladDrummer.cpp
   playback/SemanticMidiAnalyzer.h

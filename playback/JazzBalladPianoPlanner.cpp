@@ -326,6 +326,49 @@ BrokenTimeFeel calculateBrokenTimeFeel(
     return feel;
 }
 
+// =============================================================================
+// CONTEXT CONVERSION HELPERS
+// Convert JazzBalladPianoPlanner::Context to generator contexts
+// =============================================================================
+
+LhVoicingGenerator::Context toLhContext(const JazzBalladPianoPlanner::Context& c) {
+    LhVoicingGenerator::Context lhc;
+    lhc.chord = c.chord;
+    lhc.lhLo = c.lhLo;
+    lhc.lhHi = c.lhHi;
+    lhc.beatInBar = c.beatInBar;
+    lhc.energy = c.energy;
+    lhc.chordIsNew = c.chordIsNew;
+    lhc.preferShells = c.preferShells;
+    lhc.weights = c.weights;
+    lhc.keyTonicPc = c.keyTonicPc;
+    lhc.keyMode = c.keyMode;
+    lhc.bassRegisterHi = c.bassRegisterHi;
+    return lhc;
+}
+
+RhVoicingGenerator::Context toRhContext(const JazzBalladPianoPlanner::Context& c) {
+    RhVoicingGenerator::Context rhc;
+    rhc.chord = c.chord;
+    rhc.rhLo = c.rhLo;
+    rhc.rhHi = c.rhHi;
+    rhc.sparkleLo = c.sparkleLo;
+    rhc.sparkleHi = c.sparkleHi;
+    rhc.beatInBar = c.beatInBar;
+    rhc.energy = c.energy;
+    rhc.chordIsNew = c.chordIsNew;
+    rhc.weights = c.weights;
+    rhc.keyTonicPc = c.keyTonicPc;
+    rhc.keyMode = c.keyMode;
+    rhc.barInPhrase = c.barInPhrase;
+    rhc.phraseEndBar = c.phraseEndBar;
+    rhc.cadence01 = c.cadence01;
+    rhc.userSilence = c.userSilence;
+    rhc.userBusy = c.userBusy;
+    rhc.userMeanMidi = c.userMeanMidi;
+    return rhc;
+}
+
 } // namespace
 
 // =============================================================================
@@ -334,6 +377,13 @@ BrokenTimeFeel calculateBrokenTimeFeel(
 
 JazzBalladPianoPlanner::JazzBalladPianoPlanner() {
     reset();
+}
+
+void JazzBalladPianoPlanner::setOntology(const virtuoso::ontology::OntologyRegistry* ont) {
+    m_ont = ont;
+    // Also set on generators (they were created without ontology initially)
+    m_lhGen = LhVoicingGenerator(ont);
+    m_rhGen = RhVoicingGenerator(ont);
 }
 
 void JazzBalladPianoPlanner::reset() {
@@ -346,16 +396,58 @@ void JazzBalladPianoPlanner::reset() {
     m_state.lastVoicingKey.clear();
     m_state.currentPhraseId.clear();
     m_state.phraseStartBar = -1;
+    
+    // Reset generators
+    m_lhGen.setState(LhVoicingGenerator::State{});
+    m_rhGen.setState(RhVoicingGenerator::State{});
+}
+
+void JazzBalladPianoPlanner::syncGeneratorState() const {
+    // Sync planner state to generators
+    LhVoicingGenerator::State lhState;
+    lhState.lastLhMidi = m_state.lastLhMidi;
+    lhState.lastLhWasTypeA = m_state.lastLhWasTypeA;
+    lhState.lastInnerVoiceIndex = m_state.lastInnerVoiceIndex;
+    lhState.innerVoiceDirection = m_state.innerVoiceDirection;
+    m_lhGen.setState(lhState);
+    
+    RhVoicingGenerator::State rhState;
+    rhState.lastRhMidi = m_state.lastRhMidi;
+    rhState.lastRhTopMidi = m_state.lastRhTopMidi;
+    rhState.lastRhSecondMidi = m_state.lastRhSecondMidi;
+    rhState.rhMelodicDirection = m_state.rhMelodicDirection;
+    rhState.rhMotionsThisChord = m_state.rhMotionsThisChord;
+    rhState.lastChordForRh = m_state.lastChordForRh;
+    m_rhGen.setState(rhState);
+}
+
+void JazzBalladPianoPlanner::updateStateFromGenerators() {
+    // Update planner state from generators
+    const auto& lhState = m_lhGen.state();
+    m_state.lastLhMidi = lhState.lastLhMidi;
+    m_state.lastLhWasTypeA = lhState.lastLhWasTypeA;
+    m_state.lastInnerVoiceIndex = lhState.lastInnerVoiceIndex;
+    m_state.innerVoiceDirection = lhState.innerVoiceDirection;
+    
+    const auto& rhState = m_rhGen.state();
+    m_state.lastRhMidi = rhState.lastRhMidi;
+    m_state.lastRhTopMidi = rhState.lastRhTopMidi;
+    m_state.lastRhSecondMidi = rhState.lastRhSecondMidi;
+    m_state.rhMelodicDirection = rhState.rhMelodicDirection;
+    m_state.rhMotionsThisChord = rhState.rhMotionsThisChord;
+    m_state.lastChordForRh = rhState.lastChordForRh;
 }
 
 JazzBalladPianoPlanner::PlannerState JazzBalladPianoPlanner::snapshotState() const {
     QMutexLocker locker(m_stateMutex.get());
+    syncGeneratorState();  // Ensure generators are in sync before snapshot
     return m_state;
 }
 
 void JazzBalladPianoPlanner::restoreState(const PlannerState& s) {
     QMutexLocker locker(m_stateMutex.get());
     m_state = s;
+    syncGeneratorState();  // Sync generators with restored state
 }
 
 // =============================================================================
@@ -4502,7 +4594,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     const bool newPhrase = (adjusted.barInPhrase == 0 && adjusted.beatInBar == 0);
     if (newPhrase || m_state.lastPhraseStartBar < 0) {
         // Generate a new motif for this phrase
-        const_cast<JazzBalladPianoPlanner*>(this)->generatePhraseMotif(adjusted);
+        generatePhraseMotif(adjusted);
     }
     
     // Get current phrase arc phase for decisions below
@@ -4512,7 +4604,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     // CALL-AND-RESPONSE: Update interactive state
     // Detects when user stops playing and enables fill mode
     // ================================================================
-    const_cast<JazzBalladPianoPlanner*>(this)->updateResponseState(adjusted);
+    updateResponseState(adjusted);
     const bool responding = shouldRespondToUser(adjusted);
     const int responseBoost = getResponseActivityBoost(adjusted);
     
@@ -4604,8 +4696,12 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     // - Sometimes syncopates (anticipates chord changes)
     // ==========================================================================
     
-    const bool lhPlays = shouldLhPlayBeat(adjusted, lhHash);
-    LhVoicing lhVoicing;
+    // Sync generator state before LH generation
+    syncGeneratorState();
+    
+    const auto lhGenContext = toLhContext(adjusted);
+    const bool lhPlays = m_lhGen.shouldPlayBeat(lhGenContext, lhHash);
+    LhVoicingGenerator::LhVoicing lhGenVoicing;
     
     // Check for intentional rest (breath and space)
     const bool wantsRest = shouldRest(adjusted, lhHash);
@@ -4614,18 +4710,17 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         // But never rest on chord changes
     } else if (lhPlays) {
         // ================================================================
-        // LH VOICING SELECTION: Choose between rootless and quartal
-        // Quartal voicings create open, modern sound (Bill Evans, McCoy Tyner)
-        // Use quartal ~15-20% of the time for variety
+        // LH VOICING SELECTION: Delegate to LhVoicingGenerator
+        // It chooses between rootless, quartal, and shell based on context
         // ================================================================
         const bool useQuartal = (styleProfile.quartalPreference > 0) && 
                                 ((lhHash % 100) < int(styleProfile.quartalPreference * 100)) &&
                                 !adjusted.chordIsNew;  // Always use standard on chord changes
         
         if (useQuartal) {
-            lhVoicing = generateLhQuartalVoicing(adjusted);
+            lhGenVoicing = m_lhGen.generateQuartal(lhGenContext);
         } else {
-            lhVoicing = generateLhRootlessVoicing(adjusted);
+            lhGenVoicing = m_lhGen.generateRootless(lhGenContext);
         }
         
         // ================================================================
@@ -4635,13 +4730,13 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         if (adjusted.beatInBar == 2 && !adjusted.chordIsNew && styleProfile.innerVoiceMovement > 0) {
             const bool doInnerMovement = (lhHash % 100) < int(styleProfile.innerVoiceMovement * 100);
             if (doInnerMovement) {
-                lhVoicing = applyInnerVoiceMovement(lhVoicing, adjusted, adjusted.beatInBar);
+                lhGenVoicing = m_lhGen.applyInnerVoiceMovement(lhGenVoicing, lhGenContext);
                 // Update state for alternation
-                const_cast<JazzBalladPianoPlanner*>(this)->m_state.lastInnerVoiceIndex++;
+                m_lhGen.state().lastInnerVoiceIndex++;
             }
         }
         
-        if (!lhVoicing.midiNotes.isEmpty()) {
+        if (!lhGenVoicing.midiNotes.isEmpty()) {
             // ================================================================
             // LH RHYTHM PATTERN: Determine how many hits and when
             // ================================================================
@@ -4806,8 +4901,8 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             
             // Generate notes for each LH hit
             for (const auto& hit : lhHits) {
-                QVector<int> hitMidi = lhVoicing.midiNotes;
-                QString hitKey = lhVoicing.ontologyKey;
+                QVector<int> hitMidi = lhGenVoicing.midiNotes;
+                QString hitKey = lhGenVoicing.ontologyKey;
                 
                 // Alternate voicing: create meaningful variation
                 if (hit.useAltVoicing && hitMidi.size() >= 2) {
@@ -4907,9 +5002,11 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 }
             }
             
-            // Update LH state
-            m_state.lastLhMidi = lhVoicing.midiNotes;
-            m_state.lastLhWasTypeA = lhVoicing.isTypeA;
+            // Update LH state (both planner and generator)
+            m_state.lastLhMidi = lhGenVoicing.midiNotes;
+            m_state.lastLhWasTypeA = lhGenVoicing.isTypeA;
+            m_lhGen.state().lastLhMidi = lhGenVoicing.midiNotes;
+            m_lhGen.state().lastLhWasTypeA = lhGenVoicing.isTypeA;
         }
     }
     
@@ -5139,8 +5236,9 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         bool usedUST = false;
         
         if (useUST) {
-            // Get UST candidates for this chord
-            const auto ustCandidates = getUpperStructureTriads(adjusted.chord);
+            // Get UST candidates via RH generator
+            const auto rhGenContext = toRhContext(adjusted);
+            const auto ustCandidates = m_rhGen.getUpperStructureTriads(adjusted.chord);
             
             if (!ustCandidates.isEmpty()) {
                 // Select UST based on tension level
@@ -5153,8 +5251,8 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     ustIndex = qMin(2, ustCandidates.size() - 1);
                 }
                 
-                // Build the UST voicing
-                const RhMelodic ustVoicing = buildUstVoicing(adjusted, ustCandidates[ustIndex]);
+                // Build the UST voicing via generator
+                const auto ustVoicing = m_rhGen.buildUstVoicing(rhGenContext, ustCandidates[ustIndex]);
                 
                 if (!ustVoicing.midiNotes.isEmpty()) {
                     rhMidiNotes = ustVoicing.midiNotes;
@@ -5313,11 +5411,12 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             // Add expressive ornaments before the main voicing on special moments
             // ================================================================
             const quint32 ornHash = virtuoso::util::StableHash::mix(rhHash, adjusted.playbackBarIndex * 41);
-            if (shouldAddOrnament(adjusted, ornHash) && !rhMidiNotes.isEmpty()) {
+            const auto rhGenContext = toRhContext(adjusted);
+            if (m_rhGen.shouldAddOrnament(rhGenContext, ornHash) && !rhMidiNotes.isEmpty()) {
                 const int topNote = rhMidiNotes.last();  // Ornament the top (melodic) note
-                const Ornament orn = generateOrnament(adjusted, topNote, ornHash);
+                const auto orn = m_rhGen.generateOrnament(rhGenContext, topNote, ornHash);
                 
-                if (orn.type != OrnamentType::None && !orn.notes.isEmpty()) {
+                if (orn.type != RhVoicingGenerator::OrnamentType::None && !orn.notes.isEmpty()) {
                     // Calculate ornament start position (before main note)
                     int totalOrnDurMs = 0;
                     for (int d : orn.durationsMs) totalOrnDurMs += d;
@@ -5373,17 +5472,24 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 plan.notes.push_back(note);
             }
             
-            // Update state
+            // Update state (both planner and generator)
             m_state.lastRhTopMidi = bestTarget;
+            m_state.lastRhMidi = rhMidiNotes;
             if (bestTarget > currentTopMidi) m_state.rhMelodicDirection = 1;
             else if (bestTarget < currentTopMidi) m_state.rhMelodicDirection = -1;
             m_state.rhMotionsThisChord++;
             m_state.phrasePatternHitIndex++;
+            
+            // Sync to generator state
+            m_rhGen.state().lastRhTopMidi = bestTarget;
+            m_rhGen.state().lastRhMidi = rhMidiNotes;
+            m_rhGen.state().rhMelodicDirection = m_state.rhMelodicDirection;
+            m_rhGen.state().rhMotionsThisChord = m_state.rhMotionsThisChord;
         }
         
         // Update register tracking for variety calculation - SAFETY: bounds check
         if (currentTopMidi >= 0 && currentTopMidi <= 127) {
-            const_cast<JazzBalladPianoPlanner*>(this)->updateRegisterTracking(currentTopMidi);
+            updateRegisterTracking(currentTopMidi);
         }
     }
     
@@ -5392,28 +5498,26 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     if (adjusted.phraseEndBar && adjusted.beatInBar == 3) {
         const int safeMidi = qBound(0, m_state.lastRhTopMidi, 127);
         const bool wasHigh = (safeMidi > (adjusted.rhLo + adjusted.rhHi) / 2 + 3);
-        const_cast<JazzBalladPianoPlanner*>(this)->m_state.lastPhraseWasHigh = wasHigh;
+        m_state.lastPhraseWasHigh = wasHigh;
         
         // Update Q/A state for next phrase - validate inputs
         const int safePeak = qBound(0, m_state.currentPhrasePeakMidi, 127);
         const int safeLast = qBound(0, m_state.currentPhraseLastMidi, 127);
-        const_cast<JazzBalladPianoPlanner*>(this)->updateQuestionAnswerState(
-            adjusted, safePeak, safeLast
-        );
+        updateQuestionAnswerState(adjusted, safePeak, safeLast);
     }
     
     // Track melodic peaks for Q/A phrasing - SAFETY: bounds check
     const int safeLastRhTop = qBound(0, m_state.lastRhTopMidi, 127);
     if (safeLastRhTop > 0 && safeLastRhTop > m_state.currentPhrasePeakMidi) {
-        const_cast<JazzBalladPianoPlanner*>(this)->m_state.currentPhrasePeakMidi = safeLastRhTop;
+        m_state.currentPhrasePeakMidi = safeLastRhTop;
     }
     if (safeLastRhTop > 0) {
-        const_cast<JazzBalladPianoPlanner*>(this)->m_state.currentPhraseLastMidi = safeLastRhTop;
+        m_state.currentPhraseLastMidi = safeLastRhTop;
     }
     
     // Reset phrase tracking on new phrase
     if (newPhrase) {
-        const_cast<JazzBalladPianoPlanner*>(this)->m_state.currentPhrasePeakMidi = 60;
+        m_state.currentPhrasePeakMidi = 60;
     }
     
     // Return early if no notes generated
@@ -5431,7 +5535,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     std::sort(combinedMidi.begin(), combinedMidi.end());
     m_state.lastVoicingMidi = combinedMidi;
     m_state.lastTopMidi = combinedMidi.isEmpty() ? -1 : combinedMidi.last();
-    m_state.lastVoicingKey = lhVoicing.ontologyKey.isEmpty() ? "piano_rh_melodic" : lhVoicing.ontologyKey;
+    m_state.lastVoicingKey = lhGenVoicing.ontologyKey.isEmpty() ? "piano_rh_melodic" : lhGenVoicing.ontologyKey;
 
     plan.chosenVoicingKey = m_state.lastVoicingKey;
     plan.ccs = planPedal(adjusted, ts);

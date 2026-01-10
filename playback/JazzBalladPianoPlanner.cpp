@@ -48,34 +48,6 @@ QVector<VoicingTemplate> getVoicingTemplates(bool hasSeventh, bool is6thChord) {
 }
 
 // =============================================================================
-// DROP-2 VOICINGS
-// A Drop-2 voicing takes a close-position chord and drops the 2nd voice from
-// the top down an octave. This creates a more open, pianistic sound.
-// The TOP note becomes the melody - crucial for voice-led playing!
-// =============================================================================
-struct Drop2Voicing {
-    QVector<int> pcs;           // Pitch classes from bottom to top
-    int melodyPc;               // The top note (melody)
-    int melodyDegree;           // What chord degree is the melody (3, 5, 7, 9, etc.)
-    QString name;               // For debugging
-    double tension;             // How tense is this voicing (0.0 = consonant)
-};
-
-// =============================================================================
-// DIATONIC TRIADS
-// Triads built from each scale degree that harmonize with the current chord.
-// These create rich harmonic color while remaining diatonic and beautiful.
-// =============================================================================
-struct DiatonicTriad {
-    int rootPc;                 // Root of the triad
-    bool isMajor;               // Major or minor quality
-    int scaleDegree;            // Which scale degree this triad is built on
-    QVector<int> pcs;           // The 3 pitch classes
-    double harmonyScore;        // How well this harmonizes (higher = better)
-    QString name;
-};
-
-// =============================================================================
 // SINGING MELODY LINE TARGET
 // Calculate the ideal next melody note for a voice-led, expressive line
 // =============================================================================
@@ -2296,205 +2268,6 @@ QVector<int> JazzBalladPianoPlanner::repairVoicing(QVector<int> midi) const {
 }
 
 // =============================================================================
-// Voicing Generation
-// =============================================================================
-
-QVector<JazzBalladPianoPlanner::Voicing> JazzBalladPianoPlanner::generateVoicingCandidates(
-    const Context& c, VoicingDensity density) const {
-
-    QVector<Voicing> candidates;
-    candidates.reserve(6);
-
-    const auto& chord = c.chord;
-    if (chord.placeholder || chord.noChord || chord.rootPc < 0) {
-        return candidates;
-    }
-
-    const bool hasSeventh = (seventhInterval(chord) >= 0);
-    const bool is6thChord = (chord.extension == 6 && chord.seventh == music::SeventhQuality::None);
-    const bool hasColorTone = hasSeventh || is6thChord;
-    const bool hasSlashBass = (chord.bassPc >= 0 && chord.bassPc != chord.rootPc);
-    const int slashBassPc = hasSlashBass ? normalizePc(chord.bassPc) : -1;
-
-    int voicingFloor = c.lhLo;
-    int voicingCeiling = c.rhHi;
-
-    auto templates = getVoicingTemplates(hasColorTone, is6thChord);
-
-    for (const auto& tmpl : templates) {
-        if (density == VoicingDensity::Sparse && tmpl.degrees.size() > 2) continue;
-        if (density == VoicingDensity::Guide && tmpl.degrees.size() > 3) continue;
-
-        Voicing v;
-        v.ontologyKey = tmpl.name;
-
-        // Determine voicing type from ontology key
-        if (tmpl.name.contains("rootless_a")) v.type = VoicingType::RootlessA;
-        else if (tmpl.name.contains("rootless_b")) v.type = VoicingType::RootlessB;
-        else if (tmpl.name.contains("guide") || tmpl.name.contains("shell")) v.type = VoicingType::Shell;
-        else if (tmpl.name.contains("quartal")) v.type = VoicingType::Quartal;
-        else v.type = VoicingType::Shell;
-
-        v.density = density;
-
-        // Build pitch classes
-        for (int deg : tmpl.degrees) {
-            int pc = pcForDegree(chord, deg);
-            if (pc >= 0 && (!hasSlashBass || pc != slashBassPc)) {
-                v.pcs.push_back(pc);
-            }
-        }
-
-        if (v.pcs.isEmpty()) continue;
-
-        // Determine base position for voicing
-        int baseMidi = voicingFloor;
-        if (!m_state.lastVoicingMidi.isEmpty()) {
-            int sum = 0;
-            for (int m : m_state.lastVoicingMidi) sum += m;
-            baseMidi = sum / m_state.lastVoicingMidi.size();
-            // SAFETY: Ensure min <= max for qBound
-            const int voicingHi = qMax(voicingFloor, voicingCeiling - 12);
-            baseMidi = qBound(voicingFloor, baseMidi - 6, voicingHi);
-        }
-
-        // For Type B, start lower (it begins on the 7th which is lower than the 3rd)
-        if (tmpl.name == "RootlessB") {
-            baseMidi = qMax(voicingFloor, baseMidi - 5);
-        }
-
-        v.midiNotes = realizeVoicingTemplate(tmpl.degrees, chord, baseMidi, voicingCeiling);
-
-        // Filter out slash bass notes
-        if (hasSlashBass) {
-            QVector<int> filtered;
-            for (int m : v.midiNotes) {
-                if (normalizePc(m) != slashBassPc) {
-                    filtered.push_back(m);
-                }
-            }
-            v.midiNotes = filtered;
-            v.avoidsSlashBass = true;
-        }
-
-        if (v.midiNotes.size() < 2) continue;
-
-        v.midiNotes = repairVoicing(v.midiNotes);
-        v.cost = voiceLeadingCost(m_state.lastVoicingMidi, v.midiNotes);
-
-        if (!v.midiNotes.isEmpty()) {
-            v.topNoteMidi = v.midiNotes.last();
-            v.topNotePc = normalizePc(v.topNoteMidi);
-        }
-
-        candidates.push_back(v);
-    }
-
-    return candidates;
-}
-
-// =============================================================================
-// Context-Aware Voicing Density
-// =============================================================================
-
-JazzBalladPianoPlanner::VoicingDensity JazzBalladPianoPlanner::computeContextDensity(const Context& c) const {
-    const auto mappings = computeWeightMappings(c);
-
-    double densityScore = 0.5;
-    densityScore += 0.3 * (c.energy - 0.5);
-
-    const double phraseProgress = (c.phraseBars > 0)
-        ? double(c.barInPhrase) / double(c.phraseBars)
-        : 0.5;
-    densityScore += 0.15 * (phraseProgress - 0.5);
-
-    if (c.cadence01 >= 0.5) {
-        densityScore += 0.1 * c.cadence01;
-    }
-
-    if (c.userBusy || c.userDensityHigh) {
-        densityScore -= 0.25;
-    }
-
-    densityScore += 0.15 * (mappings.voicingFullnessMod - 0.8);
-
-    if (c.bpm < 70) {
-        densityScore -= 0.1;
-    }
-
-    densityScore = qBound(0.25, densityScore, 0.95);
-
-    if (densityScore < 0.35) return VoicingDensity::Guide;
-    if (densityScore < 0.50) return VoicingDensity::Medium;
-    if (densityScore < 0.70) return VoicingDensity::Full;
-    return VoicingDensity::Lush;
-}
-
-// =============================================================================
-// Melodic Top Note Selection
-// =============================================================================
-
-int JazzBalladPianoPlanner::selectMelodicTopNote(const QVector<int>& candidatePcs,
-                                                  int rhLo, int rhHi,
-                                                  int lastTopMidi,
-                                                  const Context& /*c*/) const {
-    if (candidatePcs.isEmpty()) return -1;
-
-    if (lastTopMidi < 0) {
-        const int targetMidi = (rhLo + rhHi) / 2 + 4;
-        int bestPc = candidatePcs.last();
-        return nearestMidiForPc(bestPc, targetMidi, rhLo, rhHi);
-    }
-
-    QVector<std::pair<int, double>> candidates;
-    candidates.reserve(candidatePcs.size() * 3);
-
-    for (int pc : candidatePcs) {
-        for (int octave = 4; octave <= 6; ++octave) {
-            int midi = pc + 12 * octave;
-            if (midi < rhLo || midi > rhHi) continue;
-
-            double cost = 0.0;
-            const int absMotion = qAbs(midi - lastTopMidi);
-
-            if (absMotion <= 2) cost += 0.0;
-            else if (absMotion <= 4) cost += 1.0;
-            else if (absMotion <= 7) cost += 2.0;
-            else cost += 4.0;
-
-            const int sweetCenter = (rhLo + rhHi) / 2 + 4;
-            cost += qAbs(midi - sweetCenter) * 0.1;
-
-            candidates.push_back({midi, cost});
-        }
-    }
-
-    if (candidates.isEmpty()) {
-        return nearestMidiForPc(candidatePcs.last(), lastTopMidi, rhLo, rhHi);
-    }
-
-    std::sort(candidates.begin(), candidates.end(),
-              [](const auto& a, const auto& b) { return a.second < b.second; });
-
-    return candidates.first().first;
-}
-
-int JazzBalladPianoPlanner::getDegreeForPc(int pc, const music::ChordSymbol& chord) const {
-    const int root = (chord.rootPc >= 0) ? chord.rootPc : 0;
-    const int interval = normalizePc(pc - root);
-
-    switch (interval) {
-        case 0: return 1;
-        case 3: case 4: return 3;
-        case 6: case 7: case 8: return 5;
-        case 9: case 10: case 11: return 7;
-        case 1: case 2: return 9;
-        case 5: return 11;
-        default: return 0;
-    }
-}
-
-// =============================================================================
 // Pedal Logic - Professional Jazz Piano Sustain Technique
 // =============================================================================
 // KEY PRINCIPLES:
@@ -2983,406 +2756,8 @@ JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::generateLhQuartalVoici
     return lh;
 }
 
-// RH Melodic: Create dyads/triads that move melodically
-// Top note follows stepwise motion, inner voice provides harmony
-// CONSONANCE-FIRST: Prioritize guide tones, use extensions based on tension
-JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::generateRhMelodicVoicing(
-    const Context& c, int targetTopMidi) const {
-    
-    RhMelodic rh;
-    const auto& chord = c.chord;
-    
-    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
-    
-    // ================================================================
-    // CONSONANCE-FIRST APPROACH
-    // Guide tones (3, 7) are always safe and define the chord
-    // Extensions (9, 13) add color but only when appropriate
-    // ================================================================
-    QVector<int> colorPcs;
-    
-    // Core chord tones
-    int third = pcForDegree(chord, 3);
-    int fifth = pcForDegree(chord, 5);
-    int seventh = pcForDegree(chord, 7);
-    int root = chord.rootPc;
-    
-    // Extensions
-    int ninth = pcForDegree(chord, 9);
-    int thirteenth = pcForDegree(chord, 13);
-    
-    // Determine tension level for extension usage
-    const double tensionLevel = c.weights.tension * 0.6 + c.energy * 0.4;
-    const bool isDominant = (chord.quality == music::ChordQuality::Dominant);
-    
-    // PRIORITY 1: Guide tones (always beautiful)
-    if (third >= 0) colorPcs.push_back(third);
-    if (seventh >= 0) colorPcs.push_back(seventh);
-    
-    // PRIORITY 2: Fifth (safe, consonant)
-    if (fifth >= 0) colorPcs.push_back(fifth);
-    
-    // PRIORITY 3: Extensions (pcForDegree now filters appropriately)
-    if (tensionLevel > 0.3) {
-        if (ninth >= 0) colorPcs.push_back(ninth);
-        if (thirteenth >= 0 && tensionLevel > 0.5) colorPcs.push_back(thirteenth);
-    }
-    
-    if (colorPcs.isEmpty()) return rh;
-    
-    // Select top note: prefer stepwise motion from previous
-    int lastTop = (m_state.lastRhTopMidi > 0) ? m_state.lastRhTopMidi : 74;
-    if (targetTopMidi > 0) lastTop = targetTopMidi;
-    
-    // Find best top note candidate (within 2-4 semitones of last)
-    QVector<std::pair<int, double>> candidates;
-    for (int pc : colorPcs) {
-        for (int oct = 5; oct <= 7; ++oct) {
-            int midi = pc + 12 * oct;
-            if (midi < c.rhLo || midi > c.rhHi) continue;
-            
-            double cost = 0.0;
-            int motion = qAbs(midi - lastTop);
-            
-            // Prefer stepwise (1-2 semitones)
-            if (motion <= 2) cost = 0.0;
-            else if (motion <= 4) cost = 1.0;
-            else if (motion <= 7) cost = 3.0;
-            else cost = 6.0;
-            
-            // PREFERENCE for guide tones (they sound most "right")
-            if (pc == third || pc == seventh) cost -= 0.8;
-            // Slight preference for extensions only at higher tension
-            else if ((pc == ninth || pc == thirteenth) && tensionLevel > 0.5) cost -= 0.3;
-            
-            // Prefer staying in sweet spot (72-82)
-            if (midi >= 72 && midi <= 82) cost -= 0.3;
-            
-            candidates.push_back({midi, cost});
-        }
-    }
-    
-    if (candidates.isEmpty()) return rh;
-    
-    std::sort(candidates.begin(), candidates.end(),
-              [](const auto& a, const auto& b) { return a.second < b.second; });
-    
-    rh.topNoteMidi = candidates.first().first;
-    int topPc = normalizePc(rh.topNoteMidi);
-    
-    // Determine melodic direction
-    if (rh.topNoteMidi > lastTop + 1) rh.melodicDirection = 1;
-    else if (rh.topNoteMidi < lastTop - 1) rh.melodicDirection = -1;
-    else rh.melodicDirection = 0;
-    
-    // ================================================================
-    // CONSONANT SECOND VOICE SELECTION
-    // Prefer 3rds (3-4 semitones) and 6ths (8-9 semitones)
-    // Avoid 2nds, tritones, and 7ths unless tension is high
-    // ================================================================
-    int secondPc = -1;
-    int secondMidi = -1;
-    int bestConsonance = 99;
-    
-    // Find the most consonant second voice with proper scoring
-    for (int pc : colorPcs) {
-        if (pc == topPc) continue;
-        int interval = (topPc - pc + 12) % 12;
-        
-        // Score by consonance (lower is better)
-        int score = 99;
-        if (interval == 3 || interval == 4) score = 0;  // Minor/major 3rd - sweetest
-        else if (interval == 8 || interval == 9) score = 1;  // Minor/major 6th - beautiful
-        else if (interval == 5) score = 2;  // Perfect 4th - stable
-        else if (interval == 7) score = 3;  // Perfect 5th - open
-        else if ((interval == 10 || interval == 11) && tensionLevel > 0.5) score = 5; // 7ths OK with tension
-        // Avoid 2nds (1-2) and tritones (6) unless very high tension
-        else if ((interval == 1 || interval == 2) && tensionLevel > 0.7) score = 7;
-        else if (interval == 6 && isDominant && tensionLevel > 0.6) score = 6;
-        else score = 99; // Skip dissonant intervals at low tension
-        
-        if (score < bestConsonance) {
-            bestConsonance = score;
-            secondPc = pc;
-        }
-    }
-    
-    // Last resort: just use the 7th or 3rd (guaranteed consonant with chord)
-    if (secondPc < 0 || bestConsonance > 5) {
-        secondPc = (seventh >= 0 && seventh != topPc) ? seventh : third;
-    }
-    
-    if (secondPc >= 0) {
-        // Place second voice 3-9 semitones below top (sweet spot for dyads)
-        secondMidi = rh.topNoteMidi - 3;
-        while (normalizePc(secondMidi) != secondPc && secondMidi > rh.topNoteMidi - 10) {
-            secondMidi--;
-        }
-        
-        // Verify actual interval is consonant before adding
-        int actualInterval = rh.topNoteMidi - secondMidi;
-        bool intervalOk = (actualInterval >= 3 && actualInterval <= 9) ||
-                          (actualInterval == 10 && tensionLevel > 0.5);
-        
-        if (intervalOk && secondMidi >= c.rhLo) {
-            rh.midiNotes.push_back(secondMidi);
-        }
-    }
-    
-    rh.midiNotes.push_back(rh.topNoteMidi);
-    std::sort(rh.midiNotes.begin(), rh.midiNotes.end());
-    
-    // Determine ontology key
-    if (topPc == ninth || topPc == thirteenth) {
-        rh.isColorTone = true;
-        rh.ontologyKey = (rh.midiNotes.size() == 2) ? "piano_rh_dyad_color" : "piano_rh_single_color";
-    } else {
-        rh.isColorTone = false;
-        rh.ontologyKey = (rh.midiNotes.size() == 2) ? "piano_rh_dyad_guide" : "piano_rh_single_guide";
-    }
-    
-    return rh;
-}
-
-// =============================================================================
-// UPPER STRUCTURE TRIADS (UST) - Bill Evans Signature Sound
-// =============================================================================
-// A UST is a simple major or minor triad played in the RH that creates
-// sophisticated extensions over the LH chord. The magic is that simple
-// triads produce complex harmonic colors.
-//
-// Key relationships:
-//   Dominant 7:  D/C7 → 9-#11-13 (lydian dominant color)
-//                Eb/C7 → b9-11-b13 (altered dominant)
-//                F#/C7 → #11-7-b9 (tritone sub color)
-//   Minor 7:     F/Dm7 → b3-5-b7 (reinforces minor quality)
-//                Eb/Dm7 → b9-11-b13 (phrygian color)
-//   Major 7:     D/Cmaj7 → 9-#11-13 (lydian color)
-//                E/Cmaj7 → 3-#5-7 (augmented color)
-// =============================================================================
-
-QVector<JazzBalladPianoPlanner::UpperStructureTriad> JazzBalladPianoPlanner::getUpperStructureTriads(
-    const music::ChordSymbol& chord) const {
-    
-    QVector<UpperStructureTriad> triads;
-    
-    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return triads;
-    
-    const int root = chord.rootPc;
-    const bool isDominant = (chord.quality == music::ChordQuality::Dominant);
-    const bool isMajor = (chord.quality == music::ChordQuality::Major);
-    const bool isMinor = (chord.quality == music::ChordQuality::Minor);
-    const bool isAlt = chord.alt && isDominant;
-    
-    // ==========================================================================
-    // DOMINANT 7TH CHORDS - Most UST options (the jazz workhorse)
-    // ==========================================================================
-    if (isDominant) {
-        if (isAlt) {
-            // Altered dominant: prefer tense USTs
-            // bII major (half step up) → b9, 3, b13
-            triads.push_back({normalizePc(root + 1), true, 0.7, "b9-3-b13"});
-            // bVI major (minor 6th up) → b9, #11, b13
-            triads.push_back({normalizePc(root + 8), true, 0.8, "b9-#11-b13"});
-            // #IV major (tritone) → #11, 7, b9
-            triads.push_back({normalizePc(root + 6), true, 0.6, "#11-7-b9"});
-        } else {
-            // Standard dominant - range of colors from safe to tense
-            
-            // II major (whole step up) → 9-#11-13 (lydian dominant - BEAUTIFUL)
-            triads.push_back({normalizePc(root + 2), true, 0.3, "9-#11-13"});
-            
-            // bVII major (whole step down) → 7-9-11 (mixolydian - safe)
-            triads.push_back({normalizePc(root + 10), true, 0.2, "b7-9-11"});
-            
-            // VI major (major 6th up) → 13-#9-#11 (bright tension)
-            triads.push_back({normalizePc(root + 9), true, 0.5, "13-#9-#11"});
-            
-            // bIII major (minor 3rd up) → #9-#11-13 (more tension)
-            triads.push_back({normalizePc(root + 3), true, 0.6, "#9-#11-13"});
-            
-            // #IV major (tritone) → #11-7-b9 (tritone sub hint)
-            triads.push_back({normalizePc(root + 6), true, 0.7, "#11-7-b9"});
-        }
-    }
-    
-    // ==========================================================================
-    // MINOR 7TH CHORDS
-    // ==========================================================================
-    else if (isMinor) {
-        // bIII major (minor 3rd up) → b3-5-b7 (reinforces minor - SAFE)
-        triads.push_back({normalizePc(root + 3), true, 0.1, "b3-5-b7"});
-        
-        // IV major (perfect 4th up) → 11-13-9 (dorian color - beautiful)
-        triads.push_back({normalizePc(root + 5), true, 0.3, "11-13-9"});
-        
-        // bVII major (minor 7th up) → b7-9-11 (safe extension)
-        triads.push_back({normalizePc(root + 10), true, 0.2, "b7-9-11"});
-        
-        // II minor (whole step up) → 9-11-13 (dorian 9-11-13)
-        triads.push_back({normalizePc(root + 2), false, 0.4, "9-11-13"});
-    }
-    
-    // ==========================================================================
-    // MAJOR 7TH CHORDS
-    // ==========================================================================
-    else if (isMajor) {
-        // II major (whole step up) → 9-#11-13 (lydian color - CLASSIC)
-        triads.push_back({normalizePc(root + 2), true, 0.3, "9-#11-13"});
-        
-        // V major (perfect 5th up) → 5-7-9 (simple, safe extension)
-        triads.push_back({normalizePc(root + 7), true, 0.1, "5-7-9"});
-        
-        // III minor (major 3rd up) → 3-5-7 (reinforces maj7 - SAFE)
-        triads.push_back({normalizePc(root + 4), false, 0.1, "3-5-7"});
-        
-        // VII minor (major 7th up) → 7-9-#11 (lydian hint)
-        triads.push_back({normalizePc(root + 11), false, 0.4, "7-9-#11"});
-    }
-    
-    // ==========================================================================
-    // HALF-DIMINISHED / DIMINISHED
-    // ==========================================================================
-    else if (chord.quality == music::ChordQuality::HalfDiminished) {
-        // bIII major → b3-5-b7 (locrian natural 9)
-        triads.push_back({normalizePc(root + 3), true, 0.2, "b3-5-b7"});
-        
-        // bVI major → b9-11-b13 (phrygian color)
-        triads.push_back({normalizePc(root + 8), true, 0.5, "b9-11-b13"});
-    }
-    
-    // Sort by tension level (safest first)
-    std::sort(triads.begin(), triads.end(), 
-              [](const UpperStructureTriad& a, const UpperStructureTriad& b) {
-                  return a.tensionLevel < b.tensionLevel;
-              });
-    
-    return triads;
-}
-
-JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::buildUstVoicing(
-    const Context& c, const UpperStructureTriad& ust) const {
-    
-    RhMelodic rh;
-    
-    // Build the triad: root, 3rd, 5th of the UST
-    int ustRoot = ust.rootPc;
-    int ustThird = normalizePc(ustRoot + (ust.isMajor ? 4 : 3)); // major 3rd or minor 3rd
-    int ustFifth = normalizePc(ustRoot + 7); // perfect 5th
-    
-    // Target the top voice for melodic continuity
-    int lastTop = (m_state.lastRhTopMidi > 0) ? m_state.lastRhTopMidi : 76;
-    
-    // Find best voicing of the triad in the RH register
-    // Prefer inversion that puts a note near the last top note
-    QVector<QVector<int>> inversions = {
-        {ustRoot, ustThird, ustFifth},  // Root position
-        {ustThird, ustFifth, ustRoot},  // 1st inversion
-        {ustFifth, ustRoot, ustThird}   // 2nd inversion
-    };
-    
-    int bestInversion = 0;
-    int bestDist = 999;
-    int bestTopMidi = -1;
-    
-    for (int inv = 0; inv < inversions.size(); ++inv) {
-        int topPc = inversions[inv].last();
-        
-        // Find MIDI note for top voice
-        for (int oct = 5; oct <= 7; ++oct) {
-            int topMidi = topPc + 12 * oct;
-            if (topMidi < c.rhLo || topMidi > c.rhHi) continue;
-            
-            int dist = qAbs(topMidi - lastTop);
-            // Prefer stepwise motion (1-4 semitones)
-            if (dist >= 1 && dist <= 4 && dist < bestDist) {
-                bestDist = dist;
-                bestInversion = inv;
-                bestTopMidi = topMidi;
-            } else if (dist < bestDist && dist <= 7) {
-                bestDist = dist;
-                bestInversion = inv;
-                bestTopMidi = topMidi;
-            }
-        }
-    }
-    
-    if (bestTopMidi < 0) {
-        // Fallback: just pick middle register
-        bestTopMidi = 76;
-        bestInversion = 0;
-    }
-    
-    // Build the MIDI notes from bottom to top
-    const QVector<int>& pcs = inversions[bestInversion];
-    int topMidi = bestTopMidi;
-    int topPc = pcs.last();
-    
-    // Find top note first
-    while (normalizePc(topMidi) != topPc && topMidi >= c.rhLo) {
-        topMidi--;
-    }
-    topMidi = bestTopMidi; // Use the calculated top
-    
-    // Stack from top down (closest voicing)
-    QVector<int> midiNotes;
-    midiNotes.push_back(topMidi);
-    
-    // Middle note
-    int middlePc = pcs[1];
-    int middleMidi = topMidi - 3;
-    while (normalizePc(middleMidi) != middlePc && middleMidi > topMidi - 12) {
-        middleMidi--;
-    }
-    if (middleMidi >= c.rhLo) {
-        midiNotes.insert(midiNotes.begin(), middleMidi);
-    }
-    
-    // Bottom note
-    int bottomPc = pcs[0];
-    int bottomMidi = (midiNotes.size() > 1) ? midiNotes.first() - 3 : topMidi - 6;
-    while (normalizePc(bottomMidi) != bottomPc && bottomMidi > topMidi - 14) {
-        bottomMidi--;
-    }
-    if (bottomMidi >= c.rhLo && (midiNotes.isEmpty() || bottomMidi < midiNotes.first())) {
-        midiNotes.insert(midiNotes.begin(), bottomMidi);
-    }
-    
-    std::sort(midiNotes.begin(), midiNotes.end());
-    
-    rh.midiNotes = midiNotes;
-    rh.topNoteMidi = midiNotes.isEmpty() ? -1 : midiNotes.last();
-    rh.melodicDirection = (rh.topNoteMidi > lastTop) ? 1 : ((rh.topNoteMidi < lastTop) ? -1 : 0);
-    
-    // Map UST to ontology key based on interval from chord root
-    // e.g., rootPc offset 2 → II, 3 → bIII, 4 → III, etc.
-    const int interval = normalizePc(ust.rootPc - c.chord.rootPc);
-    QString romanNumeral;
-    switch (interval) {
-        case 0:  romanNumeral = "I"; break;
-        case 1:  romanNumeral = "bII"; break;
-        case 2:  romanNumeral = "II"; break;
-        case 3:  romanNumeral = "bIII"; break;
-        case 4:  romanNumeral = "III"; break;
-        case 5:  romanNumeral = "IV"; break;
-        case 6:  romanNumeral = "bV"; break;
-        case 7:  romanNumeral = "V"; break;
-        case 8:  romanNumeral = "bVI"; break;
-        case 9:  romanNumeral = "VI"; break;
-        case 10: romanNumeral = "bVII"; break;
-        case 11: romanNumeral = "VII"; break;
-        default: romanNumeral = "I"; break;
-    }
-    // Use ontology key format: piano_ust_bIII or piano_ust_ii_min
-    if (ust.isMajor) {
-        rh.ontologyKey = QString("piano_ust_%1").arg(romanNumeral);
-    } else {
-        rh.ontologyKey = QString("piano_ust_%1_min").arg(romanNumeral.toLower());
-    }
-    rh.isColorTone = true;
-    
-    return rh;
-}
+// NOTE: Upper Structure Triads (UST) generation has been moved to RhVoicingGenerator.
+// The functions getUpperStructureTriads() and buildUstVoicing() are now in RhVoicingGenerator.
 
 // =============================================================================
 // MELODIC FRAGMENTS (Lick Library)
@@ -5189,6 +4564,54 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         
         int bestTarget = melodyTarget.midiNote;
         
+        // ================================================================
+        // MELODIC FRAGMENTS: Approach notes, enclosures, arpeggios
+        // These add jazz vocabulary - notes that lead INTO the target
+        // ================================================================
+        QVector<FragmentNote> fragmentNotes;
+        bool usedFragment = false;
+        
+        if (m_enableMelodicFragments && !userActive) {
+            // Probability of using a fragment depends on:
+            // - Creativity weight (higher = more fragments)
+            // - Phrase position (more at phrase peaks)
+            // - NOT on chord changes (keep those clean)
+            const double fragmentProb = 0.15 + (adjusted.weights.creativity * 0.25) + 
+                                        (curArcPhase == 1 ? 0.15 : 0.0);
+            const bool wantsFragment = !adjusted.chordIsNew && 
+                                       ((rhHash % 100) < int(fragmentProb * 100));
+            
+            if (wantsFragment) {
+                // Get available fragments for this context
+                const int targetPc = normalizePc(bestTarget);
+                const auto fragments = getMelodicFragments(adjusted, targetPc);
+                
+                if (!fragments.isEmpty()) {
+                    // Select a fragment based on tension level
+                    // Lower tension = simpler fragments (approaches)
+                    // Higher tension = more complex (enclosures, runs)
+                    int fragIndex = 0;
+                    const double tensionLevel = adjusted.weights.tension * 0.6 + adjusted.energy * 0.4;
+                    
+                    // Find fragments matching our tension level
+                    QVector<int> matchingIndices;
+                    for (int i = 0; i < fragments.size(); ++i) {
+                        if (fragments[i].tensionLevel <= tensionLevel + 0.2) {
+                            matchingIndices.push_back(i);
+                        }
+                    }
+                    
+                    if (!matchingIndices.isEmpty()) {
+                        fragIndex = matchingIndices[(rhHash / 7) % matchingIndices.size()];
+                        
+                        // Apply the fragment
+                        fragmentNotes = applyMelodicFragment(adjusted, fragments[fragIndex], bestTarget, 0);
+                        usedFragment = !fragmentNotes.isEmpty();
+                    }
+                }
+            }
+        }
+        
         // Helper: Check if RH note would clash with LH voicing
         auto wouldClashWithLh = [&](int rhMidi) -> bool {
             int rhPc = normalizePc(rhMidi);
@@ -5407,6 +4830,50 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             const virtuoso::groove::Rational rhDurWhole(qint64(rhDurBeats * 1000), 4000);
             
             // ================================================================
+            // MELODIC FRAGMENTS: Lead-in notes before the main voicing
+            // These add jazz vocabulary (approach notes, enclosures, runs)
+            // ================================================================
+            if (usedFragment && !fragmentNotes.isEmpty()) {
+                // Calculate fragment timing (notes lead into the beat)
+                int fragOffsetMs = 0;
+                
+                // Total duration of all fragment notes (to start early enough)
+                double totalFragDurBeats = 0.0;
+                for (const auto& fn : fragmentNotes) {
+                    totalFragDurBeats += fn.durationMult * 0.25;  // Base is 1/16 note
+                }
+                const int totalFragMs = int((totalFragDurBeats * 60000.0) / adjusted.bpm);
+                fragOffsetMs = -totalFragMs;
+                
+                for (int fi = 0; fi < fragmentNotes.size(); ++fi) {
+                    const auto& fn = fragmentNotes[fi];
+                    
+                    virtuoso::groove::GridPos fragPos = rhPos;
+                    fragPos = applyTimingOffset(fragPos, fragOffsetMs, adjusted.bpm, ts);
+                    
+                    virtuoso::engine::AgentIntentNote fragNote;
+                    fragNote.agent = "Piano";
+                    fragNote.channel = midiChannel;
+                    fragNote.note = fn.midiNote;
+                    fragNote.baseVelocity = qBound(30, rhVel + fn.velocityDelta, 90);
+                    fragNote.startPos = fragPos;
+                    
+                    // Duration from fragment pattern
+                    const double fragDurBeats = fn.durationMult * 0.25;  // Base 1/16 note
+                    fragNote.durationWhole = virtuoso::groove::Rational(qint64(fragDurBeats * 1000), 4000);
+                    fragNote.structural = false;
+                    fragNote.chord_context = adjusted.chordText;
+                    fragNote.voicing_type = "piano_melodic_fragment";
+                    fragNote.logic_tag = "RH_fragment";
+                    
+                    plan.notes.push_back(fragNote);
+                    
+                    // Advance timing for next fragment note
+                    fragOffsetMs += int((fragDurBeats * 60000.0) / adjusted.bpm);
+                }
+            }
+            
+            // ================================================================
             // ORNAMENTS: Grace notes, turns, appoggiaturas (~12% probability)
             // Add expressive ornaments before the main voicing on special moments
             // ================================================================
@@ -5452,24 +4919,79 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 }
             }
             
-            // Add all notes of voicing
-            for (int noteIdx = 0; noteIdx < rhMidiNotes.size(); ++noteIdx) {
-                int midi = rhMidiNotes[noteIdx];
-                int contouredVel = contourVelocity(rhVel, noteIdx, rhMidiNotes.size(), true);
+            // ================================================================
+            // TRIPLET PATTERNS: Rhythmic variety within a single hit
+            // Occasionally play the chord as a triplet for rhythmic interest
+            // ================================================================
+            const bool considerTriplet = m_enableTripletPatterns && 
+                                         !userActive && 
+                                         !usedFragment &&  // Don't combine with fragments
+                                         !adjusted.chordIsNew &&  // Keep chord changes clean
+                                         c.energy > 0.35;
+            
+            // Probability based on creativity and beat position
+            const double tripletProb = 0.08 + (adjusted.weights.creativity * 0.12);
+            const quint32 tripHash = virtuoso::util::StableHash::mix(rhHash, 0xBEAD);
+            const bool useTriplet = considerTriplet && ((tripHash % 100) < int(tripletProb * 100));
+            
+            if (useTriplet && rhMidiNotes.size() > 1) {
+                // Generate triplet: play the chord 3 times with triplet rhythm
+                const auto tripletPattern = generateTripletPattern(adjusted, 3);  // Full triplet
                 
-                virtuoso::engine::AgentIntentNote note;
-                note.agent = "Piano";
-                note.channel = midiChannel;
-                note.note = midi;
-                note.baseVelocity = contouredVel;
-                note.startPos = rhPos;
-                note.durationWhole = rhDurWhole;
-                note.structural = adjusted.chordIsNew;
-                note.chord_context = adjusted.chordText;
-                note.voicing_type = voicingName;
-                note.logic_tag = QString("RH_%1").arg(hitIntent);
+                const double beatDurationMs = 60000.0 / adjusted.bpm;
                 
-                plan.notes.push_back(note);
+                for (int tripIdx = 0; tripIdx < tripletPattern.size(); ++tripIdx) {
+                    const auto& [subdivision, velDelta, isAccent] = tripletPattern[tripIdx];
+                    
+                    // Calculate triplet position within the beat
+                    const double tripletOffsetMs = (subdivision * beatDurationMs) / 4.0;
+                    virtuoso::groove::GridPos tripPos = rhPos;
+                    tripPos = applyTimingOffset(tripPos, int(tripletOffsetMs), adjusted.bpm, ts);
+                    
+                    // Shorter duration for triplet notes
+                    const double tripDurBeats = rhDurBeats * 0.4;
+                    const virtuoso::groove::Rational tripDur(qint64(tripDurBeats * 1000), 4000);
+                    
+                    for (int noteIdx = 0; noteIdx < rhMidiNotes.size(); ++noteIdx) {
+                        int midi = rhMidiNotes[noteIdx];
+                        int tripVel = qBound(30, rhVel + velDelta + (isAccent ? 5 : -3), 90);
+                        tripVel = contourVelocity(tripVel, noteIdx, rhMidiNotes.size(), true);
+                        
+                        virtuoso::engine::AgentIntentNote note;
+                        note.agent = "Piano";
+                        note.channel = midiChannel;
+                        note.note = midi;
+                        note.baseVelocity = tripVel;
+                        note.startPos = tripPos;
+                        note.durationWhole = tripDur;
+                        note.structural = (tripIdx == 0 && adjusted.chordIsNew);
+                        note.chord_context = adjusted.chordText;
+                        note.voicing_type = voicingName;
+                        note.logic_tag = QString("RH_triplet_%1").arg(tripIdx + 1);
+                        
+                        plan.notes.push_back(note);
+                    }
+                }
+            } else {
+                // Standard: Add all notes of voicing
+                for (int noteIdx = 0; noteIdx < rhMidiNotes.size(); ++noteIdx) {
+                    int midi = rhMidiNotes[noteIdx];
+                    int contouredVel = contourVelocity(rhVel, noteIdx, rhMidiNotes.size(), true);
+                    
+                    virtuoso::engine::AgentIntentNote note;
+                    note.agent = "Piano";
+                    note.channel = midiChannel;
+                    note.note = midi;
+                    note.baseVelocity = contouredVel;
+                    note.startPos = rhPos;
+                    note.durationWhole = rhDurWhole;
+                    note.structural = adjusted.chordIsNew;
+                    note.chord_context = adjusted.chordText;
+                    note.voicing_type = voicingName;
+                    note.logic_tag = QString("RH_%1").arg(hitIntent);
+                    
+                    plan.notes.push_back(note);
+                }
             }
             
             // Update state (both planner and generator)

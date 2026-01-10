@@ -267,13 +267,7 @@ private:
         int topNoteMidi = -1;       // realized top note MIDI
     };
 
-    // Generate candidate voicings for a chord
-    QVector<Voicing> generateVoicingCandidates(const Context& c, VoicingDensity density) const;
-
-    // Context-aware density: considers phrase position, energy, cadence
-    VoicingDensity computeContextDensity(const Context& c) const;
-    
-    // ========== NEW: Separate LH/RH Bill Evans Style Generation ==========
+    // ========== Separate LH/RH Bill Evans Style Generation ==========
     
     // Left Hand: Rootless voicing (Type A or Type B)
     // Type A: 3-5-7-9 (when chord root is in lower half of cycle)
@@ -300,19 +294,6 @@ private:
     // direction: +1 = move up, -1 = move down, 0 = automatic
     LhVoicing applyInnerVoiceMovement(const LhVoicing& base, const Context& c, int beatInBar) const;
     
-    // Right Hand: Melodic dyads/triads for color and movement
-    // Based on chord extensions (9, 11, 13) and guide tones
-    // Creates stepwise melodic motion in top voice
-    // Returns 2-3 notes in register 69-88
-    struct RhMelodic {
-        QVector<int> midiNotes;
-        int topNoteMidi = -1;        // The melodic line note
-        int melodicDirection = 0;    // -1=down, 0=hold, +1=up
-        QString ontologyKey;         // e.g., "RH_Dyad_37", "RH_Triad_UST"
-        bool isColorTone = false;    // Uses extensions (9/11/13)?
-    };
-    RhMelodic generateRhMelodicVoicing(const Context& c, int targetTopMidi) const;
-    
     // ========== UPPER STRUCTURE TRIADS (Bill Evans signature) ==========
     // A simple triad played in the RH that creates sophisticated extensions
     // Examples:
@@ -326,12 +307,6 @@ private:
         double tensionLevel;  // How much tension this UST adds (0.0 = safe, 1.0 = very tense)
         QString colorDescription; // e.g., "9-#11-13", "b9-#11-b13"
     };
-    
-    // Get available UST options for a chord (returns candidates sorted by consonance)
-    QVector<UpperStructureTriad> getUpperStructureTriads(const music::ChordSymbol& chord) const;
-    
-    // Build a UST voicing in the RH register
-    RhMelodic buildUstVoicing(const Context& c, const UpperStructureTriad& ust) const;
     
     // ========== MELODIC FRAGMENTS (Lick Library) ==========
     // Pre-composed melodic gestures that sound pianistic and intentional.
@@ -454,10 +429,6 @@ private:
                                         const music::ChordSymbol& chord,
                                         int bassMidi, int ceiling) const;
 
-    // Ensure top note follows melodic principles (stepwise preferred, avoid large leaps)
-    int selectMelodicTopNote(const QVector<int>& candidatePcs, int rhLo, int rhHi,
-                              int lastTopMidi, const Context& c) const;
-
     // Voice-leading cost (comprehensive: motion, crossing, parallel, soprano)
     double voiceLeadingCost(const QVector<int>& prev, const QVector<int>& next) const;
 
@@ -473,9 +444,6 @@ private:
     static int thirdInterval(music::ChordQuality q);
     static int fifthInterval(music::ChordQuality q);
     static int seventhInterval(const music::ChordSymbol& c);
-
-    // Determine what chord degree a pitch class represents
-    int getDegreeForPc(int pc, const music::ChordSymbol& chord) const;
 
     // Nearest MIDI note for a pitch class within bounds
     static int nearestMidiForPc(int pc, int around, int lo, int hi);
@@ -783,6 +751,18 @@ private:
     // Synchronize generator state with planner state
     void syncGeneratorState() const;
     void updateStateFromGenerators();
+    
+    // ============= Feature Flags (for experimentation) =============
+    // Set to false to disable a feature without removing code
+    bool m_enableMelodicFragments = true;   // Approach notes, enclosures, turns, arpeggios
+    bool m_enableTripletPatterns = true;    // Triplet and hemiola rhythmic patterns
+    
+public:
+    // Feature flag setters for runtime control
+    void setEnableMelodicFragments(bool enable) { m_enableMelodicFragments = enable; }
+    void setEnableTripletPatterns(bool enable) { m_enableTripletPatterns = enable; }
+    bool melodicFragmentsEnabled() const { return m_enableMelodicFragments; }
+    bool tripletPatternsEnabled() const { return m_enableTripletPatterns; }
 };
 
 } // namespace playback

@@ -122,6 +122,7 @@ public:
         // The core innovation: RH plays according to a PHRASE-LEVEL pattern,
         // not beat-by-beat decisions. This creates musical, intentional phrasing.
         int phrasePatternIndex = -1;        // Which pattern we're using (-1 = choose new)
+        int lastPhrasePatternIndex = -1;    // Previous pattern (for variety tracking)
         int phrasePatternBar = 0;           // Our position in the phrase pattern (bar)
         int phrasePatternBeat = 0;          // Our position in the phrase pattern (beat)
         int phrasePatternHitIndex = 0;      // Which hit in the pattern we're on
@@ -754,15 +755,27 @@ private:
     
     // ============= Feature Flags (for experimentation) =============
     // Set to false to disable a feature without removing code
-    bool m_enableMelodicFragments = true;   // Approach notes, enclosures, turns, arpeggios
-    bool m_enableTripletPatterns = true;    // Triplet and hemiola rhythmic patterns
+    bool m_enableMelodicFragments = false;   // Approach notes, enclosures, turns, arpeggios - DISABLED BY DEFAULT
+    bool m_enableTripletPatterns = false;    // Triplet and hemiola rhythmic patterns - DISABLED BY DEFAULT
+    bool m_enableRightHand = false;          // ALL RH playing - DISABLED BY DEFAULT
+    bool m_enableLhVariations = false;       // LH variations (inversions, drop-2) - DISABLED BY DEFAULT
+    bool m_enableLhInnerVoice = false;       // LH inner voice movement - DISABLED BY DEFAULT
+    bool m_enableLhSyncopation = false;      // LH syncopation/anticipation - DISABLED BY DEFAULT
     
 public:
     // Feature flag setters for runtime control
     void setEnableMelodicFragments(bool enable) { m_enableMelodicFragments = enable; }
     void setEnableTripletPatterns(bool enable) { m_enableTripletPatterns = enable; }
+    void setEnableRightHand(bool enable) { m_enableRightHand = enable; }
+    void setEnableLhVariations(bool enable) { m_enableLhVariations = enable; }
+    void setEnableLhInnerVoice(bool enable) { m_enableLhInnerVoice = enable; }
+    void setEnableLhSyncopation(bool enable) { m_enableLhSyncopation = enable; }
     bool melodicFragmentsEnabled() const { return m_enableMelodicFragments; }
     bool tripletPatternsEnabled() const { return m_enableTripletPatterns; }
+    bool rightHandEnabled() const { return m_enableRightHand; }
+    bool lhVariationsEnabled() const { return m_enableLhVariations; }
+    bool lhInnerVoiceEnabled() const { return m_enableLhInnerVoice; }
+    bool lhSyncopationEnabled() const { return m_enableLhSyncopation; }
 };
 
 } // namespace playback

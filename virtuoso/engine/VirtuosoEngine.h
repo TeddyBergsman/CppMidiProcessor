@@ -58,7 +58,7 @@ public:
     void setInstrumentGrooveProfile(const QString& agent, const groove::InstrumentGrooveProfile& p);
     void setRealtimeVelocityScale(double s);
     void sendCcNow(int channel, int cc, int value);
-    
+
     // PERF: Enable/disable JSON emission. When false, toJsonString() is skipped entirely.
     // Default is false (disabled) for performance. Enable for verbose debugging.
     void setEmitTheoryJson(bool enable) { m_emitTheoryJson = enable; }

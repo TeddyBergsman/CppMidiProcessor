@@ -552,7 +552,7 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
             }
             emit debugEnergy(currentEnergy, m_debugEnergyAuto);
         }
-        
+
         // Emit weights v2 (for UI slider animation / debugging).
         {
             const int beatsPerBar = qMax(1, (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4);
@@ -621,7 +621,7 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
         if (m_usePreCache && m_preCache.isValid()) {
             scheduleStepFromCache(m_nextScheduledStep);
         } else {
-            scheduleStep(m_nextScheduledStep, seqLen);
+        scheduleStep(m_nextScheduledStep, seqLen);
         }
         m_nextScheduledStep++;
         stepsScheduledThisTick++;

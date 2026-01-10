@@ -65,6 +65,21 @@ public:
     /// Generate a rootless voicing (Bill Evans Type A or Type B)
     LhVoicing generateRootless(const Context& c) const;
     
+    /// Generate rootless voicing starting from a specific degree (3 or 7)
+    /// Used for voice-leading optimization
+    LhVoicing generateRootlessFromDegree(const Context& c, int startDegree) const;
+    
+    /// Generate both Type A (3rd-first) and Type B (7th-first) voicings,
+    /// return the one with optimal voice-leading from previous chord
+    LhVoicing generateRootlessOptimal(const Context& c) const;
+    
+    /// Generate voicing with a target for the top note (soprano line)
+    /// targetTopMidi: -1 for automatic, or specific MIDI note to aim for
+    LhVoicing generateRootlessWithTopTarget(const Context& c, int targetTopMidi) const;
+    
+    /// Reset voice-leading state to allow register shifts
+    void resetVoiceLeadingState() { m_state.lastLhMidi.clear(); }
+    
     /// Generate a quartal voicing (McCoy Tyner stacked 4ths)
     LhVoicing generateQuartal(const Context& c) const;
     

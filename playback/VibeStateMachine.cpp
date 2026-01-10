@@ -255,8 +255,8 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
             tauMs = qMax(1, m_s.energyFallTauMs);
             
             // Extra stickiness when in elevated states
-            if (m_vibe == Vibe::Climax) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsClimax));
-            if (m_vibe == Vibe::Build) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsBuild));
+        if (m_vibe == Vibe::Climax) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsClimax));
+        if (m_vibe == Vibe::Build) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsBuild));
             
             // BUT: Soft playing ACCELERATES decay (shorter tau = faster fall)
             // Low CC2 while playing = "bring it down please"

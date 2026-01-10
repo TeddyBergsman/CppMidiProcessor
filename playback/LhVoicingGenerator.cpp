@@ -191,6 +191,173 @@ LhVoicingGenerator::LhVoicing LhVoicingGenerator::generateRootless(const Context
 }
 
 // =============================================================================
+// ROOTLESS FROM SPECIFIC DEGREE (for voice-leading optimization)
+// =============================================================================
+
+LhVoicingGenerator::LhVoicing LhVoicingGenerator::generateRootlessFromDegree(const Context& c, int startDegree) const {
+    LhVoicing lh;
+    const auto& chord = c.chord;
+    
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return lh;
+    
+    // Get all available pitch classes
+    const int third = pcForDegree(chord, 3);
+    const int fifth = pcForDegree(chord, 5);
+    const int seventh = pcForDegree(chord, 7);
+    const int sixth = pcForDegree(chord, 6);
+    
+    const bool is6thChord = (chord.extension == 6 && chord.seventh == music::SeventhQuality::None);
+    const int topNote = is6thChord ? sixth : seventh;
+    
+    // Build pitch class order based on startDegree
+    QVector<int> targetPcs;
+    
+    if (startDegree == 7 && topNote >= 0) {
+        // Type B style: 7-3-5 (or 6-3-5 for 6th chords)
+        targetPcs.push_back(topNote);
+        if (third >= 0) targetPcs.push_back(third);
+        if (fifth >= 0 && fifth != topNote && fifth != third) targetPcs.push_back(fifth);
+        lh.isTypeA = false;
+        lh.ontologyKey = "piano_rootless_b";
+    } else {
+        // Type A style: 3-5-7 (or 3-5-6 for 6th chords)
+        if (third >= 0) targetPcs.push_back(third);
+        if (fifth >= 0 && fifth != third) targetPcs.push_back(fifth);
+        if (topNote >= 0 && topNote != fifth) targetPcs.push_back(topNote);
+        lh.isTypeA = true;
+        lh.ontologyKey = "piano_rootless_a";
+    }
+    
+    if (targetPcs.size() < 2) {
+        // Fallback to shell (3-7)
+        targetPcs.clear();
+        if (third >= 0) targetPcs.push_back(third);
+        if (topNote >= 0) targetPcs.push_back(topNote);
+        lh.ontologyKey = "piano_guide_3_7";
+    }
+    
+    if (targetPcs.isEmpty()) return lh;
+    
+    // Realize to MIDI with voice-leading
+    lh.midiNotes = realizePcsToMidi(targetPcs, c.lhLo, c.lhHi, m_state.lastLhMidi);
+    lh.cost = voiceLeadingCost(m_state.lastLhMidi, lh.midiNotes);
+    
+    return lh;
+}
+
+// =============================================================================
+// OPTIMAL ROOTLESS (Bill Evans voice-leading)
+// Generates both Type A and Type B, picks the one with lower voice-leading cost
+// =============================================================================
+
+LhVoicingGenerator::LhVoicing LhVoicingGenerator::generateRootlessOptimal(const Context& c) const {
+    // Generate both voicing types
+    LhVoicing typeA = generateRootlessFromDegree(c, 3);  // Start from 3rd
+    LhVoicing typeB = generateRootlessFromDegree(c, 7);  // Start from 7th
+    
+    // If either is empty, return the other
+    if (typeA.midiNotes.isEmpty()) return typeB;
+    if (typeB.midiNotes.isEmpty()) return typeA;
+    
+    // Pick the one with lower voice-leading cost
+    // This is the essence of Bill Evans' smooth voice-leading
+    if (typeB.cost < typeA.cost) {
+        return typeB;
+    }
+    return typeA;
+}
+
+// =============================================================================
+// ROOTLESS WITH TOP TARGET (Soprano Line Control)
+// Generate voicing that aims for a specific top note while maintaining harmony
+// =============================================================================
+
+LhVoicingGenerator::LhVoicing LhVoicingGenerator::generateRootlessWithTopTarget(
+    const Context& c, int targetTopMidi) const {
+    
+    LhVoicing lh;
+    const auto& chord = c.chord;
+    
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return lh;
+    
+    // Get available pitch classes for voicing
+    const int third = pcForDegree(chord, 3);
+    const int fifth = pcForDegree(chord, 5);
+    const int seventh = pcForDegree(chord, 7);
+    const int sixth = pcForDegree(chord, 6);
+    
+    const bool is6thChord = (chord.extension == 6 && chord.seventh == music::SeventhQuality::None);
+    const int topNote = is6thChord ? sixth : seventh;
+    
+    // Collect chord tones we can use
+    QVector<int> availablePcs;
+    if (third >= 0) availablePcs.push_back(third);
+    if (fifth >= 0) availablePcs.push_back(fifth);
+    if (topNote >= 0) availablePcs.push_back(topNote);
+    
+    if (availablePcs.size() < 2) return lh;
+    
+    // If we have a target top, find the chord tone closest to it
+    int targetPc = -1;
+    if (targetTopMidi > 0) {
+        int targetNotePc = targetTopMidi % 12;
+        int minDist = 999;
+        for (int pc : availablePcs) {
+            int dist = qAbs(pc - targetNotePc);
+            if (dist > 6) dist = 12 - dist;
+            if (dist < minDist) {
+                minDist = dist;
+                targetPc = pc;
+            }
+        }
+    }
+    
+    // Build voicing with target on top
+    QVector<int> orderedPcs;
+    for (int pc : availablePcs) {
+        if (pc != targetPc) {
+            orderedPcs.push_back(pc);
+        }
+    }
+    if (targetPc >= 0) {
+        orderedPcs.push_back(targetPc);  // Target goes on top
+    }
+    
+    // Realize to MIDI, respecting register bounds
+    // Use the register center as the target, not previous voicing
+    int regCenter = (c.lhLo + c.lhHi) / 2;
+    
+    lh.midiNotes = voicing_utils::realizePcsToMidi(orderedPcs, c.lhLo, c.lhHi, {});
+    
+    // Adjust to get target on top if specified
+    if (targetTopMidi > 0 && !lh.midiNotes.isEmpty()) {
+        int currentTop = lh.midiNotes.last();
+        int currentTopPc = currentTop % 12;
+        int targetPcMod = targetTopMidi % 12;
+        
+        // If the top note matches the target pitch class, adjust octave if needed
+        if (currentTopPc == targetPcMod) {
+            int octaveDiff = (targetTopMidi / 12) - (currentTop / 12);
+            if (octaveDiff != 0) {
+                int shift = octaveDiff * 12;
+                // Check if shift keeps voicing in range
+                int newLow = lh.midiNotes.first() + shift;
+                int newHigh = lh.midiNotes.last() + shift;
+                if (newLow >= c.lhLo && newHigh <= c.lhHi) {
+                    for (int& m : lh.midiNotes) m += shift;
+                }
+            }
+        }
+    }
+    
+    lh.ontologyKey = "piano_rootless_soprano";
+    lh.isTypeA = true;
+    lh.cost = voiceLeadingCost(m_state.lastLhMidi, lh.midiNotes);
+    
+    return lh;
+}
+
+// =============================================================================
 // QUARTAL VOICING (McCoy Tyner style)
 // =============================================================================
 

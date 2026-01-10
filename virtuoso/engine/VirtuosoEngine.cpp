@@ -184,11 +184,11 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
         const QString json = te.toJsonString(true);
         if (hasPlannedListeners) emit plannedTheoryEventJson(json);
         if (hasScheduledListeners) {
-            VirtuosoScheduler::ScheduledEvent tj;
-            tj.dueMs = he.onMs;
-            tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+    VirtuosoScheduler::ScheduledEvent tj;
+    tj.dueMs = he.onMs;
+    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
             tj.theoryJson = json;
-            m_sched.schedule(tj);
+    m_sched.schedule(tj);
         }
     }
 }
@@ -248,11 +248,11 @@ void VirtuosoEngine::scheduleCC(const QString& agent,
         const QString json = te.toJsonString(true);
         if (hasPlannedListeners) emit plannedTheoryEventJson(json);
         if (hasScheduledListeners) {
-            VirtuosoScheduler::ScheduledEvent tj;
-            tj.dueMs = on;
-            tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+    VirtuosoScheduler::ScheduledEvent tj;
+    tj.dueMs = on;
+    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
             tj.theoryJson = json;
-            m_sched.schedule(tj);
+    m_sched.schedule(tj);
         }
     }
 }
@@ -321,11 +321,11 @@ void VirtuosoEngine::scheduleKeySwitch(const QString& agent,
         const QString json = te.toJsonString(true);
         if (hasPlannedListeners) emit plannedTheoryEventJson(json);
         if (hasScheduledListeners) {
-            VirtuosoScheduler::ScheduledEvent tj;
-            tj.dueMs = on;
-            tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+    VirtuosoScheduler::ScheduledEvent tj;
+    tj.dueMs = on;
+    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
             tj.theoryJson = json;
-            m_sched.schedule(tj);
+    m_sched.schedule(tj);
         }
     }
 
@@ -390,11 +390,11 @@ void VirtuosoEngine::scheduleKeySwitchAtMs(const QString& agent,
         const QString json = te.toJsonString(true);
         if (hasPlannedListeners) emit plannedTheoryEventJson(json);
         if (hasScheduledListeners) {
-            VirtuosoScheduler::ScheduledEvent tj;
-            tj.dueMs = onMs;
-            tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+    VirtuosoScheduler::ScheduledEvent tj;
+    tj.dueMs = onMs;
+    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
             tj.theoryJson = json;
-            m_sched.schedule(tj);
+    m_sched.schedule(tj);
         }
     }
 }
@@ -480,11 +480,11 @@ void VirtuosoEngine::scheduleHumanizedIntentNote(const AgentIntentNote& note,
         const QString json = te.toJsonString(true);
         if (hasPlannedListeners) emit plannedTheoryEventJson(json);
         if (hasScheduledListeners) {
-            VirtuosoScheduler::ScheduledEvent tj;
-            tj.dueMs = he.onMs;
-            tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+    VirtuosoScheduler::ScheduledEvent tj;
+    tj.dueMs = he.onMs;
+    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
             tj.theoryJson = json;
-            m_sched.schedule(tj);
+    m_sched.schedule(tj);
         }
     }
 }
@@ -544,11 +544,11 @@ void VirtuosoEngine::scheduleHumanizedNote(const QString& agent,
         const QString json = te.toJsonString(true);
         if (hasPlannedListeners) emit plannedTheoryEventJson(json);
         if (hasScheduledListeners) {
-            VirtuosoScheduler::ScheduledEvent tj;
-            tj.dueMs = he.onMs;
-            tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+    VirtuosoScheduler::ScheduledEvent tj;
+    tj.dueMs = he.onMs;
+    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
             tj.theoryJson = json;
-            m_sched.schedule(tj);
+    m_sched.schedule(tj);
         }
     }
 }

@@ -50,7 +50,7 @@ private:
 
     static QString pcName(int pc);
     static int pcFromIndex(int idx);
-    
+
     // Compatibility helpers for smart filtering
     bool isChordCompatible(const virtuoso::ontology::ChordDef* candidate, 
                            const virtuoso::ontology::ChordDef* current) const;

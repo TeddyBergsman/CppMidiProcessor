@@ -509,9 +509,11 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
 
     chartLayout->addWidget(chartHeader);
     chartLayout->addWidget(m_chartWidget, 1);
+    
     m_chartContainer->setLayout(chartLayout);
 
     // Virtuoso MVP playback engine (drives highlighting + new VirtuosoEngine groove pipeline)
+    // The engine now shows its own popup dialog during pre-planning
     m_virtuosoPlayback = new playback::VirtuosoBalladMvpPlaybackEngine(this);
     connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::currentCellChanged,
             m_chartWidget, &chart::SongChartWidget::setCurrentCellIndex);
@@ -673,16 +675,24 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     
     connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::theoryEventJson,
             this, [this](const QString& json) {
-                // Only show JSON dumps in verbose mode
+                // Debug: log that we received a theory event
+                static int fwdCount = 0;
+                if (fwdCount++ % 50 == 0) {
+                    qDebug() << "NoteMonitorWidget: Forwarding theoryEventJson #" << fwdCount;
+                }
+                
+                // Always forward to external listeners (LibraryWindow, etc.)
+                emit virtuosoTheoryEventJson(json);
+                
+                // Only show JSON dumps in verbose mode (UI performance)
                 const bool isVerbose = m_debugVerbose && m_debugVerbose->isChecked();
-                if (!isVerbose) return; // Skip all JSON in non-verbose mode
+                if (!isVerbose) return;
                 
                 if (!m_virtuosoTheoryLog) return;
                 QString line = json;
                 const QJsonDocument d = QJsonDocument::fromJson(json.toUtf8());
                 if (!d.isNull()) line = QString::fromUtf8(d.toJson(QJsonDocument::Compact));
                 m_virtuosoTheoryLog->append(line);
-                emit virtuosoTheoryEventJson(json);
             });
 
     // Planned stream (immediate upon scheduling): used for 4-bar lookahead UIs.
@@ -1233,6 +1243,21 @@ void NoteMonitorWidget::setVirtuosoAgentEnergyMultiplier(const QString& agent, d
     m_virtuosoPlayback->setAgentEnergyMultiplier(agent, mult01to2);
     // Refresh lookahead immediately so UIs update even if transport is stopped.
     m_virtuosoPlayback->emitLookaheadPlanOnce();
+}
+
+void NoteMonitorWidget::setTheoryEventsEnabled(bool enabled) {
+    if (!m_virtuosoPlayback) {
+        qWarning() << "NoteMonitorWidget::setTheoryEventsEnabled: m_virtuosoPlayback is NULL!";
+        return;
+    }
+    if (!m_virtuosoPlayback->engine()) {
+        qWarning() << "NoteMonitorWidget::setTheoryEventsEnabled: engine() is NULL!";
+        return;
+    }
+    // Enable theory JSON emission in the engine (required for LibraryWindow live-follow)
+    m_virtuosoPlayback->engine()->setEmitTheoryJson(enabled);
+    qDebug() << "NoteMonitorWidget: Theory events" << (enabled ? "ENABLED" : "DISABLED")
+             << "emitTheoryJson now:" << m_virtuosoPlayback->engine()->emitTheoryJson();
 }
 
 void NoteMonitorWidget::stopAllPlayback() {

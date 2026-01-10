@@ -177,13 +177,20 @@ void VirtuosoEngine::scheduleNote(const AgentIntentNote& note) {
     te.user_outside_ratio = note.user_outside_ratio;
     // Legacy VirtuosityMatrix removed; global weights v2 are emitted via candidate_pool.
 
-    emit plannedTheoryEventJson(te.toJsonString(true));
-
-    VirtuosoScheduler::ScheduledEvent tj;
-    tj.dueMs = he.onMs;
-    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
-    tj.theoryJson = te.toJsonString(true);
-    m_sched.schedule(tj);
+    // PERF: Only serialize JSON if explicitly enabled (expensive toJsonString call)
+    if (m_emitTheoryJson) {
+        const bool hasPlannedListeners = receivers(SIGNAL(plannedTheoryEventJson(QString))) > 0;
+        const bool hasScheduledListeners = receivers(SIGNAL(theoryEventJson(QString))) > 0;
+        const QString json = te.toJsonString(true);
+        if (hasPlannedListeners) emit plannedTheoryEventJson(json);
+        if (hasScheduledListeners) {
+            VirtuosoScheduler::ScheduledEvent tj;
+            tj.dueMs = he.onMs;
+            tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+            tj.theoryJson = json;
+            m_sched.schedule(tj);
+        }
+    }
 }
 
 void VirtuosoEngine::scheduleCC(const QString& agent,
@@ -234,13 +241,20 @@ void VirtuosoEngine::scheduleCC(const QString& agent,
     te.ts_den = m_ts.den;
     te.engine_now_ms = m_clock.elapsedMs();
 
-    emit plannedTheoryEventJson(te.toJsonString(true));
-
-    VirtuosoScheduler::ScheduledEvent tj;
-    tj.dueMs = on;
-    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
-    tj.theoryJson = te.toJsonString(true);
-    m_sched.schedule(tj);
+    // PERF: Only serialize JSON if explicitly enabled (expensive toJsonString call)
+    if (m_emitTheoryJson) {
+        const bool hasPlannedListeners = receivers(SIGNAL(plannedTheoryEventJson(QString))) > 0;
+        const bool hasScheduledListeners = receivers(SIGNAL(theoryEventJson(QString))) > 0;
+        const QString json = te.toJsonString(true);
+        if (hasPlannedListeners) emit plannedTheoryEventJson(json);
+        if (hasScheduledListeners) {
+            VirtuosoScheduler::ScheduledEvent tj;
+            tj.dueMs = on;
+            tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+            tj.theoryJson = json;
+            m_sched.schedule(tj);
+        }
+    }
 }
 
 void VirtuosoEngine::scheduleKeySwitch(const QString& agent,
@@ -299,13 +313,21 @@ void VirtuosoEngine::scheduleKeySwitch(const QString& agent,
     te.ts_num = m_ts.num;
     te.ts_den = m_ts.den;
     te.engine_now_ms = m_clock.elapsedMs();
-    emit plannedTheoryEventJson(te.toJsonString(true));
 
-    VirtuosoScheduler::ScheduledEvent tj;
-    tj.dueMs = on;
-    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
-    tj.theoryJson = te.toJsonString(true);
-    m_sched.schedule(tj);
+    // PERF: Only serialize JSON if explicitly enabled (expensive toJsonString call)
+    if (m_emitTheoryJson) {
+        const bool hasPlannedListeners = receivers(SIGNAL(plannedTheoryEventJson(QString))) > 0;
+        const bool hasScheduledListeners = receivers(SIGNAL(theoryEventJson(QString))) > 0;
+        const QString json = te.toJsonString(true);
+        if (hasPlannedListeners) emit plannedTheoryEventJson(json);
+        if (hasScheduledListeners) {
+            VirtuosoScheduler::ScheduledEvent tj;
+            tj.dueMs = on;
+            tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+            tj.theoryJson = json;
+            m_sched.schedule(tj);
+        }
+    }
 
     Q_UNUSED(structural);
 }
@@ -360,13 +382,21 @@ void VirtuosoEngine::scheduleKeySwitchAtMs(const QString& agent,
     te.ts_num = m_ts.num;
     te.ts_den = m_ts.den;
     te.engine_now_ms = m_clock.elapsedMs();
-    emit plannedTheoryEventJson(te.toJsonString(true));
 
-    VirtuosoScheduler::ScheduledEvent tj;
-    tj.dueMs = onMs;
-    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
-    tj.theoryJson = te.toJsonString(true);
-    m_sched.schedule(tj);
+    // PERF: Only serialize JSON if explicitly enabled (expensive toJsonString call)
+    if (m_emitTheoryJson) {
+        const bool hasPlannedListeners = receivers(SIGNAL(plannedTheoryEventJson(QString))) > 0;
+        const bool hasScheduledListeners = receivers(SIGNAL(theoryEventJson(QString))) > 0;
+        const QString json = te.toJsonString(true);
+        if (hasPlannedListeners) emit plannedTheoryEventJson(json);
+        if (hasScheduledListeners) {
+            VirtuosoScheduler::ScheduledEvent tj;
+            tj.dueMs = onMs;
+            tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+            tj.theoryJson = json;
+            m_sched.schedule(tj);
+        }
+    }
 }
 
 groove::HumanizedEvent VirtuosoEngine::humanizeIntent(const AgentIntentNote& note) {
@@ -443,13 +473,20 @@ void VirtuosoEngine::scheduleHumanizedIntentNote(const AgentIntentNote& note,
     te.user_outside_ratio = note.user_outside_ratio;
     // Legacy VirtuosityMatrix removed; global weights v2 are emitted via candidate_pool.
 
-    emit plannedTheoryEventJson(te.toJsonString(true));
-
-    VirtuosoScheduler::ScheduledEvent tj;
-    tj.dueMs = he.onMs;
-    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
-    tj.theoryJson = te.toJsonString(true);
-    m_sched.schedule(tj);
+    // PERF: Only serialize JSON if explicitly enabled (expensive toJsonString call)
+    if (m_emitTheoryJson) {
+        const bool hasPlannedListeners = receivers(SIGNAL(plannedTheoryEventJson(QString))) > 0;
+        const bool hasScheduledListeners = receivers(SIGNAL(theoryEventJson(QString))) > 0;
+        const QString json = te.toJsonString(true);
+        if (hasPlannedListeners) emit plannedTheoryEventJson(json);
+        if (hasScheduledListeners) {
+            VirtuosoScheduler::ScheduledEvent tj;
+            tj.dueMs = he.onMs;
+            tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+            tj.theoryJson = json;
+            m_sched.schedule(tj);
+        }
+    }
 }
 
 void VirtuosoEngine::scheduleHumanizedNote(const QString& agent,
@@ -500,13 +537,20 @@ void VirtuosoEngine::scheduleHumanizedNote(const QString& agent,
     te.ts_den = m_ts.den;
     te.engine_now_ms = m_clock.elapsedMs();
 
-    emit plannedTheoryEventJson(te.toJsonString(true));
-
-    VirtuosoScheduler::ScheduledEvent tj;
-    tj.dueMs = he.onMs;
-    tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
-    tj.theoryJson = te.toJsonString(true);
-    m_sched.schedule(tj);
+    // PERF: Only serialize JSON if explicitly enabled (expensive toJsonString call)
+    if (m_emitTheoryJson) {
+        const bool hasPlannedListeners = receivers(SIGNAL(plannedTheoryEventJson(QString))) > 0;
+        const bool hasScheduledListeners = receivers(SIGNAL(theoryEventJson(QString))) > 0;
+        const QString json = te.toJsonString(true);
+        if (hasPlannedListeners) emit plannedTheoryEventJson(json);
+        if (hasScheduledListeners) {
+            VirtuosoScheduler::ScheduledEvent tj;
+            tj.dueMs = he.onMs;
+            tj.kind = VirtuosoScheduler::Kind::TheoryEventJson;
+            tj.theoryJson = json;
+            m_sched.schedule(tj);
+        }
+    }
 }
 
 void VirtuosoEngine::scheduleTheoryJsonAtGridPos(const QString& json, const groove::GridPos& startPos, int leadMs) {

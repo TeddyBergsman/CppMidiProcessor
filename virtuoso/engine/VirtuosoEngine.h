@@ -58,6 +58,11 @@ public:
     void setInstrumentGrooveProfile(const QString& agent, const groove::InstrumentGrooveProfile& p);
     void setRealtimeVelocityScale(double s);
     void sendCcNow(int channel, int cc, int value);
+    
+    // PERF: Enable/disable JSON emission. When false, toJsonString() is skipped entirely.
+    // Default is false (disabled) for performance. Enable for verbose debugging.
+    void setEmitTheoryJson(bool enable) { m_emitTheoryJson = enable; }
+    bool emitTheoryJson() const { return m_emitTheoryJson; }
 
     bool isRunning() const { return m_clock.isRunning(); }
     qint64 elapsedMs() const { return m_clock.elapsedMs(); }
@@ -161,6 +166,9 @@ private:
     // Otherwise, if scheduling takes time at playback start, beat 2 can feel early relative to beat 1.
     bool m_gridBaseInitialized = false;
     qint64 m_gridBaseMs = 0;
+    
+    // PERF: When false, skip all JSON serialization (expensive toJsonString calls).
+    bool m_emitTheoryJson = false;
 };
 
 } // namespace virtuoso::engine

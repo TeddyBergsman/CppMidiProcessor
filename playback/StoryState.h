@@ -46,6 +46,9 @@ struct StoryState final {
     bool hasLastPlannedWeightsV2 = false;
     virtuoso::control::PerformanceWeightsV2 lastPlannedWeightsV2{};
 
+    // Rate-limiting for forced replans (prevent audio stalls from too-frequent replanning).
+    int lastForcedReplanStep = -1;
+
     // Piano library continuity (auditable IDs).
     QString lastPianoCompPhraseId;
     QString lastPianoTopLinePhraseId;
@@ -82,6 +85,7 @@ struct StoryState final {
         lastPlannedEnergy01 = -1.0;
         hasLastPlannedWeightsV2 = false;
         lastPlannedWeightsV2 = virtuoso::control::PerformanceWeightsV2{};
+        lastForcedReplanStep = -1;
         lastPianoCompPhraseId.clear();
         lastPianoTopLinePhraseId.clear();
         lastPianoPedalId.clear();

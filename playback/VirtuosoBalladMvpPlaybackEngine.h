@@ -20,6 +20,8 @@
 #include "playback/TransportTimeline.h"
 #include "playback/InteractionContext.h"
 #include "playback/StoryState.h"
+#include "playback/PrePlaybackCache.h"
+#include "playback/PrePlanningDialog.h"
 #include "virtuoso/memory/MotivicMemory.h"
 #include "virtuoso/control/PerformanceWeightsV2.h"
 #include "playback/WeightNegotiator.h"
@@ -79,8 +81,15 @@ public slots:
     bool debugMutePianoRH() const { return m_debugMutePianoRH; }
 
     // Verbose debug logging (off = simple one-line summaries per chord)
-    void setDebugVerbose(bool verbose) { m_debugVerbose = verbose; }
+    // PERF: Also controls JSON emission from VirtuosoEngine (expensive toJsonString calls)
+    void setDebugVerbose(bool verbose) { 
+        m_debugVerbose = verbose; 
+        m_engine.setEmitTheoryJson(verbose);
+    }
     bool debugVerbose() const { return m_debugVerbose; }
+    
+    // Access to the underlying VirtuosoEngine (for external listeners to enable theory events)
+    virtuoso::engine::VirtuosoEngine* engine() { return &m_engine; }
 
 signals:
     void currentCellChanged(int cellIndex);
@@ -89,6 +98,11 @@ signals:
     void lookaheadPlanJson(const QString& json);
     void debugStatus(const QString& text);
     void debugEnergy(double energy01, bool isAuto);
+    
+    // Pre-planning progress
+    // phase: 0 = context building, 1 = branch building, 2 = complete
+    // progress01: 0.0 to 1.0 within current phase
+    void prePlanningProgress(int phase, double progress01, const QString& statusText);
     // Comprehensive piano debug log for console output
     void pianoDebugLog(const QString& text);
     void debugWeightsV2(double density01,
@@ -126,6 +140,15 @@ private:
 
     void scheduleBassTwoFeel(int playbackBarIndex, int beatInBar, const music::ChordSymbol& chord, bool chordIsNew);
     void schedulePianoComp(int playbackBarIndex, int beatInBar, const music::ChordSymbol& chord, bool chordIsNew);
+    
+    // Zero-computation scheduling from pre-computed cache (PERF: O(1) lookup only)
+    void scheduleStepFromCache(int stepIndex);
+    
+    // Emit theory event for LibraryWindow at the CURRENT playback position
+    void emitTheoryEventForStep(int stepIndex);
+    
+    // Build the pre-playback cache (called once before playback starts)
+    void buildPrePlaybackCache();
 
     static int thirdIntervalForQuality(music::ChordQuality q);
     static int seventhIntervalFor(const music::ChordSymbol& c);
@@ -181,6 +204,11 @@ private:
 
     // Persistent long-horizon story continuity (4–8 bars).
     StoryState m_story;
+    
+    // Pre-computed playback cache (built before playback starts)
+    PrePlaybackCache m_preCache;
+    bool m_usePreCache = true;  // When true, use pre-computed cache instead of real-time planning
+    PrePlanningDialog* m_prePlanningDialog = nullptr;  // Popup shown during pre-planning
 
     // Channels (1..16)
     int m_chDrums = 6;

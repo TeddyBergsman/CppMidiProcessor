@@ -9,6 +9,7 @@
 #include "virtuoso/theory/ScaleSuggester.h"
 
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -281,6 +282,9 @@ static QJsonObject noteStatsJson(const JointCandidateModel::NoteStats& st) {
 } // namespace
 
 void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
+    QElapsedTimer stepTimer;
+    stepTimer.start();
+
     if (!in.model || !in.sequence || in.sequence->isEmpty()) return;
     if (!in.harmony || !in.interaction || !in.engine || !in.ontology || !in.bassPlanner || !in.pianoPlanner || !in.drummer) return;
 
@@ -298,9 +302,8 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     const int beatInBar = stepIndex % beatsPerBar;
     
     // DEBUG: Trace cell index and raw chord content to diagnose timing issues
-    // Note: HARMONY traces (from chordForCellIndex) appear BEFORE this because they're called
-    // during buildLookaheadWindow above. This just summarizes the result.
-    if (in.owner) {
+    // Note: Only emit when verbose mode is on to avoid blocking playback with logging
+    if (in.owner && in.debugVerbose) {
         const int cellIndex = seq[stepIndex % seqLen];
         const int barIdx = cellIndex / 4;
         const int cellInBar = cellIndex % 4;
@@ -323,7 +326,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         
         QString parsedChord = look.haveCurrentChord ? look.currentChord.originalText : "(no chord)";
         
-        // Use DirectConnection for synchronous output (appears in correct order)
+        // Use QueuedConnection to avoid blocking the playback timer
         QString cellDebug = QString("STEP[%1]: cell=%2 (bar%3.%4) RAW='%5' -> using '%6' %7")
             .arg(stepIndex, 3).arg(cellIndex, 3)
             .arg(barIdx).arg(cellInBar)
@@ -331,7 +334,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
             .arg(parsedChord)
             .arg(look.chordIsNew ? "NEW!" : "");
         
-        QMetaObject::invokeMethod(in.owner, "pianoDebugLog", Qt::DirectConnection, Q_ARG(QString, cellDebug));
+        QMetaObject::invokeMethod(in.owner, "pianoDebugLog", Qt::QueuedConnection, Q_ARG(QString, cellDebug));
     }
 
     const bool haveChord = look.haveCurrentChord;
@@ -392,9 +395,9 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                           .arg(intent.msSinceLastActivity == std::numeric_limits<qint64>::max() ? -1 : intent.msSinceLastActivity)
                           .arg(intent.outsideRatio, 0, 'f', 2);
 
-        // Always emit a baseline status immediately, even if we later overwrite with more details.
-        QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, debugPrefix));
-        QMetaObject::invokeMethod(in.owner, "debugEnergy", Qt::DirectConnection, Q_ARG(double, baseEnergy), Q_ARG(bool, in.debugEnergyAuto));
+        // Emit baseline status - use QueuedConnection to avoid blocking playback timer
+        QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::QueuedConnection, Q_ARG(QString, debugPrefix));
+        QMetaObject::invokeMethod(in.owner, "debugEnergy", Qt::QueuedConnection, Q_ARG(double, baseEnergy), Q_ARG(bool, in.debugEnergyAuto));
     }
 
     // Energy-driven instrument layering.
@@ -404,10 +407,11 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
 
     // Instant energy response despite phrase planning:
     // If energy changed significantly, replan starting immediately (from the current beat).
+    // PERF: Use higher threshold (0.18 vs 0.08) to avoid too-frequent expensive replans.
     bool forceReplanNow = false;
     if (in.story) {
         const double prev = in.story->lastPlannedEnergy01;
-        if (prev >= 0.0 && qAbs(prev - baseEnergy) >= 0.08) {
+        if (prev >= 0.0 && qAbs(prev - baseEnergy) >= 0.18) {
             forceReplanNow = true;
         }
         in.story->lastPlannedEnergy01 = baseEnergy;
@@ -415,6 +419,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
 
     // Instant weights v2 response despite phrase planning:
     // If the user tweaks Manual weights, replan starting immediately so the sliders are audible.
+    // PERF: Use higher threshold (0.15 vs 0.06) to reduce replan frequency.
     if (in.story && !in.weightsV2Auto) {
         const auto& w = in.weightsV2;
         if (in.story->hasLastPlannedWeightsV2) {
@@ -426,10 +431,19 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                      qMax(qMax(qMax(d(w.emotion, p.emotion), d(w.creativity, p.creativity)),
                                qMax(d(w.tension, p.tension), d(w.interactivity, p.interactivity))),
                           qMax(d(w.variability, p.variability), d(w.warmth, p.warmth))));
-            if (maxDiff >= 0.06) forceReplanNow = true;
+            if (maxDiff >= 0.15) forceReplanNow = true;
         }
         in.story->lastPlannedWeightsV2 = w;
         in.story->hasLastPlannedWeightsV2 = true;
+    }
+
+    // PERF: Rate-limit forced replans to prevent audio stalls.
+    // Skip if we already replanned within the last 8 beats.
+    if (forceReplanNow && in.story) {
+        const int beatsSinceLast = stepIndex - in.story->lastForcedReplanStep;
+        if (in.story->lastForcedReplanStep >= 0 && beatsSinceLast < 8) {
+            forceReplanNow = false;
+        }
     }
 
     // Determinism seed.
@@ -495,18 +509,30 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         const int phraseSteps = look.phraseBars * beatsPerBar;
         const bool atPhraseStart = (beatInBar == 0) && (look.barInPhrase == 0);
         const bool needPlan = (in.story->plan.isEmpty() || in.story->planStartStep < 0 || in.story->planSteps <= 0);
-        const bool wrongWindow = (in.story->planStartStep != phraseStartStep || in.story->planSteps != phraseSteps);
-        if ((atPhraseStart && (needPlan || wrongWindow)) || forceReplanNow) {
+        
+        // PERF: Only replan at phrase start or if we have no valid plan.
+        // At phrase start, we plan the entire phrase. The plan is reused for all beats in the phrase.
+        const int planEnd = in.story->planStartStep + in.story->planSteps;
+        const bool planCoversCurrentStep = !needPlan && (stepIndex >= in.story->planStartStep && stepIndex < planEnd);
+        
+        // Trigger: at phrase start, if plan doesn't cover this step, or if forced (but rate-limited)
+        const bool shouldPlan = (atPhraseStart && !planCoversCurrentStep) || (needPlan) || (forceReplanNow);
+        if (shouldPlan) {
             JointPhrasePlanner::Inputs pi;
             pi.in = in;
-            // When energy changes, replan from *this beat* so behavior changes immediately.
-            pi.startStep = forceReplanNow ? stepIndex : phraseStartStep;
-            // Plan at least a phrase horizon ahead.
-            pi.steps = forceReplanNow ? qMax(1, phraseSteps - (stepIndex - phraseStartStep)) : phraseSteps;
-            pi.beamWidth = 6;
+            // Always plan from the phrase start to ensure coherent phrase-level planning
+            pi.startStep = atPhraseStart ? phraseStartStep : stepIndex;
+            // Plan the full phrase
+            pi.steps = phraseSteps;
+            // PERF: Use narrow beam (2) to balance musicality and performance.
+            pi.beamWidth = 2;
             in.story->plan = JointPhrasePlanner::plan(pi);
             in.story->planStartStep = pi.startStep;
             in.story->planSteps = pi.steps;
+            // Track when we forced a replan for rate-limiting.
+            if (forceReplanNow) {
+                in.story->lastForcedReplanStep = stepIndex;
+            }
         }
         const int idx = stepIndex - in.story->planStartStep;
         if (idx >= 0 && idx < in.story->plan.size()) {
@@ -880,10 +906,14 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
     bool haveJointBd = false;
     bool emittedCandidatePool = false;
     // IMPORTANT:
-    // The phrase planner produces a "macro" choice (sparse/base/rich + wet/dry), but using cached planned note-events
-    // makes the system unresponsive to live weight changes (Warmth/Creativity/Tension/etc.).
-    // So we only treat the plan as a preferred *choice id*, and we always (re)generate the actual notes per beat.
-    const bool usePlannedBeat = false;
+    // PERF: Use the pre-computed phrase plan when available.
+    // The phrase planner creates full beat plans including notes. Using these avoids expensive
+    // re-generation of candidates every beat (which calls piano/bass planners 6+ times per step).
+    // Live weight changes trigger forceReplanNow (above), which regenerates the phrase plan,
+    // so responsiveness is preserved without the per-beat overhead.
+    // PERF: Use the pre-computed phrase plan if available.
+    // The empty-notes check was causing fallback to expensive candidate generation on rest beats.
+    const bool usePlannedBeat = (plannedStep != nullptr);
 
     // Drums candidates (stateless planner): build contexts once, reuse in optimizer.
     BrushesBalladDrummer::Context dcBase;
@@ -967,7 +997,9 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         plannedDrumsId = plannedDrumsId.isEmpty() ? plannedStep->drumsId : plannedDrumsId;
     }
 
-    if (allowBass) {
+    // PERF: Skip expensive candidate generation when using pre-planned beat.
+    // This avoids calling bass/piano planBeatWithActions 6 times per step.
+    if (allowBass && !usePlannedBeat) {
         JazzBalladBassPlanner::Context bcSparse = bc;
         JazzBalladBassPlanner::Context bcBase = bc;
         JazzBalladBassPlanner::Context bcRich = bc;
@@ -1097,7 +1129,8 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         const double bestCost = best.bestCost;
 
         // Emit exact candidate pool + evaluated combinations for visualization.
-        {
+        // Only build expensive JSON when verbose debug mode is enabled to avoid blocking playback.
+        if (in.debugVerbose) {
             QJsonObject root;
             root.insert("event_kind", "candidate_pool");
             root.insert("schema", 2);
@@ -1268,7 +1301,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                 in.engine->scheduleTheoryJsonAtGridPos(QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)), pos);
             }
             emittedCandidatePool = true;
-        }
+        } // end if (in.debugVerbose)
 
         bcChosen = bCands[bestBi].ctx;
         pcChosen = pCands[bestPi].ctx;
@@ -1289,7 +1322,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                                   .arg(st.meanMidi, 0, 'f', 1)
                                   .arg(st.count)
                                   .arg(pianoChoiceId);
-            QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, debugPrefix + p));
+            QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::QueuedConnection, Q_ARG(QString, debugPrefix + p));
         }
         if (!plannedCostTag.isEmpty()) {
             // Prefer phrase-planner cost tag when available (it reflects horizon reasoning).
@@ -1307,6 +1340,21 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
         jointWeights = w;
         jointBd = bestBd;
         haveJointBd = true;
+    }
+
+    // PERF: When using planned beat, use the planned choice IDs and schedule planned drums.
+    if (usePlannedBeat && plannedStep) {
+        bassChoiceId = plannedBassId;
+        pianoChoiceId = plannedPianoId;
+        drumChoiceId = plannedDrumsId;
+        if (allowDrums && !plannedStep->drumsNotes.isEmpty()) {
+            const QString costTag = plannedCostTag.isEmpty() ? QString() : plannedCostTag;
+            const QString jt = QString("joint=%1+%2+%3|planned%4")
+                .arg(bassChoiceId, pianoChoiceId, drumChoiceId)
+                .arg(costTag.isEmpty() ? QString() : ("|" + costTag));
+            scheduleDrums(plannedStep->drumsNotes, jt);
+            haveKickHe = true; // Prevent re-scheduling below
+        }
     }
 
     QString jointTag = QString("joint=%1+%2+%3").arg(bassChoiceId, pianoChoiceId, drumChoiceId);
@@ -1684,7 +1732,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                                    .arg(pcsToNoteNames(chordPcs))
                                    .arg(chordPcs.size());
             
-            QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, s3));
+            QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::QueuedConnection, Q_ARG(QString, s3));
             QMetaObject::invokeMethod(in.owner, "pianoDebugLog", Qt::QueuedConnection, Q_ARG(QString, s3));
         } else if (chordIsNew) {
             // Non-verbose: detailed one-line summary per chord change
@@ -1720,7 +1768,7 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
                 .arg(rhType.isEmpty() ? "-" : rhType, -7)
                 .arg(rhNotes.isEmpty() ? "-" : rhNotes.join(","));
             
-            QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::DirectConnection, Q_ARG(QString, summary));
+            QMetaObject::invokeMethod(in.owner, "debugStatus", Qt::QueuedConnection, Q_ARG(QString, summary));
             QMetaObject::invokeMethod(in.owner, "pianoDebugLog", Qt::QueuedConnection, Q_ARG(QString, summary));
             
             // Non-verbose drum summary on chord changes
@@ -1754,7 +1802,8 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
 
     // If we didn't emit a full candidate pool (e.g. planned beat, bass resting, etc.),
     // emit a minimal "exactly considered" pool (single choice per lane).
-    if (!emittedCandidatePool && in.engine) {
+    // Only do this expensive JSON serialization when verbose debug mode is enabled.
+    if (!emittedCandidatePool && in.engine && in.debugVerbose) {
         QJsonObject root;
         root.insert("event_kind", "candidate_pool");
         root.insert("schema", 2);
@@ -1864,6 +1913,16 @@ void AgentCoordinator::scheduleStep(const Inputs& in, int stepIndex) {
 
         const auto pos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(playbackBarIndex, beatInBar, 0, 1, ts);
         in.engine->scheduleTheoryJsonAtGridPos(QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)), pos);
+    }
+
+    // PERF: Warn if step scheduling is slow (helps diagnose lag at phrase boundaries)
+    const qint64 stepMs = stepTimer.elapsed();
+    if (stepMs >= 80) { // Warn if planning takes longer than expected
+        qWarning().noquote() << QString("PERF: scheduleStep[%1] took %2ms (bar%3.%4 phraseEnd=%5 setupBar=%6)")
+            .arg(stepIndex).arg(stepMs)
+            .arg(playbackBarIndex).arg(beatInBar)
+            .arg(look.phraseEndBar ? "Y" : "N")
+            .arg((look.phraseBars > 1 && look.barInPhrase == (look.phraseBars - 2)) ? "Y" : "N");
     }
 }
 

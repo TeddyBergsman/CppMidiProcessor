@@ -7,6 +7,7 @@
 #include "virtuoso/util/StableHash.h"
 
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QtGlobal>
 #include <algorithm>
 
@@ -36,6 +37,9 @@ struct BeamNode {
 } // namespace
 
 QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
+    QElapsedTimer planTimer;
+    planTimer.start();
+
     if (!p.in.model || !p.in.sequence || p.in.sequence->isEmpty()) return {};
     if (!p.in.harmony || !p.in.interaction || !p.in.engine || !p.in.ontology) return {};
     if (!p.in.bassPlanner || !p.in.pianoPlanner || !p.in.drummer) return {};
@@ -82,6 +86,7 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
 
     for (int si = 0; si < steps; ++si) {
         const int stepIndex = p.startStep + si;
+        
         auto look = buildLookaheadWindow(*in.model, seq, in.repeats, stepIndex, /*horizonBars=*/8,
                                          /*phraseBars=*/qBound(4, in.story ? in.story->phraseBars : 4, 8),
                                          /*keyWindowBars=*/8, *in.harmony);
@@ -325,24 +330,57 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
 
         for (const auto& node : beam) {
             // Generate bass/piano candidates from this node's planner states.
-            JointCandidateModel::GenerationInputs gi;
-            gi.bassPlanner = in.bassPlanner;
-            gi.pianoPlanner = in.pianoPlanner;
-            gi.chBass = in.chBass;
-            gi.chPiano = in.chPiano;
-            gi.ts = ts;
-            gi.bcSparse = bcSparse;
-            gi.bcBase = bcBase;
-            gi.bcRich = bcRich;
-            gi.pcSparse = pcSparse;
-            gi.pcBase = pcBase;
-            gi.pcRich = pcRich;
-            gi.bassStart = node.bassState;
-            gi.pianoStart = node.pianoState;
-
+            // PERF: Generate 2 candidates per agent (base + variant) to balance musicality and performance.
+            // This is a reasonable trade-off: 4 calls per node instead of 6.
             QVector<JointCandidateModel::BassCand> bassCands;
             QVector<JointCandidateModel::PianoCand> pianoCands;
-            JointCandidateModel::generateBassPianoCandidates(gi, bassCands, pianoCands);
+            
+            // Choose variant based on context: sparse when user is busy, rich otherwise
+            const auto& bcVariant = userBusy ? bcSparse : bcRich;
+            const auto& pcVariant = userBusy ? pcSparse : pcRich;
+            const QString variantId = userBusy ? "sparse" : "rich";
+            
+            in.bassPlanner->restoreState(node.bassState);
+            {
+                JointCandidateModel::BassCand c;
+                c.id = "base";
+                c.ctx = bcBase;
+                c.plan = in.bassPlanner->planBeatWithActions(bcBase, in.chBass, ts);
+                c.nextState = in.bassPlanner->snapshotState();
+                c.st = JointCandidateModel::statsForNotes(c.plan.notes);
+                bassCands.push_back(c);
+            }
+            in.bassPlanner->restoreState(node.bassState);
+            {
+                JointCandidateModel::BassCand c;
+                c.id = variantId;
+                c.ctx = bcVariant;
+                c.plan = in.bassPlanner->planBeatWithActions(bcVariant, in.chBass, ts);
+                c.nextState = in.bassPlanner->snapshotState();
+                c.st = JointCandidateModel::statsForNotes(c.plan.notes);
+                bassCands.push_back(c);
+            }
+            
+            in.pianoPlanner->restoreState(node.pianoState);
+            {
+                JointCandidateModel::PianoCand c;
+                c.id = "base";
+                c.ctx = pcBase;
+                c.plan = in.pianoPlanner->planBeatWithActions(pcBase, in.chPiano, ts);
+                c.nextState = in.pianoPlanner->snapshotState();
+                c.st = JointCandidateModel::statsForNotes(c.plan.notes);
+                pianoCands.push_back(c);
+            }
+            in.pianoPlanner->restoreState(node.pianoState);
+            {
+                JointCandidateModel::PianoCand c;
+                c.id = variantId;
+                c.ctx = pcVariant;
+                c.plan = in.pianoPlanner->planBeatWithActions(pcVariant, in.chPiano, ts);
+                c.nextState = in.pianoPlanner->snapshotState();
+                c.st = JointCandidateModel::statsForNotes(c.plan.notes);
+                pianoCands.push_back(c);
+            }
 
             // Score all combinations with shared model.
             JointCandidateModel::ScoringInputs si;
@@ -418,6 +456,14 @@ QVector<StoryState::JointStepChoice> JointPhrasePlanner::plan(const Inputs& p) {
     in.pianoPlanner->restoreState(pianoStart);
     // CRITICAL: Restore harmony state so runtime scheduling sees correct chord progression
     in.harmony->restoreRuntimeState(savedHarmonyState);
+
+    // PERF: Warn if phrase planning is slow
+    const qint64 planMs = planTimer.elapsed();
+    if (planMs >= 15) {
+        qWarning().noquote() << QString("PERF: JointPhrasePlanner::plan took %1ms (steps=%2 beamWidth=%3)")
+            .arg(planMs).arg(p.steps).arg(p.beamWidth);
+    }
+
     return out;
 }
 

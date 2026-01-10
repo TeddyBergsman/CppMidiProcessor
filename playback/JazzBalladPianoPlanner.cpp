@@ -22,25 +22,26 @@ struct VoicingTemplate {
 };
 
 // Build voicing templates for different chord types
+// NOTE: Template names are ontology keys for direct Library window matching
 QVector<VoicingTemplate> getVoicingTemplates(bool hasSeventh, bool is6thChord) {
     QVector<VoicingTemplate> templates;
 
     if (hasSeventh || is6thChord) {
         // Type A: 3-5-7-9 (start from 3rd, stack upward)
-        templates.push_back({"RootlessA", {3, 5, 7, 9}, 3, true});
+        templates.push_back({"piano_rootless_a", {3, 5, 7, 9}, 3, true});
 
         // Type B: 7-9-3-5 (start from 7th, 3 and 5 are inverted up)
-        templates.push_back({"RootlessB", {7, 9, 3, 5}, 7, true});
+        templates.push_back({"piano_rootless_b", {7, 9, 3, 5}, 7, true});
 
-        // Shell: just 3-7
-        templates.push_back({"Shell_3_7", {3, 7}, 3, true});
+        // Shell: just 3-7 (guide tones)
+        templates.push_back({"piano_guide_3_7", {3, 7}, 3, true});
 
         // Quartal: 3-7-9
-        templates.push_back({"Quartal", {3, 7, 9}, 3, true});
+        templates.push_back({"piano_quartal_3", {3, 7, 9}, 3, true});
     } else {
         // Triads
-        templates.push_back({"Triad_135", {1, 3, 5}, 1, false});
-        templates.push_back({"Triad_351", {3, 5, 1}, 3, false});
+        templates.push_back({"piano_triad_root", {1, 3, 5}, 1, false});
+        templates.push_back({"piano_triad_first_inv", {3, 5, 1}, 3, false});
     }
 
     return templates;
@@ -2235,10 +2236,11 @@ QVector<JazzBalladPianoPlanner::Voicing> JazzBalladPianoPlanner::generateVoicing
         Voicing v;
         v.ontologyKey = tmpl.name;
 
-        if (tmpl.name.startsWith("RootlessA")) v.type = VoicingType::RootlessA;
-        else if (tmpl.name.startsWith("RootlessB")) v.type = VoicingType::RootlessB;
-        else if (tmpl.name.startsWith("Shell")) v.type = VoicingType::Shell;
-        else if (tmpl.name.startsWith("Quartal")) v.type = VoicingType::Quartal;
+        // Determine voicing type from ontology key
+        if (tmpl.name.contains("rootless_a")) v.type = VoicingType::RootlessA;
+        else if (tmpl.name.contains("rootless_b")) v.type = VoicingType::RootlessB;
+        else if (tmpl.name.contains("guide") || tmpl.name.contains("shell")) v.type = VoicingType::Shell;
+        else if (tmpl.name.contains("quartal")) v.type = VoicingType::Quartal;
         else v.type = VoicingType::Shell;
 
         v.density = density;
@@ -2735,11 +2737,11 @@ JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::generateLhRootlessVoic
     
     // Set ontology key based on voicing size
     if (lh.midiNotes.size() >= 3) {
-        lh.ontologyKey = "LH_Voicing_3";
+        lh.ontologyKey = "piano_lh_voicing";
     } else if (lh.midiNotes.size() == 2) {
-        lh.ontologyKey = "LH_Shell";
+        lh.ontologyKey = "piano_lh_shell";
     } else {
-        lh.ontologyKey = "LH_Single";
+        lh.ontologyKey = "piano_lh_single";
     }
     
     lh.isTypeA = (chord.rootPc <= 5);
@@ -2761,7 +2763,7 @@ JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::LhVoicing::getAlternat
     if (alt.midiNotes[0] + 12 <= 67) {
         alt.midiNotes[0] += 12;
         std::sort(alt.midiNotes.begin(), alt.midiNotes.end());
-        alt.ontologyKey = "LH_Inversion";
+        alt.ontologyKey = "piano_lh_inversion";
     }
     return alt;
 }
@@ -2809,7 +2811,7 @@ JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::LhVoicing::withInnerVo
     }
     
     std::sort(moved.midiNotes.begin(), moved.midiNotes.end());
-    moved.ontologyKey = "LH_InnerMove";
+    moved.ontologyKey = "piano_lh_inner_move";
     return moved;
 }
 
@@ -2882,7 +2884,7 @@ JazzBalladPianoPlanner::LhVoicing JazzBalladPianoPlanner::generateLhQuartalVoici
         lh.midiNotes.push_back(thirdNote);
     }
     
-    lh.ontologyKey = "LH_Quartal";
+    lh.ontologyKey = "piano_lh_quartal";
     lh.isTypeA = true;
     lh.cost = voiceLeadingCost(m_state.lastLhMidi, lh.midiNotes);
     
@@ -3041,10 +3043,10 @@ JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::generateRhMelodicVoici
     // Determine ontology key
     if (topPc == ninth || topPc == thirteenth) {
         rh.isColorTone = true;
-        rh.ontologyKey = (rh.midiNotes.size() == 2) ? "RH_Dyad_Color" : "RH_Single_Color";
+        rh.ontologyKey = (rh.midiNotes.size() == 2) ? "piano_rh_dyad_color" : "piano_rh_single_color";
     } else {
         rh.isColorTone = false;
-        rh.ontologyKey = (rh.midiNotes.size() == 2) ? "RH_Dyad_Guide" : "RH_Single_Guide";
+        rh.ontologyKey = (rh.midiNotes.size() == 2) ? "piano_rh_dyad_guide" : "piano_rh_single_guide";
     }
     
     return rh;
@@ -3259,7 +3261,32 @@ JazzBalladPianoPlanner::RhMelodic JazzBalladPianoPlanner::buildUstVoicing(
     rh.midiNotes = midiNotes;
     rh.topNoteMidi = midiNotes.isEmpty() ? -1 : midiNotes.last();
     rh.melodicDirection = (rh.topNoteMidi > lastTop) ? 1 : ((rh.topNoteMidi < lastTop) ? -1 : 0);
-    rh.ontologyKey = QString("UST_%1_%2").arg(ust.isMajor ? "Maj" : "Min").arg(ust.colorDescription);
+    
+    // Map UST to ontology key based on interval from chord root
+    // e.g., rootPc offset 2 → II, 3 → bIII, 4 → III, etc.
+    const int interval = normalizePc(ust.rootPc - c.chord.rootPc);
+    QString romanNumeral;
+    switch (interval) {
+        case 0:  romanNumeral = "I"; break;
+        case 1:  romanNumeral = "bII"; break;
+        case 2:  romanNumeral = "II"; break;
+        case 3:  romanNumeral = "bIII"; break;
+        case 4:  romanNumeral = "III"; break;
+        case 5:  romanNumeral = "IV"; break;
+        case 6:  romanNumeral = "bV"; break;
+        case 7:  romanNumeral = "V"; break;
+        case 8:  romanNumeral = "bVI"; break;
+        case 9:  romanNumeral = "VI"; break;
+        case 10: romanNumeral = "bVII"; break;
+        case 11: romanNumeral = "VII"; break;
+        default: romanNumeral = "I"; break;
+    }
+    // Use ontology key format: piano_ust_bIII or piano_ust_ii_min
+    if (ust.isMajor) {
+        rh.ontologyKey = QString("piano_ust_%1").arg(romanNumeral);
+    } else {
+        rh.ontologyKey = QString("piano_ust_%1_min").arg(romanNumeral.toLower());
+    }
     rh.isColorTone = true;
     
     return rh;
@@ -5307,7 +5334,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     std::sort(combinedMidi.begin(), combinedMidi.end());
     m_state.lastVoicingMidi = combinedMidi;
     m_state.lastTopMidi = combinedMidi.isEmpty() ? -1 : combinedMidi.last();
-    m_state.lastVoicingKey = lhVoicing.ontologyKey.isEmpty() ? "RH_Melodic" : lhVoicing.ontologyKey;
+    m_state.lastVoicingKey = lhVoicing.ontologyKey.isEmpty() ? "piano_rh_melodic" : lhVoicing.ontologyKey;
 
     plan.chosenVoicingKey = m_state.lastVoicingKey;
     plan.ccs = planPedal(adjusted, ts);

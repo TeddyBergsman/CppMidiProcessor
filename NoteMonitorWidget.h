@@ -14,6 +14,7 @@ class QCheckBox;
 class QTextEdit;
 class QSlider;
 class QPropertyAnimation;
+class QProgressBar;
 
 namespace ireal { struct Playlist; }
 namespace chart { class SongChartWidget; }
@@ -44,6 +45,12 @@ public slots:
     void requestVirtuosoLookaheadOnce();
     // Instrument windows send per-agent multipliers (e.g. Energy x 0..2).
     void setVirtuosoAgentEnergyMultiplier(const QString& agent, double mult01to2);
+    // Enable/disable theory event emission for external listeners (LibraryWindow, etc.)
+    // When enabled, the engine will emit detailed theory JSON for each scheduled note.
+    void setTheoryEventsEnabled(bool enabled);
+    
+    // Access to the playback engine for direct signal connections
+    playback::VirtuosoBalladMvpPlaybackEngine* virtuosoPlayback() const { return m_virtuosoPlayback; }
     void setGuitarNote(int midiNote, double cents);
     void setVoiceNote(int midiNote, double cents);
     void setGuitarHz(double hz);

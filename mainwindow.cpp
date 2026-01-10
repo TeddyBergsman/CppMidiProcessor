@@ -14,6 +14,7 @@
 #include "NoteMonitorWidget.h"
 #include "ireal/HtmlPlaylistParser.h"
 #include "LibraryWindow.h"
+#include "playback/VirtuosoBalladMvpPlaybackEngine.h"
 #include "GrooveLabWindow.h"
 #include "VirtuosoPresetInspectorWindow.h"
 #include "VirtuosoVocabularyWindow.h"
@@ -211,15 +212,23 @@ void MainWindow::createWidgets(const Preset& preset) {
             if (!m_libraryWindow) {
                 m_libraryWindow = new LibraryWindow(m_midiProcessor, this);
                 m_libraryWindow->setAttribute(Qt::WA_DeleteOnClose, false);
-                if (noteMonitorWidget) {
-                    connect(noteMonitorWidget, &NoteMonitorWidget::virtuosoTheoryEventJson,
+                
+                // Connect DIRECTLY to the playback engine (more reliable than forwarding through NoteMonitorWidget)
+                if (noteMonitorWidget && noteMonitorWidget->virtuosoPlayback()) {
+                    auto* engine = noteMonitorWidget->virtuosoPlayback();
+                    qDebug() << "MainWindow: Connecting LibraryWindow DIRECTLY to VirtuosoBalladMvpPlaybackEngine";
+                    
+                    connect(engine, &playback::VirtuosoBalladMvpPlaybackEngine::theoryEventJson,
                             m_libraryWindow, &LibraryWindow::ingestTheoryEventJson,
                             Qt::UniqueConnection);
-                    connect(noteMonitorWidget, &NoteMonitorWidget::virtuosoPlannedTheoryEventJson,
+                    connect(engine, &playback::VirtuosoBalladMvpPlaybackEngine::plannedTheoryEventJson,
                             m_libraryWindow, &LibraryWindow::ingestTheoryEventJson,
                             Qt::UniqueConnection);
+                } else {
+                    qWarning() << "MainWindow: Could not connect LibraryWindow - noteMonitorWidget or virtuosoPlayback is null";
                 }
             }
+            
             m_libraryWindow->show();
             m_libraryWindow->raise();
             m_libraryWindow->activateWindow();

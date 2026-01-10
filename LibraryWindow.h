@@ -50,6 +50,16 @@ private:
 
     static QString pcName(int pc);
     static int pcFromIndex(int idx);
+    
+    // Compatibility helpers for smart filtering
+    bool isChordCompatible(const virtuoso::ontology::ChordDef* candidate, 
+                           const virtuoso::ontology::ChordDef* current) const;
+    bool isScaleCompatible(const virtuoso::ontology::ScaleDef* candidate,
+                           const virtuoso::ontology::ChordDef* currentChord) const;
+    bool isVoicingCompatible(const virtuoso::ontology::VoicingDef* candidate,
+                             const virtuoso::ontology::ChordDef* currentChord) const;
+    QVector<QPair<QString, QString>> suggestUpperStructures(const virtuoso::ontology::ChordDef* chord,
+                                                            int rootPc) const;
 
     QSet<int> pitchClassesForChord(const virtuoso::ontology::ChordDef* chordDef, int rootPc) const;
     QSet<int> pitchClassesForScale(const virtuoso::ontology::ScaleDef* scaleDef, int rootPc) const;
@@ -104,7 +114,8 @@ private:
     // Global controls
     QComboBox* m_rootCombo = nullptr;      // 0..11 (C..B)
     QComboBox* m_keyCombo = nullptr;       // harmony analysis key (0..11, C..B)
-    QComboBox* m_chordCtxCombo = nullptr;  // context chord for voicing degree->interval mapping
+    QComboBox* m_keyModeCombo = nullptr;   // key mode (Major/Minor)
+    QComboBox* m_chordCtxCombo = nullptr;  // context chord for voicing degree->interval mapping (auto-synced during live follow)
     QComboBox* m_playInstrumentCombo = nullptr;
     QComboBox* m_positionCombo = nullptr;
     QComboBox* m_durationCombo = nullptr;
@@ -138,6 +149,7 @@ private:
     QComboBox* m_polyUpperChord = nullptr;
     QComboBox* m_polyLowerRoot = nullptr;
     QComboBox* m_polyLowerChord = nullptr;
+    QListWidget* m_polySuggestionsList = nullptr;  // Upper structure suggestions based on current chord
 
     QSet<int> m_activeMidis;
     QTimer* m_autoPlayTimer = nullptr;

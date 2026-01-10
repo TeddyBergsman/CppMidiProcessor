@@ -137,14 +137,20 @@ void LibraryWindow::buildUi() {
     controls->addWidget(m_rootCombo);
 
     controls->addSpacing(10);
-    controls->addWidget(new QLabel("Harmony key:", this));
+    controls->addWidget(new QLabel("Key:", this));
     m_keyCombo = new QComboBox(this);
     for (const auto& n : pcNames()) m_keyCombo->addItem(n);
     m_keyCombo->setCurrentIndex(0); // C
     controls->addWidget(m_keyCombo);
+    
+    m_keyModeCombo = new QComboBox(this);
+    m_keyModeCombo->addItem("Major", static_cast<int>(virtuoso::theory::KeyMode::Major));
+    m_keyModeCombo->addItem("Minor", static_cast<int>(virtuoso::theory::KeyMode::Minor));
+    m_keyModeCombo->setCurrentIndex(0);
+    controls->addWidget(m_keyModeCombo);
 
     controls->addSpacing(10);
-    controls->addWidget(new QLabel("Voicing chord context:", this));
+    controls->addWidget(new QLabel("Chord context:", this));
     m_chordCtxCombo = new QComboBox(this);
     m_chordCtxCombo->setCurrentIndex(0);
     controls->addWidget(m_chordCtxCombo);
@@ -201,7 +207,7 @@ void LibraryWindow::buildUi() {
     mkTab(m_scalesList, "Scales");
     mkTab(m_voicingsList, "Voicings");
 
-    // Polychords tab (generator UI)
+    // Polychords tab (generator UI + upper structure suggestions)
     m_polyTab = new QWidget(this);
     QVBoxLayout* polyL = new QVBoxLayout(m_polyTab);
     QGridLayout* grid = new QGridLayout;
@@ -231,6 +237,18 @@ void LibraryWindow::buildUi() {
     grid->addWidget(m_polyLowerChord, 2, 2, 1, 2);
 
     polyL->addLayout(grid);
+    
+    // Upper structure suggestions (populated during live follow)
+    QLabel* suggestLabel = new QLabel("Upper structures for current chord:", this);
+    suggestLabel->setStyleSheet("QLabel { color: #888; margin-top: 10px; }");
+    polyL->addWidget(suggestLabel);
+    
+    m_polySuggestionsList = new QListWidget(this);
+    m_polySuggestionsList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_polySuggestionsList->setStyleSheet("QListWidget { font-size: 10pt; }");
+    m_polySuggestionsList->setMaximumHeight(150);
+    polyL->addWidget(m_polySuggestionsList);
+    
     polyL->addStretch(1);
     m_tabs->addTab(m_polyTab, "Polychords");
 
@@ -296,6 +314,59 @@ void LibraryWindow::buildUi() {
     connect(m_polyUpperChord, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_polyLowerRoot, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
     connect(m_polyLowerChord, &QComboBox::currentIndexChanged, this, &LibraryWindow::onSelectionChanged);
+    
+    // Polychord suggestions - clicking populates the dropdowns
+    connect(m_polySuggestionsList, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
+        if (!item) return;
+        // Parse the suggestion text: "D / C  —  description"
+        const QString text = item->text();
+        const int slashIdx = text.indexOf('/');
+        const int dashIdx = text.indexOf("—");
+        if (slashIdx < 0 || dashIdx < 0) return;
+        
+        const QString upperStr = text.left(slashIdx).trimmed();
+        const QString lowerStr = text.mid(slashIdx + 1, dashIdx - slashIdx - 1).trimmed();
+        
+        // Find the root PCs
+        const auto names = pcNames();
+        int upperRootIdx = -1, lowerRootIdx = -1;
+        for (int i = 0; i < names.size(); ++i) {
+            if (upperStr.startsWith(names[i])) upperRootIdx = i;
+            if (lowerStr.startsWith(names[i])) lowerRootIdx = i;
+        }
+        
+        // Determine if it's a minor triad (contains "m")
+        bool upperMinor = upperStr.contains("m") && !upperStr.contains("maj");
+        
+        // Update the dropdowns
+        if (upperRootIdx >= 0 && m_polyUpperRoot) m_polyUpperRoot->setCurrentIndex(upperRootIdx);
+        if (lowerRootIdx >= 0 && m_polyLowerRoot) m_polyLowerRoot->setCurrentIndex(lowerRootIdx);
+        if (m_polyUpperChord) {
+            // Find major or minor triad
+            for (int i = 0; i < m_polyUpperChord->count(); ++i) {
+                const QString key = m_polyUpperChord->itemData(i).toString();
+                if (upperMinor && key.contains("min") && !key.contains("min7")) {
+                    m_polyUpperChord->setCurrentIndex(i);
+                    break;
+                } else if (!upperMinor && (key == "maj" || key == "major")) {
+                    m_polyUpperChord->setCurrentIndex(i);
+                    break;
+                }
+            }
+        }
+        if (m_polyTemplateCombo) {
+            // Default to triad_over_triad
+            for (int i = 0; i < m_polyTemplateCombo->count(); ++i) {
+                if (m_polyTemplateCombo->itemData(i).toString() == "triad_over_triad") {
+                    m_polyTemplateCombo->setCurrentIndex(i);
+                    break;
+                }
+            }
+        }
+        
+        updateHighlights();
+        scheduleAutoPlay(); // Audition the selected polychord
+    });
 
     // Click-to-play from visualizers
     connect(m_guitar, &GuitarFretboardWidget::noteClicked, this, &LibraryWindow::onUserClickedMidi);
@@ -379,9 +450,10 @@ void LibraryWindow::populateLists() {
     }
 
     // Chord context combo should match chord ordering.
+    // IMPORTANT: Store the key as item data so live-follow can find it!
     m_chordCtxCombo->clear();
     for (const ChordDef* c : m_orderedChords) {
-        m_chordCtxCombo->addItem(c->name);
+        m_chordCtxCombo->addItem(c->name, c->key);  // Store key as data
     }
     m_chordCtxCombo->setCurrentIndex(0);
 
@@ -653,14 +725,32 @@ int LibraryWindow::jsonInt(const QJsonObject& o, const char* key, int fallback) 
 }
 
 void LibraryWindow::ingestTheoryEventJson(const QString& json) {
+    // DEBUG: Always print to stderr so we can see if this is ever called
+    static int receiveCount = 0;
+    receiveCount++;
+    fprintf(stderr, "=== LibraryWindow::ingestTheoryEventJson CALLED #%d ===\n", receiveCount);
+    fflush(stderr);
+    
     // Drive live-follow ONLY from candidate_pool (authoritative + complete).
     QJsonParseError pe;
     const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &pe);
-    if (pe.error != QJsonParseError::NoError || !doc.isObject()) return;
+    if (pe.error != QJsonParseError::NoError || !doc.isObject()) {
+        fprintf(stderr, "    JSON parse error\n");
+        fflush(stderr);
+        return;
+    }
     const QJsonObject obj = doc.object();
 
     const QString eventKind = jsonString(obj, "event_kind");
-    if (eventKind != "candidate_pool") return;
+    fprintf(stderr, "    event_kind=%s\n", qPrintable(eventKind));
+    fflush(stderr);
+    
+    if (eventKind != "candidate_pool") {
+        return;
+    }
+    
+    fprintf(stderr, "    Processing candidate_pool!\n");
+    fflush(stderr);
 
     // Anchor song start wall time from engine-clock ms.
     {
@@ -698,8 +788,10 @@ void LibraryWindow::ingestTheoryEventJson(const QString& json) {
     m_liveFollowActive = true;
     if (m_liveFollowTimer) m_liveFollowTimer->start(1500);
 
-    applyEnabledStatesForLiveContext();
+    // IMPORTANT: First update the UI with new selections, THEN apply filtering
+    // (Previous order was backwards, causing 1-beat delay in filtering)
     applyLiveChoiceToUi(obj);
+    applyEnabledStatesForLiveContext();
 }
 
 void LibraryWindow::onLiveFollowTimeout() {
@@ -727,6 +819,7 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
     keyTonicPc = obj.value("key_tonic_pc").toInt(-1);
     grooveTpl = obj.value("groove_template").toString();
     const bool chordIsNew = obj.value("chord_is_new").toBool(false);
+    const QString keyModeStr = obj.value("key_mode").toString("major");
     const QJsonObject chosen = obj.value("chosen").toObject();
     scaleUsed = chosen.value("scale_used").toString();
     const QString scaleKey = chosen.value("scale_key").toString();
@@ -741,6 +834,8 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
     m_liveUpdatingUi = true;
     const QSignalBlocker b0(m_rootCombo);
     const QSignalBlocker b0b(m_keyCombo);
+    const QSignalBlocker b0c(m_keyModeCombo);
+    const QSignalBlocker b0d(m_chordCtxCombo);
     const QSignalBlocker b1(m_chordsList);
     const QSignalBlocker b2(m_scalesList);
     const QSignalBlocker b3(m_voicingsList);
@@ -752,9 +847,23 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
     const QSignalBlocker b9(m_polyLowerRoot);
     const QSignalBlocker b10(m_polyLowerChord);
 
-    // Always update key + root deterministically.
+    // Always update key + root + mode deterministically.
     if (m_rootCombo && chordRootPc >= 0) m_rootCombo->setCurrentIndex(qBound(0, chordRootPc, 11));
     if (m_keyCombo && keyTonicPc >= 0) m_keyCombo->setCurrentIndex(qBound(0, keyTonicPc, 11));
+    if (m_keyModeCombo) {
+        const int modeIdx = keyModeStr.toLower().contains("minor") ? 1 : 0;
+        m_keyModeCombo->setCurrentIndex(modeIdx);
+    }
+    
+    // Auto-sync chord context combo to match the current chord
+    if (m_chordCtxCombo && !chordDefKey.isEmpty()) {
+        for (int i = 0; i < m_chordCtxCombo->count(); ++i) {
+            if (m_chordCtxCombo->itemData(i).toString() == chordDefKey) {
+                m_chordCtxCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
 
     // --- Chords tab selection (always update) ---
     if (!chordDefKey.isEmpty() && m_chordsList) {
@@ -780,14 +889,28 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
         }
     }
 
-    // --- Voicings tab selection (prefer exact ontology key) ---
+    // --- Voicings tab selection (direct ontology key match) ---
+    // Piano planner now uses ontology keys directly (e.g., "piano_rootless_a")
     if (!voicingKey.isEmpty() && m_voicingsList) {
+        bool found = false;
         for (int i = 0; i < m_voicingsList->count(); ++i) {
             auto* it = m_voicingsList->item(i);
             if (!it) continue;
             if (it->data(Qt::UserRole).toString() == voicingKey) {
                 m_voicingsList->setCurrentRow(i);
+                found = true;
                 break;
+            }
+        }
+        // Fallback: try voicingType if exact key not found
+        if (!found && !voicingType.isEmpty()) {
+            for (int i = 0; i < m_voicingsList->count(); ++i) {
+                auto* it = m_voicingsList->item(i);
+                if (!it) continue;
+                if (voicingType.contains(it->text(), Qt::CaseInsensitive)) {
+                    m_voicingsList->setCurrentRow(i);
+                    break;
+                }
             }
         }
     } else if (!voicingType.isEmpty() && m_voicingsList) {
@@ -813,12 +936,14 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
     }
     if (m_grooveTempoCombo && m_liveBpm > 0) m_grooveTempoCombo->setCurrentText(QString::number(m_liveBpm));
 
-    // Polychords: disable controls unless a real polychord choice exists.
-    if (m_polyTemplateCombo) m_polyTemplateCombo->setEnabled(hasPolyChoice);
-    if (m_polyUpperRoot) m_polyUpperRoot->setEnabled(hasPolyChoice);
-    if (m_polyUpperChord) m_polyUpperChord->setEnabled(hasPolyChoice);
-    if (m_polyLowerRoot) m_polyLowerRoot->setEnabled(hasPolyChoice);
-    if (m_polyLowerChord) m_polyLowerChord->setEnabled(hasPolyChoice);
+    // Polychords: enable controls during live follow so user can audition upper structures
+    // (Previously only enabled when hasPolyChoice, but we want to allow exploration)
+    const bool enablePolychords = m_liveFollowActive || hasPolyChoice;
+    if (m_polyTemplateCombo) m_polyTemplateCombo->setEnabled(enablePolychords);
+    if (m_polyUpperRoot) m_polyUpperRoot->setEnabled(enablePolychords);
+    if (m_polyUpperChord) m_polyUpperChord->setEnabled(enablePolychords);
+    if (m_polyLowerRoot) m_polyLowerRoot->setEnabled(enablePolychords);
+    if (m_polyLowerChord) m_polyLowerChord->setEnabled(enablePolychords);
 
     // --- Polychords tab: map UST voicing keys into a triad-over-bass view ---
     if (hasPolyChoice && m_polyTab && m_tabs && m_polyTemplateCombo && !voicingKey.isEmpty() && voicingKey.startsWith("piano_ust_", Qt::CaseInsensitive)) {
@@ -858,6 +983,81 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
 
     updateHighlights();
     updateGrooveInfo();
+    
+    // Update polychord upper structure suggestions based on current chord
+    if (m_polySuggestionsList && !chordDefKey.isEmpty()) {
+        const ChordDef* chordForSuggestions = m_registry.chord(chordDefKey);
+        if (chordForSuggestions) {
+            m_polySuggestionsList->clear();
+            const int rootPc = m_rootCombo ? m_rootCombo->currentIndex() : 0;
+            const auto suggestions = suggestUpperStructures(chordForSuggestions, rootPc);
+            for (const auto& s : suggestions) {
+                QListWidgetItem* item = new QListWidgetItem(QString("%1  —  %2").arg(s.first).arg(s.second));
+                item->setData(Qt::UserRole, s.first);
+                m_polySuggestionsList->addItem(item);
+            }
+            if (m_polySuggestionsList->count() == 0) {
+                m_polySuggestionsList->addItem(new QListWidgetItem("(No upper structures for this chord type)"));
+            }
+            
+            // Auto-select the first suggestion and populate dropdowns
+            if (!suggestions.isEmpty() && m_polySuggestionsList->count() > 0) {
+                m_polySuggestionsList->setCurrentRow(0);
+                
+                // Set lower root to current chord root
+                if (m_polyLowerRoot) m_polyLowerRoot->setCurrentIndex(rootPc);
+                
+                // Set lower chord to current chord type
+                if (m_polyLowerChord) {
+                    for (int i = 0; i < m_polyLowerChord->count(); ++i) {
+                        if (m_polyLowerChord->itemData(i).toString() == chordDefKey) {
+                            m_polyLowerChord->setCurrentIndex(i);
+                            break;
+                        }
+                    }
+                }
+                
+                // Also populate upper triad from the first suggestion
+                // Suggestion format: "D / C  —  description" or "Dm / C  —  description"
+                const QString firstSugg = suggestions.first().first; // e.g. "D / C"
+                const int slashIdx = firstSugg.indexOf('/');
+                if (slashIdx > 0) {
+                    const QString upperStr = firstSugg.left(slashIdx).trimmed();
+                    const auto names = pcNames();
+                    for (int i = 0; i < names.size(); ++i) {
+                        if (upperStr.startsWith(names[i])) {
+                            if (m_polyUpperRoot) m_polyUpperRoot->setCurrentIndex(i);
+                            break;
+                        }
+                    }
+                    // Determine if minor triad
+                    const bool upperMinor = upperStr.contains("m") && !upperStr.contains("maj");
+                    if (m_polyUpperChord) {
+                        for (int i = 0; i < m_polyUpperChord->count(); ++i) {
+                            const QString key = m_polyUpperChord->itemData(i).toString();
+                            if (upperMinor && key.contains("min") && !key.contains("min7")) {
+                                m_polyUpperChord->setCurrentIndex(i);
+                                break;
+                            } else if (!upperMinor && (key == "maj" || key == "major")) {
+                                m_polyUpperChord->setCurrentIndex(i);
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Set default template
+                if (m_polyTemplateCombo) {
+                    for (int i = 0; i < m_polyTemplateCombo->count(); ++i) {
+                        if (m_polyTemplateCombo->itemData(i).toString() == "triad_over_triad") {
+                            m_polyTemplateCombo->setCurrentIndex(i);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Status bar: expose pianist performance decisions during live-follow.
     if (m_liveFollowActive && statusBar()) {
@@ -890,7 +1090,8 @@ void LibraryWindow::applyLiveChoiceToUi(const QJsonObject& obj) {
     if (isGrooveTab) {
         // Keep groove loop in sync when updated programmatically (signals are blocked above).
         startOrUpdateGrooveLoop(/*preservePhase=*/true);
-    } else if (shouldAuditionNow && (isChordTab || isScaleTab || isVoicingTab || (isPolyTab && hasPolyChoice))) {
+    } else if (shouldAuditionNow && (isChordTab || isScaleTab || isVoicingTab || isPolyTab)) {
+        // Polychord tab auditions on chord changes since we auto-populate upper structures
         onPlayPressed();
     }
 }
@@ -902,6 +1103,7 @@ void LibraryWindow::applyEnabledStatesForLiveContext() {
             auto* it = w->item(i);
             if (!it) continue;
             it->setHidden(false);
+            it->setForeground(QBrush()); // Reset to default color
         }
     };
 
@@ -914,22 +1116,130 @@ void LibraryWindow::applyEnabledStatesForLiveContext() {
         return;
     }
 
-    // Exact "available choices" as emitted by the planner (candidate_pool): filter out non-candidates.
-    auto applyAllowedSet = [](QListWidget* w, const QSet<QString>& allowedKeys) {
-        if (!w) return;
-        for (int i = 0; i < w->count(); ++i) {
-            auto* it = w->item(i);
+    // Get the current chord for compatibility checking
+    const ChordDef* currentChord = nullptr;
+    if (m_chordsList && m_chordsList->currentItem()) {
+        const QString key = m_chordsList->currentItem()->data(Qt::UserRole).toString();
+        currentChord = m_registry.chord(key);
+    }
+    
+    // === SMART CHORD FILTERING WITH COLOR GRADIENT ===
+    // Color gradient from green (best match) to red (incompatible)
+    if (m_chordsList && currentChord) {
+        for (int i = 0; i < m_chordsList->count(); ++i) {
+            auto* it = m_chordsList->item(i);
             if (!it) continue;
             const QString key = it->data(Qt::UserRole).toString();
-            const bool show = allowedKeys.isEmpty() ? true : allowedKeys.contains(key);
-            it->setHidden(!show);
+            const ChordDef* candidate = m_registry.chord(key);
+            
+            // Only consider pool if it's actually populated
+            const bool poolPopulated = !m_liveCandChordKeys.isEmpty();
+            const bool inPool = poolPopulated && m_liveCandChordKeys.contains(key);
+            const bool compatible = isChordCompatible(candidate, currentChord);
+            const bool isExact = (key == currentChord->key);
+            
+            // Color gradient: green -> yellow -> orange -> hidden
+            if (isExact) {
+                it->setHidden(false);
+                it->setForeground(QBrush(QColor(0, 200, 0))); // Bright green - exact match
+            } else if (inPool) {
+                it->setHidden(false);
+                it->setForeground(QBrush(QColor(100, 180, 100))); // Light green - in pool
+            } else if (compatible) {
+                it->setHidden(false);
+                it->setForeground(QBrush(QColor(180, 180, 80))); // Yellow - compatible
+            } else {
+                it->setHidden(true); // Hide incompatible
+            }
         }
-    };
-
-    applyAllowedSet(m_chordsList, m_liveCandChordKeys);
-    applyAllowedSet(m_scalesList, m_liveCandScaleKeys);
-    applyAllowedSet(m_voicingsList, m_liveCandVoicingKeys);
-    applyAllowedSet(m_groovesList, m_liveCandGrooveKeys);
+    }
+    
+    // === SMART SCALE FILTERING WITH COLOR GRADIENT ===
+    // Show scales that contain all chord tones
+    // Get the currently CHOSEN scale from the JSON (stored during applyLiveChoiceToUi)
+    if (m_scalesList && currentChord) {
+        QString chosenScaleKey;
+        if (m_scalesList->currentItem()) {
+            chosenScaleKey = m_scalesList->currentItem()->data(Qt::UserRole).toString();
+        }
+        
+        // Only consider pool if it's actually populated
+        const bool poolPopulated = !m_liveCandScaleKeys.isEmpty();
+        
+        for (int i = 0; i < m_scalesList->count(); ++i) {
+            auto* it = m_scalesList->item(i);
+            if (!it) continue;
+            const QString key = it->data(Qt::UserRole).toString();
+            const ScaleDef* candidate = m_registry.scale(key);
+            
+            const bool inPool = poolPopulated && m_liveCandScaleKeys.contains(key);
+            const bool compatible = isScaleCompatible(candidate, currentChord);
+            const bool isChosen = (key == chosenScaleKey);
+            
+            // Color gradient: green -> yellow -> orange -> hidden
+            if (isChosen) {
+                it->setHidden(false);
+                it->setForeground(QBrush(QColor(0, 200, 0))); // Bright green - chosen by planner
+            } else if (inPool) {
+                it->setHidden(false);
+                it->setForeground(QBrush(QColor(100, 180, 100))); // Light green - in pool
+            } else if (compatible) {
+                it->setHidden(false);
+                it->setForeground(QBrush(QColor(180, 180, 80))); // Yellow - compatible
+            } else {
+                it->setHidden(true); // Hide incompatible
+            }
+        }
+    }
+    
+    // === SMART VOICING FILTERING WITH COLOR GRADIENT ===
+    // Show voicings appropriate for the chord
+    if (m_voicingsList && currentChord) {
+        QString chosenVoicingKey;
+        if (m_voicingsList->currentItem()) {
+            chosenVoicingKey = m_voicingsList->currentItem()->data(Qt::UserRole).toString();
+        }
+        
+        // Only consider pool if it's actually populated
+        const bool poolPopulated = !m_liveCandVoicingKeys.isEmpty();
+        
+        for (int i = 0; i < m_voicingsList->count(); ++i) {
+            auto* it = m_voicingsList->item(i);
+            if (!it) continue;
+            const QString key = it->data(Qt::UserRole).toString();
+            const VoicingDef* candidate = m_registry.voicing(key);
+            
+            const bool inPool = poolPopulated && m_liveCandVoicingKeys.contains(key);
+            const bool compatible = isVoicingCompatible(candidate, currentChord);
+            const bool isChosen = (key == chosenVoicingKey);
+            
+            // Color gradient: green -> yellow -> orange -> hidden
+            if (isChosen) {
+                it->setHidden(false);
+                it->setForeground(QBrush(QColor(0, 200, 0))); // Bright green - chosen by planner
+            } else if (inPool) {
+                it->setHidden(false);
+                it->setForeground(QBrush(QColor(100, 180, 100))); // Light green - in pool
+            } else if (compatible) {
+                it->setHidden(false);
+                it->setForeground(QBrush(QColor(180, 180, 80))); // Yellow - compatible
+            } else {
+                it->setHidden(true); // Hide incompatible
+            }
+        }
+    }
+    
+    // Grooves: keep using exact pool (no compatibility concept for grooves)
+    if (m_groovesList) {
+        for (int i = 0; i < m_groovesList->count(); ++i) {
+            auto* it = m_groovesList->item(i);
+            if (!it) continue;
+            const QString key = it->data(Qt::UserRole).toString();
+            const bool show = m_liveCandGrooveKeys.isEmpty() || m_liveCandGrooveKeys.contains(key);
+            it->setHidden(!show);
+            it->setForeground(QBrush()); // Default color for grooves
+        }
+    }
 }
 
 QSet<int> LibraryWindow::pitchClassesForPolychord() const {
@@ -999,6 +1309,170 @@ int LibraryWindow::pcFromIndex(int idx) {
 QString LibraryWindow::pcName(int pc) {
     const auto names = pcNames();
     return names[normalizePc(pc)];
+}
+
+// =========================================================================
+// COMPATIBILITY HELPERS - Smart filtering for live follow
+// =========================================================================
+
+bool LibraryWindow::isChordCompatible(const ChordDef* candidate, const ChordDef* current) const {
+    if (!candidate || !current) return false;
+    
+    // Exact match is always compatible
+    if (candidate->key == current->key) return true;
+    
+    // Same base quality (min7 compatible with min9, min11, min13)
+    // Check if they share the same core intervals (1, 3, 5, 7)
+    QSet<int> currentCore, candidateCore;
+    for (int iv : current->intervals) {
+        if (iv <= 11) currentCore.insert(normalizePc(iv)); // Core tones within octave
+    }
+    for (int iv : candidate->intervals) {
+        if (iv <= 11) candidateCore.insert(normalizePc(iv));
+    }
+    
+    // Compatible if candidate contains all core tones of current
+    // (extensions are allowed, missing tones are not)
+    bool hasAllCore = true;
+    for (int pc : currentCore) {
+        if (!candidateCore.contains(pc)) {
+            hasAllCore = false;
+            break;
+        }
+    }
+    
+    if (hasAllCore) return true;
+    
+    // Check for common substitution patterns
+    const QString ck = current->key.toLower();
+    const QString cand = candidate->key.toLower();
+    
+    // Minor family: min, min7, min9, min11, min13, min6, min_add9
+    if (ck.startsWith("min") && cand.startsWith("min")) return true;
+    
+    // Major family: maj, maj7, maj9, maj13, 6, 6/9
+    if ((ck.startsWith("maj") || ck == "6" || ck == "6/9") &&
+        (cand.startsWith("maj") || cand == "6" || cand == "6/9")) return true;
+    
+    // Dominant family: 7, 9, 11, 13, 7alt, 7#9, 7b9, etc.
+    bool currentIsDom = ck.startsWith("7") || ck == "9" || ck == "11" || ck == "13";
+    bool candIsDom = cand.startsWith("7") || cand == "9" || cand == "11" || cand == "13";
+    if (currentIsDom && candIsDom) return true;
+    
+    // Half-diminished: m7b5, ø
+    if ((ck.contains("m7b5") || ck.contains("halfdim")) &&
+        (cand.contains("m7b5") || cand.contains("halfdim"))) return true;
+    
+    // Diminished: dim, dim7, °
+    if ((ck.contains("dim") || ck.contains("°")) &&
+        (cand.contains("dim") || cand.contains("°"))) return true;
+    
+    return false;
+}
+
+bool LibraryWindow::isScaleCompatible(const ScaleDef* candidate, const ChordDef* currentChord) const {
+    if (!candidate || !currentChord) return false;
+    
+    // A scale is compatible if it contains all the chord tones
+    QSet<int> chordPcs;
+    for (int iv : currentChord->intervals) {
+        chordPcs.insert(normalizePc(iv));
+    }
+    
+    QSet<int> scalePcs;
+    for (int iv : candidate->intervals) {
+        scalePcs.insert(normalizePc(iv));
+    }
+    
+    // Check if scale contains all chord tones
+    for (int pc : chordPcs) {
+        if (!scalePcs.contains(pc)) return false;
+    }
+    
+    return true;
+}
+
+bool LibraryWindow::isVoicingCompatible(const VoicingDef* candidate, const ChordDef* currentChord) const {
+    if (!candidate || !currentChord) return true; // Show all if no context
+    
+    // Get available intervals in the chord (normalized to 0-11)
+    QSet<int> chordIntervals;
+    for (int iv : currentChord->intervals) {
+        chordIntervals.insert(normalizePc(iv));
+    }
+    
+    // Check if chord has a 7th (for 7th-based voicings)
+    bool has7th = chordIntervals.contains(10) || chordIntervals.contains(11); // m7 or M7
+    
+    // Check if chord has extensions
+    bool has9th = chordIntervals.contains(2) || chordIntervals.contains(1) || chordIntervals.contains(3); // 9, b9, #9
+    bool has11th = chordIntervals.contains(5) || chordIntervals.contains(6); // 11, #11
+    bool has13th = chordIntervals.contains(9) || chordIntervals.contains(8); // 13, b13
+    
+    // Voicings with "7" in the name need a chord with a 7th
+    const QString vk = candidate->key.toLower();
+    if (vk.contains("7") && !has7th) return false;
+    if (vk.contains("9") && !has9th && !has7th) return false; // 9th voicings usually imply 7th
+    if (vk.contains("13") && !has13th && !has7th) return false;
+    
+    // Rootless voicings work best with 7th chords
+    if (vk.contains("rootless") && !has7th) return false;
+    
+    // Shell voicings (3-7, 7-3) need a 7th
+    if (vk.contains("shell") && !has7th) return false;
+    
+    // Everything else is compatible
+    return true;
+}
+
+QVector<QPair<QString, QString>> LibraryWindow::suggestUpperStructures(const ChordDef* chord, int rootPc) const {
+    QVector<QPair<QString, QString>> suggestions; // (display name, description)
+    if (!chord) return suggestions;
+    
+    const QString ck = chord->key.toLower();
+    
+    // Upper structure triads for dominant chords
+    if (ck.startsWith("7") || ck == "9" || ck == "11" || ck == "13") {
+        // Common upper structures for dominant 7th chords:
+        // II triad over root: gives 9, #11, 13 (lydian dominant sound)
+        // bII triad over root: gives b9, 3, b13 (altered sound)
+        // #IV triad over root: gives #11, 7, b9 (altered)
+        // bVI triad over root: gives b13, 1, 3 (alt)
+        // VI triad over root: gives 13, #9, 5 (lydian dominant)
+        
+        suggestions.append({QString("%1 / %2").arg(pcName((rootPc + 2) % 12)).arg(pcName(rootPc)),
+                           "9, #11, 13 (Lydian Dominant)"});
+        suggestions.append({QString("%1 / %2").arg(pcName((rootPc + 1) % 12)).arg(pcName(rootPc)),
+                           "b9, 3, b13 (Altered)"});
+        suggestions.append({QString("%1 / %2").arg(pcName((rootPc + 6) % 12)).arg(pcName(rootPc)),
+                           "#11, 7, b9 (Altered)"});
+        suggestions.append({QString("%1 / %2").arg(pcName((rootPc + 8) % 12)).arg(pcName(rootPc)),
+                           "b13, 1, 3 (Altered)"});
+        suggestions.append({QString("%1 / %2").arg(pcName((rootPc + 9) % 12)).arg(pcName(rootPc)),
+                           "13, #9, 5 (Lydian Dominant)"});
+    }
+    
+    // Upper structures for major 7th
+    if (ck.startsWith("maj")) {
+        // III triad over root: gives 3, 5, 7 (basic shell)
+        // #IV dim over root: gives #11, 13, 1 (lydian)
+        suggestions.append({QString("%1 / %2").arg(pcName((rootPc + 4) % 12)).arg(pcName(rootPc)),
+                           "3, 5, 7 (Shell voicing)"});
+        suggestions.append({QString("%1m / %2").arg(pcName((rootPc + 4) % 12)).arg(pcName(rootPc)),
+                           "3, 5, 7 (Minor 3rd on top)"});
+    }
+    
+    // Upper structures for minor 7th
+    if (ck.startsWith("min")) {
+        // bIII triad over root: gives b3, 5, b7
+        // V triad over root: gives 5, 7, 9 (So What voicing)
+        suggestions.append({QString("%1 / %2").arg(pcName((rootPc + 3) % 12)).arg(pcName(rootPc)),
+                           "b3, 5, b7 (Basic)"});
+        suggestions.append({QString("%1 / %2").arg(pcName((rootPc + 7) % 12)).arg(pcName(rootPc)),
+                           "5, b7, 9 (So What voicing)"});
+    }
+    
+    return suggestions;
 }
 
 QSet<int> LibraryWindow::pitchClassesForChord(const ChordDef* chordDef, int rootPc) const {
@@ -1191,6 +1665,9 @@ QVector<int> LibraryWindow::midiNotesForSelectionTab(int tab, int rootPc) const 
                 notes.push_back(normalizeMidi(baseRoot + st));
             }
         }
+    } else if (m_polyTab && m_tabs && tab == m_tabs->indexOf(m_polyTab)) {
+        // Polychords tab - use the polychord MIDI notes
+        return midiNotesForPolychord();
     }
 
     std::sort(notes.begin(), notes.end());

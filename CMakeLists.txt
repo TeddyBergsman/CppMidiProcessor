@@ -11,7 +11,7 @@ set(CMAKE_AUTOUIC ON)
 
 # Find Qt6. This requires CMAKE_PREFIX_PATH on Apple Silicon Macs.
 set(CMAKE_PREFIX_PATH "/opt/homebrew") # Use /usr/local for Intel Macs.
-find_package(Qt6 REQUIRED COMPONENTS Widgets Xml)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Xml Concurrent)
 
 # --- Testing ---
 include(CTest)
@@ -92,6 +92,9 @@ add_executable(VirtuosoPlaybackTests
   playback/JointPhrasePlanner.cpp
   playback/JointCandidateModel.cpp
   playback/AgentCoordinator.cpp
+  playback/PrePlaybackCache.cpp
+  playback/ChordScaleTable.cpp
+  playback/KeyAnalyzer.cpp
   playback/JazzBalladBassPlanner.cpp
   playback/JazzBalladPianoPlanner.cpp
   playback/BrushesBalladDrummer.cpp
@@ -101,7 +104,7 @@ add_executable(VirtuosoPlaybackTests
   music/Pitch.cpp
   music/ChordSymbol.cpp
 )
-target_link_libraries(VirtuosoPlaybackTests PRIVATE VirtuosoCore Qt6::Core)
+target_link_libraries(VirtuosoPlaybackTests PRIVATE VirtuosoCore Qt6::Core Qt6::Concurrent)
 add_test(NAME VirtuosoPlaybackTests COMMAND VirtuosoPlaybackTests)
 
 
@@ -157,6 +160,14 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/JointPhrasePlanner.cpp
   playback/JointCandidateModel.h
   playback/JointCandidateModel.cpp
+  playback/PrePlaybackCache.h
+  playback/PrePlaybackCache.cpp
+  playback/ChordScaleTable.h
+  playback/ChordScaleTable.cpp
+  playback/KeyAnalyzer.h
+  playback/KeyAnalyzer.cpp
+  playback/PrePlanningDialog.h
+  playback/PrePlanningDialog.cpp
   playback/AgentCoordinator.h
   playback/AgentCoordinator.cpp
   playback/LookaheadWindow.h
@@ -210,6 +221,7 @@ target_link_libraries(CppMidiProcessor
   PRIVATE
   Qt6::Widgets
   Qt6::Xml
+  Qt6::Concurrent
   VirtuosoCore
   "-framework CoreMIDI"
   "-framework CoreAudio"

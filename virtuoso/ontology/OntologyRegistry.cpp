@@ -258,14 +258,19 @@ OntologyRegistry OntologyRegistry::builtins() {
 
     // Upper Structure Triads (UST) over a dominant root (intervals are relative to the dominant root).
     // We use interval-based voicings so the Library can display/play them without requiring complex degree parsing.
+    // Major USTs (complete set for all 12 intervals)
     addVoicing2("piano_ust_I", InstrumentKind::Piano, "UST I (I Major triad)", "UST", "Major triad on I", {}, {0,4,7}, {"piano","ust"}, 100);
-    addVoicing2("piano_ust_II", InstrumentKind::Piano, "UST II (II Major triad)", "UST", "Major triad on II", {}, {2,6,9}, {"piano","ust"}, 101);
-    addVoicing2("piano_ust_bIII", InstrumentKind::Piano, "UST bIII (bIII Major triad)", "UST", "Major triad on bIII", {}, {3,7,10}, {"piano","ust"}, 102);
-    addVoicing2("piano_ust_III", InstrumentKind::Piano, "UST III (III Major triad)", "UST", "Major triad on III", {}, {4,8,11}, {"piano","ust"}, 103);
-    addVoicing2("piano_ust_bV", InstrumentKind::Piano, "UST bV (bV Major triad)", "UST", "Major triad on bV", {}, {6,10,13}, {"piano","ust"}, 104);
-    addVoicing2("piano_ust_V", InstrumentKind::Piano, "UST V (V Major triad)", "UST", "Major triad on V", {}, {7,11,14}, {"piano","ust"}, 105);
-    addVoicing2("piano_ust_bVI", InstrumentKind::Piano, "UST bVI (bVI Major triad)", "UST", "Major triad on bVI", {}, {8,12,15}, {"piano","ust"}, 106);
-    addVoicing2("piano_ust_VI", InstrumentKind::Piano, "UST VI (VI Major triad)", "UST", "Major triad on VI", {}, {9,13,16}, {"piano","ust"}, 107);
+    addVoicing2("piano_ust_bII", InstrumentKind::Piano, "UST bII (bII Major triad)", "UST", "Major triad on bII", {}, {1,5,8}, {"piano","ust"}, 101);
+    addVoicing2("piano_ust_II", InstrumentKind::Piano, "UST II (II Major triad)", "UST", "Major triad on II", {}, {2,6,9}, {"piano","ust"}, 102);
+    addVoicing2("piano_ust_bIII", InstrumentKind::Piano, "UST bIII (bIII Major triad)", "UST", "Major triad on bIII", {}, {3,7,10}, {"piano","ust"}, 103);
+    addVoicing2("piano_ust_III", InstrumentKind::Piano, "UST III (III Major triad)", "UST", "Major triad on III", {}, {4,8,11}, {"piano","ust"}, 104);
+    addVoicing2("piano_ust_IV", InstrumentKind::Piano, "UST IV (IV Major triad)", "UST", "Major triad on IV", {}, {5,9,12}, {"piano","ust"}, 105);
+    addVoicing2("piano_ust_bV", InstrumentKind::Piano, "UST bV (bV Major triad)", "UST", "Major triad on bV", {}, {6,10,13}, {"piano","ust"}, 106);
+    addVoicing2("piano_ust_V", InstrumentKind::Piano, "UST V (V Major triad)", "UST", "Major triad on V", {}, {7,11,14}, {"piano","ust"}, 107);
+    addVoicing2("piano_ust_bVI", InstrumentKind::Piano, "UST bVI (bVI Major triad)", "UST", "Major triad on bVI", {}, {8,12,15}, {"piano","ust"}, 108);
+    addVoicing2("piano_ust_VI", InstrumentKind::Piano, "UST VI (VI Major triad)", "UST", "Major triad on VI", {}, {9,13,16}, {"piano","ust"}, 109);
+    addVoicing2("piano_ust_bVII", InstrumentKind::Piano, "UST bVII (bVII Major triad)", "UST", "Major triad on bVII", {}, {10,14,17}, {"piano","ust"}, 110);
+    addVoicing2("piano_ust_VII", InstrumentKind::Piano, "UST VII (VII Major triad)", "UST", "Major triad on VII", {}, {11,15,18}, {"piano","ust"}, 111);
 
     // Piano textures (initial placeholders; degrees chosen to be audible + recognizable)
     addVoicing2("piano_block_shearing", InstrumentKind::Piano, "Block Chords (Shearing-style)", "Block", "4-way close (approx)", {1,3,5,7}, {}, {"piano","block"}, 200);
@@ -274,6 +279,39 @@ OntologyRegistry OntologyRegistry::builtins() {
     addVoicing2("piano_cluster_chromatic", InstrumentKind::Piano, "Cluster (chromatic)", "Cluster", "Chromatic cluster (approx)", {}, {0,1,2,3}, {"piano","cluster"}, 221);
     addVoicing2("piano_gospel_triads", InstrumentKind::Piano, "Gospel (triad cycling)", "Gospel", "Inversion cycling (placeholder)", {1,3,5}, {}, {"piano","gospel"}, 240);
     addVoicing2("piano_stride_basic", InstrumentKind::Piano, "Stride (basic)", "Stride", "Tenths + chord (placeholder)", {1,7,10}, {}, {"piano","stride"}, 260);
+
+    // LH (left hand) voicings - used by the jazz ballad piano planner
+    addVoicing2("piano_lh_voicing", InstrumentKind::Piano, "LH Voicing (3+ notes)", "LH", "Left hand voicing with 3+ notes", {3,5,7}, {}, {"piano","lh"}, 30);
+    addVoicing2("piano_lh_shell", InstrumentKind::Piano, "LH Shell (2 notes)", "LH", "Left hand shell voicing", {3,7}, {}, {"piano","lh","shell"}, 31);
+    addVoicing2("piano_lh_single", InstrumentKind::Piano, "LH Single", "LH", "Left hand single note", {1}, {}, {"piano","lh"}, 32);
+    addVoicing2("piano_lh_inversion", InstrumentKind::Piano, "LH Inversion", "LH", "Inverted left hand voicing", {3,5,7}, {}, {"piano","lh"}, 33);
+    addVoicing2("piano_lh_inner_move", InstrumentKind::Piano, "LH Inner Voice Move", "LH", "Inner voice movement variation", {3,5,7}, {}, {"piano","lh"}, 34);
+    addVoicing2("piano_lh_quartal", InstrumentKind::Piano, "LH Quartal", "LH", "Quartal left hand voicing", {3,7,9}, {}, {"piano","lh","quartal"}, 35);
+
+    // RH (right hand) voicings - melodic and color tones
+    addVoicing2("piano_rh_single_color", InstrumentKind::Piano, "RH Single (color)", "RH", "Single color tone (9, 13)", {9}, {}, {"piano","rh","color"}, 40);
+    addVoicing2("piano_rh_dyad_color", InstrumentKind::Piano, "RH Dyad (color)", "RH", "Dyad with color tones", {9,13}, {}, {"piano","rh","color"}, 41);
+    addVoicing2("piano_rh_single_guide", InstrumentKind::Piano, "RH Single (guide)", "RH", "Single guide tone (3, 7)", {3}, {}, {"piano","rh","guide"}, 42);
+    addVoicing2("piano_rh_dyad_guide", InstrumentKind::Piano, "RH Dyad (guide)", "RH", "Dyad with guide tones (3-7)", {3,7}, {}, {"piano","rh","guide"}, 43);
+    addVoicing2("piano_rh_melodic", InstrumentKind::Piano, "RH Melodic", "RH", "Melodic right hand line", {}, {}, {"piano","rh","melodic"}, 44);
+
+    // Basic triads
+    addVoicing2("piano_triad_root", InstrumentKind::Piano, "Triad (root position)", "Triad", "1-3-5 root position", {1,3,5}, {}, {"piano","triad"}, 50);
+    addVoicing2("piano_triad_first_inv", InstrumentKind::Piano, "Triad (1st inversion)", "Triad", "3-5-1 first inversion", {3,5,1}, {}, {"piano","triad"}, 51);
+
+    // Minor UST variants (complete set for all 12 intervals)
+    addVoicing2("piano_ust_i_min", InstrumentKind::Piano, "UST i (i minor triad)", "UST", "Minor triad on i", {}, {0,3,7}, {"piano","ust","minor"}, 120);
+    addVoicing2("piano_ust_bii_min", InstrumentKind::Piano, "UST bii (bii minor triad)", "UST", "Minor triad on bii", {}, {1,4,8}, {"piano","ust","minor"}, 121);
+    addVoicing2("piano_ust_ii_min", InstrumentKind::Piano, "UST ii (ii minor triad)", "UST", "Minor triad on ii", {}, {2,5,9}, {"piano","ust","minor"}, 122);
+    addVoicing2("piano_ust_biii_min", InstrumentKind::Piano, "UST biii (biii minor triad)", "UST", "Minor triad on biii", {}, {3,6,10}, {"piano","ust","minor"}, 123);
+    addVoicing2("piano_ust_iii_min", InstrumentKind::Piano, "UST iii (iii minor triad)", "UST", "Minor triad on iii", {}, {4,7,11}, {"piano","ust","minor"}, 124);
+    addVoicing2("piano_ust_iv_min", InstrumentKind::Piano, "UST iv (iv minor triad)", "UST", "Minor triad on iv", {}, {5,8,12}, {"piano","ust","minor"}, 125);
+    addVoicing2("piano_ust_bv_min", InstrumentKind::Piano, "UST bv (bv minor triad)", "UST", "Minor triad on bv", {}, {6,9,13}, {"piano","ust","minor"}, 126);
+    addVoicing2("piano_ust_v_min", InstrumentKind::Piano, "UST v (v minor triad)", "UST", "Minor triad on v", {}, {7,10,14}, {"piano","ust","minor"}, 127);
+    addVoicing2("piano_ust_bvi_min", InstrumentKind::Piano, "UST bvi (bvi minor triad)", "UST", "Minor triad on bvi", {}, {8,11,15}, {"piano","ust","minor"}, 128);
+    addVoicing2("piano_ust_vi_min", InstrumentKind::Piano, "UST vi (vi minor triad)", "UST", "Minor triad on vi", {}, {9,12,16}, {"piano","ust","minor"}, 129);
+    addVoicing2("piano_ust_bvii_min", InstrumentKind::Piano, "UST bvii (bvii minor triad)", "UST", "Minor triad on bvii", {}, {10,13,17}, {"piano","ust","minor"}, 130);
+    addVoicing2("piano_ust_vii_min", InstrumentKind::Piano, "UST vii (vii minor triad)", "UST", "Minor triad on vii", {}, {11,14,18}, {"piano","ust","minor"}, 131);
 
     // Guitar voicings (shape-level placeholders; still useful for pitch-class visualization)
     addVoicing2("guitar_shell_3_7", InstrumentKind::Guitar, "Shell (3-7)", "Shell", "Freddie Green shell", {3,7}, {}, {"guitar","shell"}, 300);

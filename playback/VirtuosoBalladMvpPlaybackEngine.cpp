@@ -8,15 +8,20 @@
 #include "playback/TransportTimeline.h"
 #include "playback/AutoWeightController.h"
 #include "playback/WeightNegotiator.h"
+#include "playback/ChordScaleTable.h"
 
 #include <QHash>
 #include <QDateTime>
 #include <QElapsedTimer>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPointer>
 #include <QThreadPool>
 #include <QRunnable>
+#include <QCoreApplication>
 #include <QtGlobal>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 
 namespace playback {
@@ -186,6 +191,10 @@ VirtuosoBalladMvpPlaybackEngine::VirtuosoBalladMvpPlaybackEngine(QObject* parent
     // Harmony context uses ontology as its substrate.
     m_harmony.setOntology(&m_ontology);
     m_harmony.setOwner(this);
+    
+    // Initialize global chord→scale lookup table (once at startup)
+    // This provides O(1) scale selection during pre-planning.
+    ChordScaleTable::initialize(m_ontology);
 }
 
 void VirtuosoBalladMvpPlaybackEngine::emitLookaheadPlanOnce() {
@@ -321,6 +330,18 @@ void VirtuosoBalladMvpPlaybackEngine::play() {
     if (m_sequence.isEmpty()) return;
 
     applyPresetToEngine();
+    
+    // PERF: Build the complete pre-playback cache BEFORE starting playback.
+    // This ensures ZERO computation during actual playback - only O(1) lookups.
+    // Per product spec: "lag can never happen while the actual music has started playing"
+    if (m_usePreCache) {
+        buildPrePlaybackCache();
+        qInfo().noquote() << QString("PrePlaybackCache ready: %1 steps, %2 energy branches, built in %3ms")
+            .arg(m_preCache.totalSteps)
+            .arg(m_preCache.energyBranches.size())
+            .arg(m_preCache.buildTimeMs);
+    }
+    
     m_engine.start();
     // Grid base is anchored slightly in the future at the moment we first schedule grid events.
     // IMPORTANT: do not pre-initialize it here, because scheduling may begin a bit later (first tick),
@@ -514,6 +535,10 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
             m_lastEmittedCell = cellIndex;
             emit currentCellChanged(cellIndex);
         }
+        
+        // Emit theory event for LibraryWindow at CURRENT playback position
+        // (not the scheduled lookahead position)
+        emitTheoryEventForStep(stepNow);
 
         // Emit weights v2 (for UI slider animation / debugging).
         {
@@ -548,8 +573,12 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
     }
 
     // --- Lookahead plan (4 bars) for UI ---
-    // Critical: only update on step changes (not every 10ms tick) and only if there are listeners.
-    if (stepNow != m_lastLookaheadStepEmitted && receivers(SIGNAL(lookaheadPlanJson(QString))) > 0) {
+    // Critical: only update on step changes and only if there are listeners.
+    // PERF: Limit to once per bar (not every beat) to reduce expensive planner copying.
+    // This provides smoother playback at the cost of slightly less responsive UI updates.
+    const int beatsPerBarLookahead = qMax(1, ts.num);
+    const bool isBarStart = (stepNow % beatsPerBarLookahead) == 0;
+    if (stepNow != m_lastLookaheadStepEmitted && isBarStart && receivers(SIGNAL(lookaheadPlanJson(QString))) > 0) {
         m_lastLookaheadStepEmitted = stepNow;
         scheduleLookaheadAsync(stepNow, ts, nowWallMs, elapsedMs);
     }
@@ -557,13 +586,26 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
     // Lookahead scheduling window (tight timing).
     // We need to schedule far enough ahead for sample-library articulations that must be pressed
     // before the "previous note" (e.g. Ample Upright Legato Slide).
-    constexpr int kLookaheadMs = 2600;
+    // PERF: Increased from 2600ms to 4000ms to provide more buffer for expensive planning.
+    constexpr int kLookaheadMs = 4000;
     const int scheduleUntil = int(double(songMs + kLookaheadMs) / beatMs);
     const int maxStepToSchedule = std::min(total - 1, scheduleUntil);
 
-    while (m_nextScheduledStep <= maxStepToSchedule) {
-        scheduleStep(m_nextScheduledStep, seqLen);
+    // PERF: When using pre-computed cache, we can schedule many steps per tick
+    // because it's just O(1) lookups - no computation at all.
+    // When not using cache, limit to 2 steps to prevent catch-up stalls.
+    const int kMaxStepsPerTick = (m_usePreCache && m_preCache.isValid()) ? 16 : 2;
+    int stepsScheduledThisTick = 0;
+
+    while (m_nextScheduledStep <= maxStepToSchedule && stepsScheduledThisTick < kMaxStepsPerTick) {
+        // PERF: Use pre-computed cache if available (O(1) lookup, zero computation)
+        if (m_usePreCache && m_preCache.isValid()) {
+            scheduleStepFromCache(m_nextScheduledStep);
+        } else {
+            scheduleStep(m_nextScheduledStep, seqLen);
+        }
         m_nextScheduledStep++;
+        stepsScheduledThisTick++;
     }
 }
 
@@ -758,6 +800,249 @@ void VirtuosoBalladMvpPlaybackEngine::scheduleStep(int stepIndex, int seqLen) {
     ai.story = &m_story;
 
     AgentCoordinator::scheduleStep(ai, stepIndex);
+}
+
+void VirtuosoBalladMvpPlaybackEngine::buildPrePlaybackCache() {
+    QElapsedTimer timer;
+    timer.start();
+    
+    // Clear any existing cache
+    m_preCache.clear();
+    
+    // Create and show the progress dialog
+    if (!m_prePlanningDialog) {
+        // Find parent widget for dialog (walk up to find a QWidget)
+        QWidget* parentWidget = nullptr;
+        QObject* p = parent();
+        while (p) {
+            if (auto* w = qobject_cast<QWidget*>(p)) {
+                parentWidget = w;
+                break;
+            }
+            p = p->parent();
+        }
+        m_prePlanningDialog = new PrePlanningDialog(parentWidget);
+    }
+    
+    // Start the dialog with a generic title
+    m_prePlanningDialog->start("Preparing Performance");
+    
+    // Build input structure for the cache builder
+    PrePlaybackBuilder::Inputs in;
+    in.model = &m_model;
+    in.sequence = &m_sequence;
+    in.repeats = m_repeats;
+    in.bpm = m_bpm;
+    in.stylePresetKey = m_stylePresetKey;
+    in.bassPlanner = &m_bassPlanner;
+    in.pianoPlanner = &m_pianoPlanner;
+    in.drummer = &m_drummer;
+    in.harmony = &m_harmony;
+    in.engine = &m_engine;
+    in.ontology = &m_ontology;
+    in.interaction = &m_interaction;
+    in.story = &m_story;
+    in.chBass = m_chBass;
+    in.chPiano = m_chPiano;
+    in.chDrums = m_chDrums;
+    in.agentEnergyMult = m_agentEnergyMult;
+    
+    // Track maximum progress seen from parallel branches (thread-safe via atomic)
+    std::atomic<int> maxBranchProgressPct{0};
+    
+    // Progress callback that updates the dialog
+    // currentBranch == -1 means Phase 1 (context building, main thread)
+    // currentBranch >= 0 means Phase 2 (branch building, worker threads)
+    auto progressCallback = [this, &maxBranchProgressPct](int currentStep, int totalSteps, int currentBranch, int totalBranches) {
+        const double stepProgress = double(currentStep) / double(qMax(1, totalSteps));
+        const int stepProgressPct = int(stepProgress * 100);
+        
+        if (currentBranch < 0) {
+            // Phase 1: Context building (single-threaded, main thread)
+            const int barIndex = currentStep / 4;
+            const QString status = QString("Analyzing bar %1...").arg(barIndex + 1);
+            
+            if (m_prePlanningDialog) {
+                m_prePlanningDialog->updateProgress(0, stepProgress, status);
+            }
+            emit prePlanningProgress(0, stepProgress, status);
+            QCoreApplication::processEvents();
+        } else {
+            // Phase 2: Branch building (parallel worker threads)
+            // Track max progress atomically - only update UI if this is a new max
+            int oldMax = maxBranchProgressPct.load();
+            while (stepProgressPct > oldMax && 
+                   !maxBranchProgressPct.compare_exchange_weak(oldMax, stepProgressPct)) {
+                // Loop until we either set the new max or someone else set a higher value
+            }
+            
+            // Only update UI if we set a new maximum (reduces UI thrashing)
+            if (stepProgressPct >= oldMax) {
+                static const QStringList branchNames = {"Simmer", "Build", "Climax", "Cool Down"};
+                const QString branchName = (currentBranch < branchNames.size()) 
+                    ? branchNames[currentBranch] : QString::number(currentBranch + 1);
+                
+                const int barIndex = currentStep / 4;
+                const QString status = QString("Generating %1 (bar %2)...").arg(branchName).arg(barIndex + 1);
+                
+                // Use QMetaObject::invokeMethod to safely update UI from worker thread
+                QMetaObject::invokeMethod(this, [this, stepProgress, status]() {
+                    if (m_prePlanningDialog) {
+                        m_prePlanningDialog->updateProgress(1, stepProgress, status);
+                    }
+                    emit prePlanningProgress(1, stepProgress, status);
+                    QCoreApplication::processEvents();
+                }, Qt::QueuedConnection);
+            }
+        }
+    };
+    
+    // Build the cache (optimized: ~400-800ms for a full song)
+    m_preCache = PrePlaybackBuilder::build(in, progressCallback);
+    
+    // Process any pending queued UI updates from worker threads
+    QCoreApplication::processEvents();
+    
+    // Mark completion and auto-close dialog
+    if (m_prePlanningDialog) {
+        m_prePlanningDialog->complete();
+    }
+    emit prePlanningProgress(2, 1.0, "Ready!");
+    
+    // Reset planners after cache building so real-time fallback starts fresh
+    m_bassPlanner.reset();
+    m_pianoPlanner.reset();
+    m_harmony.resetRuntimeState();
+    
+    qInfo().noquote() << QString("buildPrePlaybackCache: Completed in %1ms").arg(timer.elapsed());
+}
+
+void VirtuosoBalladMvpPlaybackEngine::scheduleStepFromCache(int stepIndex) {
+    // PERF: This function MUST be O(1) - no computation, just lookups and MIDI scheduling.
+    // Any expensive computation here defeats the purpose of pre-caching.
+    
+    if (!m_preCache.isValid()) {
+        qWarning() << "scheduleStepFromCache: Cache not valid, falling back to real-time";
+        scheduleStep(stepIndex, m_sequence.size());
+        return;
+    }
+    
+    // Get current energy level for branch selection
+    const qint64 nowWallMs = QDateTime::currentMSecsSinceEpoch();
+    double energy01 = m_debugEnergy;
+    if (m_debugEnergyAuto) {
+        const auto snap = m_interaction.snapshot(nowWallMs, /*debugEnergyAuto=*/true, /*debugEnergy01=*/m_debugEnergy);
+        energy01 = snap.energy01;
+    }
+    
+    // Select energy branch
+    const EnergyBand band = PrePlaybackCache::energyToBand(energy01);
+    const PreComputedBeat* beat = m_preCache.getBeat(stepIndex, band);
+    
+    if (!beat) {
+        qWarning() << "scheduleStepFromCache: No beat at step" << stepIndex << "band" << static_cast<int>(band);
+        return;
+    }
+    
+    // Time signature for grid conversion
+    virtuoso::groove::TimeSignature ts{4, 4};
+    ts.num = (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4;
+    ts.den = (m_model.timeSigDen > 0) ? m_model.timeSigDen : 4;
+    
+    // Schedule drums (direct intent notes)
+    for (const auto& dn : beat->drumsNotes) {
+        m_engine.scheduleNote(dn);
+    }
+    
+    // Schedule bass notes
+    for (const auto& bn : beat->bassPlan.notes) {
+        m_engine.scheduleNote(bn);
+    }
+    
+    // Schedule bass keyswitches
+    for (const auto& ks : beat->bassPlan.keyswitches) {
+        if (ks.midi >= 0) {
+            m_engine.scheduleKeySwitch("Bass", m_chBass, ks.midi, ks.startPos,
+                                       /*structural=*/true, ks.leadMs, ks.holdMs, ks.logic_tag);
+        }
+    }
+    
+    // Note: Bass BeatPlan doesn't have CCs (bass uses keyswitches for articulation)
+    
+    // Schedule piano notes
+    for (const auto& pn : beat->pianoPlan.notes) {
+        m_engine.scheduleNote(pn);
+    }
+    
+    // Schedule piano CCs (sustain pedal, expression, etc.)
+    for (const auto& cc : beat->pianoPlan.ccs) {
+        m_engine.scheduleCC("Piano", m_chPiano, cc.cc, cc.value, cc.startPos,
+                           cc.structural, cc.logic_tag);
+    }
+    
+    // NOTE: Theory event emission moved to emitTheoryEventForStep() 
+    // which is called from onTick() at the CURRENT playback position,
+    // not the scheduled (lookahead) position.
+}
+
+void VirtuosoBalladMvpPlaybackEngine::emitTheoryEventForStep(int stepIndex) {
+    // Emit candidate_pool event for LibraryWindow live-follow
+    // This is called at the CURRENT playback position from onTick()
+    
+    if (!m_usePreCache || !m_preCache.isValid()) return;
+    
+    // Get current energy level for branch selection
+    const qint64 nowWallMs = QDateTime::currentMSecsSinceEpoch();
+    double energy01 = m_debugEnergy;
+    if (m_debugEnergyAuto) {
+        const auto snap = m_interaction.snapshot(nowWallMs, /*debugEnergyAuto=*/true, /*debugEnergy01=*/m_debugEnergy);
+        energy01 = snap.energy01;
+    }
+    
+    const EnergyBand band = PrePlaybackCache::energyToBand(energy01);
+    const PreComputedBeat* beat = m_preCache.getBeat(stepIndex, band);
+    if (!beat) return;
+    
+    virtuoso::groove::TimeSignature ts{4, 4};
+    ts.num = (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4;
+    ts.den = (m_model.timeSigDen > 0) ? m_model.timeSigDen : 4;
+    
+    QJsonObject root;
+    root.insert("event_kind", "candidate_pool");
+    root.insert("schema", 2);
+    root.insert("tempo_bpm", m_bpm);
+    root.insert("ts_num", ts.num);
+    root.insert("ts_den", ts.den);
+    root.insert("style_preset_key", m_stylePresetKey);
+    
+    // Core chord/key info (what LibraryWindow::applyLiveChoiceToUi expects)
+    root.insert("chord_def_key", beat->chordDefKey);
+    root.insert("chord_root_pc", beat->chordRootPc);
+    root.insert("key_tonic_pc", beat->keyTonicPc);
+    root.insert("key_mode", beat->keyMode == virtuoso::theory::KeyMode::Minor ? "minor" : "major");
+    root.insert("chord_is_new", beat->chordIsNew);
+    root.insert("groove_template", beat->grooveTemplateKey);
+    
+    // Grid position for timing
+    const auto poolPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+        beat->barIndex, beat->beatInBar, 0, 1, ts);
+    root.insert("grid_pos", virtuoso::groove::GrooveGrid::toString(poolPos, ts));
+    const qint64 baseMs = m_engine.gridBaseMsEnsure();
+    root.insert("on_ms", qint64(virtuoso::groove::GrooveGrid::posToMs(poolPos, ts, m_bpm) + baseMs));
+    
+    // "chosen" object structure (what LibraryWindow expects)
+    QJsonObject chosen;
+    chosen.insert("scale_key", beat->scaleKey);
+    chosen.insert("voicing_key", beat->voicingKey);
+    if (!beat->pianoPlan.notes.isEmpty()) {
+        const auto& pn = beat->pianoPlan.notes.first();
+        chosen.insert("scale_used", pn.scale_used);
+        chosen.insert("voicing_type", pn.voicing_type);
+    }
+    root.insert("chosen", chosen);
+    
+    const QString json = QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+    emit theoryEventJson(json);
 }
 
 int VirtuosoBalladMvpPlaybackEngine::thirdIntervalForQuality(music::ChordQuality q) {

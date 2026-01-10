@@ -5119,25 +5119,77 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         const bool allowExtensions = hitTensionLevel > 0.3;
         
         // ================================================================
-        // BUILD SINGLE VOICING FOR THIS PHRASE HIT
-        // (No more beat-level loop - one voicing per phrase hit!)
+        // UPPER STRUCTURE TRIADS (Bill Evans Signature!)
+        // On dominant chords with sufficient tension, use USTs for color
         // ================================================================
+        const bool isDominant = (adjusted.chord.quality == music::ChordQuality::Dominant);
+        const bool isMajor7 = (adjusted.chord.quality == music::ChordQuality::Major && 
+                               adjusted.chord.seventh == music::SeventhQuality::Major7);
+        const bool isMinor7 = (adjusted.chord.quality == music::ChordQuality::Minor);
+        const bool wantsUST = (isDominant || isMajor7) && 
+                              hitTensionLevel > 0.35 && 
+                              !userActive &&
+                              curArcPhase != 2;  // Not during resolution phase
+        
+        // Probability of using UST: higher tension = more likely
+        const bool useUST = wantsUST && ((rhHash % 100) < int(hitTensionLevel * 70 + 15));
         
         QVector<int> rhMidiNotes;
-        int topPc = normalizePc(bestTarget);
-        QString voicingName = "RH_Drop2";
+        QString voicingName;
+        bool usedUST = false;
         
-        // Get all available chord tones for voicing
+        if (useUST) {
+            // Get UST candidates for this chord
+            const auto ustCandidates = getUpperStructureTriads(adjusted.chord);
+            
+            if (!ustCandidates.isEmpty()) {
+                // Select UST based on tension level
+                // Lower tension = safer USTs (lower index), higher tension = more colorful
+                int ustIndex = 0;
+                if (hitTensionLevel > 0.6 && ustCandidates.size() > 1) {
+                    ustIndex = qMin(1, ustCandidates.size() - 1);
+                }
+                if (hitTensionLevel > 0.75 && ustCandidates.size() > 2) {
+                    ustIndex = qMin(2, ustCandidates.size() - 1);
+                }
+                
+                // Build the UST voicing
+                const RhMelodic ustVoicing = buildUstVoicing(adjusted, ustCandidates[ustIndex]);
+                
+                if (!ustVoicing.midiNotes.isEmpty()) {
+                    rhMidiNotes = ustVoicing.midiNotes;
+                    voicingName = ustVoicing.ontologyKey;
+                    usedUST = true;
+                    
+                    // Update melodic state from UST
+                    if (ustVoicing.topNoteMidi > 0) {
+                        bestTarget = ustVoicing.topNoteMidi;
+                    }
+                }
+            }
+        }
+        
+        // ================================================================
+        // BUILD SINGLE VOICING FOR THIS PHRASE HIT
+        // (Only if UST wasn't used)
+        // ================================================================
+        
+        int topPc = normalizePc(bestTarget);
+        if (!usedUST) voicingName = "piano_rh_drop2";
+        
+        // Get all available chord tones for voicing (only if UST not used)
         QVector<int> voicingPcs;
-        if (third >= 0) voicingPcs.push_back(third);
-        if (fifth >= 0) voicingPcs.push_back(fifth);
-        if (seventh >= 0) voicingPcs.push_back(seventh);
-        if (ninth >= 0 && allowExtensions) voicingPcs.push_back(ninth);
+        if (!usedUST) {
+            if (third >= 0) voicingPcs.push_back(third);
+            if (fifth >= 0) voicingPcs.push_back(fifth);
+            if (seventh >= 0) voicingPcs.push_back(seventh);
+            if (ninth >= 0 && allowExtensions) voicingPcs.push_back(ninth);
+        }
         
         // ================================================================
         // DROP-2 VOICING (Default for ballads!)
         // ================================================================
-        if (voicingType == RhVoicingType::Drop2 && voicingPcs.size() >= 3) {
+        if (!usedUST && voicingType == RhVoicingType::Drop2 && voicingPcs.size() >= 3) {
             rhMidiNotes.push_back(bestTarget);
             
             QVector<int> closePositionPcs;
@@ -5171,12 +5223,12 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     rhMidiNotes.push_back(midi);
                 }
             }
-            voicingName = "RH_Drop2";
+            voicingName = "piano_drop2";
         }
         // ================================================================
         // TRIAD VOICING
         // ================================================================
-        else if (voicingType == RhVoicingType::Triad || voicingPcs.size() < 3) {
+        else if (!usedUST && (voicingType == RhVoicingType::Triad || voicingPcs.size() < 3)) {
             rhMidiNotes.push_back(bestTarget);
             
             for (int interval : {4, 3, 5}) {
@@ -5196,12 +5248,12 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     }
                 }
             }
-            voicingName = "RH_Triad";
+            voicingName = "piano_triad_root";
         }
         // ================================================================
         // DYAD VOICING
         // ================================================================
-        else if (voicingType == RhVoicingType::Dyad) {
+        else if (!usedUST && voicingType == RhVoicingType::Dyad) {
             rhMidiNotes.push_back(bestTarget);
             
             for (int interval : {4, 3, 5, 8, 9, 7, 6}) {
@@ -5215,12 +5267,12 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 int fallback = bestTarget - 4;
                 if (fallback >= adjusted.lhHi - 8) rhMidiNotes.push_back(fallback);
             }
-            voicingName = "RH_Dyad";
+            voicingName = "piano_rh_dyad_guide";
         }
         // ================================================================
         // SINGLE NOTE (only when user is playing)
         // ================================================================
-        else {
+        else if (!usedUST) {
             rhMidiNotes.push_back(bestTarget);
             if (!userActive) {
                 int support = bestTarget - 4;
@@ -5228,7 +5280,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                     rhMidiNotes.push_back(support);
                 }
             }
-            voicingName = userActive ? "RH_Single" : "RH_Dyad_Min";
+            voicingName = userActive ? "piano_rh_single_guide" : "piano_rh_dyad_guide";
         }
         
         std::sort(rhMidiNotes.begin(), rhMidiNotes.end());
@@ -5255,6 +5307,51 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             double rhDurBeats = hitIsAccent ? 0.80 : 0.60;
             rhDurBeats *= baseBrokenFeel.durationMult * mappings.durationMod;
             const virtuoso::groove::Rational rhDurWhole(qint64(rhDurBeats * 1000), 4000);
+            
+            // ================================================================
+            // ORNAMENTS: Grace notes, turns, appoggiaturas (~12% probability)
+            // Add expressive ornaments before the main voicing on special moments
+            // ================================================================
+            const quint32 ornHash = virtuoso::util::StableHash::mix(rhHash, adjusted.playbackBarIndex * 41);
+            if (shouldAddOrnament(adjusted, ornHash) && !rhMidiNotes.isEmpty()) {
+                const int topNote = rhMidiNotes.last();  // Ornament the top (melodic) note
+                const Ornament orn = generateOrnament(adjusted, topNote, ornHash);
+                
+                if (orn.type != OrnamentType::None && !orn.notes.isEmpty()) {
+                    // Calculate ornament start position (before main note)
+                    int totalOrnDurMs = 0;
+                    for (int d : orn.durationsMs) totalOrnDurMs += d;
+                    
+                    // Create ornament notes
+                    int ornOffsetMs = -totalOrnDurMs;  // Start before main note
+                    for (int i = 0; i < orn.notes.size(); ++i) {
+                        virtuoso::groove::GridPos ornPos = rhPos;
+                        ornPos = applyTimingOffset(ornPos, ornOffsetMs, adjusted.bpm, ts);
+                        
+                        virtuoso::engine::AgentIntentNote ornNote;
+                        ornNote.agent = "Piano";
+                        ornNote.channel = midiChannel;
+                        ornNote.note = orn.notes[i];
+                        ornNote.baseVelocity = orn.velocities[i];
+                        ornNote.startPos = ornPos;
+                        // Short duration for ornament notes
+                        const double ornDurBeats = double(orn.durationsMs[i]) / (60000.0 / adjusted.bpm);
+                        ornNote.durationWhole = virtuoso::groove::Rational(qint64(ornDurBeats * 1000), 4000);
+                        ornNote.structural = false;
+                        ornNote.chord_context = adjusted.chordText;
+                        ornNote.voicing_type = "piano_ornament";
+                        ornNote.logic_tag = "RH_grace";
+                        
+                        plan.notes.push_back(ornNote);
+                        ornOffsetMs += orn.durationsMs[i];
+                    }
+                    
+                    // Delay main note if ornament requires it
+                    if (orn.mainNoteDelayMs > 0) {
+                        rhPos = applyTimingOffset(rhPos, orn.mainNoteDelayMs, adjusted.bpm, ts);
+                    }
+                }
+            }
             
             // Add all notes of voicing
             for (int noteIdx = 0; noteIdx < rhMidiNotes.size(); ++noteIdx) {

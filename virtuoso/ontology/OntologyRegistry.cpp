@@ -294,6 +294,7 @@ OntologyRegistry OntologyRegistry::builtins() {
     addVoicing2("piano_rh_single_guide", InstrumentKind::Piano, "RH Single (guide)", "RH", "Single guide tone (3, 7)", {3}, {}, {"piano","rh","guide"}, 42);
     addVoicing2("piano_rh_dyad_guide", InstrumentKind::Piano, "RH Dyad (guide)", "RH", "Dyad with guide tones (3-7)", {3,7}, {}, {"piano","rh","guide"}, 43);
     addVoicing2("piano_rh_melodic", InstrumentKind::Piano, "RH Melodic", "RH", "Melodic right hand line", {}, {}, {"piano","rh","melodic"}, 44);
+    addVoicing2("piano_ornament", InstrumentKind::Piano, "Ornament (grace note)", "RH", "Grace notes, turns, mordents", {}, {}, {"piano","rh","ornament"}, 45);
 
     // Basic triads
     addVoicing2("piano_triad_root", InstrumentKind::Piano, "Triad (root position)", "Triad", "1-3-5 root position", {1,3,5}, {}, {"piano","triad"}, 50);

@@ -2410,16 +2410,46 @@ QVector<JazzBalladPianoPlanner::CcIntent> JazzBalladPianoPlanner::planPedal(
         int catchDelay = veryFrequentChanges ? 2 : 1;  // 2/16 or 1/16 of a beat
         int catchDenom = 16;
         
-        // Pedal depth: shallower for fast changes, deeper for slow passages
+        // ====================================================================
+        // PEDAL DEPTH: Energy-aware philosophy
+        // - Low energy (Evans): Deep pedal, legato, warm connected sound
+        // - Mid energy (Hancock): Moderate pedal, balanced articulation
+        // - High energy (Tyner/Corea): Light/NO pedal, percussive stabs
+        // ====================================================================
         int pedalDepth;
-        if (veryFrequentChanges) {
-            pedalDepth = 30 + int(25.0 * c.energy);  // Light: 30-55
-        } else if (frequentChanges) {
-            pedalDepth = 45 + int(30.0 * c.energy);  // Medium: 45-75
+        const bool highEnergyStabMode = (c.energy >= 0.65);
+        const bool midEnergyMode = (c.energy >= 0.45 && c.energy < 0.65);
+        
+        if (highEnergyStabMode) {
+            // HIGH ENERGY: Percussive, dry attacks - McCoy Tyner style
+            // Invert the energy relationship: MORE energy = LESS pedal
+            if (veryFrequentChanges) {
+                pedalDepth = 0;  // Completely dry for fast stabs
+            } else if (frequentChanges) {
+                pedalDepth = 10 + int(15.0 * (1.0 - c.energy));  // 10-20
+            } else {
+                pedalDepth = 20 + int(20.0 * (1.0 - c.energy));  // 20-35
+            }
+        } else if (midEnergyMode) {
+            // MID ENERGY: Balanced articulation - Herbie style
+            if (veryFrequentChanges) {
+                pedalDepth = 25 + int(15.0 * c.energy);  // 30-40
+            } else if (frequentChanges) {
+                pedalDepth = 35 + int(20.0 * c.energy);  // 40-55
+            } else {
+                pedalDepth = 45 + int(20.0 * c.energy);  // 50-60
+            }
         } else {
-            pedalDepth = 55 + int(40.0 * c.energy);  // Fuller: 55-95
+            // LOW ENERGY: Lyrical, legato - Bill Evans style
+            if (veryFrequentChanges) {
+                pedalDepth = 40 + int(20.0 * c.energy);  // 40-50
+            } else if (frequentChanges) {
+                pedalDepth = 55 + int(25.0 * c.energy);  // 55-70
+            } else {
+                pedalDepth = 65 + int(30.0 * c.energy);  // 65-85
+            }
         }
-        pedalDepth = qBound(30, pedalDepth, 95);  // Never too light or too heavy
+        pedalDepth = qBound(0, pedalDepth, 90);  // Allow zero for stabs
         
         CcIntent engage;
         engage.cc = 64;
@@ -4474,38 +4504,281 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         // ======================================================================
         
         if (!voicing.midiNotes.isEmpty()) {
-            virtuoso::groove::GridPos lhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-                adjusted.playbackBarIndex, adjusted.beatInBar, 0, 4, ts);
+            
+            // ==============================================================
+            // PHASE 4A: ANTICIPATIONS & DELAYED ENTRIES
+            // ==============================================================
+            // Two complementary techniques for timing variety:
+            // 1. ANTICIPATION: Play on "& of 4" of previous bar (early, forward)
+            // 2. DELAYED ENTRY: Play on "& of 1" (late, relaxed, let bass lead)
+            //
+            // Anticipation: Creates forward motion, urgency
+            // Delayed entry: Creates space, relaxation, let harmony breathe
+            // ==============================================================
+            
+            bool useAnticipation = false;
+            bool useDelayedEntry = false;
+            
+            if (adjusted.beatInBar == 0 && adjusted.playbackBarIndex > 0) {
+                
+                // ============================================================
+                // SAFETY CHECKS: When NOT to use timing variations
+                // ============================================================
+                
+                bool safeToVary = true;
+                
+                // 1. Don't vary at phrase endings (cadence points)
+                //    The resolution needs to land ON the beat
+                const bool isPhraseCadence = (adjusted.cadence01 >= 0.5);
+                if (isPhraseCadence) {
+                    safeToVary = false;
+                }
+                
+                // 2. Don't vary at section starts (first bar of 8-bar section)
+                const int barInSection = adjusted.playbackBarIndex % 8;
+                if (barInSection == 0) {
+                    safeToVary = false;
+                }
+                
+                // 3. Don't vary first few bars of song
+                if (adjusted.playbackBarIndex < 2) {
+                    safeToVary = false;
+                }
+                
+                // 4. Check harmonic compatibility with previous chord
+                const int prevRoot = (currentRoot + 12 - 5) % 12;
+                const int rootMotion = qAbs(currentRoot - prevRoot);
+                const int normalizedMotion = (rootMotion > 6) ? (12 - rootMotion) : rootMotion;
+                
+                // Chromatic motion (1 semitone) or tritone (6 semitones) = don't vary
+                if (normalizedMotion == 1 || normalizedMotion == 6) {
+                    safeToVary = false;
+                }
+                
+                // ============================================================
+                // TIMING SELECTION: Anticipation vs Delayed Entry
+                // ============================================================
+                
+                if (safeToVary) {
+                    const int timingHash = 
+                        (adjusted.playbackBarIndex * 17 + currentRoot * 7) % 100;
+                    
+                    // Energy influences which technique to use:
+                    // - High energy (≥0.6): Prefer anticipation (forward, driving)
+                    // - Low energy (<0.4): Prefer delayed entry (relaxed, breathing)
+                    // - Mid energy: Both possible, delayed more common
+                    //
+                    // Delayed entries are MORE COMMON overall - creates relaxed,
+                    // breathing feel that lets bass lead. Very Bill Evans.
+                    
+                    if (energy >= 0.6) {
+                        // High energy: ~18% anticipation, ~8% delayed
+                        if (timingHash < 18) {
+                            useAnticipation = true;
+                        } else if (timingHash >= 80 && timingHash < 88) {
+                            useDelayedEntry = true;
+                        }
+                    } else if (energy < 0.4) {
+                        // Low energy: ~25% delayed entry (very relaxed feel)
+                        // Works on most chords at low energy
+                        if (timingHash < 25) {
+                            useDelayedEntry = true;
+                        }
+                    } else {
+                        // Mid energy: ~10% anticipation, ~18% delayed
+                        if (timingHash < 10) {
+                            useAnticipation = true;
+                        } else if (timingHash >= 75 && timingHash < 93) {
+                            useDelayedEntry = true;
+                        }
+                    }
+                }
+            }
+            
+            // Calculate grid position
+            virtuoso::groove::GridPos lhPos;
+            
+            if (useAnticipation) {
+                // ANTICIPATION: Play on "& of 4" of previous bar (early)
+                // Creates forward motion, urgency
+                lhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                    adjusted.playbackBarIndex - 1,  // Previous bar
+                    3,                               // Beat 4 (0-indexed = 3)
+                    2,                               // "And" subdivision (0=beat, 2=and)
+                    4, ts);
+            } else if (useDelayedEntry) {
+                // DELAYED ENTRY: Play on "& of 1" (late)
+                // Let bass establish harmony first, relaxed breathing feel
+                lhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                    adjusted.playbackBarIndex,       // Current bar
+                    0,                               // Beat 1 (0-indexed = 0)
+                    2,                               // "And" subdivision
+                    4, ts);
+            } else {
+                // Normal: on beat 1
+                lhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                    adjusted.playbackBarIndex, adjusted.beatInBar, 0, 4, ts);
+            }
             
             // ================================================================
-            // VELOCITY: Energy-driven (Bill Evans style)
+            // PHASE 4D: BPM-AWARE HUMANIZED TIMING + LAY BACK
             // ================================================================
-            // Higher energy = more assertive attack, not just louder
-            // Range: 48 (soft ballad) to 88 (full intensity)
+            // Bill Evans' signature: playing slightly BEHIND the beat
+            // - Low energy, slow tempo: ~15-20ms behind (very relaxed)
+            // - High energy, fast tempo: ~3-5ms (on top of the beat, driving)
+            // 
+            // Formula: layBackMs = baseLay × (1 - energy×0.7) × (90/bpm)
+            // Also add small humanization jitter for natural feel
             // ================================================================
+            
+            const int bpm = adjusted.bpm > 0 ? adjusted.bpm : 90;  // Default 90 BPM
+            const double tempoScale = 90.0 / qBound(50, bpm, 180);  // Normalize to 90 BPM
+            
+            // Base lay back: 12ms at reference tempo (90 BPM)
+            const double baseLay = 12.0;
+            
+            // Energy reduces lay back (high energy = more on top of beat)
+            const double energyFactor = 1.0 - (energy * 0.7);  // 1.0 at e=0, 0.3 at e=1
+            
+            // Calculate lay back in ms
+            int layBackMs = int(baseLay * energyFactor * tempoScale);
+            
+            // At very high energy (stab mode), minimal lay back or even slight push
+            if (energy >= 0.75) {
+                layBackMs = qMax(0, layBackMs - 5);  // Reduce lay back
+            }
+            
+            // Small humanization jitter (±3ms)
+            const int humanHash = (adjusted.playbackBarIndex * 41 + currentRoot * 13) % 7;
+            const int humanizeMs = humanHash - 3;  // Range: -3 to +3
+            
+            // Total timing offset (positive = late/behind, negative = early/ahead)
+            int lhTimingOffsetMs = layBackMs + humanizeMs;
+            
+            // Clamp to reasonable range based on tempo
+            const int maxOffset = (bpm < 70) ? 25 : 18;
+            lhTimingOffsetMs = qBound(-5, lhTimingOffsetMs, maxOffset);
+            
+            // Apply timing offset to position
+            if (lhTimingOffsetMs != 0) {
+                lhPos = applyTimingOffset(lhPos, lhTimingOffsetMs, bpm, ts);
+            }
+            
+            // ================================================================
+            // VELOCITY & ARTICULATION: Energy-driven style adaptation
+            // ================================================================
+            // Low energy (Evans): Warm, sustained, legato
+            // Mid energy (Hancock): Balanced, articulated
+            // High energy (Tyner/Corea): Percussive stabs, short, punchy
+            // ================================================================
+            
+            const bool stabMode = (energy >= 0.65);
+            const bool midMode = (energy >= 0.45 && energy < 0.65);
             
             int lhVel = 48 + int(energy * 40);
+            
+            // At high energy, add extra "punch" to the attack
+            if (stabMode) {
+                lhVel += 8;  // More assertive
+            }
             
             // Back off when user is active
             if (adjusted.userBusy || adjusted.userDensityHigh) {
                 lhVel = qMin(lhVel, 62);
             }
-            lhVel = qBound(42, lhVel, 90);
+            lhVel = qBound(42, lhVel, 95);
             
-            // Duration: consistent 1.5 beats
-            const virtuoso::groove::Rational lhDurWhole(1500, 4000);
+            // Duration: varies with energy style
+            // Low energy: 1.5 beats (legato, sustained)
+            // Mid energy: 1.2 beats (balanced)
+            // High energy: 0.8 beats (staccato stabs)
+            double durBeats;
+            if (stabMode) {
+                durBeats = 0.8;  // Short, percussive
+            } else if (midMode) {
+                durBeats = 1.2;  // Moderate
+            } else {
+                durBeats = 1.5;  // Sustained legato
+            }
+            const virtuoso::groove::Rational lhDurWhole(int(durBeats * 1000), 4000);
             
-            for (int midi : voicing.midiNotes) {
+            // ================================================================
+            // PHASE 4E: TASTEFUL GENTLE ROLLS (arpeggiated chords)
+            // ================================================================
+            // Bill Evans' signature: occasionally roll the chord from bottom
+            // to top, creating a warm, harp-like quality.
+            //
+            // When to roll:
+            // - Low to mid energy (warm, expressive moments)
+            // - NOT at high energy (stabs need to be tight)
+            // - NOT with anticipations (would blur the timing)
+            // - Phrase starts, emotional moments
+            //
+            // Roll speed: ~15-50ms total spread depending on voicing size
+            // ================================================================
+            
+            bool useRoll = false;
+            int rollSpreadMs = 0;
+            
+            // Only consider rolls at low-mid energy, not stabs
+            if (!stabMode && !useAnticipation && voicing.midiNotes.size() >= 3) {
+                const int rollHash = (adjusted.playbackBarIndex * 19 + currentRoot * 11) % 100;
+                
+                // Probability: ~20% at low energy, ~12% at mid energy
+                const int rollThreshold = (energy < 0.4) ? 20 : 12;
+                
+                // Prefer rolls at phrase starts or section starts
+                const int barInSection = adjusted.playbackBarIndex % 8;
+                const bool isStructuralMoment = (barInSection == 0 || barInSection == 4);
+                
+                if (rollHash < rollThreshold || (isStructuralMoment && rollHash < rollThreshold + 10)) {
+                    useRoll = true;
+                    
+                    // Roll speed: slower at low energy (more expressive)
+                    // ~40ms at low energy, ~25ms at mid energy
+                    // Scaled by BPM
+                    const int bpmForRoll = adjusted.bpm > 0 ? adjusted.bpm : 90;
+                    const double tempoScale = 90.0 / qBound(50, bpmForRoll, 160);
+                    
+                    if (energy < 0.35) {
+                        rollSpreadMs = int(45.0 * tempoScale);  // Slow, expressive
+                    } else if (energy < 0.55) {
+                        rollSpreadMs = int(32.0 * tempoScale);  // Moderate
+                    } else {
+                        rollSpreadMs = int(22.0 * tempoScale);  // Quick, subtle
+                    }
+                    
+                    // Clamp to reasonable range
+                    rollSpreadMs = qBound(15, rollSpreadMs, 60);
+                }
+            }
+            
+            // Emit notes (with optional roll timing)
+            const int numNotes = voicing.midiNotes.size();
+            const int bpmForOffset = adjusted.bpm > 0 ? adjusted.bpm : 90;
+            
+            for (int i = 0; i < numNotes; ++i) {
+                const int midi = voicing.midiNotes[i];
+                
                 virtuoso::engine::AgentIntentNote note;
                 note.agent = "Piano";
                 note.channel = midiChannel;
                 note.note = midi;
                 note.baseVelocity = lhVel;
-                note.startPos = lhPos;
+                
+                // Apply roll offset: ascending from bottom to top
+                if (useRoll && numNotes > 1) {
+                    // Spread the notes evenly across rollSpreadMs
+                    const int noteOffsetMs = (i * rollSpreadMs) / (numNotes - 1);
+                    note.startPos = applyTimingOffset(lhPos, noteOffsetMs, bpmForOffset, ts);
+                } else {
+                    note.startPos = lhPos;
+                }
+                
                 note.durationWhole = lhDurWhole;
                 note.structural = true;
                 note.chord_context = adjusted.chordText;
-                note.voicing_type = voicing.ontologyKey;
+                note.voicing_type = useRoll ? "LH_roll" : (stabMode ? "LH_stab" : voicing.ontologyKey);
                 note.logic_tag = "LH";
                 
                 plan.notes.push_back(note);
@@ -4516,6 +4789,266 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             m_state.lastLhWasTypeA = voicing.isTypeA;
             m_lhGen.state().lastLhMidi = voicing.midiNotes;
             m_lhGen.state().lastLhWasTypeA = voicing.isTypeA;
+        }
+    }
+    
+    // ==========================================================================
+    // PHASE 4B: ENERGY-SCALED COMPING DENSITY
+    // ==========================================================================
+    // Base rates (same at all energies) + additional hits at higher energy:
+    //   All energies: Base beat 3 (~35%), base "& of 2" (~20%)
+    //   High (≥0.65): Add "& of 3", "& of 4", beat 2
+    //   Peak (≥0.80): Even more density, McCoy Tyner intensity
+    // ==========================================================================
+    
+    if (!adjusted.chordIsNew && !m_state.lastLhMidi.isEmpty()) {
+        const double energy = adjusted.energy;
+        
+        // Energy bands for ADDITIONAL density
+        const bool isPeakEnergy = (energy >= 0.80);
+        const bool isHighEnergy = (energy >= 0.65);
+        
+        // Use deterministic hash for this beat
+        const int compHash = (adjusted.playbackBarIndex * 31 + adjusted.beatInBar * 13) % 100;
+        
+        // Collect comping hits for this beat
+        struct CompHit {
+            int subdivision;  // 0=on beat, 2=on "and"
+            int velOffset;    // Velocity adjustment from base
+            int variation;    // 0=full voicing, 1=shell (2 notes), 2=drop middle, 3=shift up
+        };
+        QVector<CompHit> compHits;
+        const int beat = adjusted.beatInBar;
+        
+        // Variation selector based on beat and bar
+        const int varHash = (adjusted.playbackBarIndex * 23 + beat * 11) % 4;
+        
+        // ==================================================================
+        // BASE RATES (all energies) - same as original Bill Evans style
+        // ==================================================================
+        
+        // Beat 3: 30-55% depending on energy (original formula)
+        if (beat == 2) {
+            const int beat3Threshold = 30 + int(energy * 25);
+            if (compHash < beat3Threshold) {
+                // First comp hit of chord: use shell or drop-middle for variety
+                compHits.append({0, 0, (varHash == 0) ? 1 : 2});  // Beat 3
+            }
+        }
+        
+        // "& of 2": 15-35% depending on energy (original formula)
+        if (beat == 1) {
+            const int andOf2Threshold = 15 + int(energy * 20);
+            if (compHash < andOf2Threshold) {
+                compHits.append({2, -3, (varHash == 1) ? 1 : 0});  // "& of 2"
+            }
+        }
+        
+        // ==================================================================
+        // HIGH ENERGY ADDITIONS (≥0.65): Extra hits on top of base
+        // ==================================================================
+        if (isHighEnergy) {
+            // "& of 3": syncopated push after beat 3
+            if (beat == 2 && (compHash % 3 == 0)) {
+                compHits.append({2, -8, 2});  // "& of 3", drop middle
+            }
+            
+            // "& of 4": pushes into next bar
+            if (beat == 3 && compHash < 25) {
+                compHits.append({2, -5, 1});  // "& of 4", shell
+            }
+        }
+        
+        // ==================================================================
+        // PEAK ENERGY ADDITIONS (≥0.80): McCoy Tyner intensity
+        // At peak, use full voicings for power (variation 0)
+        // ==================================================================
+        if (isPeakEnergy) {
+            // Beat 2: extra hit at the top of beat 2
+            if (beat == 1 && compHash < 50) {
+                compHits.append({0, -2, 0});  // Beat 2, full voicing for power
+            }
+            
+            // Beat 4: extra hit
+            if (beat == 3 && compHash < 35) {
+                compHits.append({0, -3, 0});  // Beat 4, full voicing
+            }
+            
+            // "& of 3" with higher probability at peak
+            if (beat == 2 && compHash < 45) {
+                // Check if we already added "& of 3" from high energy section
+                bool hasAndOf3 = false;
+                for (const auto& h : compHits) {
+                    if (h.subdivision == 2) hasAndOf3 = true;
+                }
+                if (!hasAndOf3) {
+                    compHits.append({2, -5, 0});  // "& of 3", full voicing
+                }
+            }
+        }
+        
+        // Don't add comping hits when user is very active
+        if (adjusted.userBusy && adjusted.userDensityHigh) {
+            compHits.clear();
+        }
+        
+        // ==================================================================
+        // EMIT COMPING HITS
+        // ==================================================================
+        const bool stabMode = (energy >= 0.65);
+        
+        for (const auto& hit : compHits) {
+            virtuoso::groove::GridPos compPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                adjusted.playbackBarIndex, adjusted.beatInBar, hit.subdivision, 4, ts);
+            
+            // ==============================================================
+            // PHASE 4D: BPM-AWARE TIMING FOR COMPING HITS
+            // ==============================================================
+            // Comping hits get slightly different timing treatment:
+            // - Syncopated hits ("&" subdivisions): slight push (ahead of beat)
+            // - On-beat hits: slight lay back (behind beat)
+            // - High energy: tighter timing, less swing
+            // ==============================================================
+            const int bpm = adjusted.bpm > 0 ? adjusted.bpm : 90;
+            const double tempoScale = 90.0 / qBound(50, bpm, 180);
+            
+            int compTimingMs;
+            if (hit.subdivision == 2) {
+                // Syncopated "and" hits: slight push forward for swing feel
+                compTimingMs = int(-4.0 * tempoScale * (1.0 - energy * 0.5));  // -2 to -4ms
+            } else {
+                // On-beat comping: slight lay back, less than main hit
+                compTimingMs = int(6.0 * tempoScale * (1.0 - energy * 0.6));   // 2-6ms
+            }
+            
+            // Humanization jitter
+            const int compHumanHash = (adjusted.playbackBarIndex * 29 + beat * 7 + hit.subdivision) % 5;
+            compTimingMs += compHumanHash - 2;  // ±2ms
+            
+            // Clamp and apply
+            compTimingMs = qBound(-8, compTimingMs, 12);
+            if (compTimingMs != 0) {
+                compPos = applyTimingOffset(compPos, compTimingMs, bpm, ts);
+            }
+            
+            // ==============================================================
+            // HIGH-ENERGY STABS: Pedal lift before attack for dry, percussive sound
+            // McCoy Tyner / Chick Corea style - clean rhythmic articulation
+            // ==============================================================
+            if (stabMode) {
+                // Lift pedal 1/16 beat BEFORE the stab for clean attack
+                int liftSubdiv = (hit.subdivision == 0) ? 0 : hit.subdivision - 1;
+                int liftDenom = (hit.subdivision == 0) ? 8 : 4;  // Earlier for on-beat
+                
+                CcIntent stabLift;
+                stabLift.cc = 64;
+                stabLift.value = 0;
+                stabLift.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                    adjusted.playbackBarIndex, adjusted.beatInBar, 
+                    liftSubdiv, liftDenom, ts);
+                stabLift.structural = false;
+                stabLift.logic_tag = "stab_pedal_lift";
+                plan.ccs.push_back(stabLift);
+                
+                // Very light catch after the attack (just enough sustain, not muddy)
+                // Only if energy < 0.85; at peak energy, stay completely dry
+                if (energy < 0.85) {
+                    CcIntent lightCatch;
+                    lightCatch.cc = 64;
+                    lightCatch.value = 15 + int(10.0 * (0.85 - energy));  // 15-25
+                    int catchSubdiv = hit.subdivision + 1;
+                    lightCatch.startPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                        adjusted.playbackBarIndex, adjusted.beatInBar,
+                        catchSubdiv, 4, ts);
+                    lightCatch.structural = false;
+                    lightCatch.logic_tag = "stab_pedal_catch";
+                    plan.ccs.push_back(lightCatch);
+                }
+            }
+            
+            // Velocity: softer than main hit, with per-hit adjustment
+            int compVel = 40 + int(energy * 28) + hit.velOffset;
+            
+            if (adjusted.userBusy) {
+                compVel = qMin(compVel, 52);
+            }
+            compVel = qBound(35, compVel, 72);
+            
+            // Duration: shorter for syncopated hits; even shorter for stabs
+            double durBeats = (hit.subdivision == 0) ? 0.9 : 0.6;
+            if (stabMode) {
+                durBeats *= 0.7;  // Even tighter for percussive feel
+            }
+            const virtuoso::groove::Rational compDur(int(durBeats * 1000), 4000);
+            
+            // ==============================================================
+            // PHASE 4C: VOICING VARIATION ON REPEAT HITS
+            // ==============================================================
+            // variation: 0=full, 1=shell (outer 2), 2=drop middle, 3=shift
+            // This prevents repetitive sound when same chord is hit multiple times
+            // ==============================================================
+            QVector<int> compVoicing;
+            const QVector<int>& fullVoicing = m_state.lastLhMidi;
+            
+            if (fullVoicing.size() >= 3) {
+                switch (hit.variation) {
+                    case 1: // Shell: just lowest and highest notes (3rd and 7th essence)
+                        compVoicing.append(fullVoicing.first());
+                        compVoicing.append(fullVoicing.last());
+                        break;
+                        
+                    case 2: // Drop middle: remove one middle note
+                        for (int i = 0; i < fullVoicing.size(); ++i) {
+                            if (i != fullVoicing.size() / 2) {  // Skip middle note
+                                compVoicing.append(fullVoicing[i]);
+                            }
+                        }
+                        break;
+                        
+                    case 3: // Shift: move all notes up a minor 3rd (stays in chord)
+                        for (int midi : fullVoicing) {
+                            int shifted = midi + 3;
+                            if (shifted <= 72) {  // Keep in reasonable range
+                                compVoicing.append(shifted);
+                            } else {
+                                compVoicing.append(midi);  // Don't shift if too high
+                            }
+                        }
+                        break;
+                        
+                    default: // 0 = full voicing unchanged
+                        compVoicing = fullVoicing;
+                        break;
+                }
+            } else {
+                // If voicing is too small, just use it as-is
+                compVoicing = fullVoicing;
+            }
+            
+            // Emit the (possibly varied) voicing
+            QString variationType;
+            switch (hit.variation) {
+                case 1: variationType = "LH_shell"; break;
+                case 2: variationType = "LH_drop"; break;
+                case 3: variationType = "LH_shift"; break;
+                default: variationType = stabMode ? "LH_stab" : "LH_comp"; break;
+            }
+            
+            for (int midi : compVoicing) {
+                virtuoso::engine::AgentIntentNote note;
+                note.agent = "Piano";
+                note.channel = midiChannel;
+                note.note = midi;
+                note.baseVelocity = compVel;
+                note.startPos = compPos;
+                note.durationWhole = compDur;
+                note.structural = false;
+                note.chord_context = adjusted.chordText;
+                note.voicing_type = variationType;
+                note.logic_tag = "LH";
+                
+                plan.notes.push_back(note);
+            }
         }
     }
     

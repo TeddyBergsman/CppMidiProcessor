@@ -5512,39 +5512,20 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         const int root = adjusted.chord.rootPc;
         const double energy = adjusted.energy;
         
-        // Determine chord intervals based on quality
-        int third, fifth, seventh, ninth;
+        // Determine chord intervals using proper utility functions
+        // This ensures consistency with LH voicing and handles all chord types correctly
+        int third = vu::thirdInterval(adjusted.chord.quality);
+        int fifth = vu::fifthInterval(adjusted.chord.quality);
+        int seventh = vu::seventhInterval(adjusted.chord);
         
-        // 3rd: minor or major
-        if (adjusted.chord.quality == music::ChordQuality::Minor ||
-            adjusted.chord.quality == music::ChordQuality::HalfDiminished ||
-            adjusted.chord.quality == music::ChordQuality::Diminished) {
-            third = 3;   // Minor 3rd
-        } else {
-            third = 4;   // Major 3rd
-        }
+        // Default to minor 7th if no seventh in chord (for upper structures)
+        if (seventh < 0) seventh = 10;
         
-        // 5th: perfect, diminished, or augmented
-        if (adjusted.chord.quality == music::ChordQuality::HalfDiminished ||
-            adjusted.chord.quality == music::ChordQuality::Diminished) {
-            fifth = 6;   // Diminished 5th
-        } else if (adjusted.chord.quality == music::ChordQuality::Augmented) {
-            fifth = 8;   // Augmented 5th
-        } else {
-            fifth = 7;   // Perfect 5th
-        }
-        
-        // 7th: major, minor, or diminished
-        if (adjusted.chord.quality == music::ChordQuality::Major) {
-            seventh = 11;  // Major 7th
-        } else if (adjusted.chord.quality == music::ChordQuality::Diminished) {
-            seventh = 9;   // Diminished 7th
-        } else {
-            seventh = 10;  // Minor 7th (dominant, minor, half-dim)
-        }
-        
-        // 9th: always major 9th for now (safe tension)
-        ninth = 14;  // Major 9th (2 + 12)
+        // 9th: use pcForDegree for proper handling of alt chords, etc.
+        int ninthPc = vu::pcForDegree(adjusted.chord, 9);
+        int ninth = (ninthPc >= 0) ? ((ninthPc - root + 12) % 12) : 2;  // Default to major 9th
+        if (ninth == 0) ninth = 12;  // Ensure it's above root
+        ninth += 12;  // Place in upper octave for RH register
         
         // ==========================================================================
         // BUILD UPPER STRUCTURE VOICING
@@ -5780,22 +5761,93 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             }
             const virtuoso::groove::Rational rhDur(int(durBeats * 1000), 4000);
             
-            for (int midi : finalRhNotes) {
+            // ==========================================================
+            // RH EXPRESSIVE TOUCHES: Rolls and Grace Notes (like LH)
+            // ==========================================================
+            // Less frequent than LH - RH is more melodic/supportive
+            // ==========================================================
+            
+            bool useRhRoll = false;
+            int rhRollSpreadMs = 0;
+            
+            // Rolls: only at low energy, on chord changes, with 3+ notes
+            if (rhTiming == RhTiming::WithLh && energy < 0.45 && finalRhNotes.size() >= 3) {
+                const int rollHash = (adjusted.playbackBarIndex * 23 + adjusted.chord.rootPc * 11) % 100;
+                if (rollHash < 15) {  // 15% chance (less than LH's 20%)
+                    useRhRoll = true;
+                    const int bpmForRoll = adjusted.bpm > 0 ? adjusted.bpm : 90;
+                    const double tempoScale = 90.0 / qBound(50, bpmForRoll, 160);
+                    rhRollSpreadMs = int(35.0 * tempoScale);  // Slightly faster than LH rolls
+                    rhRollSpreadMs = qBound(12, rhRollSpreadMs, 50);
+                }
+            }
+            
+            // Grace note: chromatic approach from below (rare, expressive)
+            bool useRhGrace = false;
+            int rhGraceMidi = -1;
+            
+            if (rhTiming == RhTiming::WithLh && energy < 0.50 && finalRhNotes.size() >= 2) {
+                const int graceHash = (adjusted.playbackBarIndex * 17 + adjusted.chord.rootPc * 13) % 100;
+                if (graceHash < 10) {  // 10% chance (less than LH)
+                    useRhGrace = true;
+                    rhGraceMidi = finalRhNotes.first() - 1;  // Semitone below lowest note
+                }
+            }
+            
+            // Emit grace note if applicable
+            if (useRhGrace && rhGraceMidi >= 60) {
+                const int bpmForGrace = adjusted.bpm > 0 ? adjusted.bpm : 90;
+                const double tempoScale = 90.0 / qBound(50, bpmForGrace, 160);
+                const int graceOffsetMs = -int(35.0 * tempoScale);  // Before main chord
+                
+                virtuoso::engine::AgentIntentNote graceNote;
+                graceNote.agent = "Piano";
+                graceNote.channel = midiChannel;
+                graceNote.note = rhGraceMidi;
+                graceNote.baseVelocity = rhVel - 15;  // Softer
+                graceNote.startPos = applyTimingOffset(rhPos, graceOffsetMs, bpmForGrace, ts);
+                graceNote.durationWhole = virtuoso::groove::Rational(80, 4000);  // Very short
+                graceNote.structural = false;
+                graceNote.chord_context = adjusted.chordText;
+                graceNote.voicing_type = "RH_grace";
+                graceNote.logic_tag = "RH";
+                plan.notes.push_back(graceNote);
+            }
+            
+            // Emit RH voicing (with optional roll)
+            const int numRhNotes = finalRhNotes.size();
+            const int bpmForRhEmit = adjusted.bpm > 0 ? adjusted.bpm : 90;
+            
+            for (int i = 0; i < numRhNotes; ++i) {
+                const int midi = finalRhNotes[i];
                 virtuoso::engine::AgentIntentNote note;
                 note.agent = "Piano";
                 note.channel = midiChannel;
                 note.note = midi;
                 note.baseVelocity = rhVel;
-                note.startPos = rhPos;
+                
+                // Apply roll timing if active
+                if (useRhRoll && numRhNotes > 1) {
+                    const int noteOffsetMs = (i * rhRollSpreadMs) / (numRhNotes - 1);
+                    note.startPos = applyTimingOffset(rhPos, noteOffsetMs, bpmForRhEmit, ts);
+                } else {
+                    note.startPos = rhPos;
+                }
+                
                 note.durationWhole = rhDur;
                 note.structural = (rhTiming == RhTiming::WithLh);  // Only structural when with LH
                 note.chord_context = adjusted.chordText;
-                // Voicing type reflects dialogue mode
-                switch (rhTiming) {
-                    case RhTiming::WithLh: note.voicing_type = "RH_upper"; break;
-                    case RhTiming::Respond: note.voicing_type = "RH_respond"; break;
-                    case RhTiming::Fill: note.voicing_type = "RH_fill"; break;
-                    default: note.voicing_type = "RH_upper"; break;
+                
+                // Voicing type reflects dialogue mode (or roll if active)
+                if (useRhRoll) {
+                    note.voicing_type = "RH_roll";
+                } else {
+                    switch (rhTiming) {
+                        case RhTiming::WithLh: note.voicing_type = "RH_upper"; break;
+                        case RhTiming::Respond: note.voicing_type = "RH_respond"; break;
+                        case RhTiming::Fill: note.voicing_type = "RH_fill"; break;
+                        default: note.voicing_type = "RH_upper"; break;
+                    }
                 }
                 note.logic_tag = "RH";
                 

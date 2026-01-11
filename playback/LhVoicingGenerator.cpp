@@ -466,9 +466,24 @@ LhVoicingGenerator::LhVoicing LhVoicingGenerator::applyInnerVoiceMovement(
         targetPc = thirteenth;
     }
     
-    // Apply movement
+    // Apply movement - ONLY to valid chord tones or safe tensions
     int delta = (dir > 0) ? 1 : -1;
+    
+    // Build set of valid pitch classes for this chord
+    QSet<int> validPcs;
+    int root = c.chord.rootPc;
+    validPcs.insert(root);  // Root
+    int thirdPc = pcForDegree(c.chord, 3);
+    if (thirdPc >= 0) validPcs.insert(thirdPc);
+    int fifthPc = pcForDegree(c.chord, 5);
+    if (fifthPc >= 0) validPcs.insert(fifthPc);
+    int seventhPc = pcForDegree(c.chord, 7);
+    if (seventhPc >= 0) validPcs.insert(seventhPc);
+    if (ninth >= 0) validPcs.insert(ninth);
+    if (thirteenth >= 0) validPcs.insert(thirteenth);
+    
     if (targetPc >= 0) {
+        // Try to reach specific color tone (9th or 13th)
         int targetMidi = originalNote;
         while (targetMidi % 12 != targetPc && qAbs(targetMidi - originalNote) < 4) {
             targetMidi += delta;
@@ -477,19 +492,44 @@ LhVoicingGenerator::LhVoicing LhVoicingGenerator::applyInnerVoiceMovement(
             moved.midiNotes[moveIndex] = targetMidi;
         }
     } else {
-        int newNote = originalNote + delta;
-        if (newNote >= 48 && newNote <= 67) {
+        // Fallback: find nearest VALID chord tone within ±3 semitones
+        int bestTarget = -1;
+        int bestDist = 999;
+        
+        for (int offset = -3; offset <= 3; ++offset) {
+            if (offset == 0) continue;  // Skip current note
+            int candidate = originalNote + offset;
+            if (candidate < 48 || candidate > 67) continue;
+            
+            // Must be a valid chord tone
+            if (!validPcs.contains(candidate % 12)) continue;
+            
+            // Check for clusters with other notes
             bool safe = true;
             for (int i = 0; i < moved.midiNotes.size(); ++i) {
-                if (i != moveIndex && qAbs(moved.midiNotes[i] - newNote) <= 1) {
+                if (i != moveIndex && qAbs(moved.midiNotes[i] - candidate) <= 1) {
                     safe = false;
                     break;
                 }
             }
+            
             if (safe) {
-                moved.midiNotes[moveIndex] = newNote;
+                int dist = qAbs(offset);
+                // Prefer movement in the requested direction
+                if ((delta > 0 && offset > 0) || (delta < 0 && offset < 0)) {
+                    dist -= 1;  // Slight preference
+                }
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestTarget = candidate;
+                }
             }
         }
+        
+        if (bestTarget >= 0) {
+            moved.midiNotes[moveIndex] = bestTarget;
+        }
+        // If no valid target found, don't move at all (safer)
     }
     
     std::sort(moved.midiNotes.begin(), moved.midiNotes.end());

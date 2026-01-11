@@ -58,7 +58,7 @@ public:
         quint32 determinismSeed = 1;
 
         // Interaction/macro-dynamics (MVP)
-        double energy = 0.25;       // 0..1
+        double energy = 0.17;       // 0..1 (start low, 15-20% range)
         bool intensityPeak = false; // user peak -> drummer supports with brief cymbal pattern
 
         // Phrase model (lightweight, deterministic): 4-bar phrases by default.

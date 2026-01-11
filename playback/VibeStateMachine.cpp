@@ -13,7 +13,7 @@ void VibeStateMachine::reset() {
     m_buildSinceMs = -1;
     m_calmSinceMs = -1;
     m_climaxDownSinceMs = -1;
-    m_energy = 0.35;
+    m_energy = 0.17;  // Start low (15-20% range)
     m_lastEnergyUpdateMs = -1;
     
     // Reset smoothed inputs

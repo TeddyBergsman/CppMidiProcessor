@@ -106,15 +106,18 @@ int pcForDegree(const music::ChordSymbol& c, int degree) {
             break;
         case 9:
             if (is6thChord) {
-                return -1;
+                return -1;  // 9th clashes with 6th
             } else if (isAlt) {
                 pc = normalizePc(root + 1); // b9
             } else if (c.extension >= 9 || hasAlteration(9)) {
                 pc = applyAlter(9, normalizePc(root + 2));
             } else if (isDominant) {
+                pc = normalizePc(root + 2);  // Natural 9 on dominant
+            } else if (isMajor && c.seventh == music::SeventhQuality::Major7) {
+                // Major 7th chords: 9th is safe (e.g., F over EbMaj7)
                 pc = normalizePc(root + 2);
             } else if (isMinor && c.seventh != music::SeventhQuality::None) {
-                pc = normalizePc(root + 2);
+                pc = normalizePc(root + 2);  // Natural 9 on minor 7th
             } else if (isHalfDim) {
                 // Half-diminished: major 9th is safe (e.g., E over Dm7b5)
                 pc = normalizePc(root + 2);
@@ -162,6 +165,12 @@ int pcForDegree(const music::ChordSymbol& c, int degree) {
             } else if (c.extension >= 13 || hasAlteration(13)) {
                 pc = applyAlter(13, normalizePc(root + 9));
             } else if (isDominant) {
+                pc = normalizePc(root + 9);  // Natural 13 on dominant
+            } else if (isMajor && c.seventh == music::SeventhQuality::Major7) {
+                // Major 7th chords: 13th is safe (e.g., C over EbMaj7)
+                pc = normalizePc(root + 9);
+            } else if (isMinor && c.seventh != music::SeventhQuality::None) {
+                // Minor 7th chords: 13th is safe (dorian sound)
                 pc = normalizePc(root + 9);
             } else if (isHalfDim || isDim) {
                 // Half-dim/Dim: natural 13 clashes with minor 7th (half step)

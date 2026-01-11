@@ -181,7 +181,7 @@ public:
 
         // Macro dynamics
         bool forceClimax = false;
-        double energy = 0.25;           // 0..1
+        double energy = 0.17;           // 0..1 (start low, 15-20% range)
 
         // Phrase context
         int phraseBars = 4;

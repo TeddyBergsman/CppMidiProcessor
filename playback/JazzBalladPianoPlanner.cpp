@@ -5323,10 +5323,58 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     const bool userActive = adjusted.userBusy || adjusted.userDensityHigh || adjusted.userIntensityPeak;
     
     // ==========================================================================
-    // STAGE 1: UPPER STRUCTURE VOICINGS ON CHORD CHANGES
+    // STAGE 3: RHYTHMIC DIALOGUE - Decide WHEN RH plays
+    // ==========================================================================
+    // RH and LH have a conversational relationship:
+    // - Sometimes together (chord changes)
+    // - Sometimes RH responds (beat 2 after LH)
+    // - Sometimes RH fills (beat 3 when LH sustains)
+    // - Sometimes RH stays silent (let LH breathe)
     // ==========================================================================
     
+    enum class RhTiming { Silent, WithLh, Respond, Fill };
+    RhTiming rhTiming = RhTiming::Silent;
+    
+    const int rhDialogueHash = (adjusted.playbackBarIndex * 17 + adjusted.beatInBar * 11 + adjusted.chord.rootPc) % 100;
+    const double energy = adjusted.energy;
+    
     if (adjusted.chordIsNew && !userActive) {
+        // Chord change: decide if RH plays WITH LH or stays silent
+        // Higher energy = much more likely to play together (Evans drove hard at high energy)
+        const int playWithLhThreshold = 55 + int(energy * 40);  // 55-95%
+        if (rhDialogueHash < playWithLhThreshold) {
+            rhTiming = RhTiming::WithLh;
+        }
+    } else if (!adjusted.chordIsNew && !userActive && !m_state.lastRhMidi.isEmpty()) {
+        // Non-chord-change beat: decide if RH responds or fills
+        // At high energy, RH is much more active (driving rhythm)
+        
+        if (adjusted.beatInBar == 1) {
+            // Beat 2: RH can "respond" to LH that hit on beat 1
+            const int respondThreshold = 18 + int(energy * 35);  // 18-53%
+            if (rhDialogueHash < respondThreshold) {
+                rhTiming = RhTiming::Respond;
+            }
+        } else if (adjusted.beatInBar == 2) {
+            // Beat 3: RH can "fill" the space
+            const int fillThreshold = 12 + int(energy * 28);  // 12-40%
+            if (rhDialogueHash < fillThreshold) {
+                rhTiming = RhTiming::Fill;
+            }
+        } else if (adjusted.beatInBar == 3 && energy >= 0.7) {
+            // Beat 4: At high energy, RH can push into next bar
+            const int pushThreshold = int((energy - 0.5) * 40);  // 8-20% at high energy
+            if (rhDialogueHash < pushThreshold) {
+                rhTiming = RhTiming::Fill;  // Reuse Fill mode for beat 4
+            }
+        }
+    }
+    
+    // ==========================================================================
+    // STAGE 1: UPPER STRUCTURE VOICINGS (when timing says to play)
+    // ==========================================================================
+    
+    if (rhTiming != RhTiming::Silent) {
         const int root = adjusted.chord.rootPc;
         const double energy = adjusted.energy;
         
@@ -5456,12 +5504,80 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         // ==========================================================================
         
         if (!rhNotes.isEmpty()) {
-            // Position: same as LH chord (beat 1)
-            virtuoso::groove::GridPos rhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-                adjusted.playbackBarIndex, adjusted.beatInBar, 0, 4, ts);
+            // Position: depends on dialogue timing mode
+            virtuoso::groove::GridPos rhPos;
+            int rhBeat = adjusted.beatInBar;
             
-            // Velocity: slightly softer than LH, colored by energy
-            int rhVel = 42 + int(energy * 30);
+            switch (rhTiming) {
+                case RhTiming::WithLh:
+                    // Play with LH on chord change beat
+                    rhBeat = adjusted.beatInBar;
+                    break;
+                case RhTiming::Respond:
+                    // Respond on beat 2 (current beat)
+                    rhBeat = 1;
+                    break;
+                case RhTiming::Fill:
+                    // Fill on beat 3 (current beat)
+                    rhBeat = 2;
+                    break;
+                default:
+                    rhBeat = adjusted.beatInBar;
+                    break;
+            }
+            
+            rhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                adjusted.playbackBarIndex, rhBeat, 0, 4, ts);
+            
+            // Velocity: Evans approach
+            // Low energy: RH softer than LH (supportive color)
+            // High energy: RH approaches LH level (block chord power)
+            int rhVel;
+            if (rhTiming == RhTiming::WithLh) {
+                // With LH: at high energy, approach LH velocity
+                if (energy >= 0.7) {
+                    rhVel = 58 + int(energy * 28);  // 78-86 at high energy
+                } else {
+                    rhVel = 42 + int(energy * 30);  // 42-63 at low-mid
+                }
+            } else {
+                // Respond/Fill: softer, supportive
+                rhVel = 38 + int(energy * 25);  // 38-63
+            }
+            
+            // ==========================================================
+            // VOICING VARIATION FOR RESPOND/FILL (like LH comping)
+            // ==========================================================
+            // When RH plays Respond or Fill, use a varied voicing
+            // to avoid repetition and create interest
+            // ==========================================================
+            
+            QVector<int> finalRhNotes = rhNotes;
+            
+            if (rhTiming == RhTiming::Respond || rhTiming == RhTiming::Fill) {
+                const int varHash = (adjusted.playbackBarIndex * 23 + adjusted.beatInBar * 17) % 3;
+                
+                if (finalRhNotes.size() >= 3) {
+                    switch (varHash) {
+                        case 0:
+                            // Shell: just top 2 notes
+                            finalRhNotes.remove(0);  // Remove lowest
+                            break;
+                        case 1:
+                            // Drop bottom: just top 2
+                            if (finalRhNotes.size() > 2) {
+                                finalRhNotes.remove(0);
+                            }
+                            break;
+                        case 2:
+                            // Keep full voicing
+                            break;
+                    }
+                } else if (finalRhNotes.size() == 2 && varHash == 0) {
+                    // For dyads, sometimes just play top note (melodic)
+                    finalRhNotes.remove(0);
+                }
+            }
             if (userActive) {
                 rhVel = qMin(rhVel, 50);
             }
@@ -5474,7 +5590,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             }
             const virtuoso::groove::Rational rhDur(int(durBeats * 1000), 4000);
             
-            for (int midi : rhNotes) {
+            for (int midi : finalRhNotes) {
                 virtuoso::engine::AgentIntentNote note;
                 note.agent = "Piano";
                 note.channel = midiChannel;
@@ -5482,15 +5598,21 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 note.baseVelocity = rhVel;
                 note.startPos = rhPos;
                 note.durationWhole = rhDur;
-                note.structural = true;
+                note.structural = (rhTiming == RhTiming::WithLh);  // Only structural when with LH
                 note.chord_context = adjusted.chordText;
-                note.voicing_type = "RH_upper";
+                // Voicing type reflects dialogue mode
+                switch (rhTiming) {
+                    case RhTiming::WithLh: note.voicing_type = "RH_upper"; break;
+                    case RhTiming::Respond: note.voicing_type = "RH_respond"; break;
+                    case RhTiming::Fill: note.voicing_type = "RH_fill"; break;
+                    default: note.voicing_type = "RH_upper"; break;
+                }
                 note.logic_tag = "RH";
                 
                 plan.notes.push_back(note);
             }
             
-            // Store for voice-leading in future stages
+            // Store full voicing for voice-leading (not the varied one)
             m_state.lastRhMidi = rhNotes;
         }
     }

@@ -44,14 +44,21 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
     out.reason = "default";
 
     // Track intensity / silence spans.
-    if (intent.intensityPeak) {
+    // CLIMAX ENTRY: Guitar activity + significant CC2 should drive climax.
+    // Even a single sustained note with strong voice should be able to reach climax.
+    const double cc201 = qBound(0.0, double(intent.lastCc2) / 127.0, 1.0);
+    const bool hasGuitarActivity = !intent.silence && (intent.notesPerSec > 0.1 || intent.msSinceLastGuitarNoteOn < 2000);
+    const bool significantCc2 = (cc201 >= 0.30);  // ~38/127 - moderate voice intensity
+    const bool climaxSignal = intent.intensityPeak || (hasGuitarActivity && significantCc2);
+    
+    if (climaxSignal) {
         if (m_intensitySinceMs < 0) m_intensitySinceMs = nowMs;
     } else {
         m_intensitySinceMs = -1;
     }
 
     // Build signal: lower-threshold and continuous (notesPerSec) + the old boolean flags.
-    const bool buildSignal = (!intent.silence) && ((intent.notesPerSec >= m_s.buildEnterNotesPerSec) || intent.densityHigh || intent.registerHigh);
+    const bool buildSignal = (!intent.silence) && ((intent.notesPerSec >= m_s.buildEnterNotesPerSec) || intent.densityHigh || intent.registerHigh || significantCc2);
     if (buildSignal) {
         if (m_buildSinceMs < 0) m_buildSinceMs = nowMs;
     } else {
@@ -73,7 +80,7 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
     }
 
     // Climax down-signal: require *sustained* calm evidence, not just a brief breath.
-    const double cc201 = qBound(0.0, double(intent.lastCc2) / 127.0, 1.0);
+    // cc201 already defined above
     const bool lowCc2 = (intent.lastCc2 <= m_s.climaxDownCc2Max);
     const bool lowDensity = (intent.notesPerSec <= m_s.climaxDownNotesPerSecMax) && (!intent.densityHigh);
     const bool downSignal = (!intent.intensityPeak) && (intent.silence || (lowCc2 && lowDensity));
@@ -190,28 +197,42 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
         case Vibe::CoolDown: base = 0.25; break;        // Settling down
     }
     
-    // Use SMOOTHED inputs with REDUCED coefficients
-    // (musicians respond to sustained intensity, not spikes)
+    // Use SMOOTHED inputs with contribution coefficients.
+    // Guitar (NPS, register, density) should be the PRIMARY energy driver.
+    // Voice CC2 should only add notable energy when singer is loud.
     double target = base
-        + 0.06 * m_smoothedNps       // reduced from 0.10
-        + 0.05 * m_smoothedCc2       // reduced from 0.08
-        + 0.03 * m_smoothedRegister  // reduced from 0.05
-        + 0.02 * m_smoothedDensity;  // reduced from 0.04
+        + 0.12 * m_smoothedNps       // guitar notes/sec - PRIMARY driver
+        + 0.04 * m_smoothedCc2       // CC2 (voice intensity) - small unless loud
+        + 0.06 * m_smoothedRegister  // high register playing
+        + 0.05 * m_smoothedDensity;  // dense playing
     
-    // When user is NOT playing, target the resting base instead
-    const bool userIsPlaying = (rawNps > 0.02) || (rawCc2 > 0.05);
-    if (!userIsPlaying) {
-        // User is silent - target the resting energy
-        target = restingBase;
+    // When user is NOT playing guitar, energy should be lower.
+    // Voice-only (CC2 without guitar notes) should NOT drive energy up much.
+    // Guitar notes are the primary indicator of "active performance".
+    const bool guitarIsPlaying = (rawNps > 0.02);
+    const bool voiceIsLoud = (rawCc2 > 0.39);  // ~50/127 - notably loud singing
+    
+    if (!guitarIsPlaying && !voiceIsLoud) {
+        // No guitar and voice isn't notably loud - target lower energy
+        // Voice-only at moderate levels shouldn't pump up the band
+        const double voiceOnlyBase = 0.18;  // slightly above resting, but not "active"
+        target = voiceOnlyBase + 0.04 * m_smoothedCc2;  // small CC2 contribution only
+    } else if (!guitarIsPlaying && voiceIsLoud) {
+        // Voice is notably loud without guitar - allow some energy build
+        // but not as much as guitar+voice together
+        target = qMin(target, 0.55);  // cap at "build" level for voice-only
     }
     
     target = qBound(0.0, target, 1.0);
 
     // ================================================================
-    // ACTIVITY TRACKING: Detect when user is actively playing
+    // ACTIVITY TRACKING: Only GUITAR notes count for grace period.
+    // Voice CC2 does NOT extend grace period - silence = no guitar notes.
+    // This ensures energy decays when performer stops playing guitar,
+    // even if they continue singing.
     // ================================================================
-    const bool hasActivity = (rawNps > 0.05) || (rawCc2 > 0.1) || rawRegister > 0.5 || rawDensity > 0.5;
-    if (hasActivity) {
+    const bool guitarActivity = (rawNps > 0.05) || rawRegister > 0.5 || rawDensity > 0.5;
+    if (guitarActivity) {
         m_lastActivityMs = nowMs;
     }
     
@@ -220,8 +241,11 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
     // This is a PRIMARY musical signal from the performer!
     // ================================================================
     // If user is playing (notes happening) but CC2 is low, they're signaling "bring it down"
-    const bool isPlayingSoftly = (rawNps > 0.05) && (rawCc2 < 0.35);
-    const bool isPlayingVerySoftly = (rawNps > 0.05) && (rawCc2 < 0.20);
+    // PERFORMANCE FIX: Lowered thresholds - the old values (0.35/0.20) made it too hard
+    // to build energy because typical singing was being classified as "soft".
+    // New thresholds require genuinely quiet singing to trigger slow-down.
+    const bool isPlayingSoftly = (rawNps > 0.05) && (rawCc2 < 0.18);      // was 0.35 (~44) → now ~23
+    const bool isPlayingVerySoftly = (rawNps > 0.05) && (rawCc2 < 0.08);  // was 0.20 (~25) → now ~10
     
     // ================================================================
     // ENERGY SMOOTHING: Gradual transitions (attack/release)
@@ -270,18 +294,34 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
             tauMs = qMax(1, m_s.energyFallTauMs);
             
             // Extra stickiness when in elevated states
-        if (m_vibe == Vibe::Climax) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsClimax));
-        if (m_vibe == Vibe::Build) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsBuild));
+            if (m_vibe == Vibe::Climax) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsClimax));
+            if (m_vibe == Vibe::Build) tauMs = qMax(tauMs, qMax(1, m_s.energyFallTauMsBuild));
             
-            // BUT: Soft playing ACCELERATES decay (shorter tau = faster fall)
-            // Low CC2 while playing = "bring it down please"
+            // GUITAR SILENCE: Decay when no guitar notes, but with some stickiness.
+            // "Silence" = no guitar activity. Voice alone doesn't prevent decay.
+            // Decay accelerates over time but allows brief pauses.
+            const qint64 silenceDurationMs = timeSinceActivity;
+            if (silenceDurationMs >= 4000) {
+                tauMs = tauMs / 4;  // 4+ seconds: rapid decay
+            } else if (silenceDurationMs >= 2500) {
+                tauMs = tauMs / 3;  // 2.5-4 seconds: fast decay
+            } else if (silenceDurationMs >= 1500) {
+                tauMs = tauMs / 2;  // 1.5-2.5 seconds: moderate decay
+            }
+            // 0-1.5 seconds: no multiplier - allows brief phrasing pauses
+            
+            // Soft CC2 while playing = "bring it down" signal
+            // Even playing with moderate CC2 (not loud) should accelerate decay
             if (isPlayingVerySoftly) {
-                tauMs = tauMs / 4;  // 4x faster decay when playing very softly
+                tauMs = tauMs / 6;  // 6x faster decay when playing very softly
             } else if (isPlayingSoftly) {
-                tauMs = tauMs / 2;  // 2x faster decay when playing softly
+                tauMs = tauMs / 4;  // 4x faster decay when playing softly
+            } else if (rawCc2 < 0.30) {
+                // Moderate CC2 (below ~38) while playing - still signal to decay
+                tauMs = tauMs / 2;  // 2x faster decay
             }
             
-            tauMs = qMax(500, tauMs);  // Floor: never faster than 500ms
+            tauMs = qMax(300, tauMs);  // Floor: allow very fast decay (300ms min)
         }
         
         // Reset peak tracking once we start actually falling

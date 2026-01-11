@@ -24,8 +24,8 @@ public:
         int buildEnterMs = 250;
         int buildExitMs = 2600; // linger: require calm for a while before dropping from Build
 
-        // How quickly we enter Climax on sustained intensity peaks.
-        int climaxEnterMs = 500;   // lowered threshold
+        // How quickly we enter Climax on sustained intensity (guitar + CC2).
+        int climaxEnterMs = 300;   // Quick entry - just need brief sustained intensity
         // How quickly we exit Climax once intensity drops (linger).
         int climaxExitMs = 5200; // require sustained calm before dropping from Climax
         // Additional Climax hysteresis: don't fall just because of a brief breath.
@@ -39,14 +39,15 @@ public:
 
         // Energy smoothing (continuous transitions).
         // Musicians respond over PHRASES, not notes - these should be slow!
-        int energyRiseTauMs = 3500;   // ~4 bars at 120bpm - very gradual build
-        int energyFallTauMs = 5000;   // VERY slow release - musicians don't drop on pauses
-        int energyFallTauMsClimax = 8000; // extremely sticky at climax
-        int energyFallTauMsBuild = 6000;  // very sticky in build mode
+        // Energy rise: reasonably quick to allow reaching climax
+        int energyRiseTauMs = 1500;   // Quick rise to feel responsive
+        // Energy decay: base values that get divided by silence duration multipliers
+        int energyFallTauMs = 2000;   // Base decay
+        int energyFallTauMsClimax = 3500; // Climax is stickier - takes longer to decay
+        int energyFallTauMsBuild = 2500;  // Build decay
         
-        // Grace period: don't start falling AT ALL for this duration after activity stops
-        // This handles natural breathing/phrasing without any energy loss
-        int energyFallGracePeriodMs = 2000;  // 2 seconds of pause before ANY decay starts
+        // Grace period: Short pause before decay starts - allows natural phrasing.
+        int energyFallGracePeriodMs = 2500;  // 0.5 second grace for brief pauses
         
         // Input smoothing - smooth the raw intensity signals before using them
         int inputSmoothingTauMs = 1200; // increased - hear trends over longer window

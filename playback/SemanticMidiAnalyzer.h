@@ -30,7 +30,9 @@ public:
         double densityHighNotesPerSec = 2.5;  // Was 6.0 - now triggers at 2.5 notes/sec
         int registerHighCenterMidi = 72; // C5-ish
         // CC2 (breath/intensity) drives "Intensity Peak" (vocal energy), not voice note events.
-        int intensityPeakCc2 = 55;      // Was 65 - more sensitive to vocal intensity
+        // Only notably loud singing should trigger intensity peak - this gates climax entry.
+        // 50/127 ≈ 39% requires the singer to project with energy, not just casual singing.
+        int intensityPeakCc2 = 50;
         int cc2ActivityFloor = 8;       // Was 10 - counts as "user active" (not silence)
 
         // Outside detection

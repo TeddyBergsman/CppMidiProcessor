@@ -5418,10 +5418,34 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             }
         }
         
-        // Clamp all notes to reasonable range
+        // ==========================================================================
+        // STAGE 2: REGISTER SEPARATION (voice-leading in future iteration)
+        // ==========================================================================
+        // Ensure RH bottom is above LH top - simple and safe approach
+        // ==========================================================================
+        
+        // Get LH top note for register separation
+        const int lhTopMidi = m_state.lastLhMidi.isEmpty() ? 60 : m_state.lastLhMidi.last();
+        const int rhFloor = qMax(72, lhTopMidi + 5);  // At least C5, or 5 above LH top
+        
+        // If any RH note is below the floor, shift the entire voicing up an octave
+        bool needsShift = false;
+        for (int midi : rhNotes) {
+            if (midi < rhFloor) {
+                needsShift = true;
+                break;
+            }
+        }
+        
+        if (needsShift) {
+            for (int& midi : rhNotes) {
+                midi += 12;
+            }
+        }
+        
+        // Final clamp: don't go too high
         for (int& midi : rhNotes) {
-            if (midi > 88) midi -= 12;
-            if (midi < 72) midi += 12;
+            if (midi > 90) midi -= 12;
         }
         
         // Sort ascending

@@ -209,13 +209,53 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
         // Section markers:
         // - classic iReal: *A, *B, ...
         // - some exports: *i/*v/*b/*c/*o (intro/verse/bridge/chorus/outro)
-        // We treat any single-letter token after '*' as a section marker and map well-known ones.
+        // Section markers are SINGLE characters, NOT followed by more letters in the token.
+        // The next character after the marker is typically a chord, space, barline, or time signature.
+        // We must NOT greedily consume all letters (e.g. "*vEb6" should parse as *v + Eb6, not *vEb + 6).
         if (c == '*' && i + 1 < s.size()) {
             const QChar sec0 = s[i + 1];
             if (sec0.isLetter()) {
-                int j = i + 1;
-                while (j < s.size() && s[j].isLetter()) j++;
-                const QString tok = s.mid(i + 1, j - (i + 1)); // "A" or "Intro" etc.
+                // Check for known multi-word section markers first (case-insensitive).
+                // These are rare but some exports use them.
+                static const QVector<std::pair<QString, QString>> knownWords = {
+                    {"intro", "Intro"},
+                    {"verse", "Verse"},
+                    {"bridge", "Bridge"},
+                    {"chorus", "Chorus"},
+                    {"outro", "Outro"},
+                };
+
+                QString label;
+                int consumeLen = 1; // default: consume only one character
+
+                // Try to match known multi-character words.
+                for (const auto& [word, displayLabel] : knownWords) {
+                    if (i + 1 + word.size() <= s.size()) {
+                        const QString candidate = s.mid(i + 1, word.size());
+                        if (candidate.compare(word, Qt::CaseInsensitive) == 0) {
+                            // Ensure the word ends at a non-letter boundary.
+                            const int afterWord = i + 1 + word.size();
+                            if (afterWord >= s.size() || !s[afterWord].isLetter()) {
+                                label = displayLabel;
+                                consumeLen = word.size();
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // If no known word matched, treat as a single-letter section marker.
+                if (label.isEmpty()) {
+                    const QChar secChar = s[i + 1];
+                    const QChar secLower = secChar.toLower();
+                    if (secLower == 'i') label = "Intro";
+                    else if (secLower == 'v') label = "Verse";
+                    else if (secLower == 'b') label = "Bridge";
+                    else if (secLower == 'c') label = "Chorus";
+                    else if (secLower == 'o') label = "Outro";
+                    else label = secChar.toUpper(); // A, B, C, D, etc.
+                }
+
                 // Section markers start a new line in iReal.
                 // If we are mid-line or mid-bar, flush first so the section label does not get applied retroactively.
                 // IMPORTANT: do NOT flush a bar that only contains a leading barline marker (e.g. "{") before a section.
@@ -226,19 +266,10 @@ ChartModel parseIRealProgression(const QString& decodedProgression) {
                 if (!currentLine.bars.isEmpty()) {
                     pushLine(model, currentLine);
                 }
-                const QString t = tok.trimmed();
-                const QString lcStr = t.toLower();
-                QString label;
-                if (lcStr == "i" || lcStr == "intro") label = "Intro";
-                else if (lcStr == "v" || lcStr == "verse") label = "Verse";
-                else if (lcStr == "b" || lcStr == "bridge") label = "Bridge";
-                else if (lcStr == "c" || lcStr == "chorus") label = "Chorus";
-                else if (lcStr == "o" || lcStr == "outro") label = "Outro";
-                else if (t.size() == 1) label = t.toUpper(); // A/B/C...
-                else label = t; // keep unknown section token verbatim
+
                 currentLine.sectionLabel = label;
                 pendingSection.clear();
-                i = j;
+                i += 1 + consumeLen; // skip '*' + the marker character(s)
                 continue;
             }
         }

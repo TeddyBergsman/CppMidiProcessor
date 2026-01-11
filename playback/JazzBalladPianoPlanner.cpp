@@ -4945,6 +4945,25 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         const bool preferInnerVoice = (beat == 2 && energy < 0.6 && varHash < 2);  // ~40% on beat 3
         
         // ==================================================================
+        // STAGE 6C: GHOST TOUCHES (very soft, textural repetitions)
+        // ==================================================================
+        // At very low energy, add whisper-soft touches that create subtle
+        // pulse without being prominent. Bill Evans signature texture.
+        // ==================================================================
+        
+        bool addGhostTouch = false;
+        if (energy < 0.35 && !isHighEnergy) {
+            const int ghostHash = (adjusted.playbackBarIndex * 41 + beat * 19) % 100;
+            
+            // Ghost touches on beat 2 or 4 at very low energy
+            if ((beat == 1 || beat == 3) && ghostHash < 12) {
+                addGhostTouch = true;
+                // Ghost touches are very soft shell voicings
+                compHits.append({0, -25, 1});  // On beat, very soft, shell voicing
+            }
+        }
+        
+        // ==================================================================
         // BASE RATES (all energies) - same as original Bill Evans style
         // ==================================================================
         
@@ -5102,7 +5121,14 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             if (adjusted.userBusy) {
                 compVel = qMin(compVel, 52);
             }
-            compVel = qBound(35, compVel, 72);
+            
+            // Ghost touches (velOffset <= -20) are allowed to be very soft
+            const bool isGhostTouch = (hit.velOffset <= -20);
+            if (isGhostTouch) {
+                compVel = qBound(22, compVel, 38);  // Ghost range: 22-38
+            } else {
+                compVel = qBound(35, compVel, 72);  // Normal range: 35-72
+            }
             
             // Duration: shorter for syncopated hits; even shorter for stabs
             double durBeats = (hit.subdivision == 0) ? 0.9 : 0.6;
@@ -5245,12 +5271,16 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             
             // Emit the (possibly varied) voicing
             QString variationType;
-            switch (hit.variation) {
-                case 1: variationType = "LH_shell"; break;
-                case 2: variationType = "LH_drop"; break;
-                case 3: variationType = "LH_shift"; break;
-                case 4: variationType = "LH_inner"; break;  // Inner voice movement
-                default: variationType = stabMode ? "LH_stab" : "LH_comp"; break;
+            if (isGhostTouch) {
+                variationType = "LH_ghost";
+            } else {
+                switch (hit.variation) {
+                    case 1: variationType = "LH_shell"; break;
+                    case 2: variationType = "LH_drop"; break;
+                    case 3: variationType = "LH_shift"; break;
+                    case 4: variationType = "LH_inner"; break;  // Inner voice movement
+                    default: variationType = stabMode ? "LH_stab" : "LH_comp"; break;
+                }
             }
             
             for (int midi : compVoicing) {

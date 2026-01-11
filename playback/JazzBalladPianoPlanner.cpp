@@ -5641,27 +5641,83 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             // Position: depends on dialogue timing mode
             virtuoso::groove::GridPos rhPos;
             int rhBeat = adjusted.beatInBar;
+            int rhSubdivision = 0;  // Default: on the beat
+            
+            // ==========================================================
+            // RH TIMING: Lay back + humanization (like LH but slightly different)
+            // ==========================================================
+            // RH should have a slightly different feel from LH:
+            // - When WITH LH: match LH timing closely
+            // - Respond/Fill: can be on "and" for more conversational feel
+            // - Add lay back and humanization for human feel
+            // ==========================================================
             
             switch (rhTiming) {
                 case RhTiming::WithLh:
                     // Play with LH on chord change beat
                     rhBeat = adjusted.beatInBar;
+                    rhSubdivision = 0;  // On the beat with LH
                     break;
-                case RhTiming::Respond:
-                    // Respond on beat 2 (current beat)
+                case RhTiming::Respond: {
+                    // Respond: sometimes on beat 2, sometimes on "& of 2"
                     rhBeat = 1;
+                    const int respondSubHash = (adjusted.playbackBarIndex * 29 + adjusted.chord.rootPc * 11) % 100;
+                    if (energy >= 0.5 && respondSubHash < 40) {
+                        rhSubdivision = 2;  // "& of 2" - more syncopated feel
+                    } else {
+                        rhSubdivision = 0;  // On beat 2
+                    }
                     break;
-                case RhTiming::Fill:
-                    // Fill on beat 3 (current beat)
+                }
+                case RhTiming::Fill: {
+                    // Fill: sometimes on beat 3, sometimes on "& of 3"
                     rhBeat = 2;
+                    const int fillSubHash = (adjusted.playbackBarIndex * 31 + adjusted.chord.rootPc * 7) % 100;
+                    if (energy >= 0.55 && fillSubHash < 35) {
+                        rhSubdivision = 2;  // "& of 3" - anticipating beat 4
+                    } else {
+                        rhSubdivision = 0;  // On beat 3
+                    }
                     break;
+                }
                 default:
                     rhBeat = adjusted.beatInBar;
+                    rhSubdivision = 0;
                     break;
             }
             
             rhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
-                adjusted.playbackBarIndex, rhBeat, 0, 4, ts);
+                adjusted.playbackBarIndex, rhBeat, rhSubdivision, 4, ts);
+            
+            // ==========================================================
+            // RH LAY BACK + HUMANIZATION (BPM-aware, energy-scaled)
+            // ==========================================================
+            // RH timing feel:
+            // - Low energy: slightly behind LH (supportive, relaxed)
+            // - High energy: tighter, closer to LH (driving together)
+            // - Add small humanization jitter
+            // ==========================================================
+            
+            const int bpm = adjusted.bpm > 0 ? adjusted.bpm : 90;
+            const double tempoScale = 90.0 / qBound(50, bpm, 180);
+            
+            // RH lay back: 6-10ms (slightly less than LH's 8-12ms)
+            // This makes RH feel like it's responding to LH, not leading
+            const double baseRhLay = 8.0;
+            int rhLayBackMs = int(baseRhLay * tempoScale * (1.0 - energy * 0.5));  // 4-8ms range
+            
+            // When playing WITH LH, match LH timing more closely
+            if (rhTiming == RhTiming::WithLh) {
+                rhLayBackMs = int(10.0 * tempoScale * (1.0 - energy * 0.7));  // Same as LH
+            }
+            
+            // Humanization jitter (±2ms for RH - slightly tighter than LH's ±3ms)
+            const int rhHumanHash = (adjusted.playbackBarIndex * 47 + rhBeat * 13 + adjusted.chord.rootPc * 5) % 5;
+            const int rhHumanizeMs = rhHumanHash - 2;  // Range: -2 to +2
+            
+            // Apply timing offset
+            const int rhTimingOffsetMs = rhLayBackMs + rhHumanizeMs;
+            rhPos = applyTimingOffset(rhPos, rhTimingOffsetMs, bpm, ts);
             
             // Velocity: Evans approach
             // Low energy: RH softer than LH (supportive color)

@@ -1321,6 +1321,15 @@ void NoteMonitorWidget::repositionNotes() {
     int W = m_notesOverlay->width();
     int H = m_notesOverlay->height();
     if (W <= 0 || H <= 0) return;
+    
+    // PERFORMANCE FIX: Throttle repositionNotes() to avoid excessive UI updates.
+    // During live guitar+voice performance, pitch updates can come in at 100+ Hz,
+    // but repositioning the UI 40 times per second is more than enough for smooth visuals.
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    if ((nowMs - m_lastRepositionMs) < kMinRepositionIntervalMs) {
+        return; // Skip this update; we repositioned recently
+    }
+    m_lastRepositionMs = nowMs;
 
     // Ensure sections have proper size
     m_guitarSection->adjustSize();
@@ -1423,79 +1432,17 @@ void NoteMonitorWidget::repositionNotes() {
 }
 
 void NoteMonitorWidget::addVocalTrailSnapshot(const QRect& oldGeo) {
-    if (!m_trailLayer || !m_vocalSection || oldGeo.width() <= 0 || oldGeo.height() <= 0) return;
+    // PERFORMANCE FIX: The original implementation called m_vocalSection->grab()
+    // on every position change, which is extremely expensive (full widget rendering).
+    // During playback with guitar+voice, this would be called hundreds of times
+    // per second, causing severe UI lag and playback stuttering.
+    //
+    // Instead of rendering trails (which are a nice-to-have visual effect),
+    // we simply skip this during active performance to maintain smooth playback.
+    // The trail effect is disabled to prioritize audio/MIDI timing over visual polish.
+    Q_UNUSED(oldGeo);
     
-    // Ensure trail layer is properly sized
-    if (m_trailLayer->width() != m_notesOverlay->width() || 
-        m_trailLayer->height() != m_notesOverlay->height()) {
-        m_trailLayer->setGeometry(0, 0, m_notesOverlay->width(), m_notesOverlay->height());
-    }
-    
-    // Cap number of ghosts to avoid performance issues
-    const auto labels = m_trailLayer->findChildren<QLabel*>(QString(), Qt::FindDirectChildrenOnly);
-    if (labels.size() >= m_trailMaxGhosts) {
-        // Remove oldest (first in list)
-        QLabel* oldest = labels.first();
-        if (oldest) {
-            oldest->deleteLater();
-        }
-    }
-    
-    // Temporarily restore full opacity for snapshot (if opacity effect exists)
-    // This ensures the trail ghost has full detail before fading
-    QGraphicsOpacityEffect* opacityEff = qobject_cast<QGraphicsOpacityEffect*>(m_vocalSection->graphicsEffect());
-    double oldOpacity = 0.7;
-    if (opacityEff) {
-        oldOpacity = opacityEff->opacity();
-        opacityEff->setOpacity(1.0);
-    }
-    
-    // Ensure widget is visible and updated before grabbing
-    m_vocalSection->setVisible(true);
-    m_vocalSection->update();
-    
-    // Grab snapshot of vocal section at its current position (which is still oldGeo)
-    // Widget hasn't moved yet when this is called
-    // Use grab() without arguments to capture the entire widget
-    QPixmap pm = m_vocalSection->grab();
-    
-    // Restore original opacity immediately
-    if (opacityEff) {
-        opacityEff->setOpacity(oldOpacity);
-    }
-    
-    // Skip if pixmap is empty or invalid
-    if (pm.isNull() || pm.width() <= 0 || pm.height() <= 0) {
-        return;
-    }
-    
-    // Create ghost label with snapshot at old position
-    QLabel* ghost = new QLabel(m_trailLayer);
-    ghost->setPixmap(pm);
-    ghost->setGeometry(oldGeo);
-    ghost->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-    ghost->setAttribute(Qt::WA_TranslucentBackground, true);
-    ghost->setAutoFillBackground(false);
-    ghost->setScaledContents(false); // Don't scale, use exact pixmap
-    ghost->show();
-    
-    // Force update of trail layer to ensure ghost is visible
-    m_trailLayer->update();
-    m_trailLayer->repaint();
-    
-    // Apply opacity effect for fading
-    // Start at full opacity for maximum visibility, then fade
-    auto* ghostEff = new QGraphicsOpacityEffect(ghost);
-    ghostEff->setOpacity(1.0); // Start at full opacity for maximum trail visibility
-    ghost->setGraphicsEffect(ghostEff);
-    
-    // Animate fade-out over 2500ms (longer for better trail visibility)
-    QPropertyAnimation* anim = new QPropertyAnimation(ghostEff, "opacity", ghost);
-    anim->setDuration(2500);
-    anim->setStartValue(0.1);
-    anim->setEndValue(0.0);
-    anim->setEasingCurve(QEasingCurve::OutQuad); // Smooth fade
-    connect(anim, &QPropertyAnimation::finished, ghost, &QObject::deleteLater);
-    anim->start(QAbstractAnimation::DeleteWhenStopped);
+    // Trail rendering disabled for performance during live performance.
+    // The grab() call was causing severe lag when playing guitar and singing.
 }
 

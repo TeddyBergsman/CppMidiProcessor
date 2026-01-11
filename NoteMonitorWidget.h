@@ -146,6 +146,10 @@ private:
     
     // Trail optimization: limit number of ghosts
     static constexpr int m_trailMaxGhosts = 5; // Increased for better trail visibility
+    
+    // PERFORMANCE: Throttle repositionNotes() to avoid excessive UI updates during live performance
+    qint64 m_lastRepositionMs = 0;
+    static constexpr qint64 kMinRepositionIntervalMs = 25; // Max ~40 updates/sec
 
 protected:
     void resizeEvent(QResizeEvent* event) override;

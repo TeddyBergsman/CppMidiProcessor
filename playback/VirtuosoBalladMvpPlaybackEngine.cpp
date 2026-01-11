@@ -543,22 +543,18 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
         // (not the scheduled lookahead position)
         emitTheoryEventForStep(stepNow);
 
+        // PERFORMANCE FIX: Compute snapshot ONCE per step change and reuse for both
+        // energy and weights emission. Previously we called snapshot() twice.
+        const auto snap = m_interaction.snapshot(nowWallMs, m_debugEnergyAuto, m_debugEnergy);
+
         // Emit energy (for UI slider animation)
-        {
-            double currentEnergy = m_debugEnergy;
-            if (m_debugEnergyAuto) {
-                const auto energySnap = m_interaction.snapshot(nowWallMs, true, m_debugEnergy);
-                currentEnergy = energySnap.energy01;
-            }
-            emit debugEnergy(currentEnergy, m_debugEnergyAuto);
-        }
+        emit debugEnergy(snap.energy01, m_debugEnergyAuto);
 
         // Emit weights v2 (for UI slider animation / debugging).
         {
             const int beatsPerBar = qMax(1, (m_model.timeSigNum > 0) ? m_model.timeSigNum : 4);
             const int playbackBarIndex = qMax(0, stepNow / beatsPerBar);
             const QString sec = sectionLabelForPlaybackBar(m_model, playbackBarIndex);
-            const auto snap = m_interaction.snapshot(nowWallMs, m_debugEnergyAuto, m_debugEnergy);
 
             virtuoso::control::PerformanceWeightsV2 w = m_weightsV2Manual;
             w.clamp01();

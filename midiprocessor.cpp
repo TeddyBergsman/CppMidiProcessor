@@ -669,8 +669,10 @@ void MidiProcessor::updatePitch(const std::vector<unsigned char>& message, bool 
     processPitchBend();
     emitPitchIfChanged(isGuitar);
 
-    // Emit Hz updates with minimal threshold and on note state changes
-    constexpr double hzThreshold = 0.1;
+    // PERFORMANCE FIX: Increased Hz threshold from 0.1 to 1.0 Hz.
+    // The old 0.1 Hz threshold was too sensitive during live performance.
+    // 1.0 Hz change is barely perceptible but reduces signal rate significantly.
+    constexpr double hzThreshold = 1.0;
     if (isGuitar) {
         double hz = m_lastGuitarPitchHz;
         if ((m_lastEmittedGuitarHz < 0 && hz > 0) || (hz <= 0 && m_lastEmittedGuitarHz > 0) ||
@@ -782,8 +784,13 @@ void MidiProcessor::emitPitchIfChanged(bool isGuitar) {
     const double hz = isGuitar ? m_lastGuitarPitchHz : m_lastVoicePitchHz;
     hzToNoteAndCents(hz, note, cents);
 
-    // Threshold to avoid spamming UI; keeps latency negligible while reducing overhead
-    constexpr double centsThreshold = 0.5;
+    // PERFORMANCE FIX: Increased threshold from 0.5 to 3.0 cents.
+    // The old 0.5 cent threshold caused excessive signal emission during live performance
+    // (pitch trackers can jitter sub-cent variations at 100+ Hz). 3 cents is still
+    // perceptually "in tune" (JND for pitch is ~5-10 cents) while dramatically
+    // reducing signal rate. This prevents UI thread congestion that was causing
+    // playback lag during guitar+voice performance.
+    constexpr double centsThreshold = 3.0;
     if (isGuitar) {
         if (note != m_lastEmittedGuitarNote || std::fabs(cents - m_lastEmittedGuitarCents) >= centsThreshold) {
             m_lastEmittedGuitarNote = note;

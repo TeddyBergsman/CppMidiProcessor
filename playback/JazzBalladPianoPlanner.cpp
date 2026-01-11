@@ -4815,13 +4815,15 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         struct CompHit {
             int subdivision;  // 0=on beat, 2=on "and"
             int velOffset;    // Velocity adjustment from base
-            int variation;    // 0=full voicing, 1=shell (2 notes), 2=drop middle, 3=shift up
+            int variation;    // 0=full, 1=shell, 2=drop, 3=shift, 4=inner voice movement
         };
         QVector<CompHit> compHits;
         const int beat = adjusted.beatInBar;
         
         // Variation selector based on beat and bar
-        const int varHash = (adjusted.playbackBarIndex * 23 + beat * 11) % 4;
+        // Beat 3 gets higher chance of inner voice movement (variation 4)
+        const int varHash = (adjusted.playbackBarIndex * 23 + beat * 11) % 5;
+        const bool preferInnerVoice = (beat == 2 && energy < 0.6 && varHash < 2);  // ~40% on beat 3
         
         // ==================================================================
         // BASE RATES (all energies) - same as original Bill Evans style
@@ -4831,8 +4833,17 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         if (beat == 2) {
             const int beat3Threshold = 30 + int(energy * 25);
             if (compHash < beat3Threshold) {
-                // First comp hit of chord: use shell or drop-middle for variety
-                compHits.append({0, 0, (varHash == 0) ? 1 : 2});  // Beat 3
+                // Beat 3 comping: prefer inner voice movement at low-mid energy
+                // This creates melodic motion within sustained chords (Bill Evans signature)
+                int var;
+                if (preferInnerVoice) {
+                    var = 4;  // Inner voice movement
+                } else if (varHash == 0) {
+                    var = 1;  // Shell
+                } else {
+                    var = 2;  // Drop middle
+                }
+                compHits.append({0, 0, var});  // Beat 3
             }
         }
         
@@ -5016,6 +5027,94 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                         }
                         break;
                         
+                    case 4: {
+                        // ==========================================================
+                        // STAGE 5: INNER VOICE MOVEMENT (Bill Evans signature)
+                        // ==========================================================
+                        // Move one inner voice to a CHORD TONE OR AVAILABLE TENSION.
+                        // NEVER move to a note outside the chord - that creates dissonance.
+                        // ==========================================================
+                        
+                        compVoicing = fullVoicing;  // Start with full voicing
+                        
+                        // Build set of valid target pitch classes (chord tones + tensions)
+                        QVector<int> validPcs;
+                        const int root = adjusted.chord.rootPc;
+                        
+                        // Add chord tones based on quality
+                        validPcs.append(root);                    // Root
+                        validPcs.append((root + 7) % 12);         // 5th (always safe)
+                        
+                        // 3rd: minor or major depending on quality
+                        if (adjusted.chord.quality == music::ChordQuality::Minor ||
+                            adjusted.chord.quality == music::ChordQuality::HalfDiminished ||
+                            adjusted.chord.quality == music::ChordQuality::Diminished) {
+                            validPcs.append((root + 3) % 12);     // Minor 3rd
+                        } else {
+                            validPcs.append((root + 4) % 12);     // Major 3rd
+                        }
+                        
+                        // 7th: major or minor depending on quality and seventh type
+                        if (adjusted.chord.quality == music::ChordQuality::Diminished) {
+                            validPcs.append((root + 9) % 12);     // Diminished 7th
+                        } else if (adjusted.chord.quality == music::ChordQuality::Major) {
+                            // Major quality can have major 7th
+                            validPcs.append((root + 11) % 12);    // Major 7th
+                        } else {
+                            validPcs.append((root + 10) % 12);    // Minor 7th (default)
+                        }
+                        
+                        // Safe tensions: 9th and 13th (almost always available)
+                        validPcs.append((root + 2) % 12);         // 9th
+                        validPcs.append((root + 9) % 12);         // 13th (6th)
+                        
+                        // Choose which inner voice to move (not first or last)
+                        const int moveIndex = fullVoicing.size() / 2;  // Middle voice
+                        int originalNote = compVoicing[moveIndex];
+                        int originalPc = originalNote % 12;
+                        
+                        // Find the nearest valid pitch class in either direction
+                        int bestNewNote = originalNote;  // Default: no change
+                        int bestDistance = 99;
+                        
+                        for (int delta = -3; delta <= 3; ++delta) {
+                            if (delta == 0) continue;  // Skip no-change
+                            
+                            int candidateNote = originalNote + delta;
+                            int candidatePc = ((candidateNote % 12) + 12) % 12;
+                            
+                            // Check if this pitch class is valid
+                            bool isValid = validPcs.contains(candidatePc);
+                            if (!isValid) continue;
+                            
+                            // Check range
+                            if (candidateNote < 48 || candidateNote > 70) continue;
+                            
+                            // Check for clusters with other notes
+                            bool hasCluster = false;
+                            for (int i = 0; i < compVoicing.size(); ++i) {
+                                if (i != moveIndex && qAbs(compVoicing[i] - candidateNote) <= 1) {
+                                    hasCluster = true;
+                                    break;
+                                }
+                            }
+                            if (hasCluster) continue;
+                            
+                            // Prefer smaller movements
+                            if (qAbs(delta) < bestDistance) {
+                                bestDistance = qAbs(delta);
+                                bestNewNote = candidateNote;
+                            }
+                        }
+                        
+                        // Apply the movement if we found a valid target
+                        if (bestNewNote != originalNote) {
+                            compVoicing[moveIndex] = bestNewNote;
+                            std::sort(compVoicing.begin(), compVoicing.end());
+                        }
+                        break;
+                    }
+                        
                     default: // 0 = full voicing unchanged
                         compVoicing = fullVoicing;
                         break;
@@ -5031,6 +5130,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 case 1: variationType = "LH_shell"; break;
                 case 2: variationType = "LH_drop"; break;
                 case 3: variationType = "LH_shift"; break;
+                case 4: variationType = "LH_inner"; break;  // Inner voice movement
                 default: variationType = stabMode ? "LH_stab" : "LH_comp"; break;
             }
             

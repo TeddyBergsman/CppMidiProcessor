@@ -27,7 +27,11 @@ int thirdInterval(music::ChordQuality q);
 int fifthInterval(music::ChordQuality q);
 
 /// Get the seventh interval (in semitones) for a chord symbol
+/// For 6th chords, returns 9 (the 6th interval) as the "color tone"
 int seventhInterval(const music::ChordSymbol& c);
+
+/// Returns true if this chord uses a 6th instead of a 7th
+bool is6thChord(const music::ChordSymbol& c);
 
 /// Find the nearest MIDI note for a pitch class within bounds
 int nearestMidiForPc(int pc, int around, int lo, int hi);

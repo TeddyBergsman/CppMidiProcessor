@@ -36,7 +36,14 @@ int seventhInterval(const music::ChordSymbol& c) {
     if (c.seventh == music::SeventhQuality::Dim7) return 9;
     if (c.seventh == music::SeventhQuality::Minor7) return 10;
     if (c.extension >= 7) return 10;
+    // 6th chords: the 6th replaces the 7th as the color tone
+    if (c.extension == 6) return 9;  // Major 6th interval
     return -1;
+}
+
+// Returns true if this chord uses a 6th instead of a 7th
+bool is6thChord(const music::ChordSymbol& c) {
+    return (c.extension == 6 && c.seventh == music::SeventhQuality::None);
 }
 
 int pcForDegree(const music::ChordSymbol& c, int degree) {
@@ -63,6 +70,8 @@ int pcForDegree(const music::ChordSymbol& c, int degree) {
     const bool isMajor = (c.quality == music::ChordQuality::Major);
     const bool isDominant = (c.quality == music::ChordQuality::Dominant);
     const bool isMinor = (c.quality == music::ChordQuality::Minor);
+    const bool isHalfDim = (c.quality == music::ChordQuality::HalfDiminished);
+    const bool isDim = (c.quality == music::ChordQuality::Diminished);
 
     int pc = root;
     switch (degree) {
@@ -106,6 +115,12 @@ int pcForDegree(const music::ChordSymbol& c, int degree) {
                 pc = normalizePc(root + 2);
             } else if (isMinor && c.seventh != music::SeventhQuality::None) {
                 pc = normalizePc(root + 2);
+            } else if (isHalfDim) {
+                // Half-diminished: major 9th is safe (e.g., E over Dm7b5)
+                pc = normalizePc(root + 2);
+            } else if (isDim) {
+                // Diminished: avoid natural 9, return -1
+                return -1;
             } else {
                 return -1;
             }
@@ -124,7 +139,19 @@ int pcForDegree(const music::ChordSymbol& c, int degree) {
                     return -1;
                 }
             } else if (isMinor) {
-                pc = applyAlter(11, normalizePc(root + 5));
+                pc = applyAlter(11, normalizePc(root + 5)); // natural 11
+            } else if (isHalfDim) {
+                // Half-diminished: 11 = perfect 4th = same as natural 11
+                // Note: this is the same pitch as the b5 enharmonically in some voicings
+                // Generally safe but not commonly used
+                if (c.extension >= 11 || hasAlteration(11)) {
+                    pc = applyAlter(11, normalizePc(root + 5));
+                } else {
+                    return -1;  // Don't add 11 unless explicit
+                }
+            } else if (isDim) {
+                // Diminished: avoid 11
+                return -1;
             } else {
                 pc = applyAlter(11, normalizePc(root + 5));
             }
@@ -136,6 +163,10 @@ int pcForDegree(const music::ChordSymbol& c, int degree) {
                 pc = applyAlter(13, normalizePc(root + 9));
             } else if (isDominant) {
                 pc = normalizePc(root + 9);
+            } else if (isHalfDim || isDim) {
+                // Half-dim/Dim: natural 13 clashes with minor 7th (half step)
+                // b13 also problematic - avoid entirely
+                return -1;
             } else {
                 return -1;
             }

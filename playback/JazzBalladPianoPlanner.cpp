@@ -5201,36 +5201,33 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                         
                         compVoicing = fullVoicing;  // Start with full voicing
                         
-                        // Build set of valid target pitch classes (chord tones + tensions)
+                        // Build set of valid target pitch classes using utility functions
                         QVector<int> validPcs;
                         const int root = adjusted.chord.rootPc;
                         
-                        // Add chord tones based on quality
+                        // Add chord tones using pcForDegree for proper handling
                         validPcs.append(root);                    // Root
-                        validPcs.append((root + 7) % 12);         // 5th (always safe)
                         
-                        // 3rd: minor or major depending on quality
-                        if (adjusted.chord.quality == music::ChordQuality::Minor ||
-                            adjusted.chord.quality == music::ChordQuality::HalfDiminished ||
-                            adjusted.chord.quality == music::ChordQuality::Diminished) {
-                            validPcs.append((root + 3) % 12);     // Minor 3rd
-                        } else {
-                            validPcs.append((root + 4) % 12);     // Major 3rd
-                        }
+                        int thirdPc = vu::pcForDegree(adjusted.chord, 3);
+                        if (thirdPc >= 0) validPcs.append(thirdPc);
                         
-                        // 7th: major or minor depending on quality and seventh type
-                        if (adjusted.chord.quality == music::ChordQuality::Diminished) {
-                            validPcs.append((root + 9) % 12);     // Diminished 7th
-                        } else if (adjusted.chord.quality == music::ChordQuality::Major) {
-                            // Major quality can have major 7th
-                            validPcs.append((root + 11) % 12);    // Major 7th
-                        } else {
-                            validPcs.append((root + 10) % 12);    // Minor 7th (default)
-                        }
+                        int fifthPc = vu::pcForDegree(adjusted.chord, 5);
+                        if (fifthPc >= 0) validPcs.append(fifthPc);
                         
-                        // Safe tensions: 9th and 13th (almost always available)
-                        validPcs.append((root + 2) % 12);         // 9th
-                        validPcs.append((root + 9) % 12);         // 13th (6th)
+                        // 7th or 6th (color tone)
+                        int seventhPc = vu::pcForDegree(adjusted.chord, 7);
+                        if (seventhPc >= 0) validPcs.append(seventhPc);
+                        
+                        // For 6th chords, also add the 6th explicitly
+                        int sixthPc = vu::pcForDegree(adjusted.chord, 6);
+                        if (sixthPc >= 0) validPcs.append(sixthPc);
+                        
+                        // Safe tensions: 9th and 13th only if available for this chord type
+                        int ninthPc = vu::pcForDegree(adjusted.chord, 9);
+                        if (ninthPc >= 0) validPcs.append(ninthPc);
+                        
+                        int thirteenthPc = vu::pcForDegree(adjusted.chord, 13);
+                        if (thirteenthPc >= 0) validPcs.append(thirteenthPc);
                         
                         // Choose which inner voice to move (not first or last)
                         const int moveIndex = fullVoicing.size() / 2;  // Middle voice
@@ -5353,42 +5350,42 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         const int root = adjusted.chord.rootPc;
         
         // === COMPUTE LH PORTION (rootless voicing for this chord) ===
-        // Same intervals as normal LH would use
-        int lhThird = (adjusted.chord.quality == music::ChordQuality::Minor ||
-                       adjusted.chord.quality == music::ChordQuality::HalfDiminished ||
-                       adjusted.chord.quality == music::ChordQuality::Diminished) ? 3 : 4;
-        int lhSeventh = (adjusted.chord.quality == music::ChordQuality::Major) ? 11 :
-                        (adjusted.chord.quality == music::ChordQuality::Diminished) ? 9 : 10;
-        int lhFifth = (adjusted.chord.quality == music::ChordQuality::HalfDiminished ||
-                       adjusted.chord.quality == music::ChordQuality::Diminished) ? 6 :
-                      (adjusted.chord.quality == music::ChordQuality::Augmented) ? 8 : 7;
-        int lhNinth = 2;  // Major 9th (octave reduced)
+        // Use utility functions for consistency with all chord types
+        int lhThird = vu::thirdInterval(adjusted.chord.quality);
+        int lhFifth = vu::fifthInterval(adjusted.chord.quality);
+        int lhSeventh = vu::seventhInterval(adjusted.chord);
+        if (lhSeventh < 0) lhSeventh = 10;  // Default to minor 7th
+        
+        // 9th: only use if safe for this chord type
+        int lhNinthPc = vu::pcForDegree(adjusted.chord, 9);
+        bool blockNinthSafe = (lhNinthPc >= 0);
+        int lhNinth = blockNinthSafe ? 2 : -1;  // Major 9th (octave reduced), or -1 if unsafe
         
         // LH in middle register (C3-C4 area, MIDI 48-60)
         int lhBaseMidi = 48;
         int lh3 = lhBaseMidi + ((root + lhThird) % 12);
         int lh5 = lhBaseMidi + ((root + lhFifth) % 12);
         int lh7 = lhBaseMidi + ((root + lhSeventh) % 12);
-        int lh9 = lhBaseMidi + ((root + lhNinth) % 12);
+        int lh9 = blockNinthSafe ? (lhBaseMidi + ((root + lhNinth) % 12)) : -1;
         
         // Ensure ascending order
         if (lh5 < lh3) lh5 += 12;
         if (lh7 < lh5) lh7 += 12;
-        if (lh9 < lh7) lh9 += 12;
+        if (blockNinthSafe && lh9 < lh7) lh9 += 12;
         
         // === COMPUTE RH PORTION (upper structure) ===
         int rhThird = lhThird;  // Same quality as LH
         int rhSeventh = lhSeventh;
-        int rhNinth = 14;  // Major 9th (full)
+        int rhNinth = blockNinthSafe ? 14 : -1;  // Major 9th (full), or -1 if unsafe
         
         int rhBaseMidi = 72;  // C5
         int rh3 = rhBaseMidi + ((root + rhThird) % 12);
         int rh7 = rhBaseMidi + ((root + rhSeventh) % 12);
-        int rh9 = rhBaseMidi + ((root + rhNinth) % 12);
+        int rh9 = blockNinthSafe ? (rhBaseMidi + ((root + rhNinth) % 12)) : -1;
         
         if (rh3 < rhBaseMidi) rh3 += 12;
         if (rh7 < rh3) rh7 += 12;
-        if (rh9 < rh7) rh9 += 12;
+        if (blockNinthSafe && rh9 < rh7) rh9 += 12;
         
         // === BUILD UNIFIED BLOCK VOICING ===
         QVector<int> blockVoicing;
@@ -5402,7 +5399,8 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         }
         
         // Doubled melody (RH top note dropped an octave)
-        const int rhMelody = (rh9 <= 88) ? rh9 : rh7;
+        // Use 9th as melody if safe, otherwise use 7th
+        const int rhMelody = (blockNinthSafe && rh9 <= 88) ? rh9 : rh7;
         const int doubledMelody = rhMelody - 12;
         
         // Add doubled melody if it fits in the gap
@@ -5413,7 +5411,9 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         // RH upper notes
         if (!blockVoicing.contains(rh3)) blockVoicing.append(rh3);
         if (!blockVoicing.contains(rh7)) blockVoicing.append(rh7);
-        if (rh9 <= 88 && !blockVoicing.contains(rh9)) blockVoicing.append(rh9);
+        if (blockNinthSafe && rh9 >= 0 && rh9 <= 88 && !blockVoicing.contains(rh9)) {
+            blockVoicing.append(rh9);
+        }
         
         std::sort(blockVoicing.begin(), blockVoicing.end());
         
@@ -5450,7 +5450,9 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         // Update state: LH uses the lower notes, RH uses the upper
         m_state.lastLhMidi = {lh3, lh7};
         m_state.lastRhMidi = {rh3, rh7};
-        if (rh9 <= 88) m_state.lastRhMidi.append(rh9);
+        if (blockNinthSafe && rh9 >= 0 && rh9 <= 88) {
+            m_state.lastRhMidi.append(rh9);
+        }
         
         // Block chord complete - skip normal RH
         goto rh_done;
@@ -5521,11 +5523,15 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         // Default to minor 7th if no seventh in chord (for upper structures)
         if (seventh < 0) seventh = 10;
         
-        // 9th: use pcForDegree for proper handling of alt chords, etc.
+        // 9th: use pcForDegree for proper handling - NO DEFAULTS if not safe
         int ninthPc = vu::pcForDegree(adjusted.chord, 9);
-        int ninth = (ninthPc >= 0) ? ((ninthPc - root + 12) % 12) : 2;  // Default to major 9th
-        if (ninth == 0) ninth = 12;  // Ensure it's above root
-        ninth += 12;  // Place in upper octave for RH register
+        int ninth = -1;  // -1 means "don't use 9th"
+        bool ninthSafe = (ninthPc >= 0);
+        if (ninthSafe) {
+            ninth = ((ninthPc - root + 12) % 12);
+            if (ninth == 0) ninth = 12;  // Ensure it's above root
+            ninth += 12;  // Place in upper octave for RH register
+        }
         
         // ==========================================================================
         // BUILD UPPER STRUCTURE VOICING
@@ -5541,18 +5547,21 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         int thirdMidi = rhBaseMidi + ((root + third) % 12);
         int fifthMidi = rhBaseMidi + ((root + fifth) % 12);
         int seventhMidi = rhBaseMidi + ((root + seventh) % 12);
-        int ninthMidi = rhBaseMidi + ((root + ninth) % 12);
+        int ninthMidi = -1;  // Only calculate if safe
+        if (ninthSafe) {
+            ninthMidi = rhBaseMidi + ((root + ninth) % 12);
+        }
         
         // Ensure notes are in ascending order and in range
         if (thirdMidi < rhBaseMidi) thirdMidi += 12;
         if (fifthMidi < thirdMidi) fifthMidi += 12;
         if (seventhMidi < fifthMidi) seventhMidi += 12;
-        if (ninthMidi < seventhMidi) ninthMidi += 12;
+        if (ninthSafe && ninthMidi < seventhMidi) ninthMidi += 12;
         
         // Voicing selection based on energy
         // Low energy: 2 notes (3rd + 7th - the essence)
-        // Mid energy: 3 notes (3rd + 5th + 7th or 3rd + 7th + 9th)
-        // High energy: 3 notes with 9th (more color)
+        // Mid energy: 3 notes (3rd + 5th + 7th or 3rd + 7th + 9th if safe)
+        // High energy: 3 notes with 9th if safe (more color)
         
         const int voicingHash = (adjusted.playbackBarIndex * 13 + root * 7) % 100;
         
@@ -5561,9 +5570,10 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             rhNotes.append(thirdMidi);
             rhNotes.append(seventhMidi);
         } else if (energy < 0.65) {
-            // Mid energy: triad (3rd + 5th + 7th) or (3rd + 7th + 9th)
+            // Mid energy: triad (3rd + 5th + 7th) or (3rd + 7th + 9th if safe)
             rhNotes.append(thirdMidi);
-            if (voicingHash < 50) {
+            if (voicingHash < 50 || !ninthSafe) {
+                // Use 5th if hash says so OR if 9th isn't safe
                 rhNotes.append(fifthMidi);
                 rhNotes.append(seventhMidi);
             } else {
@@ -5573,11 +5583,14 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 }
             }
         } else {
-            // High energy: full color (3rd + 7th + 9th)
+            // High energy: full color (3rd + 7th + 9th if safe, else 3rd + 5th + 7th)
             rhNotes.append(thirdMidi);
             rhNotes.append(seventhMidi);
-            if (ninthMidi <= 86) {
+            if (ninthSafe && ninthMidi <= 86) {
                 rhNotes.append(ninthMidi);
+            } else {
+                // Fall back to 5th when 9th isn't safe
+                rhNotes.append(fifthMidi);
             }
         }
         
@@ -5889,13 +5902,15 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         if (melodyHash < melodicThreshold) {
             const int root = adjusted.chord.rootPc;
             
-            // Chord intervals
-            int third = (adjusted.chord.quality == music::ChordQuality::Minor ||
-                         adjusted.chord.quality == music::ChordQuality::HalfDiminished ||
-                         adjusted.chord.quality == music::ChordQuality::Diminished) ? 3 : 4;
-            int seventh = (adjusted.chord.quality == music::ChordQuality::Major) ? 11 :
-                          (adjusted.chord.quality == music::ChordQuality::Diminished) ? 9 : 10;
-            int ninth = 14;  // Major 9th
+            // Chord intervals - use utility functions for consistency
+            int third = vu::thirdInterval(adjusted.chord.quality);
+            int seventh = vu::seventhInterval(adjusted.chord);
+            if (seventh < 0) seventh = 10;  // Default to minor 7th
+            
+            // 9th: check if safe for this chord type
+            int ninthPc = vu::pcForDegree(adjusted.chord, 9);
+            bool melodicNinthSafe = (ninthPc >= 0);
+            int ninth = melodicNinthSafe ? 14 : -1;  // Only use if safe
             
             // === SIMPLE MELODIC CELLS ===
             // Pre-defined 2-note gestures that sound musical
@@ -5909,14 +5924,22 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             };
             
             // Safe, musical cells based on chord tones
-            const MelodicCell cells[] = {
-                {seventh, third, 0},    // 7 → 3 (resolution feel)
-                {ninth, seventh, 0},    // 9 → 7 (descending step)
-                {third, seventh, 1},    // 3 → 7 (ascending, dotted)
-                {seventh, ninth, 2},    // 7 → 9 (upward reach)
-            };
+            // Cells that use 9th are only used when 9th is safe
+            QVector<MelodicCell> cells;
+            cells.append({seventh, third, 0});    // 7 → 3 (resolution feel)
+            cells.append({third, seventh, 1});    // 3 → 7 (ascending, dotted)
             
-            const int cellIndex = melodyHash % 4;
+            if (melodicNinthSafe) {
+                cells.append({ninth, seventh, 0});    // 9 → 7 (descending step)
+                cells.append({seventh, ninth, 2});    // 7 → 9 (upward reach)
+            } else {
+                // Alternative cells when 9th isn't safe: use 5th
+                int fifth = vu::fifthInterval(adjusted.chord.quality);
+                cells.append({fifth, third, 0});      // 5 → 3 (descending)
+                cells.append({third, fifth, 2});      // 3 → 5 (ascending)
+            }
+            
+            const int cellIndex = melodyHash % cells.size();
             const MelodicCell& cell = cells[cellIndex];
             
             // Calculate MIDI notes (upper register: C5-C6)

@@ -479,6 +479,9 @@ LhVoicingGenerator::LhVoicing LhVoicingGenerator::applyInnerVoiceMovement(
     if (fifthPc >= 0) validPcs.insert(fifthPc);
     int seventhPc = pcForDegree(c.chord, 7);
     if (seventhPc >= 0) validPcs.insert(seventhPc);
+    // For 6th chords, also add the 6th explicitly
+    int sixthPc = pcForDegree(c.chord, 6);
+    if (sixthPc >= 0) validPcs.insert(sixthPc);
     if (ninth >= 0) validPcs.insert(ninth);
     if (thirteenth >= 0) validPcs.insert(thirteenth);
     

@@ -4353,10 +4353,29 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     // 4. Voice-leading creates smooth connections between voicings
     // ==========================================================================
     
+    // ==========================================================================
+    // BLOCK CHORD PRE-CHECK (Stage 4)
+    // ==========================================================================
+    // At very high energy, we may use block chord technique - this replaces
+    // normal LH+RH with a unified powerful voicing. Detect early so we can
+    // skip regular LH emission when block chord will be used.
+    // ==========================================================================
+    
+    bool isBlockChordMoment = false;
+    if (m_enableRightHand && adjusted.chordIsNew && adjusted.energy >= 0.72) {
+        const bool userActive = adjusted.userBusy || adjusted.userDensityHigh || adjusted.userIntensityPeak;
+        if (!userActive && !m_state.lastLhMidi.isEmpty()) {
+            const int blockHash = (adjusted.playbackBarIndex * 31 + adjusted.chord.rootPc * 13) % 100;
+            const int blockThreshold = 15 + int((adjusted.energy - 0.7) * 65);
+            isBlockChordMoment = (blockHash < blockThreshold);
+        }
+    }
+    
     // Sync generator state for voice-leading continuity
     syncGeneratorState();
     
-    if (adjusted.chordIsNew) {
+    // Skip normal LH if block chord will be used
+    if (adjusted.chordIsNew && !isBlockChordMoment) {
         auto lhGenContext = toLhContext(adjusted);
         const double energy = adjusted.energy;
         
@@ -5321,6 +5340,121 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     {
     // RH processing scope
     const bool userActive = adjusted.userBusy || adjusted.userDensityHigh || adjusted.userIntensityPeak;
+    const double energy = adjusted.energy;
+    
+    // ==========================================================================
+    // STAGE 4: BLOCK CHORD EMISSION (if pre-detected above LH section)
+    // ==========================================================================
+    // Block chord moment was detected before LH emission (isBlockChordMoment flag).
+    // Now we emit the unified voicing. LH was skipped, so we compute both LH+RH here.
+    // ==========================================================================
+    
+    if (isBlockChordMoment && adjusted.chordIsNew) {
+        const int root = adjusted.chord.rootPc;
+        
+        // === COMPUTE LH PORTION (rootless voicing for this chord) ===
+        // Same intervals as normal LH would use
+        int lhThird = (adjusted.chord.quality == music::ChordQuality::Minor ||
+                       adjusted.chord.quality == music::ChordQuality::HalfDiminished ||
+                       adjusted.chord.quality == music::ChordQuality::Diminished) ? 3 : 4;
+        int lhSeventh = (adjusted.chord.quality == music::ChordQuality::Major) ? 11 :
+                        (adjusted.chord.quality == music::ChordQuality::Diminished) ? 9 : 10;
+        int lhFifth = (adjusted.chord.quality == music::ChordQuality::HalfDiminished ||
+                       adjusted.chord.quality == music::ChordQuality::Diminished) ? 6 :
+                      (adjusted.chord.quality == music::ChordQuality::Augmented) ? 8 : 7;
+        int lhNinth = 2;  // Major 9th (octave reduced)
+        
+        // LH in middle register (C3-C4 area, MIDI 48-60)
+        int lhBaseMidi = 48;
+        int lh3 = lhBaseMidi + ((root + lhThird) % 12);
+        int lh5 = lhBaseMidi + ((root + lhFifth) % 12);
+        int lh7 = lhBaseMidi + ((root + lhSeventh) % 12);
+        int lh9 = lhBaseMidi + ((root + lhNinth) % 12);
+        
+        // Ensure ascending order
+        if (lh5 < lh3) lh5 += 12;
+        if (lh7 < lh5) lh7 += 12;
+        if (lh9 < lh7) lh9 += 12;
+        
+        // === COMPUTE RH PORTION (upper structure) ===
+        int rhThird = lhThird;  // Same quality as LH
+        int rhSeventh = lhSeventh;
+        int rhNinth = 14;  // Major 9th (full)
+        
+        int rhBaseMidi = 72;  // C5
+        int rh3 = rhBaseMidi + ((root + rhThird) % 12);
+        int rh7 = rhBaseMidi + ((root + rhSeventh) % 12);
+        int rh9 = rhBaseMidi + ((root + rhNinth) % 12);
+        
+        if (rh3 < rhBaseMidi) rh3 += 12;
+        if (rh7 < rh3) rh7 += 12;
+        if (rh9 < rh7) rh9 += 12;
+        
+        // === BUILD UNIFIED BLOCK VOICING ===
+        QVector<int> blockVoicing;
+        
+        // LH foundation (3rd, 7th - shell, or fuller)
+        blockVoicing.append(lh3);
+        blockVoicing.append(lh7);
+        if (energy >= 0.8) {
+            // At very high energy, add 5th for thicker LH
+            if (!blockVoicing.contains(lh5)) blockVoicing.append(lh5);
+        }
+        
+        // Doubled melody (RH top note dropped an octave)
+        const int rhMelody = (rh9 <= 88) ? rh9 : rh7;
+        const int doubledMelody = rhMelody - 12;
+        
+        // Add doubled melody if it fits in the gap
+        if (doubledMelody > lh7 + 2 && !blockVoicing.contains(doubledMelody)) {
+            blockVoicing.append(doubledMelody);
+        }
+        
+        // RH upper notes
+        if (!blockVoicing.contains(rh3)) blockVoicing.append(rh3);
+        if (!blockVoicing.contains(rh7)) blockVoicing.append(rh7);
+        if (rh9 <= 88 && !blockVoicing.contains(rh9)) blockVoicing.append(rh9);
+        
+        std::sort(blockVoicing.begin(), blockVoicing.end());
+        
+        // === EMIT BLOCK CHORD ===
+        virtuoso::groove::GridPos blockPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+            adjusted.playbackBarIndex, adjusted.beatInBar, 0, 4, ts);
+        
+        // Slight timing: tight on the beat for power (minimal lay-back)
+        const int bpmForOffset = adjusted.bpm > 0 ? adjusted.bpm : 90;
+        const double tempoScale = 90.0 / qBound(50, bpmForOffset, 160);
+        blockPos = applyTimingOffset(blockPos, int(3.0 * tempoScale), bpmForOffset, ts);
+        
+        // Velocity: POWERFUL
+        const int blockVel = 78 + int(energy * 17);  // 78-95
+        
+        // Duration: punchy and defined
+        const virtuoso::groove::Rational blockDur(750, 4000);  // ~0.75 beats
+        
+        for (int midi : blockVoicing) {
+            virtuoso::engine::AgentIntentNote note;
+            note.agent = "Piano";
+            note.channel = midiChannel;
+            note.note = midi;
+            note.baseVelocity = blockVel;
+            note.startPos = blockPos;
+            note.durationWhole = blockDur;
+            note.structural = true;
+            note.chord_context = adjusted.chordText;
+            note.voicing_type = "Block_chord";
+            note.logic_tag = "Piano_block";
+            plan.notes.push_back(note);
+        }
+        
+        // Update state: LH uses the lower notes, RH uses the upper
+        m_state.lastLhMidi = {lh3, lh7};
+        m_state.lastRhMidi = {rh3, rh7};
+        if (rh9 <= 88) m_state.lastRhMidi.append(rh9);
+        
+        // Block chord complete - skip normal RH
+        goto rh_done;
+    }
     
     // ==========================================================================
     // STAGE 3: RHYTHMIC DIALOGUE - Decide WHEN RH plays
@@ -5336,7 +5470,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     RhTiming rhTiming = RhTiming::Silent;
     
     const int rhDialogueHash = (adjusted.playbackBarIndex * 17 + adjusted.beatInBar * 11 + adjusted.chord.rootPc) % 100;
-    const double energy = adjusted.energy;
+    // Note: 'energy' already defined at top of RH scope
     
     if (adjusted.chordIsNew && !userActive) {
         // Chord change: decide if RH plays WITH LH or stays silent
@@ -5618,10 +5752,7 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     }
     
     // ==========================================================================
-    // END OF STAGE 1 RH - Future stages will add:
-    // - Stage 2: Register separation (voice-leading)
-    // - Stage 3: Rhythmic dialogue (not always with LH)
-    // - Stage 4: Block chord moments
+    // RH STAGES COMPLETE - Future stages will add:
     // - Stage 5: Melodic singing lines
     // - Stage 6: Dynamics & expression
     // ==========================================================================

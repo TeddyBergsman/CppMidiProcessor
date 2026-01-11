@@ -5752,9 +5752,172 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     }
     
     // ==========================================================================
-    // RH STAGES COMPLETE - Future stages will add:
-    // - Stage 5: Melodic singing lines
-    // - Stage 6: Dynamics & expression
+    // STAGE 5: MELODIC SINGING LINES (Simplified, Grid-Based)
+    // ==========================================================================
+    // Evans' melodic RH was intentional, not random. Key principles:
+    // 1. Notes on REAL grid positions (8ths, triplets) - not random timing
+    // 2. Simple gestures: 2-3 notes max, clearly placed
+    // 3. Phrase-level feel: whole gesture has unified character
+    // 4. Specific rhythmic cells that work musically
+    // ==========================================================================
+    
+    // Only on specific beats when RH isn't already playing chords
+    // Beat 3 or Beat 4: space for a melodic gesture before next bar
+    
+    if (m_enableRightHand && !isBlockChordMoment && !userActive && !adjusted.chordIsNew) {
+        const int melodyHash = (adjusted.playbackBarIndex * 37 + adjusted.beatInBar * 19 + adjusted.chord.rootPc * 7) % 100;
+        
+        // Only trigger on specific beats with appropriate energy
+        const bool isGoodBeat = (adjusted.beatInBar == 2 || adjusted.beatInBar == 3);
+        const bool isLowMidEnergy = (energy < 0.55);
+        const int barInSection = adjusted.playbackBarIndex % 8;
+        const bool isPhraseEnding = (barInSection == 3 || barInSection == 7);
+        
+        // Conservative probability
+        int melodicThreshold = 0;
+        if (isGoodBeat && isLowMidEnergy && isPhraseEnding) melodicThreshold = 30;
+        else if (isGoodBeat && isLowMidEnergy) melodicThreshold = 12;
+        
+        if (melodyHash < melodicThreshold) {
+            const int root = adjusted.chord.rootPc;
+            
+            // Chord intervals
+            int third = (adjusted.chord.quality == music::ChordQuality::Minor ||
+                         adjusted.chord.quality == music::ChordQuality::HalfDiminished ||
+                         adjusted.chord.quality == music::ChordQuality::Diminished) ? 3 : 4;
+            int seventh = (adjusted.chord.quality == music::ChordQuality::Major) ? 11 :
+                          (adjusted.chord.quality == music::ChordQuality::Diminished) ? 9 : 10;
+            int ninth = 14;  // Major 9th
+            
+            // === SIMPLE MELODIC CELLS ===
+            // Pre-defined 2-note gestures that sound musical
+            // Each cell: {interval1, interval2, rhythm_type}
+            // Rhythm types: 0 = two 8ths, 1 = dotted-8th + 16th, 2 = quarter + 8th
+            
+            struct MelodicCell {
+                int note1;    // Interval from root
+                int note2;    // Interval from root  
+                int rhythm;   // Rhythm pattern
+            };
+            
+            // Safe, musical cells based on chord tones
+            const MelodicCell cells[] = {
+                {seventh, third, 0},    // 7 → 3 (resolution feel)
+                {ninth, seventh, 0},    // 9 → 7 (descending step)
+                {third, seventh, 1},    // 3 → 7 (ascending, dotted)
+                {seventh, ninth, 2},    // 7 → 9 (upward reach)
+            };
+            
+            const int cellIndex = melodyHash % 4;
+            const MelodicCell& cell = cells[cellIndex];
+            
+            // Calculate MIDI notes (upper register: C5-C6)
+            int baseMidi = 72;  // C5
+            int note1Midi = baseMidi + ((root + cell.note1) % 12);
+            int note2Midi = baseMidi + ((root + cell.note2) % 12);
+            
+            // Ensure proper octave placement
+            if (note1Midi < baseMidi) note1Midi += 12;
+            if (note2Midi < note1Midi - 6) note2Midi += 12;  // Keep within octave
+            if (note2Midi > note1Midi + 6) note2Midi -= 12;
+            
+            // Clamp to range
+            note1Midi = qBound(72, note1Midi, 88);
+            note2Midi = qBound(72, note2Midi, 88);
+            
+            // === GRID-BASED TIMING ===
+            // Notes land on actual subdivisions, no random jitter
+            
+            virtuoso::groove::GridPos pos1, pos2;
+            virtuoso::groove::Rational dur1, dur2;
+            
+            switch (cell.rhythm) {
+                case 0:  // Two straight 8ths: current beat, then "and"
+                    pos1 = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                        adjusted.playbackBarIndex, adjusted.beatInBar, 0, 4, ts);
+                    pos2 = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                        adjusted.playbackBarIndex, adjusted.beatInBar, 2, 4, ts);  // "and"
+                    dur1 = virtuoso::groove::Rational(500, 4000);  // 0.5 beats
+                    dur2 = virtuoso::groove::Rational(500, 4000);
+                    break;
+                    
+                case 1:  // Dotted 8th + 16th: longer first, quick second
+                    pos1 = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                        adjusted.playbackBarIndex, adjusted.beatInBar, 0, 4, ts);
+                    pos2 = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                        adjusted.playbackBarIndex, adjusted.beatInBar, 3, 4, ts);  // 3/4 through beat
+                    dur1 = virtuoso::groove::Rational(750, 4000);  // 0.75 beats
+                    dur2 = virtuoso::groove::Rational(250, 4000);  // 0.25 beats
+                    break;
+                    
+                case 2:  // Quarter + 8th: on beat, then next beat's "and"
+                default:
+                    pos1 = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                        adjusted.playbackBarIndex, adjusted.beatInBar, 0, 4, ts);
+                    // Second note on next beat's "and" (if room)
+                    if (adjusted.beatInBar < 3) {
+                        pos2 = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                            adjusted.playbackBarIndex, adjusted.beatInBar + 1, 0, 4, ts);
+                    } else {
+                        pos2 = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                            adjusted.playbackBarIndex, adjusted.beatInBar, 2, 4, ts);
+                    }
+                    dur1 = virtuoso::groove::Rational(900, 4000);  // 0.9 beats
+                    dur2 = virtuoso::groove::Rational(400, 4000);  // 0.4 beats
+                    break;
+            }
+            
+            // === PHRASE-LEVEL LAY BACK ===
+            // Apply consistent timing feel to both notes (not random per-note)
+            const int bpmForMelody = adjusted.bpm > 0 ? adjusted.bpm : 90;
+            const double tempoScale = 90.0 / qBound(50, bpmForMelody, 160);
+            const int layBackMs = int(8.0 * tempoScale);  // Subtle, consistent lay back
+            
+            pos1 = applyTimingOffset(pos1, layBackMs, bpmForMelody, ts);
+            pos2 = applyTimingOffset(pos2, layBackMs, bpmForMelody, ts);
+            
+            // Velocity: soft, expressive
+            const int melodyVel = 40 + int(energy * 15);  // 40-55
+            
+            // Emit note 1
+            {
+                virtuoso::engine::AgentIntentNote note;
+                note.agent = "Piano";
+                note.channel = midiChannel;
+                note.note = note1Midi;
+                note.baseVelocity = melodyVel;
+                note.startPos = pos1;
+                note.durationWhole = dur1;
+                note.structural = false;
+                note.chord_context = adjusted.chordText;
+                note.voicing_type = "RH_melody";
+                note.logic_tag = "RH";
+                plan.notes.push_back(note);
+            }
+            
+            // Emit note 2
+            {
+                virtuoso::engine::AgentIntentNote note;
+                note.agent = "Piano";
+                note.channel = midiChannel;
+                note.note = note2Midi;
+                note.baseVelocity = melodyVel - 3;  // Slightly softer
+                note.startPos = pos2;
+                note.durationWhole = dur2;
+                note.structural = false;
+                note.chord_context = adjusted.chordText;
+                note.voicing_type = "RH_melody";
+                note.logic_tag = "RH";
+                plan.notes.push_back(note);
+            }
+            
+            // Update state
+            m_state.lastRhMidi = {note2Midi};
+        }
+    }
+    
+    // ==========================================================================
+    // RH STAGES COMPLETE - Stage 6 (Dynamics & expression) to be added
     // ==========================================================================
     
     // OLD COMPLEX RH CODE REMOVED - Building up from minimal foundation

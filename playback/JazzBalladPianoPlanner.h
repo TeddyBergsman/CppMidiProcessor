@@ -757,7 +757,7 @@ private:
     // Set to false to disable a feature without removing code
     bool m_enableMelodicFragments = false;   // Approach notes, enclosures, turns, arpeggios - DISABLED BY DEFAULT
     bool m_enableTripletPatterns = false;    // Triplet and hemiola rhythmic patterns - DISABLED BY DEFAULT
-    bool m_enableRightHand = false;          // ALL RH playing - DISABLED BY DEFAULT
+    bool m_enableRightHand = true;           // ALL RH playing - ENABLED for testing Stage 1
     bool m_enableLhVariations = false;       // LH variations (inversions, drop-2) - DISABLED BY DEFAULT
     bool m_enableLhInnerVoice = false;       // LH inner voice movement - DISABLED BY DEFAULT
     bool m_enableLhSyncopation = false;      // LH syncopation/anticipation - DISABLED BY DEFAULT

@@ -5302,35 +5302,188 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     }
     
     // ==========================================================================
-    // RIGHT HAND: PHRASE-PATTERN-BASED COMPING
+    // RIGHT HAND: UPPER STRUCTURE VOICINGS (Stage 1 - Minimal Foundation)
     // ==========================================================================
-    // FEATURE FLAG: Completely skip all RH processing if disabled
-    // This allows us to test LH in isolation
+    // Bill Evans approach: RH plays 2-3 note voicings that add harmonic
+    // richness above the LH. These are upper structure triads/voicings.
+    //
+    // Stage 1 goals:
+    // - Only on chord changes (sparse)
+    // - 2-3 note voicings (not single notes)
+    // - Register: above LH (C5-C6, MIDI 72-84)
+    // - Chord tones only for now (3rd, 5th, 7th, 9th)
     // ==========================================================================
     
     if (!m_enableRightHand) {
-        // RH is completely disabled - skip to the end
         goto rh_done;
     }
     
     {
-    // The rest of RH code is in this scope so we can use goto to skip it
+    // RH processing scope
     const bool userActive = adjusted.userBusy || adjusted.userDensityHigh || adjusted.userIntensityPeak;
     
-    // Reset RH motion counter on chord change
-    if (chordChanged) {
-        m_state.rhMotionsThisChord = 0;
-        m_state.lastChordForRh = c.chord;
+    // ==========================================================================
+    // STAGE 1: UPPER STRUCTURE VOICINGS ON CHORD CHANGES
+    // ==========================================================================
+    
+    if (adjusted.chordIsNew && !userActive) {
+        const int root = adjusted.chord.rootPc;
+        const double energy = adjusted.energy;
+        
+        // Determine chord intervals based on quality
+        int third, fifth, seventh, ninth;
+        
+        // 3rd: minor or major
+        if (adjusted.chord.quality == music::ChordQuality::Minor ||
+            adjusted.chord.quality == music::ChordQuality::HalfDiminished ||
+            adjusted.chord.quality == music::ChordQuality::Diminished) {
+            third = 3;   // Minor 3rd
+        } else {
+            third = 4;   // Major 3rd
+        }
+        
+        // 5th: perfect, diminished, or augmented
+        if (adjusted.chord.quality == music::ChordQuality::HalfDiminished ||
+            adjusted.chord.quality == music::ChordQuality::Diminished) {
+            fifth = 6;   // Diminished 5th
+        } else if (adjusted.chord.quality == music::ChordQuality::Augmented) {
+            fifth = 8;   // Augmented 5th
+        } else {
+            fifth = 7;   // Perfect 5th
+        }
+        
+        // 7th: major, minor, or diminished
+        if (adjusted.chord.quality == music::ChordQuality::Major) {
+            seventh = 11;  // Major 7th
+        } else if (adjusted.chord.quality == music::ChordQuality::Diminished) {
+            seventh = 9;   // Diminished 7th
+        } else {
+            seventh = 10;  // Minor 7th (dominant, minor, half-dim)
+        }
+        
+        // 9th: always major 9th for now (safe tension)
+        ninth = 14;  // Major 9th (2 + 12)
+        
+        // ==========================================================================
+        // BUILD UPPER STRUCTURE VOICING
+        // ==========================================================================
+        // Choose 2-3 notes from: 3rd, 5th, 7th, 9th
+        // Register: C5-C6 (MIDI 72-84)
+        // ==========================================================================
+        
+        QVector<int> rhNotes;
+        const int rhBaseMidi = 72;  // C5
+        
+        // Calculate MIDI notes for each degree
+        int thirdMidi = rhBaseMidi + ((root + third) % 12);
+        int fifthMidi = rhBaseMidi + ((root + fifth) % 12);
+        int seventhMidi = rhBaseMidi + ((root + seventh) % 12);
+        int ninthMidi = rhBaseMidi + ((root + ninth) % 12);
+        
+        // Ensure notes are in ascending order and in range
+        if (thirdMidi < rhBaseMidi) thirdMidi += 12;
+        if (fifthMidi < thirdMidi) fifthMidi += 12;
+        if (seventhMidi < fifthMidi) seventhMidi += 12;
+        if (ninthMidi < seventhMidi) ninthMidi += 12;
+        
+        // Voicing selection based on energy
+        // Low energy: 2 notes (3rd + 7th - the essence)
+        // Mid energy: 3 notes (3rd + 5th + 7th or 3rd + 7th + 9th)
+        // High energy: 3 notes with 9th (more color)
+        
+        const int voicingHash = (adjusted.playbackBarIndex * 13 + root * 7) % 100;
+        
+        if (energy < 0.4) {
+            // Low energy: sparse dyad (3rd + 7th)
+            rhNotes.append(thirdMidi);
+            rhNotes.append(seventhMidi);
+        } else if (energy < 0.65) {
+            // Mid energy: triad (3rd + 5th + 7th) or (3rd + 7th + 9th)
+            rhNotes.append(thirdMidi);
+            if (voicingHash < 50) {
+                rhNotes.append(fifthMidi);
+                rhNotes.append(seventhMidi);
+            } else {
+                rhNotes.append(seventhMidi);
+                if (ninthMidi <= 86) {  // Don't go too high
+                    rhNotes.append(ninthMidi);
+                }
+            }
+        } else {
+            // High energy: full color (3rd + 7th + 9th)
+            rhNotes.append(thirdMidi);
+            rhNotes.append(seventhMidi);
+            if (ninthMidi <= 86) {
+                rhNotes.append(ninthMidi);
+            }
+        }
+        
+        // Clamp all notes to reasonable range
+        for (int& midi : rhNotes) {
+            if (midi > 88) midi -= 12;
+            if (midi < 72) midi += 12;
+        }
+        
+        // Sort ascending
+        std::sort(rhNotes.begin(), rhNotes.end());
+        
+        // ==========================================================================
+        // EMIT RH VOICING
+        // ==========================================================================
+        
+        if (!rhNotes.isEmpty()) {
+            // Position: same as LH chord (beat 1)
+            virtuoso::groove::GridPos rhPos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                adjusted.playbackBarIndex, adjusted.beatInBar, 0, 4, ts);
+            
+            // Velocity: slightly softer than LH, colored by energy
+            int rhVel = 42 + int(energy * 30);
+            if (userActive) {
+                rhVel = qMin(rhVel, 50);
+            }
+            rhVel = qBound(38, rhVel, 75);
+            
+            // Duration: similar to LH
+            double durBeats = 1.2;
+            if (energy >= 0.65) {
+                durBeats = 0.9;  // Shorter at high energy
+            }
+            const virtuoso::groove::Rational rhDur(int(durBeats * 1000), 4000);
+            
+            for (int midi : rhNotes) {
+                virtuoso::engine::AgentIntentNote note;
+                note.agent = "Piano";
+                note.channel = midiChannel;
+                note.note = midi;
+                note.baseVelocity = rhVel;
+                note.startPos = rhPos;
+                note.durationWhole = rhDur;
+                note.structural = true;
+                note.chord_context = adjusted.chordText;
+                note.voicing_type = "RH_upper";
+                note.logic_tag = "RH";
+                
+                plan.notes.push_back(note);
+            }
+            
+            // Store for voice-leading in future stages
+            m_state.lastRhMidi = rhNotes;
+        }
     }
     
-    // ========================================================================
-    // PHRASE PATTERN MANAGEMENT
-    // At phrase start (bar 0, beat 0), select a new pattern
-    // Otherwise, continue using the current pattern
-    // ========================================================================
+    // ==========================================================================
+    // END OF STAGE 1 RH - Future stages will add:
+    // - Stage 2: Register separation (voice-leading)
+    // - Stage 3: Rhythmic dialogue (not always with LH)
+    // - Stage 4: Block chord moments
+    // - Stage 5: Melodic singing lines
+    // - Stage 6: Dynamics & expression
+    // ==========================================================================
     
-    // Note: newPhrase already defined above
+    // OLD COMPLEX RH CODE REMOVED - Building up from minimal foundation
+    // (Previous ~800 lines of phrase patterns, melodic fragments, etc. removed)
     
+    #if 0  // Disabled old RH code
     if (newPhrase || m_state.phrasePatternIndex < 0) {
         // Track previous pattern for variety
         m_state.lastPhrasePatternIndex = m_state.phrasePatternIndex;
@@ -6138,6 +6291,8 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     if (safeLastRhTop > 0) {
         m_state.currentPhraseLastMidi = safeLastRhTop;
     }
+    #endif  // End of disabled old RH code
+    
     } // End of RH scope
     
 rh_done:

@@ -39,7 +39,7 @@ public:
 
         // Energy smoothing (continuous transitions).
         // Musicians respond over PHRASES, not notes - these should be slow!
-        int energyRiseTauMs = 1800;   // ~2 bars at 120bpm - gradual build
+        int energyRiseTauMs = 3500;   // ~4 bars at 120bpm - very gradual build
         int energyFallTauMs = 5000;   // VERY slow release - musicians don't drop on pauses
         int energyFallTauMsClimax = 8000; // extremely sticky at climax
         int energyFallTauMsBuild = 6000;  // very sticky in build mode
@@ -55,7 +55,7 @@ public:
     struct Output {
         Vibe vibe = Vibe::Simmer;
         // 0..1 summary knob for how "active" the band should be.
-        double energy = 0.17;  // Start low (15-20% range)
+        double energy = 0.12;  // Start very low (12%)
         // Optional label for TheoryEvent tagging.
         QString reason;
     };
@@ -80,7 +80,7 @@ private:
     qint64 m_calmSinceMs = -1;
     qint64 m_climaxDownSinceMs = -1;
 
-    double m_energy = 0.17;  // Start low (15-20% range)
+    double m_energy = 0.12;  // Start very low (12%)
     qint64 m_lastEnergyUpdateMs = -1;
     
     // Smoothed input signals (to avoid reacting to individual notes)
@@ -91,7 +91,7 @@ private:
     
     // Grace period tracking - don't decay during brief pauses
     qint64 m_lastActivityMs = -1;    // when we last saw meaningful input
-    double m_peakEnergy = 0.17;      // highest energy reached (for grace period)
+    double m_peakEnergy = 0.12;      // highest energy reached (for grace period)
 };
 
 } // namespace playback

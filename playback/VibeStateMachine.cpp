@@ -13,7 +13,7 @@ void VibeStateMachine::reset() {
     m_buildSinceMs = -1;
     m_calmSinceMs = -1;
     m_climaxDownSinceMs = -1;
-    m_energy = 0.17;  // Start low (15-20% range)
+    m_energy = 0.12;  // Start very low (12%)
     m_lastEnergyUpdateMs = -1;
     
     // Reset smoothed inputs
@@ -175,12 +175,19 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
     // Note: Reduced coefficients since musicians don't respond as much
     // to moment-to-moment variations
     // ================================================================
-    double base = 0.35;
+    // Two-tier energy system:
+    // - When user is SILENT: energy settles to restingBase (0.12)
+    // - When user is PLAYING: energy uses activeBase and builds from there
+    
+    const double restingBase = 0.12;  // Silent/resting energy
+    const double activeSimmer = 0.34; // Active playing base (old simmer)
+    
+    double base = restingBase;
     switch (m_vibe) {
-        case Vibe::Simmer: base = 0.34; break;
-        case Vibe::Build: base = 0.62; break;
-        case Vibe::Climax: base = 0.88; break;
-        case Vibe::CoolDown: base = 0.22; break;
+        case Vibe::Simmer: base = activeSimmer; break;  // Active simmer when playing
+        case Vibe::Build: base = 0.55; break;           // Moderate during build
+        case Vibe::Climax: base = 0.85; break;          // High at climax
+        case Vibe::CoolDown: base = 0.25; break;        // Settling down
     }
     
     // Use SMOOTHED inputs with REDUCED coefficients
@@ -190,6 +197,14 @@ VibeStateMachine::Output VibeStateMachine::update(const SemanticMidiAnalyzer::In
         + 0.05 * m_smoothedCc2       // reduced from 0.08
         + 0.03 * m_smoothedRegister  // reduced from 0.05
         + 0.02 * m_smoothedDensity;  // reduced from 0.04
+    
+    // When user is NOT playing, target the resting base instead
+    const bool userIsPlaying = (rawNps > 0.02) || (rawCc2 > 0.05);
+    if (!userIsPlaying) {
+        // User is silent - target the resting energy
+        target = restingBase;
+    }
+    
     target = qBound(0.0, target, 1.0);
 
     // ================================================================

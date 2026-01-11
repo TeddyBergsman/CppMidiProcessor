@@ -32,7 +32,7 @@ public:
         int sparkleLo = 84;
         int sparkleHi = 96;
         int beatInBar = 0;
-        double energy = 0.17;  // Start low (15-20% range)
+        double energy = 0.12;  // Start very low (12%)
         bool chordIsNew = false;
         virtuoso::control::PerformanceWeightsV2 weights;
         

@@ -28,7 +28,7 @@ public:
         int lhLo = 48;
         int lhHi = 64;
         int beatInBar = 0;
-        double energy = 0.17;  // Start low (15-20% range)
+        double energy = 0.12;  // Start very low (12%)
         bool chordIsNew = false;
         bool preferShells = true;
         virtuoso::control::PerformanceWeightsV2 weights;

@@ -71,7 +71,7 @@ public:
 
         // Macro dynamics / debug forcing
         bool forceClimax = false;
-        double energy = 0.17; // 0..1 (start low, 15-20% range)
+        double energy = 0.12; // 0..1 (start very low, 12%)
 
         // Phrase model (lightweight, deterministic): 4-bar phrases by default.
         int phraseBars = 4;

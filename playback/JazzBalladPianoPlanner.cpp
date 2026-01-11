@@ -4414,8 +4414,10 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
         // REGISTER CENTER: Energy + Ascending lines on repeats
         // ======================================================================
         
-        // Energy-based center (MIDI 52 to 62)
-        int energyCenter = 52 + int(energy * 10);
+        // Energy-based center (MIDI 57 to 64)
+        // Low energy should be clear and present (57 = A3, bright but warm)
+        // High energy brighter (64 = E4)
+        int energyCenter = 57 + int(energy * 7);
         
         // If this chord has appeared before, create ascending line
         int registerCenter;
@@ -4441,8 +4443,8 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             registerCenter = energyCenter + sectionOffset + barVariety;
         }
         
-        // Clamp to safe range
-        registerCenter = qBound(50, registerCenter, 68);
+        // Clamp to safe range (minimum 55 = G3 for clarity)
+        registerCenter = qBound(55, registerCenter, 68);
         
         // ======================================================================
         // VOICING TYPE: Alternate between Type A and Type B on repeats

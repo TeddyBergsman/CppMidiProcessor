@@ -4753,6 +4753,125 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                 }
             }
             
+            // ================================================================
+            // STAGE 6A: GRACE NOTES (chromatic approach)
+            // ================================================================
+            // A quick note a semitone below one chord tone, played just
+            // before the main chord lands. Creates a "lean-in" effect.
+            //
+            // When to use:
+            // - Low-mid energy (expressive moments)
+            // - NOT with rolls (don't stack ornaments)
+            // - NOT with anticipations
+            // - NOT at high energy (stabs need clean attack)
+            // ================================================================
+            
+            bool useGraceNote = false;
+            int graceNoteMidi = -1;
+            int graceNoteTargetIdx = -1;
+            
+            // Only consider grace notes when not using other ornaments
+            if (!stabMode && !useAnticipation && !useRoll && voicing.midiNotes.size() >= 2) {
+                const int graceHash = (adjusted.playbackBarIndex * 13 + currentRoot * 17) % 100;
+                
+                // Probability: ~15% at low energy, ~8% at mid energy
+                const int graceThreshold = (energy < 0.4) ? 15 : 8;
+                
+                if (graceHash < graceThreshold) {
+                    useGraceNote = true;
+                    
+                    // Choose which note to approach (prefer bass or top note)
+                    graceNoteTargetIdx = (graceHash % 2 == 0) ? 0 : (voicing.midiNotes.size() - 1);
+                    
+                    // Grace note is a semitone below the target
+                    graceNoteMidi = voicing.midiNotes[graceNoteTargetIdx] - 1;
+                    
+                    // Safety: don't go below reasonable range
+                    if (graceNoteMidi < 40) {
+                        useGraceNote = false;
+                    }
+                }
+            }
+            
+            // ================================================================
+            // STAGE 6B: OCTAVE BASS DOUBLING
+            // ================================================================
+            // Occasionally double the lowest note an octave lower for
+            // extra bass emphasis. Creates weight and grounding.
+            //
+            // When to use:
+            // - Section starts, strong structural moments
+            // - Low-mid energy (adds warmth)
+            // - NOT with grace notes or rolls (don't stack)
+            // ================================================================
+            
+            bool useOctaveDouble = false;
+            int octaveDoubleMidi = -1;
+            
+            // Only consider at low-mid energy, on structural moments
+            if (!stabMode && !useRoll && !useGraceNote && voicing.midiNotes.size() >= 2) {
+                const int octaveHash = (adjusted.playbackBarIndex * 11 + currentRoot * 23) % 100;
+                
+                // Strong structural moments: bar 0 or 4 of section, beat 1
+                const int barInSection = adjusted.playbackBarIndex % 8;
+                const bool isStrongMoment = (barInSection == 0 || barInSection == 4) && adjusted.beatInBar == 0;
+                
+                // Probability: ~20% at structural moments, ~5% otherwise
+                const int octaveThreshold = isStrongMoment ? 20 : 5;
+                
+                if (energy < 0.55 && octaveHash < octaveThreshold) {
+                    // Double the lowest note an octave below
+                    int lowestNote = voicing.midiNotes.first();
+                    int octaveNote = lowestNote - 12;
+                    
+                    // Safety: don't go below piano range
+                    if (octaveNote >= 36) {  // Low C on piano
+                        useOctaveDouble = true;
+                        octaveDoubleMidi = octaveNote;
+                    }
+                }
+            }
+            
+            // Emit octave doubling if applicable
+            if (useOctaveDouble && octaveDoubleMidi >= 0) {
+                virtuoso::engine::AgentIntentNote octaveNote;
+                octaveNote.agent = "Piano";
+                octaveNote.channel = midiChannel;
+                octaveNote.note = octaveDoubleMidi;
+                octaveNote.baseVelocity = lhVel - 5;  // Slightly softer
+                octaveNote.startPos = lhPos;  // Same timing as main chord
+                octaveNote.durationWhole = lhDurWhole;
+                octaveNote.structural = true;
+                octaveNote.chord_context = adjusted.chordText;
+                octaveNote.voicing_type = "LH_octave";
+                octaveNote.logic_tag = "LH";
+                
+                plan.notes.push_back(octaveNote);
+            }
+            
+            // Emit grace note if applicable
+            if (useGraceNote && graceNoteMidi >= 0) {
+                const int bpmForGrace = adjusted.bpm > 0 ? adjusted.bpm : 90;
+                const double tempoScale = 90.0 / qBound(50, bpmForGrace, 160);
+                
+                // Grace note timing: 35-50ms before main chord
+                const int graceOffsetMs = -int(40.0 * tempoScale);
+                
+                virtuoso::engine::AgentIntentNote graceNote;
+                graceNote.agent = "Piano";
+                graceNote.channel = midiChannel;
+                graceNote.note = graceNoteMidi;
+                graceNote.baseVelocity = lhVel - 15;  // Softer than main
+                graceNote.startPos = applyTimingOffset(lhPos, graceOffsetMs, bpmForGrace, ts);
+                graceNote.durationWhole = virtuoso::groove::Rational(80, 4000);  // Very short (~0.08 beats)
+                graceNote.structural = false;
+                graceNote.chord_context = adjusted.chordText;
+                graceNote.voicing_type = "LH_grace";
+                graceNote.logic_tag = "LH";
+                
+                plan.notes.push_back(graceNote);
+            }
+            
             // Emit notes (with optional roll timing)
             const int numNotes = voicing.midiNotes.size();
             const int bpmForOffset = adjusted.bpm > 0 ? adjusted.bpm : 90;

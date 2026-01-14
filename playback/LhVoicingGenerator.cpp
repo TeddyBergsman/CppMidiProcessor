@@ -359,184 +359,447 @@ LhVoicingGenerator::LhVoicing LhVoicingGenerator::generateRootlessWithTopTarget(
 
 // =============================================================================
 // QUARTAL VOICING (McCoy Tyner style)
+// FIXED: Now voice-leads from previous voicing, respects register bounds
 // =============================================================================
 
 LhVoicingGenerator::LhVoicing LhVoicingGenerator::generateQuartal(const Context& c) const {
     LhVoicing lh;
     const auto& chord = c.chord;
-    
+
     if (chord.placeholder || chord.noChord || chord.rootPc < 0) return lh;
-    
+
     const int root = chord.rootPc;
     const int fifth = pcForDegree(chord, 5);
-    
-    // Start from the 5th of the chord
+    // Note: 11th (natural 4th) is implicit in quartal stacking via pure 4ths
+
+    // For quartal voicing, we can start from:
+    // - The 5th (classic "So What" voicing)
+    // - The 11th/4th if it's a sus4 or modal chord
+    // - The root for a more grounded sound
     int startPc = (fifth >= 0) ? fifth : root;
-    
-    int startMidi = 50;
-    while (startMidi % 12 != startPc && startMidi < 55) startMidi++;
-    if (startMidi > 55) startMidi -= 12;
-    
-    // Stack 4ths (5 semitones each)
-    lh.midiNotes.push_back(startMidi);
-    lh.midiNotes.push_back(startMidi + 5);
-    
-    // Add third 4th if it fits
-    int thirdNote = startMidi + 10;
-    if (thirdNote <= 65) {
-        lh.midiNotes.push_back(thirdNote);
+
+    // Voice-lead: find starting point closest to previous voicing center
+    int targetCenter = (c.lhLo + c.lhHi) / 2;
+    if (!m_state.lastLhMidi.isEmpty()) {
+        int prevCenter = 0;
+        for (int m : m_state.lastLhMidi) prevCenter += m;
+        prevCenter /= m_state.lastLhMidi.size();
+        // Quartal voicings work well slightly lower in register
+        targetCenter = qBound(c.lhLo + 2, prevCenter - 2, c.lhHi - 10);
     }
-    
+
+    // Find starting MIDI note
+    int startMidi = nearestMidiForPc(startPc, targetCenter, c.lhLo, c.lhHi - 10);
+    if (startMidi < 0) {
+        // Fallback to register bottom
+        startMidi = c.lhLo;
+        while (normalizePc(startMidi) != startPc && startMidi < c.lhLo + 12) {
+            startMidi++;
+        }
+    }
+
+    // Stack 4ths (5 semitones each) - classic quartal sound
+    lh.midiNotes.push_back(startMidi);
+
+    int secondNote = startMidi + 5;
+    if (secondNote <= c.lhHi) {
+        lh.midiNotes.push_back(secondNote);
+
+        // Add third 4th if it fits in register
+        int thirdNote = secondNote + 5;
+        if (thirdNote <= c.lhHi) {
+            lh.midiNotes.push_back(thirdNote);
+        }
+    }
+
     lh.ontologyKey = "piano_lh_quartal";
     lh.isTypeA = true;
     lh.cost = voiceLeadingCost(m_state.lastLhMidi, lh.midiNotes);
-    
+
     return lh;
 }
 
 // =============================================================================
 // SHELL VOICING (just 3-7 guide tones)
+// FIXED: Now voice-leads from previous voicing instead of fixed register
 // =============================================================================
 
 LhVoicingGenerator::LhVoicing LhVoicingGenerator::generateShell(const Context& c) const {
     LhVoicing lh;
     const auto& chord = c.chord;
-    
+
     if (chord.placeholder || chord.noChord || chord.rootPc < 0) return lh;
-    
+
     const int third = pcForDegree(chord, 3);
     const int seventh = pcForDegree(chord, 7);
-    
+    const int sixth = pcForDegree(chord, 6);
+
+    // For 6th chords, use 6th instead of 7th
+    const bool is6thChord = (chord.extension == 6 && chord.seventh == music::SeventhQuality::None);
+    const int topPc = is6thChord ? sixth : seventh;
+
     if (third < 0) return lh;
-    
-    // Find the 3rd near MIDI 52
-    int thirdMidi = 52;
-    while (normalizePc(thirdMidi) != third && thirdMidi < 60) thirdMidi++;
-    if (thirdMidi > 60) thirdMidi -= 12;
-    
+
+    // Determine starting register from previous voicing (voice-leading)
+    int targetCenter = (c.lhLo + c.lhHi) / 2;  // Default to register center
+    if (!m_state.lastLhMidi.isEmpty()) {
+        // Voice-lead: use center of previous voicing
+        int prevCenter = 0;
+        for (int m : m_state.lastLhMidi) prevCenter += m;
+        prevCenter /= m_state.lastLhMidi.size();
+        targetCenter = qBound(c.lhLo + 3, prevCenter, c.lhHi - 3);
+    }
+
+    // Find the 3rd closest to target center
+    int thirdMidi = nearestMidiForPc(third, targetCenter, c.lhLo, c.lhHi);
+    if (thirdMidi < 0) return lh;
+
     lh.midiNotes.push_back(thirdMidi);
-    
-    // Add 7th above
-    if (seventh >= 0) {
-        int seventhMidi = thirdMidi + 1;
-        while (normalizePc(seventhMidi) != seventh && seventhMidi < thirdMidi + 12) {
-            seventhMidi++;
+
+    // Add 7th (or 6th) - prefer above the 3rd for standard shell
+    if (topPc >= 0) {
+        // Try to find top note above the third
+        int topMidi = thirdMidi + 1;
+        while (normalizePc(topMidi) != topPc && topMidi < thirdMidi + 12) {
+            topMidi++;
         }
-        if (seventhMidi <= 67) {
-            lh.midiNotes.push_back(seventhMidi);
+
+        // If above register, try below
+        if (topMidi > c.lhHi) {
+            topMidi = thirdMidi - 1;
+            while (normalizePc(topMidi) != topPc && topMidi > thirdMidi - 12) {
+                topMidi--;
+            }
+        }
+
+        // Only add if in register
+        if (topMidi >= c.lhLo && topMidi <= c.lhHi) {
+            lh.midiNotes.push_back(topMidi);
         }
     }
-    
+
+    std::sort(lh.midiNotes.begin(), lh.midiNotes.end());
+
     lh.ontologyKey = "piano_lh_shell";
     lh.isTypeA = true;
     lh.cost = voiceLeadingCost(m_state.lastLhMidi, lh.midiNotes);
-    
+
+    return lh;
+}
+
+// =============================================================================
+// BASS ANCHOR (Single low note for structural emphasis)
+// Used at phrase boundaries, climaxes, and when the bass is not playing
+// =============================================================================
+
+LhVoicingGenerator::LhVoicing LhVoicingGenerator::generateBassAnchor(const Context& c) const {
+    LhVoicing lh;
+    const auto& chord = c.chord;
+
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return lh;
+
+    // Choose anchor note based on context
+    // Default: root of chord (when bass is not playing, piano can provide foundation)
+    // Alternative: 5th for a more open sound, or 3rd for color
+    int anchorPc = chord.rootPc;
+
+    // If there's a slash bass, use that instead
+    if (chord.bassPc >= 0) {
+        anchorPc = chord.bassPc;
+    }
+
+    // Find the anchor in the low register (below typical LH voicing)
+    // Target around C3 (MIDI 48) for bass anchor
+    int targetMidi = 48;
+    int anchorMidi = nearestMidiForPc(anchorPc, targetMidi, 36, 55);
+
+    if (anchorMidi < 0) {
+        // Fallback
+        anchorMidi = 48;
+        while (normalizePc(anchorMidi) != anchorPc && anchorMidi > 36) {
+            anchorMidi--;
+        }
+    }
+
+    lh.midiNotes.push_back(anchorMidi);
+    lh.ontologyKey = "piano_lh_anchor";
+    lh.isTypeA = true;
+    lh.cost = 0.0;  // Bass anchor doesn't really voice-lead
+
+    return lh;
+}
+
+// =============================================================================
+// BLOCK LOWER (Lower portion of block chord, coordinated with RH)
+// Used for climax moments when both hands play together (George Shearing style)
+// =============================================================================
+
+LhVoicingGenerator::LhVoicing LhVoicingGenerator::generateBlockLower(const Context& c, int targetTopMidi) const {
+    LhVoicing lh;
+    const auto& chord = c.chord;
+
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return lh;
+
+    // Block chord: LH takes the lower portion (root + middle voices)
+    // RH takes upper portion (will be coordinated by orchestrator)
+
+    // Get chord tones
+    const int root = chord.rootPc;
+    const int third = pcForDegree(chord, 3);
+    const int fifth = pcForDegree(chord, 5);
+    const int seventh = pcForDegree(chord, 7);
+
+    // For block chords, we DO include the root (unlike rootless voicings)
+    QVector<int> targetPcs;
+    targetPcs.push_back(root);
+    if (third >= 0) targetPcs.push_back(third);
+    if (fifth >= 0) targetPcs.push_back(fifth);
+
+    // Realize in LH register, aiming for close position
+    // Block chords are typically in close position for that "locked hands" sound
+    int startMidi = qBound(c.lhLo, 48, c.lhHi - 8);
+
+    // Find root near start
+    int rootMidi = nearestMidiForPc(root, startMidi, c.lhLo, c.lhHi);
+    if (rootMidi < 0) return lh;
+
+    lh.midiNotes.push_back(rootMidi);
+
+    // Stack remaining notes closely above root
+    int cursor = rootMidi;
+    for (int i = 1; i < targetPcs.size(); ++i) {
+        int pc = targetPcs[i];
+        // Find next note within octave above cursor
+        int nextMidi = cursor + 1;
+        while (normalizePc(nextMidi) != pc && nextMidi < cursor + 12) {
+            nextMidi++;
+        }
+        // Keep in register
+        if (nextMidi <= c.lhHi) {
+            lh.midiNotes.push_back(nextMidi);
+            cursor = nextMidi;
+        }
+    }
+
+    std::sort(lh.midiNotes.begin(), lh.midiNotes.end());
+
+    lh.ontologyKey = "piano_lh_block";
+    lh.isTypeA = true;
+    lh.cost = voiceLeadingCost(m_state.lastLhMidi, lh.midiNotes);
+
     return lh;
 }
 
 // =============================================================================
 // INNER VOICE MOVEMENT
+// FIXED: Now triggers more frequently (beats 2 and 3) and has better targeting
+// =============================================================================
+// CONTRAPUNTAL INNER VOICE MOVEMENT (Evans' "piled up contrapuntal lines")
+// =============================================================================
+// Per Chuck Israels: Evans' harmonies were "a piling up of contrapuntal lines"
+// where tension/release between voices was "exquisitely shaded."
+//
+// KEY INSIGHT: This is NOT about mechanical movement on beat 3, but about
+// voices with DIRECTION - ascending toward tension, descending toward resolution.
+// Movement is triggered by PHRASE CONTEXT, not beat position.
 // =============================================================================
 
 LhVoicingGenerator::LhVoicing LhVoicingGenerator::applyInnerVoiceMovement(
     const LhVoicing& base, const Context& c, int direction) const {
-    
-    if (c.chordIsNew) return base;
-    if (c.beatInBar != 2) return base; // Only move on beat 3
-    
+
+    // Skip if chord just changed - let voicing establish first
+    if (c.chordIsNew) {
+        m_state.beatsOnCurrentTarget = 0;
+        return base;
+    }
+
     LhVoicing moved = base;
     if (moved.midiNotes.size() < 2) return moved;
-    
-    // Choose inner voice (not top or bottom)
-    int moveIndex = (moved.midiNotes.size() >= 3) ? 1 : 0;
+
+    // =========================================================================
+    // PHRASE-DRIVEN DIRECTION (the heart of contrapuntal voice movement)
+    // =========================================================================
+    // Building tension (phase 0): Inner voices ASCEND toward dissonance
+    // Peak (phase 1): Maximum activity, voices can move freely
+    // Resolving (phase 2): Inner voices DESCEND toward consonance
+
+    int dir = direction;
+    if (dir == 0) {
+        // Determine direction from phrase context
+        switch (c.phraseArcPhase) {
+        case 0:  // Building - ascend toward tension
+            dir = 1;
+            break;
+        case 1:  // Peak - alternate for maximum shimmer
+            dir = (m_state.innerVoiceDirection > 0) ? -1 : 1;
+            break;
+        case 2:  // Resolving - descend toward consonance
+            dir = -1;
+            break;
+        default:
+            dir = (m_state.innerVoiceDirection > 0) ? -1 : 1;
+        }
+
+        // Cadence approach: always resolve downward
+        if (c.cadence01 > 0.6) {
+            dir = -1;
+        }
+    }
+
+    // =========================================================================
+    // CHOOSE INNER VOICE TO MOVE
+    // =========================================================================
+    // For 3+ note voicings: move middle voice (preserves bass and melodic top)
+    // For 2-note voicings: move lower voice (preserves melodic top)
+    // Cycle through voices over time for variety
+
+    int moveIndex;
+    int numNotes = moved.midiNotes.size();
+    if (numNotes >= 4) {
+        // 4-note voicing: alternate between inner voices (index 1 and 2)
+        moveIndex = 1 + (m_state.lastInnerVoiceIndex % 2);
+    } else if (numNotes >= 3) {
+        moveIndex = 1;  // Middle voice
+    } else {
+        moveIndex = 0;  // Lower voice of dyad
+    }
     int originalNote = moved.midiNotes[moveIndex];
-    
-    // Determine direction
-    int dir = (direction != 0) ? direction : ((m_state.lastInnerVoiceIndex % 2 == 0) ? 1 : -1);
-    
-    // Target a color tone if available
-    int targetPc = -1;
+
+    // =========================================================================
+    // BUILD TARGET PITCH CLASSES
+    // =========================================================================
     int ninth = pcForDegree(c.chord, 9);
     int thirteenth = pcForDegree(c.chord, 13);
-    
-    // Use energy for tension (more color tones at higher energy)
-    if (c.energy > 0.4 && ninth >= 0) {
-        targetPc = ninth;
-    } else if (c.energy > 0.6 && thirteenth >= 0) {
-        targetPc = thirteenth;
-    }
-    
-    // Apply movement - ONLY to valid chord tones or safe tensions
-    int delta = (dir > 0) ? 1 : -1;
-    
-    // Build set of valid pitch classes for this chord
+
     QSet<int> validPcs;
     int root = c.chord.rootPc;
-    validPcs.insert(root);  // Root
+    validPcs.insert(root);
     int thirdPc = pcForDegree(c.chord, 3);
     if (thirdPc >= 0) validPcs.insert(thirdPc);
     int fifthPc = pcForDegree(c.chord, 5);
     if (fifthPc >= 0) validPcs.insert(fifthPc);
     int seventhPc = pcForDegree(c.chord, 7);
     if (seventhPc >= 0) validPcs.insert(seventhPc);
-    // For 6th chords, also add the 6th explicitly
-    int sixthPc = pcForDegree(c.chord, 6);
-    if (sixthPc >= 0) validPcs.insert(sixthPc);
-    if (ninth >= 0) validPcs.insert(ninth);
-    if (thirteenth >= 0) validPcs.insert(thirteenth);
-    
-    if (targetPc >= 0) {
-        // Try to reach specific color tone (9th or 13th)
-        int targetMidi = originalNote;
-        while (targetMidi % 12 != targetPc && qAbs(targetMidi - originalNote) < 4) {
-            targetMidi += delta;
-        }
-        if (qAbs(targetMidi - originalNote) <= 3 && targetMidi >= 48 && targetMidi <= 67) {
-            moved.midiNotes[moveIndex] = targetMidi;
-        }
-    } else {
-        // Fallback: find nearest VALID chord tone within ±3 semitones
-        int bestTarget = -1;
-        int bestDist = 999;
-        
-        for (int offset = -3; offset <= 3; ++offset) {
-            if (offset == 0) continue;  // Skip current note
-            int candidate = originalNote + offset;
-            if (candidate < 48 || candidate > 67) continue;
-            
-            // Must be a valid chord tone
-            if (!validPcs.contains(candidate % 12)) continue;
-            
-            // Check for clusters with other notes
-            bool safe = true;
-            for (int i = 0; i < moved.midiNotes.size(); ++i) {
-                if (i != moveIndex && qAbs(moved.midiNotes[i] - candidate) <= 1) {
-                    safe = false;
-                    break;
-                }
-            }
-            
-            if (safe) {
-                int dist = qAbs(offset);
-                // Prefer movement in the requested direction
-                if ((delta > 0 && offset > 0) || (delta < 0 && offset < 0)) {
-                    dist -= 1;  // Slight preference
-                }
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    bestTarget = candidate;
-                }
-            }
-        }
-        
-        if (bestTarget >= 0) {
-            moved.midiNotes[moveIndex] = bestTarget;
-        }
-        // If no valid target found, don't move at all (safer)
+
+    // Color tones for Evans-style richness
+    if (c.energy > 0.15 && ninth >= 0) validPcs.insert(ninth);
+    if (c.energy > 0.3 && thirteenth >= 0) validPcs.insert(thirteenth);
+
+    // During resolution, prefer chord tones over extensions
+    bool preferConsonant = (c.phraseArcPhase == 2 || c.cadence01 > 0.5);
+
+    // =========================================================================
+    // VOICE-LEADING TO NEXT CHORD (contrapuntal preparation)
+    // =========================================================================
+    // If we know the next chord and it's coming soon, prepare for it
+    QSet<int> nextChordPcs;
+    if (c.hasNextChord && c.beatsUntilChordChange <= 2) {
+        int nextThird = pcForDegree(c.nextChord, 3);
+        int nextSeventh = pcForDegree(c.nextChord, 7);
+        if (nextThird >= 0) nextChordPcs.insert(nextThird);
+        if (nextSeventh >= 0) nextChordPcs.insert(nextSeventh);
+        // Root of next chord is also a good target
+        nextChordPcs.insert(c.nextChord.rootPc);
     }
-    
-    std::sort(moved.midiNotes.begin(), moved.midiNotes.end());
-    moved.ontologyKey = "piano_lh_inner_move";
+
+    // =========================================================================
+    // FIND BEST TARGET NOTE
+    // =========================================================================
+    int bestTarget = -1;
+    int bestScore = -999;
+
+    // Search in preferred direction first, but consider both directions
+    // Use ±6 semitones to find valid options even in compact voicings
+    for (int offset = -6; offset <= 6; ++offset) {
+        if (offset == 0) continue;
+
+        int candidate = originalNote + offset;
+        if (candidate < c.lhLo || candidate > c.lhHi) continue;
+
+        int candidatePc = candidate % 12;
+
+        // Must be a valid pitch class for current chord
+        if (!validPcs.contains(candidatePc)) continue;
+
+        // Check for clusters with other notes (min 2 semitones apart)
+        bool safe = true;
+        for (int i = 0; i < moved.midiNotes.size(); ++i) {
+            if (i != moveIndex && qAbs(moved.midiNotes[i] - candidate) < 2) {
+                safe = false;
+                break;
+            }
+        }
+        if (!safe) continue;
+
+        // =====================================================================
+        // SCORING: Contrapuntal priorities
+        // =====================================================================
+        int score = 0;
+
+        // 1. Stepwise motion is most melodic (±1 or ±2 semitones)
+        int dist = qAbs(offset);
+        score += (6 - dist);  // Stepwise strongly preferred
+
+        // 2. Moving in phrase-driven direction
+        bool inDirection = (dir > 0 && offset > 0) || (dir < 0 && offset < 0);
+        if (inDirection) {
+            score += 4;  // Strong preference for phrase-driven direction
+        }
+
+        // 3. Voice-leading bonus: moves toward next chord's tones
+        if (!nextChordPcs.isEmpty() && nextChordPcs.contains(candidatePc)) {
+            score += 3;  // Prepares the next chord
+        }
+
+        // 4. Resolution phase: prefer chord tones over extensions
+        if (preferConsonant) {
+            bool isChordTone = (candidatePc == root || candidatePc == thirdPc ||
+                               candidatePc == fifthPc || candidatePc == seventhPc);
+            if (isChordTone) score += 2;
+        } else {
+            // Building phase: color tones add tension
+            if (candidatePc == ninth || candidatePc == thirteenth) {
+                score += 2;
+            }
+        }
+
+        // 5. Continuation bonus: if we have a target, keep pursuing it
+        if (m_state.innerVoiceTarget >= 0) {
+            int targetDist = qAbs(candidate - m_state.innerVoiceTarget);
+            if (targetDist < qAbs(originalNote - m_state.innerVoiceTarget)) {
+                score += 2;  // Getting closer to our target
+            }
+        }
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestTarget = candidate;
+        }
+    }
+
+    // =========================================================================
+    // APPLY MOVEMENT AND UPDATE STATE
+    // =========================================================================
+    if (bestTarget >= 0 && bestTarget != originalNote) {
+        moved.midiNotes[moveIndex] = bestTarget;
+        std::sort(moved.midiNotes.begin(), moved.midiNotes.end());
+        moved.ontologyKey = "piano_lh_inner_move";
+
+        // Update contrapuntal line state
+        m_state.innerVoiceDirection = (bestTarget > originalNote) ? 1 : -1;
+        m_state.lastInnerVoiceIndex = moveIndex;
+
+        // Set or update target based on phrase
+        if (c.phraseArcPhase == 0) {
+            // Building: target is upward toward a color tone
+            m_state.innerVoiceTarget = originalNote + 3;  // Aim 3 semitones up
+        } else if (c.phraseArcPhase == 2) {
+            // Resolving: target is downward toward a chord tone
+            m_state.innerVoiceTarget = originalNote - 3;  // Aim 3 semitones down
+        }
+        m_state.beatsOnCurrentTarget++;
+    }
+
     return moved;
 }
 

@@ -399,6 +399,21 @@ LhVoicingGenerator::Context toLhContext(const JazzBalladPianoPlanner::Context& c
     lhc.keyTonicPc = c.keyTonicPc;
     lhc.keyMode = c.keyMode;
     lhc.bassRegisterHi = c.bassRegisterHi;
+
+    // Phrase context for contrapuntal inner voice movement
+    // Derive phraseArcPhase from barInPhrase and cadence01
+    if (c.cadence01 > 0.7 || c.phraseEndBar) {
+        lhc.phraseArcPhase = 2;  // Resolving
+    } else if (c.barInPhrase >= c.phraseBars / 2) {
+        lhc.phraseArcPhase = 1;  // Peak
+    } else {
+        lhc.phraseArcPhase = 0;  // Building
+    }
+    lhc.cadence01 = c.cadence01;
+    lhc.barInPhrase = c.barInPhrase;
+    lhc.beatsUntilChordChange = c.beatsUntilChordChange;
+    lhc.nextChord = c.nextChord;
+    lhc.hasNextChord = c.hasNextChord;
     return lhc;
 }
 
@@ -464,6 +479,9 @@ void JazzBalladPianoPlanner::syncGeneratorState() const {
     lhState.lastLhWasTypeA = m_state.lastLhWasTypeA;
     lhState.lastInnerVoiceIndex = m_state.lastInnerVoiceIndex;
     lhState.innerVoiceDirection = m_state.innerVoiceDirection;
+    lhState.innerVoiceTarget = m_state.innerVoiceTarget;
+    lhState.innerVoiceTension = m_state.innerVoiceTension;
+    lhState.beatsOnCurrentTarget = m_state.beatsOnCurrentTarget;
     m_lhGen.setState(lhState);
     
     RhVoicingGenerator::State rhState;
@@ -483,6 +501,9 @@ void JazzBalladPianoPlanner::updateStateFromGenerators() {
     m_state.lastLhWasTypeA = lhState.lastLhWasTypeA;
     m_state.lastInnerVoiceIndex = lhState.lastInnerVoiceIndex;
     m_state.innerVoiceDirection = lhState.innerVoiceDirection;
+    m_state.innerVoiceTarget = lhState.innerVoiceTarget;
+    m_state.innerVoiceTension = lhState.innerVoiceTension;
+    m_state.beatsOnCurrentTarget = lhState.beatsOnCurrentTarget;
     
     const auto& rhState = m_rhGen.state();
     m_state.lastRhMidi = rhState.lastRhMidi;
@@ -690,30 +711,44 @@ void JazzBalladPianoPlanner::applyArticulation(
 
 int JazzBalladPianoPlanner::contourVelocity(
     int baseVel, int noteIndex, int noteCount, bool isRh) const {
-    
-    // Velocity contouring: melody voice (top) louder, inner voices softer
-    // This creates natural voicing where melody sings over harmony
-    
+
+    // =============================================================
+    // EVANS-STYLE TOUCH/VELOCITY SHADING (Stage 4)
+    // From Chuck Israels: "exquisitely shaded by his control of pianistic touch"
+    //
+    // - Top voice: prominent (+8) - melody clarity
+    // - Bottom voice: foundation (base) - harmonic anchor
+    // - Inner voices: recede (-6 to -10) - creates "shimmer" without mud
+    //
+    // This creates the characteristic Evans sound where harmony
+    // surrounds and supports without competing.
+    // =============================================================
+
     if (noteCount <= 1) return baseVel;
-    
+
+    const bool isTopVoice = (noteIndex == noteCount - 1);
+    const bool isBottomVoice = (noteIndex == 0);
+
     if (isRh) {
-        // RH: top note is melody, should be loudest
-        if (noteIndex == noteCount - 1) {
-            // Top voice: melody boost
-            return qMin(127, baseVel + 10);
-        } else if (noteIndex == 0) {
-            // Bottom voice: slightly softer
-            return qMax(30, baseVel - 6);
+        // RH: top voice is melody, must sing clearly
+        if (isTopVoice) {
+            return qMin(127, baseVel + 8);   // Melody prominence
+        } else if (isBottomVoice && noteCount > 2) {
+            return qMax(30, baseVel - 4);    // Lower voice still audible
         } else {
-            // Middle voices: softest
-            return qMax(30, baseVel - 10);
+            return qMax(30, baseVel - 8);    // Inner voices recede more
         }
     } else {
-        // LH: more even, but top of voicing slightly emphasized
-        if (noteIndex == noteCount - 1) {
-            return qMin(127, baseVel + 4);
+        // LH: bass provides foundation, inner voices shimmer
+        if (isBottomVoice) {
+            return baseVel;                   // Bass foundation (unchanged)
+        } else if (isTopVoice) {
+            return qMin(127, baseVel + 5);   // Top of LH voicing slightly emphasized
         } else {
-            return qMax(30, baseVel - 3);
+            // Inner voices: softer to create space
+            // More notes = more recessed inners (avoid mud)
+            int innerReduction = (noteCount > 3) ? -8 : -5;
+            return qMax(30, baseVel + innerReduction);
         }
     }
 }
@@ -4215,6 +4250,15 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
     // Multiple threads can call this concurrently (lookahead, phrase planner, main scheduler)
     QMutexLocker locker(m_stateMutex.get());
 
+    // ================================================================
+    // ORCHESTRATOR ROUTING: Use new texture-first architecture if enabled
+    // When m_useOrchestrator is true, route through the new coordinated
+    // texture decision system. Otherwise, use legacy independent LH/RH logic.
+    // ================================================================
+    if (m_useOrchestrator) {
+        return planBeatWithOrchestrator(c, midiChannel, ts);
+    }
+
     BeatPlan plan;
 
     Context adjusted = c;
@@ -6906,6 +6950,1017 @@ rh_done:
     perf.compPhraseId = m_state.currentPhraseId;
     perf.pedalId = pedalId;
     perf.gestureProfile = m_state.lastVoicingKey;
+    plan.performance = perf;
+
+    return plan;
+}
+
+// ============================================================================
+// ORCHESTRATOR INTEGRATION (NEW - Stage 1)
+// These methods implement the texture-first architecture for Bill Evans style
+// ============================================================================
+
+PianoTextureOrchestrator::OrchestratorInput
+JazzBalladPianoPlanner::buildOrchestratorInput(const Context& c) const
+{
+    PianoTextureOrchestrator::OrchestratorInput input;
+
+    // Soloist state
+    input.soloist.userBusy = c.userBusy;
+    input.soloist.userSilence = c.userSilence;
+    input.soloist.userSilenceDuration = c.userSilence ? 4.0 : 0.0;  // TODO: track actual duration
+    input.soloist.userMeanMidi = c.userMeanMidi;
+    input.soloist.userHighMidi = c.userHighMidi;
+    input.soloist.userLowMidi = c.userLowMidi;
+    input.soloist.userApproachingPhraseEnd = c.phraseEndBar;
+
+    // Rhythm section state
+    input.rhythmSection.bassIsPlaying = c.bassPlayingThisBeat;
+    input.rhythmSection.bassRegisterHigh = c.bassRegisterHi;
+    input.rhythmSection.beatsSinceBassRoot = 0;  // TODO: track this
+    input.rhythmSection.strongBeatComing = (c.beatInBar == 3);  // Beat 4 precedes strong beat 1
+    input.rhythmSection.drumFillInProgress = false;  // TODO: get from drummer
+    input.rhythmSection.cymbalCrash = false;  // TODO: get from drummer
+    input.rhythmSection.drumActivity = c.energy;  // Approximate
+
+    // Musical context
+    input.context.beatInBar = c.beatInBar;
+    input.context.barInPhrase = c.barInPhrase;
+    input.context.phraseBars = c.phraseBars;
+    input.context.isChordChange = c.chordIsNew;
+    input.context.isPhraseEnd = c.phraseEndBar;
+    input.context.isClimaxPoint = c.forceClimax;
+    input.context.chord = c.chord;
+    input.context.nextChord = c.nextChord;
+    input.context.hasNextChord = c.hasNextChord;
+    input.context.beatsUntilChordChange = c.beatsUntilChordChange;
+    input.context.chordFunction = c.chordFunction;
+    input.context.energy = c.energy;
+    input.context.cadence01 = c.cadence01;
+    input.context.keyTonicPc = c.keyTonicPc;
+    input.context.isMinorKey = (c.keyMode == virtuoso::theory::KeyMode::Minor);
+
+    return input;
+}
+
+JazzBalladPianoPlanner::BeatPlan
+JazzBalladPianoPlanner::planBeatWithOrchestrator(
+    const Context& c, int midiChannel, const virtuoso::groove::TimeSignature& ts)
+{
+    // NOTE: Mutex is already held by caller (planBeatWithActions)
+
+    BeatPlan plan;
+    Context adjusted = c;
+    adjustRegisterForBass(adjusted);
+
+    // Build orchestrator input from planner context
+    auto orchInput = buildOrchestratorInput(adjusted);
+
+    // Get texture decision from orchestrator
+    auto decision = m_orchestrator.decide(orchInput);
+
+    // Sync generator state for voicing generation
+    syncGeneratorState();
+
+    // Determinism hash for this beat
+    quint32 beatHash = virtuoso::util::StableHash::mix(
+        adjusted.determinismSeed, adjusted.playbackBarIndex * 17 + adjusted.beatInBar);
+
+    // ================================================================
+    // STAGE 6: RHYTHMIC PHRASE SYSTEM (ENHANCEMENT, NOT REPLACEMENT)
+    // The phrase adds musical coherence and timing feel.
+    // Base shouldPlay decisions come from energy-scaled probabilities.
+    // ================================================================
+    if (adjusted.playbackBarIndex != m_currentPhraseBar || adjusted.beatInBar == 0) {
+        m_currentPhrase = m_orchestrator.generateRhythmicPhrase(orchInput, beatHash);
+        m_currentPhraseBar = adjusted.playbackBarIndex;
+    }
+
+    // ================================================================
+    // BPM-SCALED TIMING (Bill Evans signature)
+    // Low energy, slow tempo: ~15-20ms behind (relaxed)
+    // High energy, fast tempo: ~3-5ms (on top, driving)
+    // ================================================================
+    const int bpm = adjusted.bpm > 0 ? adjusted.bpm : 90;
+    const double tempoScale = 90.0 / qBound(50, bpm, 180);  // Normalize to 90 BPM
+    const double energy = adjusted.energy;
+
+    // Base lay back: 12ms at reference tempo (90 BPM)
+    const double baseLay = 12.0;
+    const double energyFactor = 1.0 - (energy * 0.7);  // 1.0 at e=0, 0.3 at e=1
+    int baseLayBackMs = int(baseLay * energyFactor * tempoScale);
+
+    // At very high energy, minimal lay back
+    if (energy >= 0.75) {
+        baseLayBackMs = qMax(0, baseLayBackMs - 5);
+    }
+
+    // Small humanization jitter (±3ms)
+    const int humanHash = (adjusted.playbackBarIndex * 41 + adjusted.chord.rootPc * 13) % 7;
+    const int humanizeMs = humanHash - 3;
+
+    // Get phrase timing modification (for hemiola, anticipation, etc.)
+    const int phraseLhTimingMs = m_orchestrator.getTimingOffsetForBeat(
+        m_currentPhrase, adjusted.beatInBar, true);
+    const int phraseRhTimingMs = m_orchestrator.getTimingOffsetForBeat(
+        m_currentPhrase, adjusted.beatInBar, false);
+
+    // Scale phrase timing by BPM too
+    const int scaledPhraseLhMs = int(phraseLhTimingMs * tempoScale);
+    const int scaledPhraseRhMs = int(phraseRhTimingMs * tempoScale);
+
+    // Final LH timing: base lay-back + humanize + phrase modification
+    int lhTimingOffsetMs = baseLayBackMs + humanizeMs + scaledPhraseLhMs;
+    const int maxOffset = (bpm < 70) ? 25 : 18;
+    lhTimingOffsetMs = qBound(-50, lhTimingOffsetMs, maxOffset);
+
+    // ================================================================
+    // ENERGY-SCALED DURATION (legato at low energy, staccato at high)
+    // ================================================================
+    // DURATION: Continuous, context-driven (not binary stepped)
+    // Base duration curve: ranges from 1.8 beats (very low energy) to 0.6 beats (high energy)
+    // Then modulated by phrase position, harmonic context, and micro-variation
+    // ================================================================
+    const bool stabMode = (energy >= 0.65);
+    const bool midMode = (energy >= 0.45 && energy < 0.65);
+
+    // Base duration: continuous curve from energy
+    // Low energy (0.0) = 2.5 beats base (moderate-long, with variation added below)
+    // Mid energy (0.5) = 1.3 beats (moderate sustain)
+    // High energy (1.0) = 0.5 beats (short, percussive)
+    double lhDurBeats = 2.5 - (2.0 * std::pow(energy, 0.6));  // Ranges from ~2.5 to ~0.5
+
+    // VARIETY in sustain length - especially at low energy
+    // Use multiple seeds for different types of variation
+    const int sustainSeed = (adjusted.determinismSeed + adjusted.playbackBarIndex * 3) % 100;
+    const int varietySeed = (adjusted.determinismSeed + adjusted.playbackBarIndex * 11 + adjusted.chord.rootPc) % 100;
+
+    if (energy < 0.35) {
+        // At low energy, create a RANGE of sustain lengths:
+        // ~25% short (1.5-2 beats) - some breathing room
+        // ~40% medium (2-3 beats) - comfortable sustain
+        // ~35% long (3-4.5 beats) - ring until next chord
+        if (varietySeed < 25) {
+            lhDurBeats *= 0.7;  // Shorter sustain
+        } else if (varietySeed < 65) {
+            lhDurBeats *= 1.0;  // Medium (no change)
+        } else if (varietySeed < 85) {
+            lhDurBeats *= 1.4;  // Long sustain
+        } else {
+            lhDurBeats *= 1.7;  // Very long - ring to next chord
+        }
+    }
+
+    // Phrase position modulation
+    const double phraseProgressForDur = adjusted.phraseBars > 0 ?
+        double(adjusted.barInPhrase) / adjusted.phraseBars : 0.5;
+    if (phraseProgressForDur < 0.2) {
+        // Phrase beginning: slightly shorter (establishing)
+        lhDurBeats *= 0.9;
+    } else if (phraseProgressForDur > 0.8) {
+        // Phrase ending: longer (resolving, breathing)
+        lhDurBeats *= 1.15;
+    }
+
+    // Harmonic context modulation
+    if (adjusted.cadence01 > 0.5) {
+        // Resolution: allow to ring longer
+        lhDurBeats *= 1.2;
+    } else if (adjusted.cadence01 < 0.2 && energy > 0.5) {
+        // Tension + energy: punchy
+        lhDurBeats *= 0.85;
+    }
+
+    // Micro-variation: ±15% randomness for natural feel
+    const int durVariationSeed = (adjusted.determinismSeed + adjusted.playbackBarIndex * 7) % 100;
+    double durVariation = 0.85 + (durVariationSeed / 333.0);  // 0.85 to 1.15
+    lhDurBeats *= durVariation;
+
+    // Clamp to reasonable range
+    const double maxDur = (energy < 0.3) ? 4.5 : 3.0;
+    lhDurBeats = qBound(0.4, lhDurBeats, maxDur);
+
+    // ================================================================
+    // LEFT HAND: FLUID EVANS-STYLE COMPING
+    // Based on research: timing is ELASTIC, not pattern-based
+    // Supports: straight 8ths, swung 8ths, triplets, 16ths, dotted, polyrhythms
+    // ================================================================
+
+    const bool userActive = adjusted.userBusy || adjusted.userDensityHigh;
+
+    // ================================================================
+    // DENSITY CONTRAST & HAND ACTIVITY MODES
+    // Evans varied density and sometimes featured one hand over the other
+    // Creates flowing, emotional feel with contrast between sparse and dense
+    // ================================================================
+
+    // Determine density mode based on phrase position and musical context
+    // Use a longer hash for phrase-level decisions (spans multiple bars)
+    const int phraseSection = adjusted.playbackBarIndex / 2;  // Changes every 2 bars
+    const quint32 densityHash = virtuoso::util::StableHash::mix(
+        adjusted.determinismSeed, phraseSection * 73);
+    const int densityRoll = densityHash % 100;
+
+    // Activity modes: which hand is "featured" for rhythmic activity
+    enum class HandActivityMode {
+        Balanced,      // Both hands similar activity
+        LhFeatured,    // LH more rhythmically active, RH adds occasional color
+        RhFeatured,    // RH more rhythmically active, LH sustains
+        BothDense,     // Density burst - both hands active (climactic)
+        BothSparse     // Breathing room - both hands laid back
+    };
+
+    HandActivityMode activityMode = HandActivityMode::Balanced;
+
+    // Phrase position affects density (building toward phrase peak = denser)
+    const double phraseProgress = adjusted.phraseBars > 0 ?
+        double(adjusted.barInPhrase) / adjusted.phraseBars : 0.5;
+    const bool approachingPeak = phraseProgress > 0.5 && phraseProgress < 0.8;
+    const bool atPhraseStart = phraseProgress < 0.15;
+    const bool atPhraseEnd = phraseProgress > 0.85;
+
+    // Select activity mode - MORE variety, more RH featured moments
+    if (atPhraseEnd && adjusted.cadence01 > 0.4) {
+        // Phrase endings: often denser for resolution
+        if (densityRoll < 50) {
+            activityMode = HandActivityMode::BothDense;
+        } else if (densityRoll < 70) {
+            activityMode = HandActivityMode::RhFeatured;  // RH active on resolution
+        }
+    } else if (approachingPeak && energy > 0.3) {
+        // Building toward peak: increase density, feature hands
+        if (densityRoll < 25) {
+            activityMode = HandActivityMode::BothDense;
+        } else if (densityRoll < 45) {
+            activityMode = HandActivityMode::LhFeatured;
+        } else if (densityRoll < 70) {
+            activityMode = HandActivityMode::RhFeatured;  // More RH featured
+        }
+    } else if (atPhraseStart) {
+        // Phrase start: can still feature RH for color
+        if (densityRoll < 25) {
+            activityMode = HandActivityMode::BothSparse;
+        } else if (densityRoll < 45) {
+            activityMode = HandActivityMode::RhFeatured;  // RH establishes color
+        }
+        // else Balanced
+    } else {
+        // Mid-phrase: LOTS of variety, RH featured often
+        if (densityRoll < 20) {
+            activityMode = HandActivityMode::BothDense;
+        } else if (densityRoll < 35) {
+            activityMode = HandActivityMode::LhFeatured;
+        } else if (densityRoll < 60) {
+            activityMode = HandActivityMode::RhFeatured;  // 25% - RH featured most common
+        } else if (densityRoll < 75) {
+            activityMode = HandActivityMode::BothSparse;
+        }
+        // else Balanced (25%)
+    }
+
+    // Calculate density multipliers based on activity mode
+    double lhDensityMult = 1.0;
+    double rhDensityMult = 1.0;
+
+    switch (activityMode) {
+    case HandActivityMode::LhFeatured:
+        lhDensityMult = 1.4;  // LH more likely to play
+        rhDensityMult = 0.6;  // RH backs off
+        break;
+    case HandActivityMode::RhFeatured:
+        lhDensityMult = 0.7;  // LH sustains more
+        rhDensityMult = 1.5;  // RH more active
+        break;
+    case HandActivityMode::BothDense:
+        lhDensityMult = 1.5;  // Both hands active
+        rhDensityMult = 1.5;
+        break;
+    case HandActivityMode::BothSparse:
+        lhDensityMult = 0.6;  // Both hands laid back
+        rhDensityMult = 0.5;
+        break;
+    default:  // Balanced
+        break;
+    }
+
+    // ----------------------------------------------------------------
+    // STEP 1: TEMPO-DEPENDENT SWING RATIO (research-based)
+    // Slower tempos = more swing (~2:1), faster = straighter (~1.2:1)
+    // Based on: Friberg & Sundström (2002), Honing & de Haas (2008)
+    // ----------------------------------------------------------------
+    auto calculateSwingRatio = [](int bpm) -> double {
+        // Research shows swing ratio decreases with tempo
+        // At 60 BPM: ~2.0 (strong triplet feel)
+        // At 120 BPM: ~1.5 (moderate swing)
+        // At 200 BPM: ~1.2 (nearly straight)
+        if (bpm <= 60) return 2.0;
+        if (bpm >= 200) return 1.2;
+        // Linear interpolation between these points
+        double t = (bpm - 60) / 140.0;
+        return 2.0 - (0.8 * t);  // 2.0 -> 1.2
+    };
+    const double swingRatio = calculateSwingRatio(bpm);
+
+    // ----------------------------------------------------------------
+    // STEP 2: RHYTHMIC SUBDIVISION OPTIONS
+    // Not locked to any single grid - fluid mixing
+    // ----------------------------------------------------------------
+    enum class Subdivision {
+        Quarter,        // On the beat
+        Swing8th,       // Swung 8th note (uses swing ratio)
+        Straight8th,    // Even 8th note
+        Triplet8th,     // True triplet (3 per beat)
+        Sixteenth,      // 16th note
+        DottedQuarter,  // Dotted quarter (1.5 beats)
+        QuarterTriplet  // Quarter note triplet (3 over 2 beats)
+    };
+
+    // Convert subdivision to timing offset in ms from beat start
+    auto subdivisionToMs = [&](Subdivision sub, int beatFraction) -> double {
+        const double beatMs = 60000.0 / bpm;  // Duration of one beat in ms
+
+        switch (sub) {
+        case Subdivision::Quarter:
+            return 0.0;  // On the beat
+
+        case Subdivision::Swing8th:
+            // Swing 8th: first note on beat, second note shifted by swing ratio
+            // If swingRatio = 2.0 (triplet feel), second 8th at 2/3 of beat
+            // If swingRatio = 1.0 (straight), second 8th at 1/2 of beat
+            if (beatFraction == 0) return 0.0;
+            return beatMs * (swingRatio / (swingRatio + 1.0));
+
+        case Subdivision::Straight8th:
+            // Even 8ths: exactly half the beat
+            return (beatFraction == 0) ? 0.0 : (beatMs * 0.5);
+
+        case Subdivision::Triplet8th:
+            // Triplets: divide beat into 3 equal parts
+            return beatMs * (beatFraction / 3.0);
+
+        case Subdivision::Sixteenth:
+            // 16ths: divide beat into 4 equal parts
+            return beatMs * (beatFraction / 4.0);
+
+        case Subdivision::DottedQuarter:
+            return 0.0;  // Starts on beat (duration handles the dot)
+
+        case Subdivision::QuarterTriplet:
+            // Quarter note triplet: 3 notes over 2 beats
+            // Each note is 2/3 of a beat apart
+            return beatMs * (2.0 / 3.0) * beatFraction;
+
+        default:
+            return 0.0;
+        }
+    };
+
+    // ----------------------------------------------------------------
+    // STEP 3: CONTEXT-DRIVEN PLAY DECISION
+    // Not pattern-based but driven by musical context
+    // ----------------------------------------------------------------
+
+    // Base: always consider playing on chord changes
+    bool lhPlays = adjusted.chordIsNew;
+
+    // Additional play opportunities based on context
+    Subdivision chosenSubdivision = Subdivision::Quarter;
+    int subdivisionFraction = 0;  // Which part of the subdivision (0, 1, 2, etc.)
+    double timingElasticityMs = 0.0;  // Micro-timing adjustment
+
+    // Hash for deterministic but varied decisions
+    const quint32 rhythmHash = virtuoso::util::StableHash::mix(
+        adjusted.determinismSeed,
+        adjusted.playbackBarIndex * 31 + adjusted.beatInBar * 13);
+    const int rhythmRoll = rhythmHash % 1000;  // Finer granularity
+
+    if (decision.leftHand.voicing != PianoTextureOrchestrator::VoicingRole::None) {
+
+        // ============================================================
+        // PHRASE POSITION AFFECTS RHYTHM
+        // Beginning of phrase: establish, Middle: develop, End: resolve
+        // ============================================================
+        const double phraseProgress = adjusted.phraseBars > 0 ?
+            double(adjusted.barInPhrase) / adjusted.phraseBars : 0.0;
+        const bool phraseBeginning = phraseProgress < 0.25;
+        const bool phraseMiddle = phraseProgress >= 0.25 && phraseProgress < 0.75;
+        const bool phraseEnding = phraseProgress >= 0.75;
+
+        // ============================================================
+        // HARMONIC TENSION AFFECTS RHYTHM
+        // High tension = shorter, more rhythmic
+        // Resolution = longer, more sustained
+        // ============================================================
+        const bool isResolution = adjusted.cadence01 > 0.5;
+        const bool isTension = adjusted.cadence01 < 0.2 && !adjusted.chordIsNew;
+
+        // ============================================================
+        // ENERGY-SCALED DENSITY (but fluid, not stepped)
+        // Low energy: sparse, sustained
+        // High energy: denser, more rhythmic variety
+        // ============================================================
+
+        if (!adjusted.chordIsNew && !userActive) {
+            // Opportunities for re-articulation or additional hits
+            // Density affected by activity mode (lhDensityMult)
+
+            // BEAT 1 RE-ARTICULATION (when NOT a chord change)
+            // Sometimes emphasize downbeat even without chord change
+            if (adjusted.beatInBar == 0) {
+                int playProb = int((25 + energy * 55) * lhDensityMult);  // Base 25-80%, scaled
+                if (phraseBeginning) playProb += 15;
+                if (isResolution) playProb -= 10;
+                playProb = qBound(5, playProb, 95);
+
+                if (rhythmRoll % 100 < playProb) {
+                    lhPlays = true;
+                    chosenSubdivision = Subdivision::Quarter;
+                }
+            }
+
+            // BEAT 2: Swing 8th opportunity (classic jazz)
+            else if (adjusted.beatInBar == 1) {
+                int playProb = int((40 + energy * 50) * lhDensityMult);  // Base 40-90%, scaled
+                if (phraseMiddle) playProb += 10;
+                if (isResolution) playProb -= 15;
+                playProb = qBound(5, playProb, 98);
+
+                if (rhythmRoll % 100 < playProb) {
+                    lhPlays = true;
+                    // Choose subdivision based on feel
+                    if (rhythmRoll % 10 < 3) {
+                        chosenSubdivision = Subdivision::Quarter;
+                    } else if (rhythmRoll % 10 < 6) {
+                        chosenSubdivision = Subdivision::Swing8th;
+                        subdivisionFraction = 1;
+                    } else if (rhythmRoll % 10 < 9) {
+                        chosenSubdivision = Subdivision::Triplet8th;
+                        subdivisionFraction = (rhythmRoll % 3);
+                    } else {
+                        chosenSubdivision = Subdivision::Straight8th;
+                        subdivisionFraction = 1;
+                    }
+                }
+            }
+
+            // BEAT 3: Strong re-articulation point
+            else if (adjusted.beatInBar == 2) {
+                int playProb = int((45 + energy * 50) * lhDensityMult);  // Base 45-95%, scaled
+                if (phraseEnding) playProb += 10;
+                if (isTension) playProb += 10;
+                playProb = qBound(5, playProb, 98);
+
+                if (rhythmRoll % 100 < playProb) {
+                    lhPlays = true;
+                    // Beat 3 often on the beat or triplet feel
+                    if (rhythmRoll % 10 < 3) {
+                        chosenSubdivision = Subdivision::Quarter;
+                    } else if (rhythmRoll % 10 < 6) {
+                        chosenSubdivision = Subdivision::Swing8th;
+                        subdivisionFraction = (rhythmRoll % 2);
+                    } else {
+                        chosenSubdivision = Subdivision::Triplet8th;
+                        subdivisionFraction = (rhythmRoll % 2);
+                    }
+                }
+            }
+
+            // BEAT 4: Anticipation/push opportunity
+            else if (adjusted.beatInBar == 3) {
+                int playProb = int((35 + energy * 50) * lhDensityMult);  // Base 35-85%, scaled
+                if (phraseEnding && !isResolution) playProb += 15;
+                playProb = qBound(5, playProb, 95);
+
+                if (rhythmRoll % 100 < playProb) {
+                    lhPlays = true;
+                    // Beat 4 often anticipates - use swing 8th or triplet
+                    if (rhythmRoll % 10 < 3) {
+                        chosenSubdivision = Subdivision::Quarter;
+                    } else if (rhythmRoll % 10 < 6) {
+                        chosenSubdivision = Subdivision::Swing8th;
+                        subdivisionFraction = 1;
+                    } else {
+                        chosenSubdivision = Subdivision::Triplet8th;
+                        subdivisionFraction = 2;
+                    }
+                }
+            }
+        }
+
+        // ============================================================
+        // MICRO-TIMING: SUBTLE HUMANIZATION (not drunken feel!)
+        // Keep deviations SMALL - the subdivision already provides the rhythmic variety
+        // ============================================================
+        const int microHash = (rhythmHash >> 8) % 100;
+
+        // Much smaller deviations - just humanization, not "feel"
+        // The subdivision offset already handles swing/triplet placement
+        if (adjusted.beatInBar == 0) {
+            // Beat 1: very slight lay-back (3-8ms, not 5-30ms!)
+            timingElasticityMs = 3 + (microHash % 5);
+            if (energy > 0.7) timingElasticityMs = 0;  // On the beat at high energy
+        } else if (chosenSubdivision != Subdivision::Quarter) {
+            // Offbeat subdivisions: tight timing (subdivision already provides offset)
+            timingElasticityMs = -2 + (microHash % 4);  // -2 to +2ms only
+        } else {
+            // On-beat non-downbeats: minimal humanization
+            timingElasticityMs = -3 + (microHash % 6);  // -3 to +3ms
+        }
+
+        // Scale micro-timing by tempo (less deviation at fast tempos)
+        timingElasticityMs *= tempoScale;
+    }
+
+    // ================================================================
+    // ANTICIPATION / DELAYED ENTRY (Evans signature)
+    // Instead of playing ON the chord change beat, sometimes play EARLY or LATE
+    // IMPORTANT: Safety checks to avoid timing variations at inappropriate moments
+    // ================================================================
+    bool useAnticipation = false;
+    bool useDelayedEntry = false;
+    int timingModificationMs = 0;
+
+    if (lhPlays && adjusted.beatInBar == 0 && adjusted.playbackBarIndex > 0) {
+        // ============================================================
+        // SAFETY CHECKS: When NOT to use timing variations
+        // (Copied from old code - these are essential for musical results)
+        // ============================================================
+        bool safeToVary = true;
+
+        // 1. Don't vary at phrase endings (cadence points)
+        const bool isPhraseCadence = (adjusted.cadence01 >= 0.5);
+        if (isPhraseCadence) {
+            safeToVary = false;
+        }
+
+        // 2. Don't vary at section starts (first bar of 8-bar section)
+        const int barInSection = adjusted.playbackBarIndex % 8;
+        if (barInSection == 0) {
+            safeToVary = false;
+        }
+
+        // 3. Don't vary first few bars of song
+        if (adjusted.playbackBarIndex < 2) {
+            safeToVary = false;
+        }
+
+        // 4. Check harmonic compatibility with previous chord
+        const int currentRoot = adjusted.chord.rootPc;
+        const int prevRoot = (currentRoot + 12 - 5) % 12;
+        const int rootMotion = qAbs(currentRoot - prevRoot);
+        const int normalizedMotion = (rootMotion > 6) ? (12 - rootMotion) : rootMotion;
+
+        // Chromatic motion (1 semitone) or tritone (6 semitones) = don't vary
+        if (normalizedMotion == 1 || normalizedMotion == 6) {
+            safeToVary = false;
+        }
+
+        // ============================================================
+        // TIMING SELECTION (only if safe)
+        // ============================================================
+        if (safeToVary) {
+            const int timingHash = (adjusted.playbackBarIndex * 17 + currentRoot * 7) % 100;
+
+            // Energy influences which technique to use:
+            // High energy (≥0.6): Prefer anticipation (forward, driving)
+            // Low energy (<0.4): Prefer delayed entry (relaxed, breathing)
+            if (energy >= 0.6) {
+                // High energy: ~18% anticipation, ~8% delayed
+                if (timingHash < 18) {
+                    useAnticipation = true;
+                } else if (timingHash >= 80 && timingHash < 88) {
+                    useDelayedEntry = true;
+                }
+            } else if (energy < 0.4) {
+                // Low energy: ~25% delayed entry (very relaxed feel)
+                if (timingHash < 25) {
+                    useDelayedEntry = true;
+                }
+            } else {
+                // Mid energy: ~10% anticipation, ~18% delayed
+                if (timingHash < 10) {
+                    useAnticipation = true;
+                } else if (timingHash >= 75 && timingHash < 93) {
+                    useDelayedEntry = true;
+                }
+            }
+        }
+
+        // Apply timing modification for anticipation/delayed entry
+        // GRID-BASED: Calculate as fraction of a beat, not magic ms numbers
+        // This ensures proper musical feel at any tempo
+        const double beatMs = 60000.0 / bpm;  // ms per beat
+
+        if (useAnticipation) {
+            // Anticipate by the "&" of the previous beat (0.5 beats early)
+            // This is the classic jazz anticipation - playing on "&4" before "1"
+            timingModificationMs = -int(beatMs * 0.5);
+        } else if (useDelayedEntry) {
+            // Delay by ~quarter of a beat (0.25 beats late)
+            // Let the bass establish the root, then add color
+            timingModificationMs = int(beatMs * 0.25);
+        }
+    }
+
+    // ================================================================
+    // SUBDIVISION TIMING: Apply the chosen subdivision offset
+    // This is where the actual "swing" and subdivision feel happens
+    // ================================================================
+
+    // Determine if this is an offbeat hit (affects velocity and duration)
+    bool isOffbeatHit = false;
+    if (chosenSubdivision == Subdivision::Swing8th && subdivisionFraction > 0) {
+        isOffbeatHit = true;
+    } else if (chosenSubdivision == Subdivision::Triplet8th && subdivisionFraction > 0) {
+        isOffbeatHit = true;
+    } else if (chosenSubdivision == Subdivision::Straight8th && subdivisionFraction > 0) {
+        isOffbeatHit = true;
+    } else if (chosenSubdivision == Subdivision::Sixteenth && subdivisionFraction > 0) {
+        isOffbeatHit = true;
+    }
+
+    // Calculate the subdivision offset in ms
+    double subdivisionOffsetMs = subdivisionToMs(chosenSubdivision, subdivisionFraction);
+
+    // Final timing combines:
+    // 1. Base lay-back (lhTimingOffsetMs)
+    // 2. Anticipation or delayed entry (timingModificationMs)
+    // 3. Subdivision position within the beat (subdivisionOffsetMs)
+    // 4. Micro-timing elasticity (timingElasticityMs)
+    int totalTimingShiftMs = lhTimingOffsetMs + timingModificationMs + int(subdivisionOffsetMs) + int(timingElasticityMs);
+    totalTimingShiftMs = qBound(-150, totalTimingShiftMs, maxOffset + 800);  // Allow larger shift for subdivisions
+
+    if (lhPlays) {
+        // Build LH context using actual field names
+        LhVoicingGenerator::Context lhCtx;
+        lhCtx.chord = adjusted.chord;
+        lhCtx.lhLo = decision.leftHand.registerLow;
+        lhCtx.lhHi = decision.leftHand.registerHigh;
+        lhCtx.beatInBar = adjusted.beatInBar;
+        lhCtx.energy = adjusted.energy;
+        lhCtx.chordIsNew = adjusted.chordIsNew;
+        lhCtx.preferShells = (decision.leftHand.voicing == PianoTextureOrchestrator::VoicingRole::Shell);
+        lhCtx.weights = adjusted.weights;
+        lhCtx.keyTonicPc = adjusted.keyTonicPc;
+        lhCtx.keyMode = adjusted.keyMode;
+        lhCtx.bassRegisterHi = adjusted.bassRegisterHi;
+
+        // Phrase context for contrapuntal inner voice movement
+        if (adjusted.cadence01 > 0.7 || adjusted.phraseEndBar) {
+            lhCtx.phraseArcPhase = 2;  // Resolving
+        } else if (adjusted.barInPhrase >= adjusted.phraseBars / 2) {
+            lhCtx.phraseArcPhase = 1;  // Peak
+        } else {
+            lhCtx.phraseArcPhase = 0;  // Building
+        }
+        lhCtx.cadence01 = adjusted.cadence01;
+        lhCtx.barInPhrase = adjusted.barInPhrase;
+        lhCtx.beatsUntilChordChange = adjusted.beatsUntilChordChange;
+        lhCtx.nextChord = adjusted.nextChord;
+        lhCtx.hasNextChord = adjusted.hasNextChord;
+
+        LhVoicingGenerator::LhVoicing lhVoicing;
+
+        // ================================================================
+        // VOICING STRATEGY: New chord vs. Sustained chord
+        // ================================================================
+        // On chord change: Generate fresh voicing with optimal voice-leading
+        // On sustained chord: REUSE previous voicing, apply inner voice movement
+        // This ensures inner voice changes persist and accumulate!
+
+        if (adjusted.chordIsNew || m_state.lastLhMidi.isEmpty()) {
+            // NEW CHORD: Generate fresh voicing
+            switch (decision.leftHand.voicing) {
+            case PianoTextureOrchestrator::VoicingRole::Shell:
+                lhVoicing = m_lhGen.generateShell(lhCtx);
+                break;
+            case PianoTextureOrchestrator::VoicingRole::Rootless:
+            default:
+                lhVoicing = m_lhGen.generateRootlessOptimal(lhCtx);
+                break;
+            }
+        } else {
+            // SUSTAINED CHORD: Reuse previous voicing as base
+            lhVoicing.midiNotes = m_state.lastLhMidi;
+            lhVoicing.isTypeA = m_state.lastLhWasTypeA;
+            lhVoicing.ontologyKey = "piano_lh_sustained";
+
+            // ================================================================
+            // INNER VOICE MOVEMENT (Contrapuntal "shimmer" - Evans signature)
+            // ================================================================
+            // Apply inner voice movement to the PREVIOUS voicing
+            // This way changes persist and accumulate across beats!
+            if (decision.innerVoiceMotion) {
+                lhVoicing = m_lhGen.applyInnerVoiceMovement(lhVoicing, lhCtx);
+            }
+        }
+
+        // Update state (both m_state AND generator state to stay in sync)
+        // BUG FIX: updateStateFromGenerators() at the end of this function copies FROM
+        // generators TO m_state. If we only update m_state here, it gets overwritten!
+        m_state.lastLhMidi = lhVoicing.midiNotes;
+        m_state.lastLhWasTypeA = lhVoicing.isTypeA;
+        m_lhGen.state().lastLhMidi = lhVoicing.midiNotes;
+        m_lhGen.state().lastLhWasTypeA = lhVoicing.isTypeA;
+
+        // Calculate timing using enhanced offset (includes syncopation/anticipation/hemiola)
+        auto basePos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+            adjusted.playbackBarIndex, adjusted.beatInBar, 0, 1, ts);
+        auto finalPos = applyTimingOffset(basePos, totalTimingShiftMs, bpm, ts);
+
+        // Velocity: energy-driven with mode scaling
+        int baseVel = 48 + int(energy * 40);
+        if (stabMode) baseVel += 8;  // Extra punch at high energy
+        if (useAnticipation) baseVel += 5;  // Slight accent on anticipations
+        if (isOffbeatHit) baseVel -= 5;     // Offbeats slightly softer
+        if (!adjusted.chordIsNew) baseVel -= 8;  // Re-articulations softer than main hit
+        if (adjusted.userBusy) baseVel = qMin(baseVel, 62);  // Back off when user active
+        baseVel = qBound(42, baseVel, 95);
+        baseVel = std::clamp(static_cast<int>(baseVel * decision.leftHand.velocityMult), 30, 100);
+
+        // Duration: energy-scaled, but shorter for timing variations (punchier)
+        double actualDurBeats = lhDurBeats;
+        if (useAnticipation) actualDurBeats *= 0.85;  // Anticipations are slightly shorter
+        if (useDelayedEntry) actualDurBeats *= 0.9;   // Delayed entries slightly shorter
+        if (isOffbeatHit) actualDurBeats *= 0.7;      // Offbeats are punchy/short
+        if (!adjusted.chordIsNew) actualDurBeats *= 0.75;  // Re-articulations are shorter
+        virtuoso::groove::Rational durWhole(static_cast<qint64>(actualDurBeats * 1000), 4000);
+
+        // Create notes
+        for (int i = 0; i < lhVoicing.midiNotes.size(); ++i) {
+            virtuoso::engine::AgentIntentNote note;
+            note.agent = QStringLiteral("Piano");
+            note.channel = midiChannel;
+            note.note = lhVoicing.midiNotes[i];
+            note.baseVelocity = contourVelocity(baseVel, i, lhVoicing.midiNotes.size(), false);
+            note.startPos = finalPos;
+            note.durationWhole = durWhole;
+            note.structural = adjusted.chordIsNew;
+            note.voicing_type = lhVoicing.ontologyKey;
+            note.logic_tag = decision.mode == PianoTextureOrchestrator::TextureMode::ShellAnticipation ?
+                QStringLiteral("LH-anticipate") : QStringLiteral("LH-support");
+            plan.notes.append(note);
+        }
+    } else {
+        // DEBUG: Log when LH doesn't play (state not updated!)
+        qDebug().noquote() << QString("  -> LH SKIP b%1.%2 new=%3 voicing=%4")
+            .arg(adjusted.playbackBarIndex).arg(adjusted.beatInBar)
+            .arg(adjusted.chordIsNew ? "Y" : "N")
+            .arg(static_cast<int>(decision.leftHand.voicing));
+    }
+
+    // ================================================================
+    // RIGHT HAND: DIALOGUE-BASED GATING (like old code)
+    // RH and LH have a conversational relationship:
+    // - RH plays WITH LH (synchronized timing, not independent subdivisions)
+    // - Higher activity on chord changes, some activity on sustained chords too
+    // - NO independent RH subdivisions - when RH plays, it matches LH exactly
+    // - This creates unified texture, not distracting independent rhythm
+    // ================================================================
+
+    bool rhPlaysThisBeat = false;
+
+    // userActive already defined above for LH phrase selection
+    const int rhDialogueHash = (adjusted.playbackBarIndex * 17 + adjusted.beatInBar * 11 + adjusted.chord.rootPc) % 100;
+
+    if (!userActive && lhPlays) {
+        // RH can play whenever LH plays (synchronized)
+        // Higher probability on chord changes, lower on sustained chords
+
+        int rhPlayProb;
+        if (adjusted.chordIsNew) {
+            // CHORD CHANGE: RH very likely to reinforce
+            if (energy < 0.3) {
+                rhPlayProb = int(55 + energy * 50);  // 55-70%
+            } else if (energy < 0.6) {
+                rhPlayProb = int(70 + (energy - 0.3) * 50);  // 70-85%
+            } else {
+                rhPlayProb = int(85 + (energy - 0.6) * 25);  // 85-95%
+            }
+        } else {
+            // SUSTAINED CHORD: RH plays less often but still present
+            // Especially on beat 3 (backbeat) for rhythmic drive
+            int beatBonus = (adjusted.beatInBar == 2) ? 15 : 0;  // Beat 3 boost
+
+            if (energy < 0.3) {
+                rhPlayProb = int(15 + energy * 40) + beatBonus;  // 15-27% + beat bonus
+            } else if (energy < 0.6) {
+                rhPlayProb = int(27 + (energy - 0.3) * 50) + beatBonus;  // 27-42% + beat bonus
+            } else {
+                rhPlayProb = int(42 + (energy - 0.6) * 40) + beatBonus;  // 42-58% + beat bonus
+            }
+        }
+
+        // Apply density multiplier from activity mode
+        rhPlayProb = int(rhPlayProb * rhDensityMult);
+        rhPlayProb = qBound(10, rhPlayProb, 95);
+
+        rhPlaysThisBeat = (rhDialogueHash < rhPlayProb);
+    }
+
+    const bool rhPlays = rhPlaysThisBeat &&
+                         (decision.rightHand.voicing != PianoTextureOrchestrator::VoicingRole::None) &&
+                         m_enableRightHand;
+    if (rhPlays) {
+
+        // Build RH context using actual field names
+        RhVoicingGenerator::Context rhCtx;
+        rhCtx.chord = adjusted.chord;
+        rhCtx.rhLo = decision.rightHand.registerLow;
+        rhCtx.rhHi = decision.rightHand.registerHigh;
+        rhCtx.sparkleLo = adjusted.sparkleLo;
+        rhCtx.sparkleHi = adjusted.sparkleHi;
+        rhCtx.beatInBar = adjusted.beatInBar;
+        rhCtx.energy = adjusted.energy;
+        rhCtx.chordIsNew = adjusted.chordIsNew;
+        rhCtx.weights = adjusted.weights;
+        rhCtx.keyTonicPc = adjusted.keyTonicPc;
+        rhCtx.keyMode = adjusted.keyMode;
+        rhCtx.barInPhrase = adjusted.barInPhrase;
+        rhCtx.phraseEndBar = adjusted.phraseEndBar;
+        rhCtx.cadence01 = adjusted.cadence01;
+        rhCtx.userSilence = adjusted.userSilence;
+        rhCtx.userBusy = adjusted.userBusy;
+        rhCtx.userMeanMidi = adjusted.userMeanMidi;
+
+        RhVoicingGenerator::RhVoicing rhVoicing;
+
+        // ================================================================
+        // RH VOICING STRATEGY: New chord vs. Sustained chord
+        // ================================================================
+        // On chord change: Generate fresh voicing
+        // On sustained chord: VARY the previous voicing (move top voice, change density)
+        // This creates harmonic interest when "hammering" on a chord!
+
+        if (adjusted.chordIsNew || m_state.lastRhMidi.isEmpty()) {
+            // NEW CHORD: Generate fresh voicing
+            switch (decision.rightHand.voicing) {
+            case PianoTextureOrchestrator::VoicingRole::Dyad:
+                rhVoicing = m_rhGen.generateDyad(rhCtx);
+                break;
+            case PianoTextureOrchestrator::VoicingRole::Triad:
+                rhVoicing = m_rhGen.generateTriad(rhCtx);
+                break;
+            case PianoTextureOrchestrator::VoicingRole::MelodicDyad:
+                rhVoicing = m_rhGen.generateDyad(rhCtx);
+                break;
+            default:
+                rhVoicing = m_rhGen.generateDyad(rhCtx);
+                break;
+            }
+        } else {
+            // SUSTAINED CHORD: Vary the previous voicing for interest
+            // Use hash to decide variation type
+            const quint32 varHash = virtuoso::util::StableHash::mix(
+                adjusted.determinismSeed + 777,
+                adjusted.playbackBarIndex * 31 + adjusted.beatInBar * 13);
+            const int varRoll = varHash % 100;
+
+            // Start with previous voicing
+            rhVoicing.midiNotes = m_state.lastRhMidi;
+            rhVoicing.topNoteMidi = m_state.lastRhTopMidi;
+            rhVoicing.ontologyKey = "piano_rh_varied";
+
+            // VARIATION OPTIONS:
+            // 1. Move top voice up/down by step (most common - melodic interest)
+            // 2. Add/remove a note (density variation)
+            // 3. Generate completely fresh voicing (occasional contrast)
+
+            // Determine phrase arc phase from context
+            int phraseArcPhase = 0;  // Building
+            if (adjusted.cadence01 > 0.7 || adjusted.phraseEndBar) {
+                phraseArcPhase = 2;  // Resolving
+            } else if (adjusted.barInPhrase >= adjusted.phraseBars / 2) {
+                phraseArcPhase = 1;  // Peak
+            }
+
+            if (varRoll < 40) {
+                // Move top voice by step (ascending or descending based on phrase)
+                int direction = (rhCtx.cadence01 > 0.5) ? -1 : 1;  // Resolve down at cadence
+                if (phraseArcPhase == 2) direction = -1;  // Resolving phase: descend
+                if (phraseArcPhase == 0) direction = 1;   // Building phase: ascend
+
+                int newTop = rhVoicing.topNoteMidi + direction * (1 + (varHash % 3));  // 1-3 semitones
+                newTop = qBound(rhCtx.rhLo, newTop, rhCtx.rhHi);
+
+                // Validate new top is a chord tone or extension
+                int newTopPc = newTop % 12;
+                int thirdPc = pcForDegree(rhCtx.chord, 3);
+                int fifthPc = pcForDegree(rhCtx.chord, 5);
+                int seventhPc = pcForDegree(rhCtx.chord, 7);
+                int ninthPc = pcForDegree(rhCtx.chord, 9);
+                int thirteenthPc = pcForDegree(rhCtx.chord, 13);
+
+                bool validTop = (newTopPc == rhCtx.chord.rootPc || newTopPc == thirdPc ||
+                                newTopPc == fifthPc || newTopPc == seventhPc ||
+                                newTopPc == ninthPc || newTopPc == thirteenthPc);
+
+                if (validTop && !rhVoicing.midiNotes.isEmpty()) {
+                    // Replace top note
+                    rhVoicing.midiNotes.last() = newTop;
+                    rhVoicing.topNoteMidi = newTop;
+                    qDebug() << "RH TOP MOVED: bar" << adjusted.playbackBarIndex
+                             << "beat" << adjusted.beatInBar
+                             << "old:" << m_state.lastRhTopMidi << "new:" << newTop;
+                }
+            } else if (varRoll < 60 && rhVoicing.midiNotes.size() >= 2) {
+                // Vary the second voice (inner voice movement for RH)
+                int secondIdx = rhVoicing.midiNotes.size() - 2;
+                int oldSecond = rhVoicing.midiNotes[secondIdx];
+                int direction = (phraseArcPhase == 2) ? -1 : 1;
+                int newSecond = oldSecond + direction * (1 + (varHash % 2));
+
+                // Validate not too close to other notes
+                bool safe = true;
+                for (int i = 0; i < rhVoicing.midiNotes.size(); ++i) {
+                    if (i != secondIdx && qAbs(rhVoicing.midiNotes[i] - newSecond) < 2) {
+                        safe = false;
+                        break;
+                    }
+                }
+                if (safe && newSecond >= rhCtx.rhLo && newSecond <= rhCtx.rhHi) {
+                    rhVoicing.midiNotes[secondIdx] = newSecond;
+                    std::sort(rhVoicing.midiNotes.begin(), rhVoicing.midiNotes.end());
+                }
+            } else if (varRoll < 75) {
+                // Generate fresh voicing for contrast
+                switch (decision.rightHand.voicing) {
+                case PianoTextureOrchestrator::VoicingRole::Triad:
+                    rhVoicing = m_rhGen.generateTriad(rhCtx);
+                    break;
+                default:
+                    rhVoicing = m_rhGen.generateDyad(rhCtx);
+                    break;
+                }
+            }
+            // else: keep previous voicing unchanged (25% of time - provides stability)
+        }
+
+        // Update state (both m_state AND generator state to stay in sync)
+        if (!rhVoicing.midiNotes.isEmpty()) {
+            m_state.lastRhTopMidi = rhVoicing.topNoteMidi >= 0 ? rhVoicing.topNoteMidi : rhVoicing.midiNotes.last();
+            m_state.lastRhMidi = rhVoicing.midiNotes;
+            // Also update generator state for updateStateFromGenerators() at function end
+            m_rhGen.state().lastRhMidi = rhVoicing.midiNotes;
+            m_rhGen.state().lastRhTopMidi = m_state.lastRhTopMidi;
+        }
+
+        // RH ALWAYS matches LH timing - unified texture, not independent rhythm
+        // RH plays slightly after LH (+4ms) for natural piano feel
+        // No more random subdivisions - the two hands are ONE instrument
+        int rhTimingOffsetMs = totalTimingShiftMs + 4;
+
+        auto basePos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+            adjusted.playbackBarIndex, adjusted.beatInBar, 0, 1, ts);
+        auto finalPos = applyTimingOffset(basePos, rhTimingOffsetMs, bpm, ts);
+
+        // RH velocity: softer than LH (supportive color)
+        int rhBaseVel = 42 + int(energy * 35);
+        if (adjusted.userBusy) rhBaseVel = qMin(rhBaseVel, 55);  // Back off more when user active
+        rhBaseVel = qBound(35, rhBaseVel, 85);
+        rhBaseVel = std::clamp(static_cast<int>(rhBaseVel * decision.rightHand.velocityMult), 25, 95);
+
+        // RH duration: slightly shorter than LH
+        double rhDurBeats = lhDurBeats * 0.85;
+        virtuoso::groove::Rational durWhole(static_cast<qint64>(rhDurBeats * 1000), 4000);
+
+        // Create notes
+        for (int i = 0; i < rhVoicing.midiNotes.size(); ++i) {
+            virtuoso::engine::AgentIntentNote note;
+            note.agent = QStringLiteral("Piano");
+            note.channel = midiChannel;
+            note.note = rhVoicing.midiNotes[i];
+            int vel = contourVelocity(rhBaseVel, i, rhVoicing.midiNotes.size(), true);
+            if (decision.rightHand.accentTop && i == rhVoicing.midiNotes.size() - 1) {
+                vel += 8;  // Accent top voice
+            }
+            note.baseVelocity = vel;
+            note.startPos = finalPos;
+            note.durationWhole = durWhole;
+            note.structural = false;
+            note.voicing_type = rhVoicing.ontologyKey;
+            note.logic_tag = QStringLiteral("RH-color");
+            plan.notes.append(note);
+        }
+    }
+
+    // ================================================================
+    // PEDAL: Generate pedal CCs
+    // ================================================================
+    plan.ccs = planPedal(adjusted, ts);
+
+    // ================================================================
+    // UPDATE STATE
+    // ================================================================
+    m_state.lastVoicingKey = QStringLiteral("orchestrator-%1").arg(
+        static_cast<int>(decision.mode));
+
+    // Update state from generators
+    updateStateFromGenerators();
+
+    // Performance plan - include both texture decision and rhythmic phrase info
+    virtuoso::piano::PianoPerformancePlan perf;
+    perf.compPhraseId = QStringLiteral("%1 | %2").arg(decision.rationale, m_currentPhrase.description);
     plan.performance = perf;
 
     return plan;

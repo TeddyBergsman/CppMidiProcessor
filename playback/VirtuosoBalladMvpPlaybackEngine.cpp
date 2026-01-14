@@ -325,6 +325,18 @@ void VirtuosoBalladMvpPlaybackEngine::setStylePresetKey(const QString& key) {
     applyPresetToEngine();
 }
 
+void VirtuosoBalladMvpPlaybackEngine::setUsePianoOrchestrator(bool use) {
+    if (m_pianoPlanner.useOrchestratorEnabled() == use) return;  // No change
+
+    m_pianoPlanner.setUseOrchestrator(use);
+
+    // Rebuild the pre-playback cache since piano notes are pre-computed
+    // This is necessary for A/B testing to take effect
+    if (m_usePreCache && m_playing) {
+        buildPrePlaybackCache();
+    }
+}
+
 void VirtuosoBalladMvpPlaybackEngine::play() {
     if (m_playing) return;
     if (m_sequence.isEmpty()) return;

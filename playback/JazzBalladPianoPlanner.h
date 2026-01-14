@@ -19,6 +19,7 @@
 #include "virtuoso/vocab/VocabularyRegistry.h"
 #include "playback/LhVoicingGenerator.h"
 #include "playback/RhVoicingGenerator.h"
+#include "playback/PianoTextureOrchestrator.h"
 
 namespace playback {
 
@@ -109,10 +110,13 @@ public:
         int sequenceTransposition = 0;      // Current transposition level
         int sequenceRepetitions = 0;        // How many times pattern repeated
         
-        // ========== INNER VOICE STATE ==========
-        // Tracks which inner voice moved last (for alternation)
+        // ========== INNER VOICE STATE (Contrapuntal Line Tracking) ==========
+        // Evans' inner voices are "piled up contrapuntal lines" with direction
         int lastInnerVoiceIndex = 0;        // Which voice moved last
         int innerVoiceDirection = 1;        // Direction of last movement
+        int innerVoiceTarget = -1;          // Where inner voice is heading (-1=none)
+        int innerVoiceTension = 0;          // Current tension level (0=consonant)
+        int beatsOnCurrentTarget = 0;       // How long pursuing current target
         
         // ========== PHRASE TRACKING ==========
         int currentPhrasePeakMidi = 72;     // Highest note in current phrase (for Q/A)
@@ -748,11 +752,27 @@ private:
     // ============= Voicing Generators (Refactored) =============
     mutable LhVoicingGenerator m_lhGen;
     mutable RhVoicingGenerator m_rhGen;
-    
+
+    // ============= Texture Orchestrator (NEW - Stage 1) =============
+    // Coordinates both hands with rhythm-section-aware texture decisions
+    mutable PianoTextureOrchestrator m_orchestrator;
+
+    // ============= Rhythmic Phrase Cache (Stage 6) =============
+    // Phrase is generated once per bar, then used for all 4 beats
+    mutable PianoTextureOrchestrator::RhythmicPhrase m_currentPhrase;
+    mutable int m_currentPhraseBar = -1;  // Bar index the current phrase was generated for
+
     // Synchronize generator state with planner state
     void syncGeneratorState() const;
     void updateStateFromGenerators();
-    
+
+    // Build orchestrator input from planner context
+    PianoTextureOrchestrator::OrchestratorInput buildOrchestratorInput(const Context& c) const;
+
+    // Execute plan using orchestrator decisions
+    BeatPlan planBeatWithOrchestrator(const Context& c, int midiChannel,
+                                       const virtuoso::groove::TimeSignature& ts);
+
     // ============= Feature Flags (for experimentation) =============
     // Set to false to disable a feature without removing code
     bool m_enableMelodicFragments = false;   // Approach notes, enclosures, turns, arpeggios - DISABLED BY DEFAULT
@@ -761,6 +781,7 @@ private:
     bool m_enableLhVariations = false;       // LH variations (inversions, drop-2) - DISABLED BY DEFAULT
     bool m_enableLhInnerVoice = false;       // LH inner voice movement - DISABLED BY DEFAULT
     bool m_enableLhSyncopation = false;      // LH syncopation/anticipation - DISABLED BY DEFAULT
+    bool m_useOrchestrator = true;           // Use new orchestrator for texture decisions - ENABLED BY DEFAULT
     
 public:
     // Feature flag setters for runtime control
@@ -776,6 +797,8 @@ public:
     bool lhVariationsEnabled() const { return m_enableLhVariations; }
     bool lhInnerVoiceEnabled() const { return m_enableLhInnerVoice; }
     bool lhSyncopationEnabled() const { return m_enableLhSyncopation; }
+    void setUseOrchestrator(bool enable) { m_useOrchestrator = enable; }
+    bool useOrchestratorEnabled() const { return m_useOrchestrator; }
 };
 
 } // namespace playback

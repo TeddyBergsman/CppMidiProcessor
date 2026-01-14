@@ -82,11 +82,16 @@ public slots:
 
     // Verbose debug logging (off = simple one-line summaries per chord)
     // PERF: Also controls JSON emission from VirtuosoEngine (expensive toJsonString calls)
-    void setDebugVerbose(bool verbose) { 
-        m_debugVerbose = verbose; 
+    void setDebugVerbose(bool verbose) {
+        m_debugVerbose = verbose;
         m_engine.setEmitTheoryJson(verbose);
     }
     bool debugVerbose() const { return m_debugVerbose; }
+
+    // Piano orchestrator toggle (A/B testing between old and new piano logic)
+    // NOTE: This triggers a cache rebuild since piano notes are pre-computed
+    void setUsePianoOrchestrator(bool use);
+    bool usePianoOrchestrator() const { return m_pianoPlanner.useOrchestratorEnabled(); }
     
     // Access to the underlying VirtuosoEngine (for external listeners to enable theory events)
     virtuoso::engine::VirtuosoEngine* engine() { return &m_engine; }

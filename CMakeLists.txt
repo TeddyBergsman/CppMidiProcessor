@@ -104,6 +104,7 @@ add_executable(VirtuosoPlaybackTests
   playback/SemanticMidiAnalyzer.cpp
   playback/VibeStateMachine.cpp
   playback/BalladReferenceTuning.cpp
+  playback/PianoTextureOrchestrator.cpp
   music/Pitch.cpp
   music/ChordSymbol.cpp
 )
@@ -201,6 +202,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/SemanticMidiAnalyzer.cpp
   playback/VibeStateMachine.h
   playback/VibeStateMachine.cpp
+  playback/PianoTextureOrchestrator.h
+  playback/PianoTextureOrchestrator.cpp
   music/Pitch.h
   music/Pitch.cpp
   music/ChordSymbol.h

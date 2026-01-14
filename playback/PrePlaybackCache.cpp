@@ -278,13 +278,19 @@ QVector<PreComputedBeat> PrePlaybackBuilder::buildBranchFromContexts(
     // =========================================================================
     // PARALLEL OPTIMIZATION: Create LOCAL planners for thread-safety
     // Each parallel branch gets its own planner instances, avoiding data races.
+    // CRITICAL: Copy settings from original planners (like useOrchestrator for A/B testing)
     // =========================================================================
     JazzBalladBassPlanner localBassPlanner;
     JazzBalladPianoPlanner localPianoPlanner;
     BrushesBalladDrummer localDrummer;
-    
+
     localBassPlanner.reset();
     localPianoPlanner.reset();
+
+    // Copy orchestrator toggle from original planner (for A/B testing)
+    if (in.pianoPlanner) {
+        localPianoPlanner.setUseOrchestrator(in.pianoPlanner->useOrchestratorEnabled());
+    }
     
     // Determinism seed
     const quint32 detSeed = virtuoso::util::StableHash::fnv1a32(

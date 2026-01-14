@@ -32,13 +32,22 @@ public:
         bool chordIsNew = false;
         bool preferShells = true;
         virtuoso::control::PerformanceWeightsV2 weights;
-        
+
         // Key context
         int keyTonicPc = 0;
         virtuoso::theory::KeyMode keyMode = virtuoso::theory::KeyMode::Major;
-        
+
         // Bass coordination
         int bassRegisterHi = 55;
+
+        // ========== PHRASE CONTEXT (for contrapuntal inner voice movement) ==========
+        // Phase determines inner voice direction: building=ascend, resolving=descend
+        int phraseArcPhase = 0;       // 0=building tension, 1=peak, 2=resolving
+        double cadence01 = 0.0;       // 0.0-1.0 approach to cadence (resolution)
+        int barInPhrase = 0;          // Current bar within phrase (0-3 typically)
+        int beatsUntilChordChange = 4;// For voice-leading anticipation to next chord
+        music::ChordSymbol nextChord; // Upcoming chord for voice-leading prep
+        bool hasNextChord = false;    // Whether nextChord is valid
     };
     
     // ========== Output ==========
@@ -55,6 +64,12 @@ public:
         bool lastLhWasTypeA = true;      // Alternate Type A/B
         int lastInnerVoiceIndex = 0;     // Which inner voice moved last
         int innerVoiceDirection = 1;     // +1 or -1
+
+        // ========== CONTRAPUNTAL LINE TRACKING ==========
+        // Each voice tracked as independent melodic line with destination
+        int innerVoiceTarget = -1;       // Where inner voice is heading (-1=none)
+        int innerVoiceTension = 0;       // Current tension level (0=consonant, higher=more tense)
+        int beatsOnCurrentTarget = 0;    // How long pursuing current target
     };
     
     // ========== Constructor ==========
@@ -85,7 +100,15 @@ public:
     
     /// Generate a shell voicing (just 3-7 guide tones)
     LhVoicing generateShell(const Context& c) const;
-    
+
+    /// Generate a bass anchor (single low note for structural emphasis)
+    /// Used at phrase boundaries, climaxes, and when bass is not playing
+    LhVoicing generateBassAnchor(const Context& c) const;
+
+    /// Generate lower portion of block chord (coordinated with RH)
+    /// Used for climax moments when both hands play together
+    LhVoicing generateBlockLower(const Context& c, int targetTopMidi) const;
+
     /// Apply inner voice movement to create melodic motion within sustained chords
     /// direction: +1 = up, -1 = down, 0 = automatic
     LhVoicing applyInnerVoiceMovement(const LhVoicing& base, const Context& c, int direction = 0) const;

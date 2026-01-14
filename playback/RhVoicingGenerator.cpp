@@ -299,7 +299,270 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateSingle(const Context& 
     
     rh.type = VoicingType::Single;
     rh.ontologyKey = "piano_rh_single_guide";
-    
+
+    return rh;
+}
+
+// =============================================================================
+// MELODIC DYAD (Evans-style walking 3rds/6ths)
+// Creates parallel motion rather than isolated chord tones
+// =============================================================================
+
+RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateMelodicDyad(
+    const Context& c, int direction) const {
+
+    RhVoicing rh;
+    const auto& chord = c.chord;
+
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
+
+    // Determine melodic direction
+    int dir = direction;
+    if (dir == 0) {
+        // Use state to alternate or continue direction
+        dir = (m_state.rhMelodicDirection != 0) ? m_state.rhMelodicDirection : 1;
+    }
+
+    // Get last top note as starting point
+    int lastTop = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 74;
+
+    // Determine interval type based on chord quality
+    // Major/Dominant: prefer major 3rds (4 semitones) or major 6ths (9 semitones)
+    // Minor: prefer minor 3rds (3 semitones) or minor 6ths (8 semitones)
+    int interval = 4;  // Default major 3rd
+    if (chord.quality == music::ChordQuality::Minor ||
+        chord.quality == music::ChordQuality::HalfDiminished ||
+        chord.quality == music::ChordQuality::Diminished) {
+        interval = 3;  // Minor 3rd
+    }
+
+    // For variety, sometimes use 6ths instead of 3rds
+    if ((c.beatInBar + c.barInPhrase) % 4 == 0) {
+        interval = (interval == 4) ? 9 : 8;  // 6th instead of 3rd
+    }
+
+    // Move by step in the direction
+    int step = dir * 2;  // Move by whole step for smooth parallel motion
+
+    // Calculate new top note
+    int newTop = lastTop + step;
+
+    // Ensure we stay in register
+    if (newTop > c.rhHi) {
+        newTop = lastTop - 2;  // Reverse direction
+        dir = -1;
+    } else if (newTop < c.rhLo + interval) {
+        newTop = lastTop + 2;  // Reverse direction
+        dir = 1;
+    }
+
+    // Snap to nearest chord tone or scale tone
+    QVector<int> validPcs;
+    int third = pcForDegree(chord, 3);
+    int fifth = pcForDegree(chord, 5);
+    int seventh = pcForDegree(chord, 7);
+    int ninth = pcForDegree(chord, 9);
+
+    if (third >= 0) validPcs.push_back(third);
+    if (fifth >= 0) validPcs.push_back(fifth);
+    if (seventh >= 0) validPcs.push_back(seventh);
+    if (ninth >= 0 && c.energy > 0.3) validPcs.push_back(ninth);
+
+    // Find closest valid PC to newTop
+    int bestTop = newTop;
+    int bestDist = 99;
+    for (int pc : validPcs) {
+        for (int oct = 5; oct <= 7; ++oct) {
+            int midi = pc + oct * 12;
+            if (midi < c.rhLo || midi > c.rhHi) continue;
+            int dist = qAbs(midi - newTop);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestTop = midi;
+            }
+        }
+    }
+
+    rh.topNoteMidi = bestTop;
+
+    // Calculate second note (interval below top)
+    int secondMidi = bestTop - interval;
+    if (secondMidi < c.rhLo) {
+        // Try interval above instead
+        secondMidi = bestTop + interval;
+        if (secondMidi > c.rhHi) {
+            // Can't fit dyad, return single note
+            rh.midiNotes.push_back(bestTop);
+            rh.type = VoicingType::Single;
+            rh.ontologyKey = "piano_rh_melodic_single";
+            return rh;
+        }
+    }
+
+    rh.midiNotes.push_back(qMin(secondMidi, bestTop));
+    rh.midiNotes.push_back(qMax(secondMidi, bestTop));
+    rh.topNoteMidi = rh.midiNotes.last();
+    rh.melodicDirection = dir;
+
+    rh.type = VoicingType::Dyad;
+    rh.ontologyKey = (interval <= 4) ? "piano_rh_melodic_3rd" : "piano_rh_melodic_6th";
+    rh.cost = voiceLeadingCost(m_state.lastRhMidi, rh.midiNotes);
+
+    return rh;
+}
+
+// =============================================================================
+// UNISON VOICING (RH synced with LH for reinforced texture)
+// Evans' signature: both hands strike together, creating unified texture
+// =============================================================================
+
+RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateUnisonVoicing(
+    const Context& c, const QVector<int>& lhMidi) const {
+
+    RhVoicing rh;
+    const auto& chord = c.chord;
+
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
+    if (lhMidi.isEmpty()) return generateDyad(c);  // Fallback
+
+    // For unison comping, RH adds color above LH
+    // Typically a 3rd or 6th above the LH top note
+    int lhTop = lhMidi.last();
+
+    // Get color tones
+    int seventh = pcForDegree(chord, 7);
+    int ninth = pcForDegree(chord, 9);
+    int thirteenth = pcForDegree(chord, 13);
+
+    QVector<int> colorPcs;
+    if (ninth >= 0) colorPcs.push_back(ninth);
+    if (thirteenth >= 0 && c.energy > 0.4) colorPcs.push_back(thirteenth);
+    if (seventh >= 0) colorPcs.push_back(seventh);
+
+    if (colorPcs.isEmpty()) {
+        return generateDyad(c);  // Fallback
+    }
+
+    // Find a color note that's a 3rd or 6th above LH top
+    int bestNote = -1;
+    int bestScore = -999;
+
+    for (int pc : colorPcs) {
+        for (int oct = 5; oct <= 7; ++oct) {
+            int midi = pc + oct * 12;
+            if (midi < c.rhLo || midi > c.rhHi) continue;
+            if (midi <= lhTop + 2) continue;  // Must be clearly above LH
+
+            int interval = midi - lhTop;
+            int score = 0;
+
+            // Prefer 3rds and 6ths above LH
+            if (interval == 3 || interval == 4) score = 10;  // 3rd
+            else if (interval == 8 || interval == 9) score = 8;  // 6th
+            else if (interval == 5) score = 5;  // 4th
+            else if (interval >= 10 && interval <= 12) score = 3;  // 7th/octave
+            else score = -5;
+
+            // Bonus for being in sweet spot
+            if (midi >= 72 && midi <= 82) score += 2;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestNote = midi;
+            }
+        }
+    }
+
+    if (bestNote < 0) {
+        return generateDyad(c);  // Fallback
+    }
+
+    rh.midiNotes.push_back(bestNote);
+    rh.topNoteMidi = bestNote;
+    rh.melodicDirection = (bestNote > m_state.lastRhTopMidi) ? 1 :
+                          (bestNote < m_state.lastRhTopMidi) ? -1 : 0;
+
+    // Optionally add a second note for richer texture
+    if (c.energy > 0.4) {
+        // Add note a 3rd or 4th below
+        int second = bestNote - 4;
+        if (second >= c.rhLo && second > lhTop) {
+            rh.midiNotes.insert(rh.midiNotes.begin(), second);
+        }
+    }
+
+    rh.type = VoicingType::Dyad;
+    rh.ontologyKey = "piano_rh_unison_color";
+    rh.isColorTone = true;
+    rh.cost = voiceLeadingCost(m_state.lastRhMidi, rh.midiNotes);
+
+    return rh;
+}
+
+// =============================================================================
+// BLOCK UPPER (Upper portion of block chord, coordinated with LH)
+// Used for climax moments - George Shearing "locked hands" style
+// =============================================================================
+
+RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateBlockUpper(
+    const Context& c, int targetTopMidi) const {
+
+    RhVoicing rh;
+    const auto& chord = c.chord;
+
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
+
+    // Block chord upper: melody note doubled an octave below + inner voices
+    // Classic Shearing: melody on top, same note octave below, fills in between
+
+    // Get chord tones for fill
+    int third = pcForDegree(chord, 3);
+    int fifth = pcForDegree(chord, 5);
+    int seventh = pcForDegree(chord, 7);
+
+    // Determine top note
+    int topMidi = targetTopMidi;
+    if (topMidi < 0) {
+        topMidi = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 76;
+    }
+
+    // Ensure top is in register
+    while (topMidi > c.rhHi) topMidi -= 12;
+    while (topMidi < c.rhLo) topMidi += 12;
+
+    // Build block: top note + fill notes + octave below
+    rh.midiNotes.push_back(topMidi);
+
+    // Add inner voices between top and octave below
+    int octaveBelow = topMidi - 12;
+    if (octaveBelow >= c.rhLo) {
+        // Fill with chord tones
+        QVector<int> fillPcs;
+        if (seventh >= 0) fillPcs.push_back(seventh);
+        if (fifth >= 0) fillPcs.push_back(fifth);
+        if (third >= 0) fillPcs.push_back(third);
+
+        for (int pc : fillPcs) {
+            int midi = nearestMidiForPc(pc, (topMidi + octaveBelow) / 2, octaveBelow + 1, topMidi - 1);
+            if (midi > octaveBelow && midi < topMidi) {
+                rh.midiNotes.push_back(midi);
+            }
+        }
+
+        // Add octave below
+        rh.midiNotes.push_back(octaveBelow);
+    }
+
+    std::sort(rh.midiNotes.begin(), rh.midiNotes.end());
+
+    rh.topNoteMidi = rh.midiNotes.isEmpty() ? topMidi : rh.midiNotes.last();
+    rh.melodicDirection = (rh.topNoteMidi > m_state.lastRhTopMidi) ? 1 :
+                          (rh.topNoteMidi < m_state.lastRhTopMidi) ? -1 : 0;
+
+    rh.type = VoicingType::Drop2;  // Similar voicing density
+    rh.ontologyKey = "piano_rh_block";
+    rh.cost = voiceLeadingCost(m_state.lastRhMidi, rh.midiNotes);
+
     return rh;
 }
 

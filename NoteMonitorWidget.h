@@ -135,6 +135,7 @@ private:
     QCheckBox* m_debugMuteLH = nullptr;
     QCheckBox* m_debugMuteRH = nullptr;
     QCheckBox* m_debugVerbose = nullptr;
+    QCheckBox* m_useOrchestratorToggle = nullptr;
 
     MidiProcessor* m_midiProcessor = nullptr; // not owned
 

@@ -124,7 +124,19 @@ public:
     
     /// Generate a single melodic note
     RhVoicing generateSingle(const Context& c) const;
-    
+
+    /// Generate a melodic dyad (walking 3rds/6ths for Evans-style motion)
+    /// Creates parallel motion rather than isolated chord tones
+    RhVoicing generateMelodicDyad(const Context& c, int direction = 0) const;
+
+    /// Generate a unison voicing (RH chord synced with LH for reinforced texture)
+    /// Used for Evans-style "locked hands" moments without full block chords
+    RhVoicing generateUnisonVoicing(const Context& c, const QVector<int>& lhMidi) const;
+
+    /// Generate upper portion of block chord (climax moments)
+    /// Coordinated with LH's generateBlockLower()
+    RhVoicing generateBlockUpper(const Context& c, int targetTopMidi) const;
+
     /// Generate an Upper Structure Triad voicing
     RhVoicing generateUST(const Context& c) const;
     

@@ -583,9 +583,16 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
             m_debugVerbose->setToolTip("Verbose logging (check for detailed data dumps)");
             m_debugVerbose->setStyleSheet("QCheckBox { color: #aaa; }");
 
+            m_useOrchestratorToggle = new QCheckBox("Orchestrator", virtuosoDbg);
+            m_useOrchestratorToggle->setChecked(true); // Default ON to test new code
+            m_useOrchestratorToggle->setToolTip("Use new PianoTextureOrchestrator (uncheck for old logic - A/B testing)");
+            m_useOrchestratorToggle->setStyleSheet("QCheckBox { color: #6f6; font-weight: bold; }");
+
             debugRow->addWidget(new QLabel("Piano:", virtuosoDbg));
             debugRow->addWidget(m_debugMuteLH);
             debugRow->addWidget(m_debugMuteRH);
+            debugRow->addSpacing(20);
+            debugRow->addWidget(m_useOrchestratorToggle);
             debugRow->addSpacing(20);
             debugRow->addWidget(m_debugVerbose);
             debugRow->addStretch(1);
@@ -686,6 +693,11 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     });
     connect(m_debugVerbose, &QCheckBox::toggled, this, [this](bool on) {
         if (m_virtuosoPlayback) m_virtuosoPlayback->setDebugVerbose(on);
+    });
+    connect(m_useOrchestratorToggle, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_virtuosoPlayback) {
+            m_virtuosoPlayback->setUsePianoOrchestrator(on);
+        }
     });
 
     connect(m_virtuosoPlayback, &playback::VirtuosoBalladMvpPlaybackEngine::debugEnergy,

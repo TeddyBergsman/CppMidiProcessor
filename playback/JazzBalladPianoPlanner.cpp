@@ -7686,17 +7686,161 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
         if (!adjusted.chordIsNew) actualDurBeats *= 0.75;  // Re-articulations are shorter
         virtuoso::groove::Rational durWhole(static_cast<qint64>(actualDurBeats * 1000), 4000);
 
-        // Create notes
-        for (int i = 0; i < lhVoicing.midiNotes.size(); ++i) {
+        // ================================================================
+        // LH EXPRESSIVE VOCABULARY: Rolls and Grace Notes
+        // ================================================================
+        // Bill Evans' signature touches - used sparingly for warmth/expression
+        // Rolls: Ascending arpeggiated chords (harp-like quality)
+        // Grace notes: Chromatic approach from below
+        // ================================================================
+
+        bool useLhRoll = false;
+        int lhRollSpreadMs = 0;
+
+        // Rolls: only at low-mid energy, not during anticipations/stabs, 3+ notes
+        if (!stabMode && !useAnticipation && lhVoicing.midiNotes.size() >= 3) {
+            const int rollHash = (adjusted.playbackBarIndex * 19 + adjusted.chord.rootPc * 11) % 100;
+
+            // Probability: ~20% at low energy, ~12% at mid energy
+            const int rollThreshold = (energy < 0.4) ? 20 : 12;
+
+            // Prefer rolls at phrase starts or section starts
+            const int barInSection = adjusted.playbackBarIndex % 8;
+            const bool isStructuralMoment = (barInSection == 0 || barInSection == 4);
+
+            if (rollHash < rollThreshold || (isStructuralMoment && rollHash < rollThreshold + 10)) {
+                useLhRoll = true;
+
+                // Roll speed: slower at low energy (more expressive)
+                // ~40ms at low energy, ~25ms at mid energy, scaled by tempo
+                const double tempoScale = 90.0 / qBound(50, bpm, 160);
+
+                if (energy < 0.35) {
+                    lhRollSpreadMs = int(45.0 * tempoScale);  // Slow, expressive
+                } else if (energy < 0.55) {
+                    lhRollSpreadMs = int(32.0 * tempoScale);  // Moderate
+                } else {
+                    lhRollSpreadMs = int(22.0 * tempoScale);  // Quick, subtle
+                }
+                lhRollSpreadMs = qBound(15, lhRollSpreadMs, 60);
+            }
+        }
+
+        // Grace note: chromatic approach from below (rare, expressive)
+        bool useLhGrace = false;
+        int lhGraceMidi = -1;
+
+        // Only consider grace notes when not using rolls (don't stack ornaments)
+        if (!stabMode && !useAnticipation && !useLhRoll && lhVoicing.midiNotes.size() >= 2) {
+            const int graceHash = (adjusted.playbackBarIndex * 13 + adjusted.chord.rootPc * 17) % 100;
+
+            // Probability: ~15% at low energy, ~8% at mid energy
+            const int graceThreshold = (energy < 0.4) ? 15 : 8;
+
+            if (graceHash < graceThreshold) {
+                useLhGrace = true;
+
+                // Choose which note to approach (prefer bass note for LH)
+                const int targetIdx = (graceHash % 3 == 0) ? (lhVoicing.midiNotes.size() - 1) : 0;
+
+                // Grace note is a semitone below the target
+                lhGraceMidi = lhVoicing.midiNotes[targetIdx] - 1;
+
+                // Safety: don't go below reasonable range
+                if (lhGraceMidi < 40) {
+                    useLhGrace = false;
+                }
+            }
+        }
+
+        // Emit grace note before main chord
+        if (useLhGrace && lhGraceMidi >= 40) {
+            const double tempoScale = 90.0 / qBound(50, bpm, 160);
+            const int graceOffsetMs = -int(40.0 * tempoScale);  // Before main chord
+
+            virtuoso::engine::AgentIntentNote graceNote;
+            graceNote.agent = QStringLiteral("Piano");
+            graceNote.channel = midiChannel;
+            graceNote.note = lhGraceMidi;
+            graceNote.baseVelocity = baseVel - 15;  // Softer than main
+            graceNote.startPos = applyTimingOffset(finalPos, graceOffsetMs, bpm, ts);
+            graceNote.durationWhole = virtuoso::groove::Rational(80, 4000);  // Very short (~0.08 beats)
+            graceNote.structural = false;
+            graceNote.chord_context = adjusted.chordText;
+            graceNote.voicing_type = QStringLiteral("LH_grace");
+            graceNote.logic_tag = QStringLiteral("LH-grace");
+            plan.notes.append(graceNote);
+        }
+
+        // Octave doubling: bass note doubled an octave above for warmth
+        // Only at structural moments (section starts) and low-mid energy
+        bool useOctaveDouble = false;
+        int octaveDoubleMidi = -1;
+
+        if (!stabMode && !useLhRoll && !useLhGrace && lhVoicing.midiNotes.size() >= 2) {
+            const int octaveHash = (adjusted.playbackBarIndex * 11 + adjusted.chord.rootPc * 23) % 100;
+
+            // Strong structural moments: bar 0 or 4 of section, beat 1
+            const int barInSection = adjusted.playbackBarIndex % 8;
+            const bool isStructuralMoment = (barInSection == 0 || barInSection == 4) && adjusted.beatInBar == 0;
+
+            // Only at low-mid energy, structural moments, ~20% chance
+            if (isStructuralMoment && energy < 0.5 && octaveHash < 20) {
+                const int bassNote = lhVoicing.midiNotes.first();
+                const int doubled = bassNote + 12;
+
+                // Only if doubled doesn't clash with voicing
+                bool safe = true;
+                for (int note : lhVoicing.midiNotes) {
+                    if (qAbs(note - doubled) < 2 && note != bassNote) {
+                        safe = false;
+                        break;
+                    }
+                }
+
+                if (safe && doubled <= 65) {  // Don't go too high
+                    useOctaveDouble = true;
+                    octaveDoubleMidi = doubled;
+                }
+            }
+        }
+
+        // Emit octave doubling if applicable
+        if (useOctaveDouble && octaveDoubleMidi > 0) {
+            virtuoso::engine::AgentIntentNote octaveNote;
+            octaveNote.agent = QStringLiteral("Piano");
+            octaveNote.channel = midiChannel;
+            octaveNote.note = octaveDoubleMidi;
+            octaveNote.baseVelocity = baseVel - 10;  // Slightly softer
+            octaveNote.startPos = finalPos;
+            octaveNote.durationWhole = durWhole;
+            octaveNote.structural = false;
+            octaveNote.chord_context = adjusted.chordText;
+            octaveNote.voicing_type = QStringLiteral("LH_octave");
+            octaveNote.logic_tag = QStringLiteral("LH-support");
+            plan.notes.append(octaveNote);
+        }
+
+        // Create LH voicing notes (with optional roll timing)
+        const int numLhNotes = lhVoicing.midiNotes.size();
+        for (int i = 0; i < numLhNotes; ++i) {
             virtuoso::engine::AgentIntentNote note;
             note.agent = QStringLiteral("Piano");
             note.channel = midiChannel;
             note.note = lhVoicing.midiNotes[i];
-            note.baseVelocity = contourVelocity(baseVel, i, lhVoicing.midiNotes.size(), false);
-            note.startPos = finalPos;
+            note.baseVelocity = contourVelocity(baseVel, i, numLhNotes, false);
+
+            // Apply roll offset: ascending from bottom to top
+            if (useLhRoll && numLhNotes > 1) {
+                const int noteOffsetMs = (i * lhRollSpreadMs) / (numLhNotes - 1);
+                note.startPos = applyTimingOffset(finalPos, noteOffsetMs, bpm, ts);
+            } else {
+                note.startPos = finalPos;
+            }
+
             note.durationWhole = durWhole;
             note.structural = adjusted.chordIsNew;
-            note.voicing_type = lhVoicing.ontologyKey;
+            note.voicing_type = useLhRoll ? QStringLiteral("LH_roll") : lhVoicing.ontologyKey;
             note.logic_tag = decision.mode == PianoTextureOrchestrator::TextureMode::ShellAnticipation ?
                 QStringLiteral("LH-anticipate") : QStringLiteral("LH-support");
             plan.notes.append(note);
@@ -7922,23 +8066,86 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
 
         // RH duration: slightly shorter than LH
         double rhDurBeats = lhDurBeats * 0.85;
-        virtuoso::groove::Rational durWhole(static_cast<qint64>(rhDurBeats * 1000), 4000);
+        virtuoso::groove::Rational rhDurWhole(static_cast<qint64>(rhDurBeats * 1000), 4000);
 
-        // Create notes
-        for (int i = 0; i < rhVoicing.midiNotes.size(); ++i) {
+        // ================================================================
+        // RH EXPRESSIVE VOCABULARY: Rolls and Grace Notes
+        // ================================================================
+        // Less frequent than LH - RH is more about supportive color
+        // ================================================================
+
+        bool useRhRoll = false;
+        int rhRollSpreadMs = 0;
+
+        // Rolls: only at low energy, on chord changes, with 3+ notes
+        if (energy < 0.45 && adjusted.chordIsNew && rhVoicing.midiNotes.size() >= 3) {
+            const int rollHash = (adjusted.playbackBarIndex * 23 + adjusted.chord.rootPc * 11) % 100;
+            if (rollHash < 15) {  // 15% chance (less than LH's 20%)
+                useRhRoll = true;
+                const double tempoScale = 90.0 / qBound(50, bpm, 160);
+                rhRollSpreadMs = int(35.0 * tempoScale);  // Slightly faster than LH rolls
+                rhRollSpreadMs = qBound(12, rhRollSpreadMs, 50);
+            }
+        }
+
+        // Grace note: chromatic approach from below (rare, expressive)
+        bool useRhGrace = false;
+        int rhGraceMidi = -1;
+
+        if (energy < 0.50 && !useRhRoll && rhVoicing.midiNotes.size() >= 2) {
+            const int graceHash = (adjusted.playbackBarIndex * 17 + adjusted.chord.rootPc * 13) % 100;
+            if (graceHash < 10) {  // 10% chance (less than LH)
+                useRhGrace = true;
+                rhGraceMidi = rhVoicing.midiNotes.first() - 1;  // Semitone below lowest note
+                if (rhGraceMidi < 60) {  // RH grace notes should stay in upper register
+                    useRhGrace = false;
+                }
+            }
+        }
+
+        // Emit grace note if applicable
+        if (useRhGrace && rhGraceMidi >= 60) {
+            const double tempoScale = 90.0 / qBound(50, bpm, 160);
+            const int graceOffsetMs = -int(35.0 * tempoScale);  // Before main chord
+
+            virtuoso::engine::AgentIntentNote graceNote;
+            graceNote.agent = QStringLiteral("Piano");
+            graceNote.channel = midiChannel;
+            graceNote.note = rhGraceMidi;
+            graceNote.baseVelocity = rhBaseVel - 15;  // Softer
+            graceNote.startPos = applyTimingOffset(finalPos, graceOffsetMs, bpm, ts);
+            graceNote.durationWhole = virtuoso::groove::Rational(80, 4000);  // Very short
+            graceNote.structural = false;
+            graceNote.chord_context = adjusted.chordText;
+            graceNote.voicing_type = QStringLiteral("RH_grace");
+            graceNote.logic_tag = QStringLiteral("RH-grace");
+            plan.notes.append(graceNote);
+        }
+
+        // Create RH voicing notes (with optional roll timing)
+        const int numRhNotes = rhVoicing.midiNotes.size();
+        for (int i = 0; i < numRhNotes; ++i) {
             virtuoso::engine::AgentIntentNote note;
             note.agent = QStringLiteral("Piano");
             note.channel = midiChannel;
             note.note = rhVoicing.midiNotes[i];
-            int vel = contourVelocity(rhBaseVel, i, rhVoicing.midiNotes.size(), true);
-            if (decision.rightHand.accentTop && i == rhVoicing.midiNotes.size() - 1) {
+            int vel = contourVelocity(rhBaseVel, i, numRhNotes, true);
+            if (decision.rightHand.accentTop && i == numRhNotes - 1) {
                 vel += 8;  // Accent top voice
             }
             note.baseVelocity = vel;
-            note.startPos = finalPos;
-            note.durationWhole = durWhole;
+
+            // Apply roll timing if active
+            if (useRhRoll && numRhNotes > 1) {
+                const int noteOffsetMs = (i * rhRollSpreadMs) / (numRhNotes - 1);
+                note.startPos = applyTimingOffset(finalPos, noteOffsetMs, bpm, ts);
+            } else {
+                note.startPos = finalPos;
+            }
+
+            note.durationWhole = rhDurWhole;
             note.structural = false;
-            note.voicing_type = rhVoicing.ontologyKey;
+            note.voicing_type = useRhRoll ? QStringLiteral("RH_roll") : rhVoicing.ontologyKey;
             note.logic_tag = QStringLiteral("RH-color");
             plan.notes.append(note);
         }

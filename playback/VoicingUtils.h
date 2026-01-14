@@ -78,9 +78,17 @@ QVector<int> getScalePcs(const music::ChordSymbol& chord);
 int validateToConsonant(int midi, const music::ChordSymbol& chord, int lo, int hi);
 
 /// Validate an entire voicing - returns corrected voicing
-QVector<int> validateVoicing(const QVector<int>& midiNotes, 
+QVector<int> validateVoicing(const QVector<int>& midiNotes,
                              const music::ChordSymbol& chord,
                              int lo, int hi);
+
+/// Filter out semitone clashes within a voicing
+/// When two notes are a semitone apart, removes the less important one:
+/// - Prefer chord tones over extensions
+/// - In low register (<= MIDI 48), prefer the higher note (less mud)
+/// - Otherwise prefer the lower note (preserve bass)
+QVector<int> filterSemitoneClashes(const QVector<int>& midiNotes,
+                                   const music::ChordSymbol& chord);
 
 } // namespace voicing_utils
 } // namespace playback

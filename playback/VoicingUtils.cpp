@@ -1,5 +1,6 @@
 #include "VoicingUtils.h"
 #include <algorithm>
+#include <QSet>
 
 namespace playback {
 namespace voicing_utils {
@@ -547,8 +548,64 @@ QVector<int> validateVoicing(const QVector<int>& midiNotes,
     // Remove duplicates and sort
     std::sort(validated.begin(), validated.end());
     validated.erase(std::unique(validated.begin(), validated.end()), validated.end());
-    
+
     return validated;
+}
+
+QVector<int> filterSemitoneClashes(const QVector<int>& midiNotes,
+                                   const music::ChordSymbol& chord) {
+    if (midiNotes.size() < 2) return midiNotes;
+
+    // Sort notes ascending
+    QVector<int> sorted = midiNotes;
+    std::sort(sorted.begin(), sorted.end());
+
+    // Mark notes to remove
+    QSet<int> toRemove;
+
+    for (int i = 0; i < sorted.size() - 1; ++i) {
+        int low = sorted[i];
+        int high = sorted[i + 1];
+        int interval = high - low;
+
+        if (interval != 1) continue;  // Not a semitone clash
+
+        // Already marked for removal?
+        if (toRemove.contains(low) || toRemove.contains(high)) continue;
+
+        // Determine which note to remove
+        bool lowIsChordTone = isChordTone(normalizePc(low), chord);
+        bool highIsChordTone = isChordTone(normalizePc(high), chord);
+
+        int noteToRemove;
+
+        if (lowIsChordTone && !highIsChordTone) {
+            // Keep chord tone, remove extension
+            noteToRemove = high;
+        } else if (!lowIsChordTone && highIsChordTone) {
+            // Keep chord tone, remove extension
+            noteToRemove = low;
+        } else if (low <= 48) {
+            // Low register (C3 and below): remove the LOWER note to reduce mud
+            noteToRemove = low;
+        } else {
+            // Higher register: remove the HIGHER note (preserve bass foundation)
+            noteToRemove = high;
+        }
+
+        toRemove.insert(noteToRemove);
+    }
+
+    // Build result without removed notes
+    QVector<int> result;
+    result.reserve(sorted.size());
+    for (int midi : sorted) {
+        if (!toRemove.contains(midi)) {
+            result.append(midi);
+        }
+    }
+
+    return result;
 }
 
 } // namespace voicing_utils

@@ -201,73 +201,184 @@ PianoGestures::Gesture PianoGestures::generateWaterfall(
 }
 
 // ============================================================================
-// SCALE RUN - Ascending or descending scalar passage
+// MELODIC FILL - Arpeggio-based fill with dyads/triads, musical contour
 // ============================================================================
 PianoGestures::Gesture PianoGestures::generateScaleRun(
-    const Context& ctx, int startMidi, int direction, int numNotes) const {
+    const Context& ctx, int startMidi, int direction, int /*numNotes*/) const {
 
     Gesture result;
     result.hand = "RH";
-    result.type = direction > 0 ? "scale_run_up" : "scale_run_down";
+    result.type = direction > 0 ? "melodic_fill_up" : "melodic_fill_down";
 
-    QVector<int> scalePcs = getChordScale(ctx.chord, ctx.keyTonicPc, ctx.keyMode);
-    if (scalePcs.isEmpty()) {
-        return result;
-    }
+    double beatMs = 60000.0 / ctx.bpm;
+    int patternHash = (ctx.chord.rootPc * 17 + startMidi * 7 + ctx.bpm) % 100;
 
-    // Build scale notes in register
-    QVector<int> scaleNotes;
-    int low = direction > 0 ? startMidi : startMidi - 12;
-    int high = direction > 0 ? startMidi + 12 : startMidi;
+    // ========================================================================
+    // BUILD CHORD TONES in register (arpeggio basis)
+    // ========================================================================
+    int root = ctx.chord.rootPc;
+    int third = pcForDegree(ctx.chord, 3);
+    int fifth = pcForDegree(ctx.chord, 5);
+    int seventh = pcForDegree(ctx.chord, 7);
+    int ninth = pcForDegree(ctx.chord, 9);
 
-    for (int midi = low; midi <= high; ++midi) {
+    // Build available chord tones across register
+    QVector<int> chordTones;
+    for (int midi = startMidi - 12; midi <= startMidi + 12; ++midi) {
         int pc = midi % 12;
-        if (scalePcs.contains(pc)) {
-            scaleNotes.append(midi);
+        if (pc == root || pc == third || pc == fifth ||
+            (seventh >= 0 && pc == seventh) || (ninth >= 0 && pc == ninth)) {
+            chordTones.append(midi);
         }
     }
 
-    if (scaleNotes.size() < numNotes) {
-        return result;  // Not enough notes
+    if (chordTones.size() < 4) {
+        return result;
     }
 
     // Find starting position
     int startIdx = 0;
-    for (int i = 0; i < scaleNotes.size(); ++i) {
-        if (scaleNotes[i] >= startMidi) {
+    for (int i = 0; i < chordTones.size(); ++i) {
+        if (chordTones[i] >= startMidi) {
             startIdx = i;
             break;
         }
     }
 
-    // Calculate timing - scale runs are quick
-    double beatMs = 60000.0 / ctx.bpm;
-    int noteSpacingMs = int(beatMs * 0.15);  // 16th-ish notes
-    noteSpacingMs = qBound(60, noteSpacingMs, 120);
+    // ========================================================================
+    // MELODIC PATTERNS - Arpeggio shapes with character
+    // ========================================================================
+    // Each pattern is: {noteIndex, dyadBelow} where dyadBelow adds harmony
+    struct FillNote {
+        int chordToneOffset;  // Relative to current position in chord tones
+        bool addDyad;         // Add a note a 3rd/4th below
+        double timingMult;    // Timing relative to base
+    };
 
-    // Generate notes
-    for (int i = 0; i < numNotes; ++i) {
-        int idx = startIdx + (direction > 0 ? i : -i);
-        if (idx < 0 || idx >= scaleNotes.size()) break;
+    QVector<QVector<FillNote>> patterns = {
+        // Pattern 0: Simple ascending arpeggio with final dyad
+        {{0, false, 1.0}, {1, false, 1.0}, {2, false, 1.2}, {3, true, 1.5}},
+        // Pattern 1: Up-down turn ending on root
+        {{1, false, 0.9}, {2, false, 1.0}, {1, false, 1.1}, {0, true, 1.8}},
+        // Pattern 2: Leap up, step down to resolution
+        {{2, false, 1.0}, {3, false, 0.8}, {2, true, 1.4}, {1, false, 1.0}, {0, true, 2.0}},
+        // Pattern 3: Descending with dyads
+        {{2, true, 1.2}, {1, false, 1.0}, {0, true, 1.8}},
+        // Pattern 4: Wide arpeggio
+        {{0, false, 1.0}, {2, false, 1.0}, {4, false, 1.2}, {2, true, 1.5}},
+        // Pattern 5: Gentle turn
+        {{1, false, 1.1}, {0, false, 0.9}, {1, false, 1.0}, {2, true, 1.6}},
+        // Pattern 6: Rising with passing tone feel
+        {{0, false, 0.8}, {1, false, 0.9}, {1, false, 1.0}, {2, false, 1.1}, {3, true, 1.5}},
+        // Pattern 7: Bell-like - high note then settle
+        {{3, false, 1.3}, {2, false, 1.0}, {1, true, 1.2}, {0, true, 2.0}},
+    };
 
+    int patternIdx = patternHash % patterns.size();
+    if (direction < 0) {
+        // Use different patterns for descending
+        patternIdx = (patternIdx + 4) % patterns.size();
+    }
+    const auto& pattern = patterns[patternIdx];
+
+    // ========================================================================
+    // TIMING - Relaxed, melodic feel (~2-3 notes per beat)
+    // ========================================================================
+    double baseNoteMs = beatMs / (2.0 + (patternHash % 20) / 20.0);  // 2-3 notes per beat
+
+    // ========================================================================
+    // GENERATE NOTES
+    // ========================================================================
+    double currentTimeMs = 0.0;
+    int currentIdx = startIdx;
+
+    for (int i = 0; i < pattern.size(); ++i) {
+        const auto& p = pattern[i];
+
+        // Move in chord tones
+        int targetIdx = currentIdx + (direction > 0 ? p.chordToneOffset : -p.chordToneOffset);
+        targetIdx = qBound(0, targetIdx, chordTones.size() - 1);
+
+        int noteMidi = chordTones[targetIdx];
+
+        // Main note
         GestureNote note;
-        note.midiNote = scaleNotes[idx];
-        note.offsetMs = i * noteSpacingMs;
-        note.durationMs = noteDurationMs(ctx.bpm, 0.25);
-        note.velocity = velocityForGesture(ctx.energy, i, numNotes, direction < 0);
+        note.midiNote = noteMidi;
+        note.offsetMs = int(currentTimeMs);
+        note.durationMs = int(baseNoteMs * p.timingMult * 0.9);
+
+        // Velocity: gentle arc
+        int baseVel = 48 + int(ctx.energy * 22);
+        double velMult = (i == 0) ? 0.9 : (i == pattern.size() - 1) ? 1.05 : 1.0;
+        note.velocity = qBound(40, int(baseVel * velMult), 75);
 
         result.notes.append(note);
+
+        // Add dyad below if requested (3rd or 4th below)
+        if (p.addDyad && targetIdx > 0) {
+            int dyadIdx = targetIdx - 1;  // One chord tone below
+            if (dyadIdx >= 0) {
+                GestureNote dyad;
+                dyad.midiNote = chordTones[dyadIdx];
+                dyad.offsetMs = int(currentTimeMs) + 5;  // Slight spread
+                dyad.durationMs = note.durationMs;
+                dyad.velocity = note.velocity - 8;  // Softer
+                result.notes.append(dyad);
+            }
+        }
+
+        currentTimeMs += baseNoteMs * p.timingMult;
+        currentIdx = targetIdx;
     }
 
+    // ========================================================================
+    // ENSURE RESOLUTION - Last note should be root, 3rd, or 5th
+    // ========================================================================
     if (!result.notes.isEmpty()) {
-        result.totalDurationMs = result.notes.last().offsetMs + result.notes.last().durationMs;
+        int lastPc = result.notes.last().midiNote % 12;
+        bool resolved = (lastPc == root || lastPc == third || lastPc == fifth);
+
+        if (!resolved) {
+            // Find nearest resolution tone
+            int lastMidi = result.notes.last().midiNote;
+            for (int delta = 1; delta <= 4; ++delta) {
+                int upPc = (lastMidi + delta) % 12;
+                int downPc = (lastMidi - delta + 12) % 12;
+                if (upPc == root || upPc == third || upPc == fifth) {
+                    GestureNote resolve;
+                    resolve.midiNote = lastMidi + delta;
+                    resolve.offsetMs = int(currentTimeMs);
+                    resolve.durationMs = int(beatMs * 0.6);
+                    resolve.velocity = 55 + int(ctx.energy * 15);
+                    result.notes.append(resolve);
+                    currentTimeMs += beatMs * 0.4;
+                    break;
+                }
+                if (downPc == root || downPc == third || downPc == fifth) {
+                    GestureNote resolve;
+                    resolve.midiNote = lastMidi - delta;
+                    resolve.offsetMs = int(currentTimeMs);
+                    resolve.durationMs = int(beatMs * 0.6);
+                    resolve.velocity = 55 + int(ctx.energy * 15);
+                    result.notes.append(resolve);
+                    currentTimeMs += beatMs * 0.4;
+                    break;
+                }
+            }
+        }
+
+        result.totalDurationMs = int(currentTimeMs) + result.notes.last().durationMs;
     }
 
     return result;
 }
 
 // ============================================================================
-// OCTAVE BELL - High single note for sparkle
+// OCTAVE BELL - High single note for sparkle (Evans-style)
+// ============================================================================
+// A clear, ringing note in the high register that adds color and space.
+// Can optionally include octave doubling below for richer texture.
+// Best used at phrase starts, during held chords, or very low energy moments.
 // ============================================================================
 PianoGestures::Gesture PianoGestures::generateOctaveBell(
     const Context& ctx, int targetPc) const {
@@ -276,12 +387,18 @@ PianoGestures::Gesture PianoGestures::generateOctaveBell(
     result.hand = "RH";
     result.type = "octave_bell";
 
-    // Find the target pitch class in the high register (C5-C6 range)
+    // Voice leading: prefer note close to previous top note if available
     int midiNote = -1;
-    for (int midi = 84; midi >= 72; --midi) {  // C6 down to C5
+    int bestDist = 999;
+
+    // Search in the sparkle register (C5-C6 range: MIDI 72-84)
+    for (int midi = 84; midi >= 72; --midi) {
         if (midi % 12 == targetPc) {
-            midiNote = midi;
-            break;
+            int dist = (ctx.previousTopNote > 0) ? qAbs(midi - ctx.previousTopNote) : 0;
+            if (dist < bestDist) {
+                bestDist = dist;
+                midiNote = midi;
+            }
         }
     }
 
@@ -289,14 +406,32 @@ PianoGestures::Gesture PianoGestures::generateOctaveBell(
         return result;
     }
 
-    GestureNote note;
-    note.midiNote = midiNote;
-    note.offsetMs = 0;
-    note.durationMs = noteDurationMs(ctx.bpm, 2.0);  // Let it ring (2 beats)
-    note.velocity = 40 + int(ctx.energy * 25);  // Soft but audible
+    // Duration varies with tempo - let it ring
+    int durationMs = noteDurationMs(ctx.bpm, 2.0);  // 2 beats
+    int velocity = 45 + int(ctx.energy * 20);  // Soft but clear
 
-    result.notes.append(note);
-    result.totalDurationMs = note.durationMs;
+    // Main bell note (high)
+    GestureNote bellNote;
+    bellNote.midiNote = midiNote;
+    bellNote.offsetMs = 0;
+    bellNote.durationMs = durationMs;
+    bellNote.velocity = velocity;
+    result.notes.append(bellNote);
+
+    // Octave doubling below (optional, adds richness)
+    // Use at slightly lower energy for more intimate sound
+    int octaveBelow = midiNote - 12;
+    if (octaveBelow >= 60 && ctx.energy < 0.5) {  // Only if it fits and low energy
+        GestureNote lowerNote;
+        lowerNote.midiNote = octaveBelow;
+        lowerNote.offsetMs = 15;  // Slight delay for "rolled" effect
+        lowerNote.durationMs = durationMs;
+        lowerNote.velocity = velocity - 8;  // Softer than top note
+        result.notes.append(lowerNote);
+        result.type = "octave_bell_doubled";
+    }
+
+    result.totalDurationMs = durationMs;
 
     return result;
 }

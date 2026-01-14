@@ -681,9 +681,10 @@ LhVoicingGenerator::LhVoicing LhVoicingGenerator::applyInnerVoiceMovement(
     int seventhPc = pcForDegree(c.chord, 7);
     if (seventhPc >= 0) validPcs.insert(seventhPc);
 
-    // Color tones for Evans-style richness
-    if (c.energy > 0.15 && ninth >= 0) validPcs.insert(ninth);
-    if (c.energy > 0.3 && thirteenth >= 0) validPcs.insert(thirteenth);
+    // Color tones: DECOUPLED from energy - 9ths always OK, skip 13ths
+    // Energy drives rhythm, not harmonic complexity
+    if (ninth >= 0) validPcs.insert(ninth);  // 9ths always consonant
+    // Skip 13ths - keep LH simple and clear
 
     // During resolution, prefer chord tones over extensions
     bool preferConsonant = (c.phraseArcPhase == 2 || c.cadence01 > 0.5);

@@ -4,6 +4,7 @@
 #include "virtuoso/util/StableHash.h"
 
 #include <QtGlobal>
+#include <QSet>
 #include <algorithm>
 
 // Namespace alias for cleaner code
@@ -20,8 +21,11 @@ static int normalizePc(int pc) { return ((pc % 12) + 12) % 12; }
 // ENERGY-DERIVED WEIGHT HELPERS
 // These replace direct weights access with energy-based values
 // =============================================================================
-static double energyToTension(double energy) {
-    return 0.3 + 0.5 * qBound(0.0, energy, 1.0);
+static double energyToTension(double /*energy*/) {
+    // DECOUPLED FROM ENERGY: Tension controls harmonic complexity/dissonance.
+    // Energy should drive rhythm/activity, NOT harmonic dissonance.
+    // Return constant low value to ensure consonant voicings at all energy levels.
+    return 0.3;  // Always conservative - no dissonant USTs or altered extensions
 }
 static double energyToCreativity(double energy) {
     return 0.35 + 0.25 * qBound(0.0, energy, 1.0);
@@ -6429,16 +6433,16 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
                                adjusted.chord.seventh == music::SeventhQuality::Major7);
         const bool isMinor7 = (adjusted.chord.quality == music::ChordQuality::Minor);
         // UST on dominant, major7, AND minor7 chords (all sound beautiful!)
-        // At high energy: more USTs even during resolution (driving colorful harmony)
-        const bool allowInResolve = (c.energy > 0.6);  // At high energy, USTs anywhere!
-        const bool wantsUST = (isDominant || isMajor7 || isMinor7) && 
-                              hitTensionLevel > 0.15 &&   // Lower threshold for more color
+        // UST usage: DECOUPLED from energy to avoid dissonance at high energy
+        // Only use USTs on dominant chords (where they sound most natural)
+        // Avoid USTs during resolution (curArcPhase 2) for clear harmonic direction
+        const bool wantsUST = isDominant &&  // Only dominants - safest context for USTs
                               !userActive &&
-                              (curArcPhase != 2 || allowInResolve);
-        
-        // Probability of using UST: scales with ENERGY now, not just tension
-        // Low energy: 30-50%, High energy: 60-90%!
-        const int ustProb = int(30 + c.energy * 40 + hitTensionLevel * 20);
+                              curArcPhase != 2;  // Never during resolution
+
+        // Fixed probability - not energy-dependent
+        // Conservative: only 25% chance to use UST even when conditions allow
+        const int ustProb = 25;
         const bool useUST = wantsUST && ((rhHash % 100) < ustProb);
         
         QVector<int> rhMidiNotes;
@@ -6451,16 +6455,10 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             const auto ustCandidates = m_rhGen.getUpperStructureTriads(adjusted.chord);
             
             if (!ustCandidates.isEmpty()) {
-                // Select UST based on tension level
-                // Lower tension = safer USTs (lower index), higher tension = more colorful
-                int ustIndex = 0;
-                if (hitTensionLevel > 0.6 && ustCandidates.size() > 1) {
-                    ustIndex = qMin(1, ustCandidates.size() - 1);
-                }
-                if (hitTensionLevel > 0.75 && ustCandidates.size() > 2) {
-                    ustIndex = qMin(2, ustCandidates.size() - 1);
-                }
-                
+                // ALWAYS use safest UST (idx=0) - no dissonant tritone subs or altered voicings
+                // This ensures consonance regardless of energy level
+                int ustIndex = 0;  // Always use most consonant UST
+
                 // Build the UST voicing via generator
                 const auto ustVoicing = m_rhGen.buildUstVoicing(rhGenContext, ustCandidates[ustIndex]);
                 
@@ -7590,6 +7588,9 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     int totalTimingShiftMs = lhTimingOffsetMs + timingModificationMs + int(subdivisionOffsetMs) + int(timingElasticityMs);
     totalTimingShiftMs = qBound(-150, totalTimingShiftMs, maxOffset + 800);  // Allow larger shift for subdivisions
 
+    // Track LH velocity for RH to reference (RH should always be softer)
+    int lhFinalVel = 55;  // Default if LH doesn't play
+
     if (lhPlays) {
         // Build LH context using actual field names
         LhVoicingGenerator::Context lhCtx;
@@ -7620,6 +7621,87 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
         lhCtx.hasNextChord = adjusted.hasNextChord;
 
         LhVoicingGenerator::LhVoicing lhVoicing;
+
+        // ================================================================
+        // SINGLE LOW BASS NOTE (Evans-style emotional depth)
+        // ================================================================
+        // Occasionally, instead of a full voicing, just play a single low
+        // bass note for intimate emotional weight. Very sparse, very special.
+        // Used at phrase starts, very low energy, important harmonic moments.
+        // ================================================================
+        bool useSingleBassNote = false;
+        const int bassNoteHash = (adjusted.playbackBarIndex * 43 + adjusted.chord.rootPc * 23) % 100;
+
+        // Conditions for single bass note:
+        // - Very low energy (intimate)
+        // - Phrase start OR significant chord (like tonic/dominant)
+        // - New chord (not sustained)
+        // - User not busy
+        const bool veryLowEnergy = energy <= 0.25;
+        const bool atPhraseStart = (adjusted.barInPhrase == 0) && (adjusted.beatInBar == 0);
+        const bool isSignificantChord = (adjusted.chord.rootPc == adjusted.keyTonicPc) ||  // Tonic
+                                        (adjusted.chord.rootPc == (adjusted.keyTonicPc + 7) % 12);  // Dominant
+
+        if (veryLowEnergy && adjusted.chordIsNew && !adjusted.userBusy) {
+            if (atPhraseStart && bassNoteHash < 8) {
+                // ~8% at phrase starts
+                useSingleBassNote = true;
+            } else if (isSignificantChord && bassNoteHash < 4) {
+                // ~4% on tonic/dominant chords
+                useSingleBassNote = true;
+            }
+        }
+
+        if (useSingleBassNote) {
+            // Single low bass note - root in low register
+            int bassNoteMidi = adjusted.chord.rootPc + 36;  // Around C2-B2
+            if (bassNoteMidi < 36) bassNoteMidi += 12;
+            if (bassNoteMidi > 48) bassNoteMidi -= 12;
+
+            // Occasionally use 5th instead of root for variety
+            if (bassNoteHash % 5 == 0) {
+                int fifth = (adjusted.chord.rootPc + 7) % 12;
+                bassNoteMidi = fifth + 36;
+                if (bassNoteMidi < 36) bassNoteMidi += 12;
+            }
+
+            lhVoicing.midiNotes.clear();
+            lhVoicing.midiNotes.push_back(bassNoteMidi);
+            lhVoicing.ontologyKey = "piano_lh_bass_note";
+            lhVoicing.isTypeA = false;
+
+            // Emit the single bass note with special treatment
+            auto basePos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                adjusted.playbackBarIndex, adjusted.beatInBar, 0, 1, ts);
+            auto finalPos = applyTimingOffset(basePos, totalTimingShiftMs, bpm, ts);
+
+            // Soft velocity, long duration (let it ring)
+            int bassVel = 38 + int(energy * 15);  // Very soft (38-42)
+            double bassDurBeats = 3.0;  // Let it ring for 3 beats
+            virtuoso::groove::Rational bassDurWhole(static_cast<qint64>(bassDurBeats * 1000), 4000);
+
+            virtuoso::engine::AgentIntentNote note;
+            note.agent = QStringLiteral("Piano");
+            note.channel = midiChannel;
+            note.note = bassNoteMidi;
+            note.baseVelocity = bassVel;
+            note.startPos = finalPos;
+            note.durationWhole = bassDurWhole;
+            note.structural = true;
+            note.chord_context = adjusted.chordText;
+            note.voicing_type = QStringLiteral("LH_bass_depth");
+            note.logic_tag = QStringLiteral("LH-bass");
+            plan.notes.append(note);
+
+            // Update state
+            m_state.lastLhMidi = lhVoicing.midiNotes;
+            lhFinalVel = bassVel;
+        }
+
+        // ================================================================
+        // NORMAL VOICING (skip if using single bass note)
+        // ================================================================
+        if (!useSingleBassNote) {
 
         // ================================================================
         // VOICING STRATEGY: New chord vs. Sustained chord
@@ -7655,6 +7737,9 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
             }
         }
 
+        // Filter out semitone clashes within LH voicing
+        lhVoicing.midiNotes = voicing_utils::filterSemitoneClashes(lhVoicing.midiNotes, adjusted.chord);
+
         // Update state (both m_state AND generator state to stay in sync)
         // BUG FIX: updateStateFromGenerators() at the end of this function copies FROM
         // generators TO m_state. If we only update m_state here, it gets overwritten!
@@ -7677,6 +7762,9 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
         if (adjusted.userBusy) baseVel = qMin(baseVel, 62);  // Back off when user active
         baseVel = qBound(42, baseVel, 95);
         baseVel = std::clamp(static_cast<int>(baseVel * decision.leftHand.velocityMult), 30, 100);
+
+        // Store LH velocity for RH to reference (RH should always be softer)
+        lhFinalVel = baseVel;
 
         // Duration: energy-scaled, but shorter for timing variations (punchier)
         double actualDurBeats = lhDurBeats;
@@ -7845,6 +7933,9 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
                 QStringLiteral("LH-anticipate") : QStringLiteral("LH-support");
             plan.notes.append(note);
         }
+
+        } // end if (!useSingleBassNote)
+
     } else {
         // DEBUG: Log when LH doesn't play (state not updated!)
         qDebug().noquote() << QString("  -> LH SKIP b%1.%2 new=%3 voicing=%4")
@@ -7895,8 +7986,39 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
             }
         }
 
-        // Apply density multiplier from activity mode
-        rhPlayProb = int(rhPlayProb * rhDensityMult);
+        // ================================================================
+        // PHRASE-BASED DENSITY VARIATION (Evans-style)
+        // ================================================================
+        // Evans didn't play RH uniformly - he varied density within phrases:
+        // - Sparse at phrase beginnings (let the phrase breathe)
+        // - Building toward phrase peaks
+        // - Sparse again approaching phrase endings (space for resolution)
+        // ================================================================
+        const double phraseProgress = adjusted.phraseBars > 0 ?
+            double(adjusted.barInPhrase) / adjusted.phraseBars : 0.5;
+
+        double phraseDensityMod = 1.0;
+        if (phraseProgress < 0.2) {
+            // Phrase beginning: sparse, let it breathe
+            phraseDensityMod = 0.5 + phraseProgress * 2.0;  // 0.5 -> 0.9
+        } else if (phraseProgress < 0.6) {
+            // Building phase: normal to increased density
+            phraseDensityMod = 0.9 + (phraseProgress - 0.2) * 0.5;  // 0.9 -> 1.1
+        } else if (phraseProgress < 0.85) {
+            // Peak/sustain: highest density
+            phraseDensityMod = 1.1;
+        } else {
+            // Approaching phrase end: taper off for resolution space
+            phraseDensityMod = 1.1 - (phraseProgress - 0.85) * 2.0;  // 1.1 -> 0.8
+        }
+
+        // Cadence areas: extra sparse to let harmony breathe
+        if (adjusted.cadence01 > 0.5) {
+            phraseDensityMod *= (1.0 - (adjusted.cadence01 - 0.5) * 0.6);  // Up to 30% reduction
+        }
+
+        // Apply density multiplier from activity mode AND phrase position
+        rhPlayProb = int(rhPlayProb * rhDensityMult * phraseDensityMod);
         rhPlayProb = qBound(10, rhPlayProb, 95);
 
         rhPlaysThisBeat = (rhDialogueHash < rhPlayProb);
@@ -7921,11 +8043,39 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
         rhCtx.keyTonicPc = adjusted.keyTonicPc;
         rhCtx.keyMode = adjusted.keyMode;
         rhCtx.barInPhrase = adjusted.barInPhrase;
+        rhCtx.phraseBars = adjusted.phraseBars;
         rhCtx.phraseEndBar = adjusted.phraseEndBar;
         rhCtx.cadence01 = adjusted.cadence01;
         rhCtx.userSilence = adjusted.userSilence;
         rhCtx.userBusy = adjusted.userBusy;
         rhCtx.userMeanMidi = adjusted.userMeanMidi;
+
+        // ================================================================
+        // MELODIC DIRECTION HINT (Evans-style phrase contour)
+        // ================================================================
+        // Evans' top voice had direction - not random movement:
+        // - Ascending toward phrase climaxes
+        // - Descending toward resolutions
+        // - Neutral at phrase beginnings (establishing)
+        // ================================================================
+        const double phraseProgress = adjusted.phraseBars > 0 ?
+            double(adjusted.barInPhrase) / adjusted.phraseBars : 0.5;
+
+        int melodicDir = 0;  // Default: neutral
+        if (phraseProgress < 0.25) {
+            melodicDir = 0;  // Phrase start: neutral, establishing
+        } else if (phraseProgress < 0.6) {
+            melodicDir = 1;  // Building: ascending toward climax
+        } else if (phraseProgress < 0.8) {
+            melodicDir = 0;  // Peak: can go either way
+        } else {
+            melodicDir = -1;  // Resolution: descending
+        }
+        // Cadences always descend
+        if (adjusted.cadence01 > 0.5) {
+            melodicDir = -1;
+        }
+        rhCtx.melodicDirectionHint = melodicDir;
 
         RhVoicingGenerator::RhVoicing rhVoicing;
 
@@ -8040,29 +8190,93 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
             // else: keep previous voicing unchanged (25% of time - provides stability)
         }
 
+        // Filter out semitone clashes within RH voicing
+        rhVoicing.midiNotes = voicing_utils::filterSemitoneClashes(rhVoicing.midiNotes, adjusted.chord);
+
         // Update state (both m_state AND generator state to stay in sync)
         if (!rhVoicing.midiNotes.isEmpty()) {
-            m_state.lastRhTopMidi = rhVoicing.topNoteMidi >= 0 ? rhVoicing.topNoteMidi : rhVoicing.midiNotes.last();
+            // Track consecutive same top note BEFORE updating state (for repetition penalty)
+            const int prevTop = m_state.lastRhTopMidi;
+            const int newTop = rhVoicing.topNoteMidi >= 0 ? rhVoicing.topNoteMidi : rhVoicing.midiNotes.last();
+            if (newTop == prevTop) {
+                m_rhGen.state().consecutiveSameTop++;
+            } else {
+                m_rhGen.state().consecutiveSameTop = 0;  // Reset on movement
+            }
+
+            // Now update state with new values
+            m_state.lastRhTopMidi = newTop;
             m_state.lastRhMidi = rhVoicing.midiNotes;
             // Also update generator state for updateStateFromGenerators() at function end
             m_rhGen.state().lastRhMidi = rhVoicing.midiNotes;
-            m_rhGen.state().lastRhTopMidi = m_state.lastRhTopMidi;
+            m_rhGen.state().lastRhTopMidi = newTop;
         }
 
-        // RH ALWAYS matches LH timing - unified texture, not independent rhythm
-        // RH plays slightly after LH (+4ms) for natural piano feel
-        // No more random subdivisions - the two hands are ONE instrument
-        int rhTimingOffsetMs = totalTimingShiftMs + 4;
+        // ================================================================
+        // RH TIMING VARIATION (Evans-style, BPM-constrained)
+        // ================================================================
+        // Evans' RH timing wasn't metronomic - it had subtle variation:
+        // - Slight anticipation for forward motion
+        // - Slight lay-back for relaxed feel
+        // - Always relative to beat duration (BPM-constrained)
+        // ================================================================
+
+        // Base timing: RH slightly after LH for natural piano feel
+        int rhTimingOffsetMs = totalTimingShiftMs;
+
+        // BPM-constrained timing variation (as percentage of beat)
+        const double beatMs = 60000.0 / qBound(40, bpm, 200);  // ms per beat
+        const double maxVariationPct = 0.04;  // Max 4% of beat (subtle but audible)
+        const int maxVariationMs = int(beatMs * maxVariationPct);
+
+        // Hash for this beat determines timing character
+        const int timingHash = (adjusted.playbackBarIndex * 31 + adjusted.beatInBar * 17 +
+                               adjusted.chord.rootPc * 7) % 100;
+
+        // Phrase position influences timing feel (phraseProgress already defined above)
+
+        int timingVariationMs = 0;
+        if (phraseProgress < 0.3) {
+            // Phrase beginning: tend to lay back (relaxed entry)
+            timingVariationMs = 3 + (timingHash % maxVariationMs);  // +3 to +maxVar (late)
+        } else if (phraseProgress < 0.7 && energy > 0.4) {
+            // Building phase: tend to anticipate (forward motion)
+            timingVariationMs = -(timingHash % (maxVariationMs / 2));  // Slight anticipation
+        } else if (adjusted.cadence01 > 0.5) {
+            // Cadence: lay back more (letting harmony settle)
+            timingVariationMs = 5 + (timingHash % maxVariationMs);  // More late
+        } else {
+            // Otherwise: vary both ways
+            timingVariationMs = (timingHash % (maxVariationMs * 2)) - maxVariationMs;
+        }
+
+        // RH always slightly after LH for natural two-hand feel
+        rhTimingOffsetMs += 4 + timingVariationMs;
 
         auto basePos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
             adjusted.playbackBarIndex, adjusted.beatInBar, 0, 1, ts);
         auto finalPos = applyTimingOffset(basePos, rhTimingOffsetMs, bpm, ts);
 
-        // RH velocity: softer than LH (supportive color)
-        int rhBaseVel = 42 + int(energy * 35);
-        if (adjusted.userBusy) rhBaseVel = qMin(rhBaseVel, 55);  // Back off more when user active
-        rhBaseVel = qBound(35, rhBaseVel, 85);
-        rhBaseVel = std::clamp(static_cast<int>(rhBaseVel * decision.rightHand.velocityMult), 25, 95);
+        // ================================================================
+        // RH VELOCITY: ALWAYS softer than LH (supportive color)
+        // ================================================================
+        // Evans' RH was recessed - adding color without dominating.
+        // Make RH explicitly 10-15 velocity points lower than LH.
+        // ================================================================
+
+        // RH velocity: derive from LH, always 10-15 lower
+        int rhBaseVel = lhFinalVel - 12;  // Base: 12 points below LH
+
+        // Additional reductions based on context
+        if (adjusted.userBusy) rhBaseVel -= 8;  // Extra soft when user active
+        if (!adjusted.chordIsNew) rhBaseVel -= 5;  // Even softer on re-articulations
+        if (adjusted.cadence01 > 0.5) rhBaseVel -= 3;  // Softer at cadences
+
+        // Small variation for naturalness
+        rhBaseVel += (timingHash % 5) - 2;  // ±2 velocity variation
+
+        rhBaseVel = qBound(28, rhBaseVel, 75);  // RH never louder than 75
+        rhBaseVel = std::clamp(static_cast<int>(rhBaseVel * decision.rightHand.velocityMult), 25, 80);
 
         // RH duration: slightly shorter than LH
         double rhDurBeats = lhDurBeats * 0.85;
@@ -8152,6 +8366,11 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     }
 
     // ================================================================
+    // GESTURE COLLISION PREVENTION
+    // ================================================================
+    bool gestureTriggeredThisBeat = false;  // Prevents multiple gestures on same beat
+
+    // ================================================================
     // WATERFALL GESTURE (Stage 7): Descending arpeggio at phrase endings
     // ================================================================
     // Bill Evans' signature fill: cascading descent through chord tones.
@@ -8170,8 +8389,8 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
 
         if (atPhraseEnd && userSilent && validEnergy && onTargetBeat) {
 
-            // ~15% chance at phrase endings - keep it special, not overused
-            if (waterfallHash < 15) {
+            // ~8% chance at phrase endings - keep it rare and special
+            if (waterfallHash < 8) {
                 // Build gesture context
                 PianoGestures::Context gestureCtx;
                 gestureCtx.chord = adjusted.chord;
@@ -8208,12 +8427,143 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
                         plan.notes.append(note);
                     }
 
-                    qDebug() << "WATERFALL TRIGGERED: bar" << adjusted.playbackBarIndex
-                             << "start" << startMidi << "notes" << waterfall.notes.size();
-                } else {
-                    qDebug() << "WATERFALL EMPTY: bar" << adjusted.playbackBarIndex
-                             << "chord=" << adjusted.chordText
-                             << "startMidi=" << startMidi;
+                    gestureTriggeredThisBeat = true;  // Prevent other gestures
+                }
+            }
+        }
+    }
+
+    // ================================================================
+    // BELL NOTE GESTURE: High sparkle note for color
+    // ================================================================
+    // Evans-style bell: clear high note that rings out, adding color and space.
+    // Triggers at phrase beginnings when user is silent, low energy.
+    // Opposite of waterfalls (which are at phrase endings).
+    // ================================================================
+    if (!gestureTriggeredThisBeat) {
+        const bool atPhraseStart = (adjusted.barInPhrase == 0) && (adjusted.beatInBar == 0);
+        const bool userSilent = !adjusted.userBusy;
+        const bool lowEnergy = energy <= 0.4;
+
+        // Hash for this bar
+        const int bellHash = (adjusted.playbackBarIndex * 41 + adjusted.chord.rootPc * 19) % 100;
+
+        if (atPhraseStart && userSilent && lowEnergy) {
+            // ~12% chance at phrase starts
+            if (bellHash < 12) {
+                PianoGestures::Context gestureCtx;
+                gestureCtx.chord = adjusted.chord;
+                gestureCtx.keyTonicPc = adjusted.keyTonicPc;
+                gestureCtx.keyMode = static_cast<int>(adjusted.keyMode);
+                gestureCtx.energy = energy;
+                gestureCtx.bpm = bpm;
+                gestureCtx.registerLow = 72;   // High RH register
+                gestureCtx.registerHigh = 84;
+                gestureCtx.previousTopNote = m_state.lastRhTopMidi;
+
+                // Pick a chord tone for the bell (3rd, 5th, 7th, or 9th - avoid root)
+                QVector<int> bellPcs;
+                int third = pcForDegree(adjusted.chord, 3);
+                int fifth = pcForDegree(adjusted.chord, 5);
+                int seventh = pcForDegree(adjusted.chord, 7);
+                int ninth = pcForDegree(adjusted.chord, 9);
+                if (third >= 0) bellPcs.push_back(third);
+                if (seventh >= 0) bellPcs.push_back(seventh);
+                if (fifth >= 0) bellPcs.push_back(fifth);
+                if (ninth >= 0) bellPcs.push_back(ninth);
+
+                if (!bellPcs.isEmpty()) {
+                    int targetPc = bellPcs[bellHash % bellPcs.size()];
+                    auto bellNote = m_gestures.generateOctaveBell(gestureCtx, targetPc);
+
+                    if (!bellNote.notes.isEmpty()) {
+                        auto gestureBasePos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                            adjusted.playbackBarIndex, adjusted.beatInBar, 0, 1, ts);
+
+                        for (const auto& gNote : bellNote.notes) {
+                            virtuoso::engine::AgentIntentNote note;
+                            note.agent = QStringLiteral("Piano");
+                            note.channel = midiChannel;
+                            note.note = gNote.midiNote;
+                            note.baseVelocity = gNote.velocity;
+                            note.startPos = applyTimingOffset(gestureBasePos, gNote.offsetMs, bpm, ts);
+                            note.durationWhole = virtuoso::groove::Rational(gNote.durationMs, 4000);
+                            note.structural = false;
+                            note.chord_context = adjusted.chordText;
+                            note.voicing_type = QStringLiteral("RH_bell");
+                            note.logic_tag = QStringLiteral("RH-gesture");
+                            plan.notes.append(note);
+                        }
+
+                        gestureTriggeredThisBeat = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // ================================================================
+    // SCALE RUN GESTURE (Stage 7): Ascending/descending scalar passage
+    // ================================================================
+    // Short scale fragments for forward motion approaching cadences.
+    // Best at mid energy, on early beats (ascending) or beat 3 (descending).
+    // Never collide with waterfalls.
+    // ================================================================
+    if (!gestureTriggeredThisBeat) {
+        const bool userSilent = !adjusted.userBusy;
+
+        // Hash for this bar determines if/when/how melodic fill happens
+        const int fillHash = (adjusted.playbackBarIndex * 37 + adjusted.chord.rootPc * 17) % 100;
+
+        // Avoid collision with waterfalls: don't trigger near phrase endings
+        const bool atPhraseEnd = (adjusted.cadence01 > 0.5) ||
+                                 (adjusted.barInPhrase >= adjusted.phraseBars - 1);
+
+        // Melodic fills on beat 2 (gives space after downbeat chord)
+        const bool onBeat2 = (adjusted.beatInBar == 1);  // Beat 2 (0-indexed)
+        const bool isAscending = true;  // Can vary based on context
+
+        // Only trigger when NOT at phrase end (avoid waterfall collision)
+        const bool shouldTrigger = onBeat2 && userSilent && !atPhraseEnd;
+
+        if (shouldTrigger) {
+            // DISABLED for now - melodic fills need more work
+            if (false && fillHash < 25) {
+                PianoGestures::Context gestureCtx;
+                gestureCtx.chord = adjusted.chord;
+                gestureCtx.keyTonicPc = adjusted.keyTonicPc;
+                gestureCtx.keyMode = static_cast<int>(adjusted.keyMode);
+                gestureCtx.energy = energy;
+                gestureCtx.bpm = bpm;
+                gestureCtx.registerLow = 60;
+                gestureCtx.registerHigh = 84;
+
+                // Start from mid-register, direction based on beat
+                int startMidi = 65 + (fillHash % 8);  // F4 to C5
+                int direction = isAscending ? 1 : -1;
+                int numNotes = 4 + (fillHash % 3);    // 4-6 notes
+
+                auto scaleRun = m_gestures.generateScaleRun(gestureCtx, startMidi, direction, numNotes);
+
+                if (!scaleRun.notes.isEmpty()) {
+                    auto gestureBasePos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                        adjusted.playbackBarIndex, adjusted.beatInBar, 0, 1, ts);
+
+                    for (const auto& gNote : scaleRun.notes) {
+                        virtuoso::engine::AgentIntentNote note;
+                        note.agent = QStringLiteral("Piano");
+                        note.channel = midiChannel;
+                        note.note = gNote.midiNote;
+                        note.baseVelocity = gNote.velocity;
+                        note.startPos = applyTimingOffset(gestureBasePos, gNote.offsetMs, bpm, ts);
+                        note.durationWhole = virtuoso::groove::Rational(gNote.durationMs, 4000);
+                        note.structural = false;
+                        note.chord_context = adjusted.chordText;
+                        note.voicing_type = QStringLiteral("RH_scale_run");
+                        note.logic_tag = QStringLiteral("RH-gesture");
+                        plan.notes.append(note);
+                    }
+                    gestureTriggeredThisBeat = true;
                 }
             }
         }
@@ -8237,6 +8587,42 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     virtuoso::piano::PianoPerformancePlan perf;
     perf.compPhraseId = QStringLiteral("%1 | %2").arg(decision.rationale, m_currentPhrase.description);
     plan.performance = perf;
+
+    // ================================================================
+    // FINAL CLASH FILTER: Remove semitone clashes from all emitted notes
+    // This catches clashes from grace notes, bells, waterfalls, etc.
+    // ================================================================
+    if (plan.notes.size() >= 2) {
+        // Collect all MIDI notes
+        QVector<int> allMidi;
+        for (const auto& n : plan.notes) {
+            allMidi.append(n.note);
+        }
+
+        // Filter semitone clashes
+        QVector<int> filtered = voicing_utils::filterSemitoneClashes(allMidi, adjusted.chord);
+
+        // Build set of notes to keep
+        QSet<int> keepNotes;
+        for (int midi : filtered) {
+            keepNotes.insert(midi);
+        }
+
+        // Remove notes not in filtered set (but keep one of each pitch)
+        QSet<int> emittedPitches;
+        QVector<virtuoso::engine::AgentIntentNote> filteredPlan;
+        for (const auto& n : plan.notes) {
+            if (keepNotes.contains(n.note) && !emittedPitches.contains(n.note)) {
+                filteredPlan.append(n);
+                emittedPitches.insert(n.note);
+            } else if (keepNotes.contains(n.note)) {
+                // Duplicate pitch - still emit (could be different timing)
+                filteredPlan.append(n);
+            }
+            // Notes not in keepNotes are dropped
+        }
+        plan.notes = filteredPlan;
+    }
 
     return plan;
 }

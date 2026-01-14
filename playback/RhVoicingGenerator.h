@@ -42,9 +42,14 @@ public:
         
         // Phrase context
         int barInPhrase = 0;
+        int phraseBars = 8;           // Total bars in phrase
         bool phraseEndBar = false;
         double cadence01 = 0.0;
-        
+
+        // Melodic direction hint (from planner, based on phrase position)
+        // -1 = descending toward resolution, +1 = ascending toward climax, 0 = neutral
+        int melodicDirectionHint = 0;
+
         // User interaction
         bool userSilence = false;
         bool userBusy = false;
@@ -106,6 +111,10 @@ public:
         int rhMotionsThisChord = 0;       // Count of RH movements on current chord
         music::ChordSymbol lastChordForRh; // Track when chord changes
         VoicingType lastVoicingType = VoicingType::Dyad;
+
+        // Melodic contour tracking (for avoiding repetition)
+        int consecutiveSameTop = 0;       // How many beats on same top note
+        int targetMelodicDirection = 0;   // Phrase-driven direction (-1, 0, +1)
     };
     
     // ========== Constructor ==========

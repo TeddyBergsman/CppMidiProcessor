@@ -91,49 +91,94 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateDrop2(const Context& c
 RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateTriad(const Context& c) const {
     RhVoicing rh;
     const auto& chord = c.chord;
-    
+
     if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
-    
-    // Close position triad: 3-5-7 or 1-3-5
-    QVector<int> pcs;
+
+    // Get all available chord tones
     int third = pcForDegree(chord, 3);
     int fifth = pcForDegree(chord, 5);
     int seventh = pcForDegree(chord, 7);
-    
-    if (third >= 0) pcs.push_back(third);
-    if (fifth >= 0) pcs.push_back(fifth);
-    if (seventh >= 0) pcs.push_back(seventh);
-    
-    if (pcs.size() < 2) {
-        pcs.clear();
-        pcs.push_back(chord.rootPc);
-        if (third >= 0) pcs.push_back(third);
-        if (fifth >= 0) pcs.push_back(fifth);
+    int ninth = pcForDegree(chord, 9);
+
+    QVector<int> allPcs;
+    if (third >= 0) allPcs.push_back(third);
+    if (fifth >= 0) allPcs.push_back(fifth);
+    if (seventh >= 0) allPcs.push_back(seventh);
+    if (ninth >= 0) allPcs.push_back(ninth);
+    allPcs.push_back(chord.rootPc);
+
+    if (allPcs.isEmpty()) return rh;
+
+    // ================================================================
+    // VOICE LEADING FIRST: Find the best top note (stepwise from previous)
+    // ================================================================
+    int lastTop = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 76;
+
+    int bestTopMidi = -1;
+    double bestCost = 9999.0;
+
+    for (int pc : allPcs) {
+        for (int oct = 5; oct <= 7; ++oct) {
+            int midi = pc + 12 * oct;
+            if (midi < c.rhLo || midi > c.rhHi) continue;
+
+            int motion = qAbs(midi - lastTop);
+            double cost = 0.0;
+
+            // Same aggressive voice leading as dyad
+            if (motion == 0) cost = 0.5;
+            else if (motion <= 2) cost = 0.0;
+            else if (motion == 3) cost = 2.0;
+            else if (motion == 4) cost = 3.0;
+            else if (motion <= 7) cost = 8.0;
+            else cost = 15.0;
+
+            // Small bonus for guide tones
+            if (pc == third || pc == seventh) cost -= 0.3;
+
+            if (cost < bestCost) {
+                bestCost = cost;
+                bestTopMidi = midi;
+            }
+        }
     }
-    
-    if (pcs.isEmpty()) return rh;
-    
-    // Realize near previous top note for voice-leading
-    int targetMidi = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 76;
-    
-    for (int pc : pcs) {
-        int midi = nearestMidiForPc(pc, targetMidi - 4, c.rhLo, c.rhHi);
-        rh.midiNotes.push_back(midi);
+
+    if (bestTopMidi < 0) return rh;
+
+    rh.topNoteMidi = bestTopMidi;
+    int topPc = normalizePc(bestTopMidi);
+
+    // ================================================================
+    // BUILD TRIAD: Place other voices below the top
+    // ================================================================
+    QVector<int> triadPcs;
+    // Prefer 3-5-7 or 3-7-9 shapes (guide tone triads)
+    if (third >= 0 && third != topPc) triadPcs.push_back(third);
+    if (seventh >= 0 && seventh != topPc) triadPcs.push_back(seventh);
+    if (fifth >= 0 && fifth != topPc && triadPcs.size() < 2) triadPcs.push_back(fifth);
+
+    // Place inner voices below top note
+    for (int pc : triadPcs) {
+        int midi = bestTopMidi - 3;  // Start searching below top
+        while (normalizePc(midi) != pc && midi > bestTopMidi - 12) {
+            midi--;
+        }
+        if (midi >= c.rhLo && midi < bestTopMidi) {
+            rh.midiNotes.push_back(midi);
+        }
     }
-    
+
+    rh.midiNotes.push_back(bestTopMidi);
     std::sort(rh.midiNotes.begin(), rh.midiNotes.end());
-    
-    if (!rh.midiNotes.isEmpty()) {
-        rh.topNoteMidi = rh.midiNotes.last();
-        rh.melodicDirection = (rh.topNoteMidi > m_state.lastRhTopMidi) ? 1 :
-                              (rh.topNoteMidi < m_state.lastRhTopMidi) ? -1 : 0;
-    }
-    
+
+    rh.melodicDirection = (bestTopMidi > lastTop + 1) ? 1 :
+                          (bestTopMidi < lastTop - 1) ? -1 : 0;
+
     rh.type = VoicingType::Triad;
-    rh.ontologyKey = (chord.rootPc == normalizePc(rh.midiNotes.first())) ? 
+    rh.ontologyKey = (chord.rootPc == normalizePc(rh.midiNotes.first())) ?
                      "piano_triad_root" : "piano_triad_first_inv";
     rh.cost = voiceLeadingCost(m_state.lastRhMidi, rh.midiNotes);
-    
+
     return rh;
 }
 
@@ -147,50 +192,80 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateDyad(const Context& c)
     
     if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
     
-    // Get color tones for dyad
+    // Get ALL valid chord tones for voice leading flexibility
+    // More options = better chance of stepwise motion
     QVector<int> colorPcs;
     int third = pcForDegree(chord, 3);
     int fifth = pcForDegree(chord, 5);
     int seventh = pcForDegree(chord, 7);
     int ninth = pcForDegree(chord, 9);
-    int thirteenth = pcForDegree(chord, 13);
-    
-    // Priority: guide tones first
+
+    // Include all chord tones for maximum voice leading options
     if (third >= 0) colorPcs.push_back(third);
     if (seventh >= 0) colorPcs.push_back(seventh);
     if (fifth >= 0) colorPcs.push_back(fifth);
-    
-    // Extensions based on energy (tension derived from energy)
-    double tensionLevel = c.energy;  // Direct correlation with energy
-    if (tensionLevel > 0.3 && ninth >= 0) colorPcs.push_back(ninth);
-    if (tensionLevel > 0.5 && thirteenth >= 0) colorPcs.push_back(thirteenth);
-    
+    if (ninth >= 0) colorPcs.push_back(ninth);  // 9ths are consonant, always include
+    colorPcs.push_back(chord.rootPc);  // Root also valid for voice leading
+
     if (colorPcs.isEmpty()) return rh;
-    
-    // Select top note with stepwise motion preference
+
+    // ================================================================
+    // STRONG VOICE LEADING with MELODIC CONTOUR
+    // ================================================================
+    // Evans' top voice creates a coherent melodic line:
+    // - Stepwise motion is paramount
+    // - But also has DIRECTION (ascending toward climax, descending toward resolution)
+    // - Avoids staying on same note too long (repetition penalty)
+    // ================================================================
     int lastTop = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 74;
-    
+
+    // Repetition penalty: increases with consecutive same-note beats
+    const double repetitionPenalty = m_state.consecutiveSameTop * 1.5;  // 0, 1.5, 3.0, 4.5...
+
+    // Melodic direction: bonus for moving in phrase-appropriate direction
+    const int targetDir = c.melodicDirectionHint;  // -1, 0, or +1
+
     QVector<std::pair<int, double>> candidates;
     for (int pc : colorPcs) {
         for (int oct = 5; oct <= 7; ++oct) {
             int midi = pc + 12 * oct;
             if (midi < c.rhLo || midi > c.rhHi) continue;
-            
+
             double cost = 0.0;
             int motion = qAbs(midi - lastTop);
-            
-            if (motion <= 2) cost = 0.0;
-            else if (motion <= 4) cost = 1.0;
-            else if (motion <= 7) cost = 3.0;
-            else cost = 6.0;
-            
-            // Prefer guide tones
-            if (pc == third || pc == seventh) cost -= 0.8;
-            else if ((pc == ninth || pc == thirteenth) && tensionLevel > 0.5) cost -= 0.3;
-            
-            // Prefer sweet spot
-            if (midi >= 72 && midi <= 82) cost -= 0.3;
-            
+            int direction = (midi > lastTop) ? 1 : (midi < lastTop) ? -1 : 0;
+
+            // AGGRESSIVE voice leading costs - stepwise MUST win
+            if (motion == 0) {
+                // Same note: base penalty PLUS repetition penalty
+                cost = 0.5 + repetitionPenalty;
+            }
+            else if (motion == 1) cost = 0.0;   // Half step - ideal
+            else if (motion == 2) cost = 0.0;   // Whole step - ideal
+            else if (motion == 3) cost = 2.0;   // Minor 3rd - small leap, acceptable
+            else if (motion == 4) cost = 3.0;   // Major 3rd - noticeable leap
+            else if (motion <= 7) cost = 8.0;   // 4th-5th - significant leap
+            else cost = 15.0;                   // 6th+ - avoid unless necessary
+
+            // ================================================================
+            // MELODIC CONTOUR: Bonus for moving in target direction
+            // ================================================================
+            if (targetDir != 0 && direction != 0) {
+                if (direction == targetDir) {
+                    // Moving in desired direction: bonus
+                    cost -= 1.0;
+                } else {
+                    // Moving against desired direction: penalty
+                    cost += 0.5;
+                }
+            }
+
+            // Small bonus for guide tones (but NOT enough to override voice leading)
+            if (pc == third || pc == seventh) cost -= 0.3;
+
+            // Small bonus for sweet spot
+            if (midi >= 72 && midi <= 82) cost -= 0.2;
+
             candidates.push_back({midi, cost});
         }
     }
@@ -206,44 +281,41 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateDyad(const Context& c)
     rh.melodicDirection = (rh.topNoteMidi > lastTop + 1) ? 1 :
                           (rh.topNoteMidi < lastTop - 1) ? -1 : 0;
     
-    // Select second voice with consonance preference
+    // Select second voice with consonance preference (always conservative)
     int secondPc = -1;
     int bestConsonance = 99;
-    const bool isDominant = (chord.quality == music::ChordQuality::Dominant);
-    
+
     for (int pc : colorPcs) {
         if (pc == topPc) continue;
         int interval = (topPc - pc + 12) % 12;
-        
+
         int score = 99;
-        if (interval == 3 || interval == 4) score = 0;       // 3rds
-        else if (interval == 8 || interval == 9) score = 1;  // 6ths
-        else if (interval == 5) score = 2;                    // 4th
-        else if (interval == 7) score = 3;                    // 5th
-        else if ((interval == 10 || interval == 11) && tensionLevel > 0.5) score = 5;
-        else if ((interval == 1 || interval == 2) && tensionLevel > 0.7) score = 7;
-        else if (interval == 6 && isDominant && tensionLevel > 0.6) score = 6;
-        
+        if (interval == 3 || interval == 4) score = 0;       // 3rds - best
+        else if (interval == 8 || interval == 9) score = 1;  // 6ths - great
+        else if (interval == 5) score = 2;                    // 4th - good
+        else if (interval == 7) score = 3;                    // 5th - good
+        // No tense intervals (7ths, 2nds, tritones) - keep it consonant
+
         if (score < bestConsonance) {
             bestConsonance = score;
             secondPc = pc;
         }
     }
-    
+
     if (secondPc < 0 || bestConsonance > 5) {
         secondPc = (seventh >= 0 && seventh != topPc) ? seventh : third;
     }
-    
+
     if (secondPc >= 0) {
         int secondMidi = rh.topNoteMidi - 3;
         while (normalizePc(secondMidi) != secondPc && secondMidi > rh.topNoteMidi - 10) {
             secondMidi--;
         }
-        
+
         int actualInterval = rh.topNoteMidi - secondMidi;
-        bool intervalOk = (actualInterval >= 3 && actualInterval <= 9) ||
-                          (actualInterval == 10 && tensionLevel > 0.5);
-        
+        // Only consonant intervals (3-9 semitones)
+        bool intervalOk = (actualInterval >= 3 && actualInterval <= 9);
+
         if (intervalOk && secondMidi >= c.rhLo) {
             rh.midiNotes.push_back(secondMidi);
         }
@@ -253,7 +325,7 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateDyad(const Context& c)
     std::sort(rh.midiNotes.begin(), rh.midiNotes.end());
     
     // Set ontology key
-    if (topPc == ninth || topPc == thirteenth) {
+    if (topPc == ninth) {
         rh.isColorTone = true;
         rh.ontologyKey = (rh.midiNotes.size() == 2) ? "piano_rh_dyad_color" : "piano_rh_single_color";
     } else {
@@ -285,7 +357,7 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateSingle(const Context& 
     
     if (third >= 0) candidatePcs.push_back(third);
     if (seventh >= 0) candidatePcs.push_back(seventh);
-    if (ninth >= 0 && c.energy > 0.3) candidatePcs.push_back(ninth);
+    if (ninth >= 0) candidatePcs.push_back(ninth);  // 9ths always OK (consonant)
     
     if (candidatePcs.isEmpty()) candidatePcs.push_back(chord.rootPc);
     
@@ -436,7 +508,7 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateUnisonVoicing(
 
     QVector<int> colorPcs;
     if (ninth >= 0) colorPcs.push_back(ninth);
-    if (thirteenth >= 0 && c.energy > 0.4) colorPcs.push_back(thirteenth);
+    // Skip 13ths - keep voicings simple and consonant
     if (seventh >= 0) colorPcs.push_back(seventh);
 
     if (colorPcs.isEmpty()) {
@@ -681,15 +753,9 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateUST(const Context& c) 
         return generateDyad(c);  // Fallback
     }
     
-    // Choose based on energy (tension correlates with energy)
-    int idx = 0;
-    if (c.energy > 0.7 && triads.size() > 2) {
-        idx = 2;  // Most colorful UST at high energy
-    } else if (c.energy > 0.4 && triads.size() > 1) {
-        idx = 1;  // More color at medium-high energy
-    }
-    
-    return buildUstVoicing(c, triads[idx]);
+    // ALWAYS use safest UST (idx=0) - decoupled from energy
+    // No tritone subs or altered voicings regardless of energy
+    return buildUstVoicing(c, triads[0]);
 }
 
 // =============================================================================
@@ -697,29 +763,15 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateUST(const Context& c) 
 // =============================================================================
 
 RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateBest(const Context& c) const {
-    const bool isDominant = (c.chord.quality == music::ChordQuality::Dominant);
-    
-    // UST for dominants at medium-high energy
-    if (isDominant && c.energy > 0.4) {
-        return generateUST(c);
-    }
-    
-    // Drop-2 for high energy (always at high energy for full sound)
-    if (c.energy > 0.5) {
-        return generateDrop2(c);
-    }
-    
-    // Triad for moderate moments
-    if (c.energy > 0.4 || c.chordIsNew) {
+    // Voicing complexity DECOUPLED from energy - energy drives rhythm, not harmony
+    // Use simple, consonant voicings regardless of energy level
+
+    // New chords get triads for clarity
+    if (c.chordIsNew) {
         return generateTriad(c);
     }
-    
-    // Dyad for lower energy/ballad texture
-    if (c.energy < 0.4) {
-        return generateDyad(c);
-    }
-    
-    // Default: dyad
+
+    // Otherwise prefer dyads - simple and always consonant
     return generateDyad(c);
 }
 
@@ -787,7 +839,7 @@ int RhVoicingGenerator::selectNextMelodicTarget(const Context& c) const {
     
     if (third >= 0) candidatePcs.push_back(third);
     if (seventh >= 0) candidatePcs.push_back(seventh);
-    if (ninth >= 0 && c.energy > 0.3) candidatePcs.push_back(ninth);
+    if (ninth >= 0) candidatePcs.push_back(ninth);  // 9ths always OK (consonant)
     
     if (candidatePcs.isEmpty()) candidatePcs.push_back(c.chord.rootPc);
     

@@ -105,6 +105,7 @@ add_executable(VirtuosoPlaybackTests
   playback/VibeStateMachine.cpp
   playback/BalladReferenceTuning.cpp
   playback/PianoTextureOrchestrator.cpp
+  playback/PianoGestures.cpp
   music/Pitch.cpp
   music/ChordSymbol.cpp
 )
@@ -204,6 +205,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/VibeStateMachine.cpp
   playback/PianoTextureOrchestrator.h
   playback/PianoTextureOrchestrator.cpp
+  playback/PianoGestures.h
+  playback/PianoGestures.cpp
   music/Pitch.h
   music/Pitch.cpp
   music/ChordSymbol.h

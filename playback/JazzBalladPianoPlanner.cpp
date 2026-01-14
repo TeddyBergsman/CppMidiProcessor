@@ -8152,6 +8152,74 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     }
 
     // ================================================================
+    // WATERFALL GESTURE (Stage 7): Descending arpeggio at phrase endings
+    // ================================================================
+    // Bill Evans' signature fill: cascading descent through chord tones.
+    // Triggers at phrase endings when user is silent, low-mid energy.
+    // ================================================================
+    {
+        const bool atPhraseEnd = (adjusted.cadence01 > 0.5) ||
+                                 (adjusted.barInPhrase >= adjusted.phraseBars - 1);
+        const bool userSilent = !adjusted.userBusy;  // Relaxed: don't require userSilence flag
+        const bool validEnergy = energy <= 0.65;  // Allow all low-mid energies, no minimum
+
+        // Use hash to pick EITHER beat 3 OR beat 4 (not both) - prevents double-triggering
+        const int waterfallHash = (adjusted.playbackBarIndex * 29 + adjusted.chord.rootPc * 13) % 100;
+        const int targetBeat = (waterfallHash % 2 == 0) ? 2 : 3;  // Beat 3 (index 2) or beat 4 (index 3)
+        const bool onTargetBeat = (adjusted.beatInBar == targetBeat);
+
+        if (atPhraseEnd && userSilent && validEnergy && onTargetBeat) {
+
+            // ~15% chance at phrase endings - keep it special, not overused
+            if (waterfallHash < 15) {
+                // Build gesture context
+                PianoGestures::Context gestureCtx;
+                gestureCtx.chord = adjusted.chord;
+                gestureCtx.keyTonicPc = adjusted.keyTonicPc;
+                gestureCtx.keyMode = static_cast<int>(adjusted.keyMode);
+                gestureCtx.energy = energy;
+                gestureCtx.bpm = bpm;
+                gestureCtx.registerLow = 60;   // RH register
+                gestureCtx.registerHigh = 84;
+
+                // Start waterfall from high register (around C5-G5)
+                int startMidi = 72 + (waterfallHash % 7);  // C5 to G5
+                int numNotes = 4 + (waterfallHash % 3);    // 4-6 notes
+
+                auto waterfall = m_gestures.generateWaterfall(gestureCtx, startMidi, numNotes);
+
+                if (!waterfall.notes.isEmpty()) {
+                    // Calculate base position for gesture (slightly before beat 4)
+                    auto gestureBasePos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
+                        adjusted.playbackBarIndex, adjusted.beatInBar, 0, 1, ts);
+
+                    for (const auto& gNote : waterfall.notes) {
+                        virtuoso::engine::AgentIntentNote note;
+                        note.agent = QStringLiteral("Piano");
+                        note.channel = midiChannel;
+                        note.note = gNote.midiNote;
+                        note.baseVelocity = gNote.velocity;
+                        note.startPos = applyTimingOffset(gestureBasePos, gNote.offsetMs, bpm, ts);
+                        note.durationWhole = virtuoso::groove::Rational(gNote.durationMs, 4000);
+                        note.structural = false;
+                        note.chord_context = adjusted.chordText;
+                        note.voicing_type = QStringLiteral("RH_waterfall");
+                        note.logic_tag = QStringLiteral("RH-gesture");
+                        plan.notes.append(note);
+                    }
+
+                    qDebug() << "WATERFALL TRIGGERED: bar" << adjusted.playbackBarIndex
+                             << "start" << startMidi << "notes" << waterfall.notes.size();
+                } else {
+                    qDebug() << "WATERFALL EMPTY: bar" << adjusted.playbackBarIndex
+                             << "chord=" << adjusted.chordText
+                             << "startMidi=" << startMidi;
+                }
+            }
+        }
+    }
+
+    // ================================================================
     // PEDAL: Generate pedal CCs
     // ================================================================
     plan.ccs = planPedal(adjusted, ts);

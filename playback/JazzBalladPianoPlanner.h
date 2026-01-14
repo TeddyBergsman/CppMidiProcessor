@@ -20,6 +20,7 @@
 #include "playback/LhVoicingGenerator.h"
 #include "playback/RhVoicingGenerator.h"
 #include "playback/PianoTextureOrchestrator.h"
+#include "playback/PianoGestures.h"
 
 namespace playback {
 
@@ -756,6 +757,10 @@ private:
     // ============= Texture Orchestrator (NEW - Stage 1) =============
     // Coordinates both hands with rhythm-section-aware texture decisions
     mutable PianoTextureOrchestrator m_orchestrator;
+
+    // ============= Piano Gestures Library (Stage 7) =============
+    // Pre-composed pianistic figures: waterfalls, scale runs, etc.
+    mutable PianoGestures m_gestures;
 
     // ============= Rhythmic Phrase Cache (Stage 6) =============
     // Phrase is generated once per bar, then used for all 4 beats

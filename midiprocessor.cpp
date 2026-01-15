@@ -276,6 +276,21 @@ void MidiProcessor::sendVirtualCC(int channel, int cc, int value) {
     m_condition.notify_one();
 }
 
+void MidiProcessor::sendVirtualPitchBend(int channel, int bendValue) {
+    if (channel < 1 || channel > 16) return;
+    // MIDI pitch bend: 14-bit value, 0-16383, center at 8192
+    if (bendValue < 0) bendValue = 0;
+    if (bendValue > 16383) bendValue = 16383;
+    const unsigned char chan = (unsigned char)(channel - 1);
+    // Pitch bend message: status byte 0xE0 | channel, LSB (7 bits), MSB (7 bits)
+    unsigned char lsb = (unsigned char)(bendValue & 0x7F);
+    unsigned char msb = (unsigned char)((bendValue >> 7) & 0x7F);
+    std::vector<unsigned char> msg = { (unsigned char)(0xE0 | chan), lsb, msb };
+    std::lock_guard<std::mutex> lock(m_eventMutex);
+    tryEnqueueEvent({EventType::MIDI_MESSAGE, msg, MidiSource::VirtualBand, -1, ""});
+    m_condition.notify_one();
+}
+
 void MidiProcessor::toggleTrack(const std::string& trackId) {
     std::lock_guard<std::mutex> lock(m_eventMutex);
     tryEnqueueEvent({EventType::TRACK_TOGGLE, std::vector<unsigned char>(), MidiSource::Guitar, -1, trackId});

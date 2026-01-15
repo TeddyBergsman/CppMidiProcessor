@@ -22,6 +22,7 @@
 #include "playback/StoryState.h"
 #include "playback/PrePlaybackCache.h"
 #include "playback/PrePlanningDialog.h"
+#include "playback/ScaleSnapProcessor.h"
 #include "virtuoso/memory/MotivicMemory.h"
 #include "virtuoso/control/PerformanceWeightsV2.h"
 #include "playback/WeightNegotiator.h"
@@ -95,6 +96,9 @@ public slots:
     
     // Access to the underlying VirtuosoEngine (for external listeners to enable theory events)
     virtuoso::engine::VirtuosoEngine* engine() { return &m_engine; }
+
+    // Access to the ScaleSnapProcessor for UI control
+    ScaleSnapProcessor* scaleSnapProcessor() { return &m_scaleSnap; }
 
 signals:
     void currentCellChanged(int cellIndex);
@@ -188,6 +192,7 @@ private:
     MidiProcessor* m_midi = nullptr; // not owned
 
     HarmonyContext m_harmony;
+    ScaleSnapProcessor m_scaleSnap;
 
     // Transport: repeat/ending expansion + cell lookup.
     TransportTimeline m_transport;

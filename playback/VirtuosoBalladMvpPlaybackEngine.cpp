@@ -191,7 +191,11 @@ VirtuosoBalladMvpPlaybackEngine::VirtuosoBalladMvpPlaybackEngine(QObject* parent
     // Harmony context uses ontology as its substrate.
     m_harmony.setOntology(&m_ontology);
     m_harmony.setOwner(this);
-    
+
+    // ScaleSnapProcessor uses harmony context and ontology for chord/scale analysis.
+    m_scaleSnap.setHarmonyContext(&m_harmony);
+    m_scaleSnap.setOntology(&m_ontology);
+
     // Initialize global chord→scale lookup table (once at startup)
     // This provides O(1) scale selection during pre-planning.
     ChordScaleTable::initialize(m_ontology);
@@ -292,6 +296,23 @@ void VirtuosoBalladMvpPlaybackEngine::setMidiProcessor(MidiProcessor* midi) {
     connect(m_midi, &MidiProcessor::voiceNoteOff,
             this, &VirtuosoBalladMvpPlaybackEngine::onVoiceNoteOff,
             static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+
+    // ScaleSnapProcessor: connect guitar signals for scale-aware pitch correction.
+    m_scaleSnap.setMidiProcessor(m_midi);
+    connect(m_midi, &MidiProcessor::guitarNoteOn,
+            &m_scaleSnap, &ScaleSnapProcessor::onGuitarNoteOn,
+            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+    connect(m_midi, &MidiProcessor::guitarNoteOff,
+            &m_scaleSnap, &ScaleSnapProcessor::onGuitarNoteOff,
+            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+    connect(m_midi, &MidiProcessor::guitarHzUpdated,
+            &m_scaleSnap, &ScaleSnapProcessor::onGuitarHzUpdated,
+            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+
+    // Forward CC2 (breath) from voice to ScaleSnapProcessor for expression on snapped channels.
+    connect(m_midi, &MidiProcessor::voiceCc2Updated,
+            &m_scaleSnap, &ScaleSnapProcessor::onVoiceCc2Updated,
+            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
 }
 
 void VirtuosoBalladMvpPlaybackEngine::setTempoBpm(int bpm) {
@@ -315,6 +336,11 @@ void VirtuosoBalladMvpPlaybackEngine::setChartModel(const chart::ChartModel& mod
 
     // Harmony analysis (global key + local keys).
     m_harmony.rebuildFromModel(m_model);
+
+    // ScaleSnapProcessor needs chart model reference for chord lookup.
+    m_scaleSnap.setChartModel(&m_model);
+    // Set initial cell index to 0 so scale snap works even before playback starts
+    m_scaleSnap.setCurrentCellIndex(0);
 }
 
 void VirtuosoBalladMvpPlaybackEngine::setStylePresetKey(const QString& key) {
@@ -549,6 +575,8 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
         if (cellIndex != m_lastEmittedCell) {
             m_lastEmittedCell = cellIndex;
             emit currentCellChanged(cellIndex);
+            // Update ScaleSnapProcessor so it knows which chord is current.
+            m_scaleSnap.setCurrentCellIndex(cellIndex);
         }
         
         // Emit theory event for LibraryWindow at CURRENT playback position

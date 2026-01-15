@@ -158,6 +158,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/HarmonyTypes.h
   playback/HarmonyContext.h
   playback/HarmonyContext.cpp
+  playback/ScaleSnapProcessor.h
+  playback/ScaleSnapProcessor.cpp
   playback/InteractionContext.h
   playback/InteractionContext.cpp
   playback/StoryState.h

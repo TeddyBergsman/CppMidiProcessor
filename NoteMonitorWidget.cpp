@@ -467,6 +467,17 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_virtuosoPresetCombo->setFixedWidth(260);
     m_virtuosoPresetCombo->setStyleSheet("QComboBox { background-color: #111; color: #eee; padding: 4px; }");
 
+    // Scale Snap mode selector
+    m_scaleSnapModeCombo = new QComboBox(chartHeader);
+    m_scaleSnapModeCombo->addItem("Snap: Off", static_cast<int>(playback::ScaleSnapProcessor::Mode::Off));
+    m_scaleSnapModeCombo->addItem("As Played", static_cast<int>(playback::ScaleSnapProcessor::Mode::AsPlayed));
+    m_scaleSnapModeCombo->addItem("Harmony", static_cast<int>(playback::ScaleSnapProcessor::Mode::Harmony));
+    m_scaleSnapModeCombo->addItem("Both", static_cast<int>(playback::ScaleSnapProcessor::Mode::AsPlayedPlusHarmony));
+    m_scaleSnapModeCombo->setCurrentIndex(0);
+    m_scaleSnapModeCombo->setToolTip("Scale snap mode:\n- As Played: Snap notes to scale (ch 12)\n- Harmony: Generate harmony (ch 12)\n- Both: As Played (ch 11) + Harmony (ch 12)");
+    m_scaleSnapModeCombo->setFixedWidth(100);
+    m_scaleSnapModeCombo->setStyleSheet("QComboBox { background-color: #111; color: #eee; padding: 4px; }");
+
     m_virtuosoPlayButton = new QPushButton(chartHeader);
     m_virtuosoPlayButton->setEnabled(false);
     m_virtuosoPlayButton->setFixedSize(30, 30);
@@ -500,6 +511,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     headerLayout->addWidget(m_repeatsSpin, 0);
 
     headerLayout->addWidget(m_virtuosoPresetCombo, 0);
+    headerLayout->addWidget(m_scaleSnapModeCombo, 0);
     headerLayout->addWidget(m_virtuosoPlayButton, 0);
     headerLayout->addWidget(m_virtuosoDebugToggle, 0);
     chartHeader->setLayout(headerLayout);
@@ -942,6 +954,15 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
                 s.setValue(overrideGroupForSongId(m_currentSongId) + "/virtuosoPresetKey", key);
             }
         }
+    });
+
+    // Scale Snap mode control
+    connect(m_scaleSnapModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx) {
+        if (!m_virtuosoPlayback || !m_scaleSnapModeCombo) return;
+        const int modeInt = m_scaleSnapModeCombo->itemData(idx).toInt();
+        m_virtuosoPlayback->scaleSnapProcessor()->setMode(
+            static_cast<playback::ScaleSnapProcessor::Mode>(modeInt)
+        );
     });
 
     connect(m_virtuosoPlayButton, &QPushButton::clicked, this, [this]() {

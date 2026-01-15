@@ -37,6 +37,8 @@ public slots:
     void sendVirtualAllNotesOff(int channel);
     // Virtual musician CC (thread-safe; enqueued to worker thread)
     void sendVirtualCC(int channel, int cc, int value);
+    // Virtual musician pitch bend (thread-safe; enqueued to worker thread)
+    void sendVirtualPitchBend(int channel, int bendValue);
     // Emergency stop for shutdown: sends explicit NOTE_OFF for all notes on all channels,
     // plus CC64/CC123/CC120. This is intended for app quit / teardown.
     void panicAllChannels();

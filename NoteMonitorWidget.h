@@ -117,6 +117,7 @@ private:
     QComboBox* m_keyCombo = nullptr;
     // Virtuoso MVP controls (new engine, not legacy players)
     QComboBox* m_virtuosoPresetCombo = nullptr;
+    QComboBox* m_scaleSnapModeCombo = nullptr;
     QPushButton* m_virtuosoPlayButton = nullptr;
     QSpinBox* m_tempoSpin = nullptr;
     QSpinBox* m_repeatsSpin = nullptr;

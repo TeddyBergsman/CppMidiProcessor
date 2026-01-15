@@ -4944,31 +4944,49 @@ JazzBalladPianoPlanner::BeatPlan JazzBalladPianoPlanner::planBeatWithActions(
             // Emit notes (with optional roll timing)
             const int numNotes = voicing.midiNotes.size();
             const int bpmForOffset = adjusted.bpm > 0 ? adjusted.bpm : 90;
-            
+            const bool hasVelocities = (voicing.velocities.size() == numNotes);
+            const bool hasTimingOffsets = (voicing.timingOffsets.size() == numNotes);
+
+            // Apply overall phrase timing offset (in beats, BPM-constrained)
+            virtuoso::groove::GridPos lhPhrasePos = lhPos;
+            if (qAbs(voicing.voicingOffset) > 0.001) {
+                int phraseOffsetMs = int(voicing.voicingOffset * 60000.0 / qMax(60, bpmForOffset));
+                lhPhrasePos = applyTimingOffset(lhPos, phraseOffsetMs, bpmForOffset, ts);
+            }
+
             for (int i = 0; i < numNotes; ++i) {
                 const int midi = voicing.midiNotes[i];
-                
+
                 virtuoso::engine::AgentIntentNote note;
                 note.agent = "Piano";
                 note.channel = midiChannel;
                 note.note = midi;
-                note.baseVelocity = lhVel;
-                
-                // Apply roll offset: ascending from bottom to top
-                if (useRoll && numNotes > 1) {
-                    // Spread the notes evenly across rollSpreadMs
-                    const int noteOffsetMs = (i * rollSpreadMs) / (numNotes - 1);
-                    note.startPos = applyTimingOffset(lhPos, noteOffsetMs, bpmForOffset, ts);
+
+                // Use LhVoicing velocities if available (voice shading)
+                if (hasVelocities) {
+                    note.baseVelocity = voicing.velocities[i];
                 } else {
-                    note.startPos = lhPos;
+                    note.baseVelocity = lhVel;
                 }
-                
+
+                // Apply per-note timing from LhVoicing
+                if (hasTimingOffsets && qAbs(voicing.timingOffsets[i]) > 0.0001) {
+                    int noteOffsetMs = int(voicing.timingOffsets[i] * 60000.0 / qMax(60, bpmForOffset));
+                    note.startPos = applyTimingOffset(lhPhrasePos, noteOffsetMs, bpmForOffset, ts);
+                } else if (useRoll && numNotes > 1) {
+                    // Fallback to legacy roll timing
+                    const int noteOffsetMs = (i * rollSpreadMs) / (numNotes - 1);
+                    note.startPos = applyTimingOffset(lhPhrasePos, noteOffsetMs, bpmForOffset, ts);
+                } else {
+                    note.startPos = lhPhrasePos;
+                }
+
                 note.durationWhole = lhDurWhole;
                 note.structural = true;
                 note.chord_context = adjusted.chordText;
                 note.voicing_type = useRoll ? "LH_roll" : (stabMode ? "LH_stab" : voicing.ontologyKey);
                 note.logic_tag = "LH";
-                
+
                 plan.notes.push_back(note);
             }
             
@@ -8338,23 +8356,46 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
 
         // Create RH voicing notes (with optional roll timing)
         const int numRhNotes = rhVoicing.midiNotes.size();
+        const bool hasVelocities = (rhVoicing.velocities.size() == numRhNotes);
+        const bool hasTimingOffsets = (rhVoicing.timingOffsets.size() == numRhNotes);
+
+        // Apply overall phrase timing offset (in beats, BPM-constrained)
+        virtuoso::groove::GridPos phraseOffsetPos = finalPos;
+        if (qAbs(rhVoicing.voicingOffset) > 0.001) {
+            // Convert beats to ms: offset_beats * (60000 / bpm)
+            int phraseOffsetMs = int(rhVoicing.voicingOffset * 60000.0 / qMax(60, bpm));
+            phraseOffsetPos = applyTimingOffset(finalPos, phraseOffsetMs, bpm, ts);
+        }
+
         for (int i = 0; i < numRhNotes; ++i) {
             virtuoso::engine::AgentIntentNote note;
             note.agent = QStringLiteral("Piano");
             note.channel = midiChannel;
             note.note = rhVoicing.midiNotes[i];
-            int vel = contourVelocity(rhBaseVel, i, numRhNotes, true);
+
+            // Use RhVoicing velocities if available (Phase 4: voice shading)
+            int vel;
+            if (hasVelocities) {
+                vel = rhVoicing.velocities[i];
+            } else {
+                vel = contourVelocity(rhBaseVel, i, numRhNotes, true);
+            }
             if (decision.rightHand.accentTop && i == numRhNotes - 1) {
                 vel += 8;  // Accent top voice
             }
-            note.baseVelocity = vel;
+            note.baseVelocity = qBound(30, vel, 127);
 
-            // Apply roll timing if active
-            if (useRhRoll && numRhNotes > 1) {
+            // Apply per-note timing (Phase 5: Evans roll from RhVoicing)
+            if (hasTimingOffsets && qAbs(rhVoicing.timingOffsets[i]) > 0.0001) {
+                // Convert beat offset to ms
+                int noteOffsetMs = int(rhVoicing.timingOffsets[i] * 60000.0 / qMax(60, bpm));
+                note.startPos = applyTimingOffset(phraseOffsetPos, noteOffsetMs, bpm, ts);
+            } else if (useRhRoll && numRhNotes > 1) {
+                // Fallback to legacy roll timing
                 const int noteOffsetMs = (i * rhRollSpreadMs) / (numRhNotes - 1);
-                note.startPos = applyTimingOffset(finalPos, noteOffsetMs, bpm, ts);
+                note.startPos = applyTimingOffset(phraseOffsetPos, noteOffsetMs, bpm, ts);
             } else {
-                note.startPos = finalPos;
+                note.startPos = phraseOffsetPos;
             }
 
             note.durationWhole = rhDurWhole;

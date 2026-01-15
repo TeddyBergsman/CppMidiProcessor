@@ -878,19 +878,27 @@ LhVoicingGenerator::LhVoicing LhVoicingGenerator::generateBest(const Context& c)
     // Choose voicing type based on context (quartal voicings at higher energy)
     const double quartalChance = c.energy * 0.25;  // More quartal at higher energy
     const bool useQuartal = (c.energy > 0.5) && ((c.chord.rootPc * 7 + c.beatInBar) % 100 < int(quartalChance * 100));
-    
+
+    LhVoicing result;
+
     // Shell for very sparse moments
     if (c.preferShells && c.energy < 0.3) {
-        return generateShell(c);
+        result = generateShell(c);
     }
-    
     // Quartal for modern sound
-    if (useQuartal) {
-        return generateQuartal(c);
+    else if (useQuartal) {
+        result = generateQuartal(c);
     }
-    
     // Default: rootless
-    return generateRootless(c);
+    else {
+        result = generateRootless(c);
+    }
+
+    // Apply velocity shading and micro-timing
+    result = applyVelocityShading(result, c);
+    result = applyMicroTiming(result, c);
+
+    return result;
 }
 
 // =============================================================================
@@ -934,6 +942,118 @@ QVector<int> LhVoicingGenerator::realizeVoicingTemplate(const QVector<int>& degr
                                                          const music::ChordSymbol& chord,
                                                          int bassMidi, int ceiling) const {
     return voicing_utils::realizeVoicingTemplate(degrees, chord, bassMidi, ceiling);
+}
+
+// =============================================================================
+// VELOCITY SHADING (LH)
+// =============================================================================
+
+int LhVoicingGenerator::phraseVelocityOffset(const Context& c) const {
+    // LH phrase dynamics: builds toward cadence, then resolves
+    // More subtle than RH - LH provides foundation
+
+    float progress = (c.barInPhrase >= 0 && c.cadence01 < 0.5)
+                     ? 0.5f  // Mid-phrase
+                     : (c.cadence01 > 0.5 ? 0.8f : 0.3f);
+
+    if (progress < 0.3) return -3;       // Opening: slightly soft
+    if (progress < 0.6) return 0;        // Building
+    if (progress < 0.85) return 3;       // Approaching cadence
+    return -2;                            // Resolution
+}
+
+LhVoicingGenerator::LhVoicing LhVoicingGenerator::applyVelocityShading(
+    const LhVoicing& voicing, const Context& c) const {
+
+    LhVoicing result = voicing;
+
+    if (result.midiNotes.isEmpty()) return result;
+
+    // Base velocity from energy (LH is foundation: 70-90 range)
+    int energyBase = 70 + int(c.energy * 20);
+
+    // Apply phrase offset
+    int phraseOffset = phraseVelocityOffset(c);
+    int baseVel = qBound(55, energyBase + phraseOffset, 95);
+
+    result.baseVelocity = baseVel;
+    result.velocities.clear();
+
+    // LH voice shading:
+    // - Bottom voice: foundation (+3)
+    // - Top voice: slight prominence for voice-leading audibility (+2)
+    // - Inner voices: recede slightly (-3)
+
+    int topIdx = result.midiNotes.size() - 1;
+
+    for (int i = 0; i < result.midiNotes.size(); ++i) {
+        int vel = baseVel;
+
+        if (i == 0) {
+            // Bottom voice: foundation
+            vel += 3;
+        }
+        else if (i == topIdx) {
+            // Top voice: voice-leading audibility
+            vel += 2;
+        }
+        else {
+            // Inner voices: recede
+            vel -= 3;
+        }
+
+        result.velocities.push_back(qBound(40, vel, 120));
+    }
+
+    return result;
+}
+
+// =============================================================================
+// MICRO-TIMING (LH)
+// =============================================================================
+
+double LhVoicingGenerator::phraseTimingOffset(const Context& c) const {
+    // LH timing: foundation should be slightly ahead or on beat
+    // Evans LH often anticipates slightly to "push" the harmony
+
+    float progress = (c.barInPhrase >= 0 && c.cadence01 < 0.5)
+                     ? 0.5f
+                     : (c.cadence01 > 0.5 ? 0.8f : 0.3f);
+
+    if (progress < 0.3) return 0.0;        // Opening: on beat
+    if (progress < 0.6) return -0.008;     // Building: slight push
+    if (progress < 0.85) return -0.012;    // Approaching cadence: more push
+    return 0.015;                           // Resolution: lay back
+}
+
+LhVoicingGenerator::LhVoicing LhVoicingGenerator::applyMicroTiming(
+    const LhVoicing& voicing, const Context& c) const {
+
+    LhVoicing result = voicing;
+
+    if (result.midiNotes.isEmpty()) return result;
+
+    // Overall phrase offset
+    result.voicingOffset = phraseTimingOffset(c);
+
+    // Per-note timing: gentle roll from bottom to top
+    // LH roll is more subtle than RH (0.005 beats per voice)
+    result.timingOffsets.clear();
+
+    bool applyRoll = (result.midiNotes.size() >= 3);
+
+    for (int i = 0; i < result.midiNotes.size(); ++i) {
+        double offset = 0.0;
+
+        if (applyRoll) {
+            // Bottom note on time, each voice slightly later
+            offset = i * 0.005;
+        }
+
+        result.timingOffsets.push_back(offset);
+    }
+
+    return result;
 }
 
 } // namespace playback

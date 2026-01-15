@@ -53,9 +53,13 @@ public:
     // ========== Output ==========
     struct LhVoicing {
         QVector<int> midiNotes;       // Realized MIDI notes (3-4 notes typically)
+        QVector<int> velocities;      // Per-note velocity (voice shading)
+        QVector<double> timingOffsets;// Per-note timing offset in beats (BPM-constrained)
+        double voicingOffset = 0.0;   // Overall phrase timing offset in beats
         bool isTypeA = true;          // True = Type A (3-5-7-9), False = Type B (7-9-3-5)
         QString ontologyKey;          // e.g., "piano_rootless_a", "piano_lh_quartal"
         double cost = 0.0;            // Voice-leading cost from previous voicing
+        int baseVelocity = 75;        // Base velocity before shading
     };
     
     // ========== State for continuity ==========
@@ -119,7 +123,34 @@ public:
     /// Choose the best voicing type for current context
     /// Returns: rootless, quartal, or shell based on energy, function, etc.
     LhVoicing generateBest(const Context& c) const;
-    
+
+    // ========== Velocity Shading ==========
+
+    /**
+     * Apply voice shading to a voicing.
+     * LH shading: bottom voice foundation, top voice slightly prominent.
+     * Phrase dynamics: builds toward cadence.
+     */
+    LhVoicing applyVelocityShading(const LhVoicing& voicing, const Context& c) const;
+
+    /**
+     * Calculate phrase-position velocity offset for LH.
+     */
+    int phraseVelocityOffset(const Context& c) const;
+
+    // ========== Micro-Timing ==========
+
+    /**
+     * Apply BPM-constrained micro-timing.
+     * LH timing: slightly ahead of beat for foundation, gentle roll up.
+     */
+    LhVoicing applyMicroTiming(const LhVoicing& voicing, const Context& c) const;
+
+    /**
+     * Calculate phrase-position timing offset in beats.
+     */
+    double phraseTimingOffset(const Context& c) const;
+
     // ========== Voice Leading ==========
     
     /// Calculate voice-leading cost between two voicings

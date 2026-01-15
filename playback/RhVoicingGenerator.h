@@ -68,12 +68,16 @@ public:
     // ========== Output ==========
     struct RhVoicing {
         QVector<int> midiNotes;          // Realized MIDI notes
+        QVector<int> velocities;         // Per-note velocity (Phase 4: voice shading)
+        QVector<double> timingOffsets;   // Per-note timing offset in beats (Phase 5)
+        double voicingOffset = 0.0;      // Overall voicing offset in beats
         int topNoteMidi = -1;            // The melodic line note
         int melodicDirection = 0;        // -1=down, 0=hold, +1=up
         QString ontologyKey;             // e.g., "piano_rh_drop2", "piano_ust_bIII"
         VoicingType type = VoicingType::Dyad;
         bool isColorTone = false;        // Uses extensions (9/11/13)?
         double cost = 0.0;               // Voice-leading cost
+        int baseVelocity = 70;           // Base velocity before shading
     };
     
     // ========== Upper Structure Triads ==========
@@ -115,8 +119,82 @@ public:
         // Melodic contour tracking (for avoiding repetition)
         int consecutiveSameTop = 0;       // How many beats on same top note
         int targetMelodicDirection = 0;   // Phrase-driven direction (-1, 0, +1)
+
+        // Inner voice shimmer state (Evans signature)
+        int shimmerPhase = 0;             // 0-3 cycle through shimmer patterns
+        int beatsOnSameChord = 0;         // How long we've been on current chord
+        int innerVoice1Target = -1;       // Chromatic target for inner voice 1
+        int innerVoice2Target = -1;       // Chromatic target for inner voice 2
     };
-    
+
+    // ========== Inner Voice Shimmer (Phase 2) ==========
+
+    /**
+     * Apply inner voice shimmer to a voicing.
+     * Called when sustaining on the same chord - creates Evans' signature
+     * "breathing" quality where inner voices move chromatically while
+     * top and bottom voices remain anchored.
+     *
+     * @param base The base voicing to shimmer
+     * @param c Context for chord/energy info
+     * @return Modified voicing with inner voice movement
+     */
+    RhVoicing applyInnerVoiceShimmer(const RhVoicing& base, const Context& c) const;
+
+    /**
+     * Check if shimmer should be applied.
+     * Shimmer only when: same chord for 2+ beats, energy < 0.5, user not busy
+     */
+    bool shouldApplyShimmer(const Context& c) const;
+
+    // ========== Velocity Shading (Phase 4) ==========
+
+    /**
+     * Apply voice shading to a voicing.
+     * Evans signature: top voice prominent (+8), inner voices recede (-5)
+     * Also applies phrase-dynamic shaping based on position in phrase.
+     *
+     * @param voicing The voicing to apply shading to
+     * @param c Context for phrase position
+     * @return Modified voicing with populated velocities
+     */
+    RhVoicing applyVelocityShading(const RhVoicing& voicing, const Context& c) const;
+
+    /**
+     * Calculate phrase-position velocity offset.
+     * Returns -5 to +5 based on where we are in the phrase arc.
+     */
+    int phraseVelocityOffset(const Context& c) const;
+
+    // ========== Micro-Timing (Phase 5) ==========
+
+    /**
+     * Apply phrase-aware and voice-specific micro-timing.
+     * All offsets are in BEATS (BPM-constrained).
+     *
+     * Phrase timing:
+     * - Phrase start: slightly late (+0.02 beats) - settling in
+     * - Mid-phrase: on beat (0) - stable groove
+     * - Phrase climax: slightly early (-0.015 beats) - forward momentum
+     * - Resolution: slightly late (+0.025 beats) - relaxed arrival
+     *
+     * Voice timing (Evans roll):
+     * - Bottom note: on time
+     * - Each subsequent voice: +0.008 beats later
+     * - Creates gentle "bloom" rather than block attack
+     *
+     * @param voicing The voicing to apply timing to
+     * @param c Context for phrase position
+     * @return Modified voicing with populated timing offsets
+     */
+    RhVoicing applyMicroTiming(const RhVoicing& voicing, const Context& c) const;
+
+    /**
+     * Calculate phrase-position timing offset in beats.
+     * Returns -0.02 to +0.03 beats based on phrase position.
+     */
+    double phraseTimingOffset(const Context& c) const;
+
     // ========== Constructor ==========
     explicit RhVoicingGenerator(const virtuoso::ontology::OntologyRegistry* ont = nullptr);
     
@@ -215,7 +293,16 @@ private:
     
     /// Determine what chord degree a pitch class represents
     int getDegreeForPc(int pc, const music::ChordSymbol& chord) const;
-    
+
+    /// Update melodic direction target based on phrase position
+    /// Called at start of generateBest() to set m_state.targetMelodicDirection
+    void updateMelodicDirection(const Context& c) const;
+
+    /// Apply direction-aware top note selection
+    /// Returns the best top MIDI note considering voice-leading, direction, and repetition
+    int selectDirectionAwareTop(const QVector<int>& candidatePcs, int lo, int hi,
+                                int lastTopMidi, int targetDir, int repetitionCount) const;
+
     // ========== State ==========
     mutable State m_state;
     const virtuoso::ontology::OntologyRegistry* m_ont = nullptr;

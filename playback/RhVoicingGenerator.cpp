@@ -18,20 +18,20 @@ RhVoicingGenerator::RhVoicingGenerator(const virtuoso::ontology::OntologyRegistr
 RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateDrop2(const Context& c) const {
     RhVoicing rh;
     const auto& chord = c.chord;
-    
+
     if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
-    
+
     // Drop-2 voicings: 4 notes, 2nd from top dropped an octave
     // Degrees: typically 3-5-7-9 or 1-3-5-7
     QVector<int> degrees = {3, 5, 7, 9};
-    
+
     // Get pitch classes
     QVector<int> pcs;
     for (int deg : degrees) {
         int pc = pcForDegree(chord, deg);
         if (pc >= 0) pcs.push_back(pc);
     }
-    
+
     if (pcs.size() < 3) {
         // Fallback to simpler degrees
         pcs.clear();
@@ -43,14 +43,28 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateDrop2(const Context& c
         int seventh = pcForDegree(chord, 7);
         if (seventh >= 0) pcs.push_back(seventh);
     }
-    
+
     if (pcs.isEmpty()) return rh;
-    
-    // Realize in RH register
-    int targetTop = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 76;
-    
-    // Stack notes upward from around MIDI 70
-    int cursor = 70;
+
+    // ================================================================
+    // DIRECTION-AWARE TOP NOTE SELECTION
+    // ================================================================
+    int lastTop = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 76;
+
+    // Use unified direction-aware selection
+    int targetTop = selectDirectionAwareTop(pcs, c.rhLo, c.rhHi,
+                                             lastTop,
+                                             m_state.targetMelodicDirection,
+                                             m_state.consecutiveSameTop);
+
+    // Build voicing from bottom up, positioning to hit target top
+    // Calculate where bottom should start to achieve target top
+    int topPc = normalizePc(targetTop);
+
+    // Stack notes: place each PC in order, working up toward target top
+    int cursor = targetTop - 14;  // Start roughly an octave below target
+    if (cursor < c.rhLo) cursor = c.rhLo;
+
     for (int pc : pcs) {
         int midi = cursor;
         while (normalizePc(midi) != pc && midi < cursor + 12) midi++;
@@ -60,27 +74,27 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateDrop2(const Context& c
         }
         cursor = midi + 1;
     }
-    
+
     std::sort(rh.midiNotes.begin(), rh.midiNotes.end());
-    
+
     // Apply Drop-2: move 2nd from top down an octave
     if (rh.midiNotes.size() >= 4) {
         int idx = rh.midiNotes.size() - 2;
         rh.midiNotes[idx] -= 12;
         std::sort(rh.midiNotes.begin(), rh.midiNotes.end());
     }
-    
-    // Set top note
+
+    // Set top note and direction
     if (!rh.midiNotes.isEmpty()) {
         rh.topNoteMidi = rh.midiNotes.last();
-        rh.melodicDirection = (rh.topNoteMidi > m_state.lastRhTopMidi) ? 1 :
-                              (rh.topNoteMidi < m_state.lastRhTopMidi) ? -1 : 0;
+        rh.melodicDirection = (rh.topNoteMidi > lastTop) ? 1 :
+                              (rh.topNoteMidi < lastTop) ? -1 : 0;
     }
-    
+
     rh.type = VoicingType::Drop2;
     rh.ontologyKey = "piano_rh_drop2";
     rh.cost = voiceLeadingCost(m_state.lastRhMidi, rh.midiNotes);
-    
+
     return rh;
 }
 
@@ -110,38 +124,15 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateTriad(const Context& c
     if (allPcs.isEmpty()) return rh;
 
     // ================================================================
-    // VOICE LEADING FIRST: Find the best top note (stepwise from previous)
+    // VOICE LEADING with DIRECTION: Use the unified selection function
     // ================================================================
     int lastTop = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 76;
 
-    int bestTopMidi = -1;
-    double bestCost = 9999.0;
-
-    for (int pc : allPcs) {
-        for (int oct = 5; oct <= 7; ++oct) {
-            int midi = pc + 12 * oct;
-            if (midi < c.rhLo || midi > c.rhHi) continue;
-
-            int motion = qAbs(midi - lastTop);
-            double cost = 0.0;
-
-            // Same aggressive voice leading as dyad
-            if (motion == 0) cost = 0.5;
-            else if (motion <= 2) cost = 0.0;
-            else if (motion == 3) cost = 2.0;
-            else if (motion == 4) cost = 3.0;
-            else if (motion <= 7) cost = 8.0;
-            else cost = 15.0;
-
-            // Small bonus for guide tones
-            if (pc == third || pc == seventh) cost -= 0.3;
-
-            if (cost < bestCost) {
-                bestCost = cost;
-                bestTopMidi = midi;
-            }
-        }
-    }
+    // Use direction-aware selection (respects phrase arc + repetition avoidance)
+    int bestTopMidi = selectDirectionAwareTop(allPcs, c.rhLo, c.rhHi,
+                                               lastTop,
+                                               m_state.targetMelodicDirection,
+                                               m_state.consecutiveSameTop);
 
     if (bestTopMidi < 0) return rh;
 
@@ -346,29 +337,32 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateDyad(const Context& c)
 RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateSingle(const Context& c) const {
     RhVoicing rh;
     const auto& chord = c.chord;
-    
+
     if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
-    
+
     // Get candidate notes
     QVector<int> candidatePcs;
     int third = pcForDegree(chord, 3);
     int seventh = pcForDegree(chord, 7);
     int ninth = pcForDegree(chord, 9);
-    
+
     if (third >= 0) candidatePcs.push_back(third);
     if (seventh >= 0) candidatePcs.push_back(seventh);
     if (ninth >= 0) candidatePcs.push_back(ninth);  // 9ths always OK (consonant)
-    
+
     if (candidatePcs.isEmpty()) candidatePcs.push_back(chord.rootPc);
-    
-    // Select with stepwise motion
+
+    // Use direction-aware selection (respects phrase arc + repetition avoidance)
     int lastTop = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 74;
-    rh.topNoteMidi = selectMelodicTopNote(candidatePcs, c.rhLo, c.rhHi, lastTop, c);
-    
+    rh.topNoteMidi = selectDirectionAwareTop(candidatePcs, c.rhLo, c.rhHi,
+                                              lastTop,
+                                              m_state.targetMelodicDirection,
+                                              m_state.consecutiveSameTop);
+
     rh.midiNotes.push_back(rh.topNoteMidi);
     rh.melodicDirection = (rh.topNoteMidi > lastTop + 1) ? 1 :
                           (rh.topNoteMidi < lastTop - 1) ? -1 : 0;
-    
+
     rh.type = VoicingType::Single;
     rh.ontologyKey = "piano_rh_single_guide";
 
@@ -928,16 +922,108 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateUST(const Context& c) 
 // =============================================================================
 
 RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateBest(const Context& c) const {
-    // Voicing complexity DECOUPLED from energy - energy drives rhythm, not harmony
-    // Use simple, consonant voicings regardless of energy level
+    // ================================================================
+    // PHASE 1: Update melodic direction based on phrase position
+    // ================================================================
+    updateMelodicDirection(c);
 
-    // New chords get triads for clarity
-    if (c.chordIsNew) {
+    // ================================================================
+    // PHASE 2: Track chord duration for shimmer
+    // ================================================================
+    bool sameChord = (c.chord.rootPc == m_state.lastChordForRh.rootPc &&
+                      c.chord.quality == m_state.lastChordForRh.quality);
+
+    if (sameChord) {
+        m_state.beatsOnSameChord++;
+    } else {
+        m_state.beatsOnSameChord = 0;
+        m_state.shimmerPhase = 0;  // Reset shimmer on chord change
+    }
+
+    // ================================================================
+    // PHASE 3: Diversified voicing selection (not just Dyad/Triad!)
+    // ================================================================
+    // Target distribution:
+    // - Dyad: 40% (still common, but not dominant)
+    // - Triad: 25% (close position color)
+    // - HarmonizedDyad: 15% (Evans singing quality)
+    // - Drop2: 10% (fuller texture on phrase boundaries)
+    // - UST: 5% (dominants only)
+    // - Single: 5% (melodic moments)
+
+    // Generate a pseudo-random value from context for variety
+    quint32 hash = quint32(c.beatInBar * 17 + c.barInPhrase * 31 +
+                           int(c.energy * 100) + c.chord.rootPc * 7);
+
+    // ================================================================
+    // CONTEXT-DRIVEN SELECTION
+    // ================================================================
+
+    // Phrase boundary / cadence: fuller voicings
+    if (c.phraseEndBar || c.cadence01 > 0.5) {
+        if (hash % 4 == 0) return generateDrop2(c);
         return generateTriad(c);
     }
 
-    // Otherwise prefer dyads - simple and always consonant
-    return generateDyad(c);
+    // Dominant chord: UST opportunity (5% chance)
+    if (c.chord.quality == music::ChordQuality::Dominant && c.energy > 0.3) {
+        if (hash % 20 == 0) return generateUST(c);
+    }
+
+    // New chord: triads for clarity (but with variety)
+    if (c.chordIsNew) {
+        int r = hash % 10;
+        if (r < 6) return generateTriad(c);           // 60%
+        if (r < 8) return generateHarmonizedDyad(c);  // 20%
+        return generateDrop2(c);                       // 20%
+    }
+
+    // Melodic/sparse moments (user silent, low energy)
+    if (c.userSilence && c.energy < 0.3) {
+        int r = hash % 10;
+        if (r < 3) return generateHarmonizedDyad(c);  // 30%
+        if (r < 5) return generateSingle(c);          // 20%
+        return generateDyad(c);                        // 50%
+    }
+
+    // Avoid voicing type repetition
+    if (m_state.lastVoicingType == VoicingType::Dyad) {
+        // If we've been doing dyads, mix it up
+        int r = hash % 10;
+        if (r < 4) return generateDyad(c);            // 40%
+        if (r < 6) return generateTriad(c);           // 20%
+        if (r < 8) return generateHarmonizedDyad(c);  // 20%
+        return generateSingle(c);                      // 20%
+    }
+
+    // Default distribution
+    int r = hash % 10;
+    RhVoicing result;
+    if (r < 4) result = generateDyad(c);            // 40%
+    else if (r < 6) result = generateTriad(c);      // 20%
+    else if (r < 8) result = generateHarmonizedDyad(c);  // 20%
+    else if (r < 9) result = generateDrop2(c);      // 10%
+    else result = generateSingle(c);                 // 10%
+
+    // ================================================================
+    // PHASE 2: Apply inner voice shimmer when sustaining
+    // ================================================================
+    if (shouldApplyShimmer(c) && result.midiNotes.size() >= 3) {
+        result = applyInnerVoiceShimmer(result, c);
+        m_state.shimmerPhase++;  // Advance shimmer phase for next beat
+    }
+
+    // ================================================================
+    // PHASE 4: Apply velocity shading
+    // ================================================================
+    result = applyVelocityShading(result, c);
+
+    // ================================================================
+    // PHASE 5: Apply micro-timing (BPM-constrained)
+    // ================================================================
+    result = applyMicroTiming(result, c);
+
+    return result;
 }
 
 // =============================================================================
@@ -997,18 +1083,23 @@ int RhVoicingGenerator::activityLevel(const Context& c, quint32 hash) const {
 
 int RhVoicingGenerator::selectNextMelodicTarget(const Context& c) const {
     QVector<int> candidatePcs;
-    
+
     int third = pcForDegree(c.chord, 3);
     int seventh = pcForDegree(c.chord, 7);
     int ninth = pcForDegree(c.chord, 9);
-    
+
     if (third >= 0) candidatePcs.push_back(third);
     if (seventh >= 0) candidatePcs.push_back(seventh);
     if (ninth >= 0) candidatePcs.push_back(ninth);  // 9ths always OK (consonant)
-    
+
     if (candidatePcs.isEmpty()) candidatePcs.push_back(c.chord.rootPc);
-    
-    return selectMelodicTopNote(candidatePcs, c.rhLo, c.rhHi, m_state.lastRhTopMidi, c);
+
+    // Use direction-aware selection (respects phrase arc + repetition avoidance)
+    int lastTop = m_state.lastRhTopMidi > 0 ? m_state.lastRhTopMidi : 74;
+    return selectDirectionAwareTop(candidatePcs, c.rhLo, c.rhHi,
+                                    lastTop,
+                                    m_state.targetMelodicDirection,
+                                    m_state.consecutiveSameTop);
 }
 
 // =============================================================================
@@ -1127,6 +1218,332 @@ int RhVoicingGenerator::nearestMidiForPc(int pc, int around, int lo, int hi) {
 
 int RhVoicingGenerator::getDegreeForPc(int pc, const music::ChordSymbol& chord) const {
     return voicing_utils::getDegreeForPc(pc, chord);
+}
+
+// =============================================================================
+// MICRO-TIMING SYSTEM (Phase 5)
+// All offsets in BEATS (BPM-constrained)
+// =============================================================================
+
+double RhVoicingGenerator::phraseTimingOffset(const Context& c) const {
+    // Map phrase position to timing offset (in beats)
+    // - Phrase start: slightly late (+0.02 beats) - settling in
+    // - Mid-phrase: on beat (0) - stable groove
+    // - Phrase climax: slightly early (-0.015 beats) - forward momentum
+    // - Resolution: slightly late (+0.025 beats) - relaxed arrival
+
+    if (c.phraseBars <= 0) return 0.0;
+
+    float progress = float(c.barInPhrase) / float(c.phraseBars);
+
+    if (progress < 0.2) return 0.02;       // Opening: laid back
+    if (progress < 0.5) return 0.0;        // Building: on beat
+    if (progress < 0.75) return -0.01;     // Approaching climax: push forward
+    if (progress < 0.9) return -0.015;     // Near climax: more forward
+    return 0.025;                           // Resolution: relax back
+}
+
+RhVoicingGenerator::RhVoicing RhVoicingGenerator::applyMicroTiming(
+    const RhVoicing& voicing, const Context& c) const {
+
+    RhVoicing result = voicing;
+
+    if (result.midiNotes.isEmpty()) return result;
+
+    // Overall phrase offset
+    result.voicingOffset = phraseTimingOffset(c);
+
+    // Per-voice timing (Evans roll effect)
+    // Only apply voice spread for Triads and Drop2 (3+ notes)
+    // Dyads should strike together
+    result.timingOffsets.clear();
+
+    bool applyVoiceSpread = (result.midiNotes.size() >= 3 &&
+                             (result.type == VoicingType::Triad ||
+                              result.type == VoicingType::Drop2 ||
+                              result.type == VoicingType::UST));
+
+    for (int i = 0; i < result.midiNotes.size(); ++i) {
+        double offset = 0.0;
+
+        if (applyVoiceSpread) {
+            // Evans roll: bottom note on time, each voice slightly later
+            // Creates gentle "bloom" rather than block attack
+            // Offset: 0.008 beats per voice (roughly 10-15ms at ballad tempo)
+            offset = i * 0.008;
+        }
+
+        result.timingOffsets.push_back(offset);
+    }
+
+    return result;
+}
+
+// =============================================================================
+// VELOCITY SHADING SYSTEM (Phase 4)
+// Evans signature: top voice prominent, inner voices recede
+// =============================================================================
+
+int RhVoicingGenerator::phraseVelocityOffset(const Context& c) const {
+    // Map phrase position to dynamic arc
+    // - Phrase start: soft (-5)
+    // - Building: neutral (0)
+    // - Approaching climax: louder (+5)
+    // - Resolution: soften (-3)
+
+    if (c.phraseBars <= 0) return 0;
+
+    float progress = float(c.barInPhrase) / float(c.phraseBars);
+
+    if (progress < 0.25) return -5;       // Opening: soft
+    if (progress < 0.5) return 0;         // Building
+    if (progress < 0.75) return 3;        // Approaching climax
+    if (progress < 0.9) return 5;         // Near climax
+    return -3;                             // Resolution: soften
+}
+
+RhVoicingGenerator::RhVoicing RhVoicingGenerator::applyVelocityShading(
+    const RhVoicing& voicing, const Context& c) const {
+
+    RhVoicing result = voicing;
+
+    if (result.midiNotes.isEmpty()) return result;
+
+    // Calculate base velocity from energy and phrase position
+    // Energy-driven base: 60-85 range
+    int energyBase = 60 + int(c.energy * 25);
+
+    // Apply phrase position offset
+    int phraseOffset = phraseVelocityOffset(c);
+    int baseVel = qBound(50, energyBase + phraseOffset, 95);
+
+    result.baseVelocity = baseVel;
+    result.velocities.clear();
+
+    // Voice shading rules (Evans signature):
+    // - Top voice: +8 (melody prominence)
+    // - Bottom voice: +0 (harmonic anchor)
+    // - Inner voices: -5 (recede into texture)
+
+    int topIdx = result.midiNotes.size() - 1;
+
+    for (int i = 0; i < result.midiNotes.size(); ++i) {
+        int vel = baseVel;
+
+        if (i == topIdx) {
+            // Top voice: prominent
+            vel += 8;
+        }
+        else if (i == 0) {
+            // Bottom voice: anchor (no change)
+            vel += 0;
+        }
+        else {
+            // Inner voices: recede
+            vel -= 5;
+        }
+
+        result.velocities.push_back(qBound(30, vel, 127));
+    }
+
+    return result;
+}
+
+// =============================================================================
+// INNER VOICE SHIMMER SYSTEM (Phase 2)
+// Evans' signature: inner voices move chromatically while outer anchors
+// =============================================================================
+
+bool RhVoicingGenerator::shouldApplyShimmer(const Context& c) const {
+    // Shimmer conditions:
+    // 1. Same chord for 2+ beats (need time to shimmer)
+    // 2. Low-medium energy (shimmer is intimate, not punchy)
+    // 3. User not busy (don't distract from soloist)
+    // 4. Voicing has at least 3 notes (need inner voice to move)
+
+    if (m_state.beatsOnSameChord < 2) return false;
+    if (c.energy > 0.5) return false;
+    if (c.userBusy) return false;
+    if (m_state.lastRhMidi.size() < 3) return false;
+
+    return true;
+}
+
+RhVoicingGenerator::RhVoicing RhVoicingGenerator::applyInnerVoiceShimmer(
+    const RhVoicing& base, const Context& c) const {
+
+    // Don't shimmer if conditions aren't met
+    if (!shouldApplyShimmer(c)) return base;
+
+    // Need at least 3 notes to have an inner voice
+    if (base.midiNotes.size() < 3) return base;
+
+    RhVoicing result = base;
+
+    // Identify voices:
+    // - Top voice (melody): NEVER moves - this is the anchor
+    // - Bottom voice (bass): rarely moves
+    // - Inner voice(s): FREE to move chromatically
+
+    int topIdx = result.midiNotes.size() - 1;
+    int bottomIdx = 0;
+    int innerIdx = (result.midiNotes.size() >= 3) ? 1 : -1;
+    int innerIdx2 = (result.midiNotes.size() >= 4) ? 2 : -1;
+
+    // Shimmer patterns cycle through 4 phases:
+    // Phase 0: Base voicing (no change)
+    // Phase 1: Inner voice 1 rises half step
+    // Phase 2: Inner voice 1 falls back, inner voice 2 rises (if exists)
+    // Phase 3: All return to base
+
+    int phase = m_state.shimmerPhase % 4;
+
+    if (innerIdx >= 0 && innerIdx < topIdx) {
+        int innerNote = result.midiNotes[innerIdx];
+        int topNote = result.midiNotes[topIdx];
+        (void)bottomIdx;  // Bottom voice stays anchored
+
+        switch (phase) {
+            case 0:
+                // Base voicing - no change
+                break;
+
+            case 1:
+                // Inner voice rises half step (if it doesn't collide with top)
+                if (innerNote + 1 < topNote - 1) {
+                    result.midiNotes[innerIdx] = innerNote + 1;
+                }
+                break;
+
+            case 2:
+                // Inner voice falls back; if 4+ notes, second inner rises
+                if (innerIdx2 >= 0 && innerIdx2 < topIdx) {
+                    int inner2Note = result.midiNotes[innerIdx2];
+                    if (inner2Note + 1 < topNote - 1) {
+                        result.midiNotes[innerIdx2] = inner2Note + 1;
+                    }
+                }
+                break;
+
+            case 3:
+                // All return to base (handled by base voicing)
+                break;
+        }
+    }
+
+    // Keep the voicing sorted
+    std::sort(result.midiNotes.begin(), result.midiNotes.end());
+
+    // Preserve top note after sort (may have changed position)
+    result.topNoteMidi = result.midiNotes.isEmpty() ? base.topNoteMidi : result.midiNotes.last();
+
+    // Mark that this voicing has shimmer applied
+    result.ontologyKey = base.ontologyKey + "_shimmer";
+
+    return result;
+}
+
+// =============================================================================
+// MELODIC DIRECTION SYSTEM (Phase 1)
+// =============================================================================
+
+void RhVoicingGenerator::updateMelodicDirection(const Context& c) const {
+    // Update targetMelodicDirection based on phrase position
+    // This creates the musical arc that Evans voicings follow
+
+    float phraseProgress = (c.phraseBars > 0) ? float(c.barInPhrase) / float(c.phraseBars) : 0.0f;
+
+    if (c.phraseEndBar || c.cadence01 > 0.5) {
+        // Phrase end / cadence: descend toward resolution
+        m_state.targetMelodicDirection = -1;
+    }
+    else if (phraseProgress > 0.6) {
+        // Approaching climax: ascend
+        m_state.targetMelodicDirection = 1;
+    }
+    else if (phraseProgress < 0.3) {
+        // Opening: gentle ascent to build
+        m_state.targetMelodicDirection = 1;
+    }
+    else {
+        // Mid-phrase: neutral, let voice-leading decide
+        m_state.targetMelodicDirection = 0;
+    }
+
+    // Override with explicit hint if provided
+    if (c.melodicDirectionHint != 0) {
+        m_state.targetMelodicDirection = c.melodicDirectionHint;
+    }
+}
+
+int RhVoicingGenerator::selectDirectionAwareTop(const QVector<int>& candidatePcs,
+                                                  int lo, int hi,
+                                                  int lastTopMidi,
+                                                  int targetDir,
+                                                  int repetitionCount) const {
+    // This is the CORE voice-leading function used by ALL voicing methods
+    // It balances:
+    // 1. Stepwise motion (Evans signature)
+    // 2. Melodic direction (phrase arc)
+    // 3. Repetition avoidance (force movement after 2+ same notes)
+
+    if (candidatePcs.isEmpty()) return lastTopMidi;
+
+    QVector<std::pair<int, double>> candidates;
+
+    // Repetition penalty: increases with consecutive same-note beats
+    // After 2 beats on same note, FORCE movement
+    const double repetitionPenalty = (repetitionCount >= 2) ? 10.0 : repetitionCount * 1.5;
+    const bool forceMoveFlag = (repetitionCount >= 2);
+
+    for (int pc : candidatePcs) {
+        for (int oct = 5; oct <= 7; ++oct) {
+            int midi = pc + 12 * oct;
+            if (midi < lo || midi > hi) continue;
+
+            double cost = 0.0;
+            int motion = qAbs(midi - lastTopMidi);
+            int direction = (midi > lastTopMidi) ? 1 : (midi < lastTopMidi) ? -1 : 0;
+
+            // VOICE-LEADING COSTS (stepwise = best)
+            if (motion == 0) {
+                // Same note: apply repetition penalty
+                cost = 0.5 + repetitionPenalty;
+                // If force-move flag, make same note very expensive
+                if (forceMoveFlag) cost = 50.0;
+            }
+            else if (motion == 1) cost = 0.0;   // Half step - ideal
+            else if (motion == 2) cost = 0.0;   // Whole step - ideal
+            else if (motion == 3) cost = 2.0;   // Minor 3rd - acceptable
+            else if (motion == 4) cost = 3.0;   // Major 3rd - small leap
+            else if (motion <= 7) cost = 8.0;   // 4th-5th - leap
+            else cost = 15.0;                   // 6th+ - avoid
+
+            // MELODIC DIRECTION BONUS/PENALTY
+            if (targetDir != 0 && direction != 0) {
+                if (direction == targetDir) {
+                    // Moving in desired direction: bonus
+                    cost -= 1.5;
+                } else {
+                    // Moving against: penalty (but can still happen for good voice-leading)
+                    cost += 1.0;
+                }
+            }
+
+            // REGISTER PREFERENCE (sweet spot around 74-80)
+            if (midi >= 72 && midi <= 82) cost -= 0.2;
+
+            candidates.push_back({midi, cost});
+        }
+    }
+
+    if (candidates.isEmpty()) return lastTopMidi;
+
+    // Find best candidate
+    std::sort(candidates.begin(), candidates.end(),
+              [](const auto& a, const auto& b) { return a.second < b.second; });
+
+    return candidates.first().first;
 }
 
 } // namespace playback

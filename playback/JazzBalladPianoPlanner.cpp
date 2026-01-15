@@ -7035,6 +7035,25 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     // Get texture decision from orchestrator
     auto decision = m_orchestrator.decide(orchInput);
 
+    // ================================================================
+    // PHRASE PATTERN SELECTION (Bill Evans style phrase commitment)
+    // Select a comping pattern at phrase boundaries and stick with it.
+    // This creates musical coherence instead of beat-by-beat randomness.
+    // ================================================================
+    const bool newPhrase = (adjusted.barInPhrase == 0 && adjusted.beatInBar == 0);
+    if (newPhrase || m_state.phrasePatternIndex < 0) {
+        m_state.lastPhrasePatternIndex = m_state.phrasePatternIndex;
+        m_state.phrasePatternIndex = selectPhrasePattern(adjusted,
+            virtuoso::util::StableHash::mix(adjusted.determinismSeed, adjusted.playbackBarIndex));
+        m_state.phrasePatternHitIndex = 0;
+
+        // Track register preference for next pattern selection
+        const auto patterns = getAvailablePhrasePatterns(adjusted);
+        if (m_state.phrasePatternIndex >= 0 && m_state.phrasePatternIndex < patterns.size()) {
+            m_state.lastPhraseWasHigh = patterns[m_state.phrasePatternIndex].preferHighRegister;
+        }
+    }
+
     // Sync generator state for voicing generation
     syncGeneratorState();
 
@@ -7332,17 +7351,31 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     };
 
     // ----------------------------------------------------------------
-    // STEP 3: CONTEXT-DRIVEN PLAY DECISION
-    // Not pattern-based but driven by musical context
+    // STEP 3: PATTERN-DRIVEN PLAY DECISION
+    // Uses phrase patterns for rhythmic commitment (not beat-by-beat probability)
     // ----------------------------------------------------------------
 
-    // Base: always consider playing on chord changes
-    bool lhPlays = adjusted.chordIsNew;
+    // Get current pattern and check for hit at this position
+    const auto patterns = getAvailablePhrasePatterns(adjusted);
+    const PhraseCompHit* currentHit = nullptr;
+    bool patternSaysPlay = false;
+
+    if (m_state.phrasePatternIndex >= 0 && m_state.phrasePatternIndex < patterns.size()) {
+        const auto& pattern = patterns[m_state.phrasePatternIndex];
+        const int barInPattern = adjusted.barInPhrase % pattern.bars;
+        currentHit = getPhraseHitAt(pattern, barInPattern, adjusted.beatInBar);
+        patternSaysPlay = (currentHit != nullptr);
+    }
+
+    // LH plays when: pattern says OR chord changes
+    bool lhPlays = adjusted.chordIsNew || (patternSaysPlay && !userActive);
 
     // Additional play opportunities based on context
     Subdivision chosenSubdivision = Subdivision::Quarter;
     int subdivisionFraction = 0;  // Which part of the subdivision (0, 1, 2, etc.)
     double timingElasticityMs = 0.0;  // Micro-timing adjustment
+    int patternVelocityDelta = 0;     // Velocity adjustment from pattern
+    int patternTimingMs = 0;          // Timing adjustment from pattern
 
     // Hash for deterministic but varied decisions
     const quint32 rhythmHash = virtuoso::util::StableHash::mix(
@@ -7353,112 +7386,76 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     if (decision.leftHand.voicing != PianoTextureOrchestrator::VoicingRole::None) {
 
         // ============================================================
-        // PHRASE POSITION AFFECTS RHYTHM
-        // Beginning of phrase: establish, Middle: develop, End: resolve
+        // PATTERN HIT PARAMETERS - Use when pattern dictates a hit
         // ============================================================
-        const double phraseProgress = adjusted.phraseBars > 0 ?
-            double(adjusted.barInPhrase) / adjusted.phraseBars : 0.0;
-        const bool phraseBeginning = phraseProgress < 0.25;
-        const bool phraseMiddle = phraseProgress >= 0.25 && phraseProgress < 0.75;
-        const bool phraseEnding = phraseProgress >= 0.75;
-
-        // ============================================================
-        // HARMONIC TENSION AFFECTS RHYTHM
-        // High tension = shorter, more rhythmic
-        // Resolution = longer, more sustained
-        // ============================================================
-        const bool isResolution = adjusted.cadence01 > 0.5;
-        const bool isTension = adjusted.cadence01 < 0.2 && !adjusted.chordIsNew;
-
-        // ============================================================
-        // ENERGY-SCALED DENSITY (but fluid, not stepped)
-        // Low energy: sparse, sustained
-        // High energy: denser, more rhythmic variety
-        // ============================================================
-
-        if (!adjusted.chordIsNew && !userActive) {
-            // Opportunities for re-articulation or additional hits
-            // Density affected by activity mode (lhDensityMult)
-
-            // BEAT 1 RE-ARTICULATION (when NOT a chord change)
-            // Sometimes emphasize downbeat even without chord change
-            if (adjusted.beatInBar == 0) {
-                int playProb = int((25 + energy * 55) * lhDensityMult);  // Base 25-80%, scaled
-                if (phraseBeginning) playProb += 15;
-                if (isResolution) playProb -= 10;
-                playProb = qBound(5, playProb, 95);
-
-                if (rhythmRoll % 100 < playProb) {
-                    lhPlays = true;
-                    chosenSubdivision = Subdivision::Quarter;
+        if (currentHit && patternSaysPlay) {
+            // Extract subdivision from hit
+            if (currentHit->subdivision > 0) {
+                // Hit specifies a subdivision offset (0-3 for 16th notes within beat)
+                if (currentHit->subdivision == 1) {
+                    // Early in beat - could be swing 8th or straight 8th
+                    chosenSubdivision = (rhythmRoll % 2 == 0) ? Subdivision::Swing8th : Subdivision::Straight8th;
+                    subdivisionFraction = 1;
+                } else if (currentHit->subdivision == 2) {
+                    // Mid-beat - triplet feel
+                    chosenSubdivision = Subdivision::Triplet8th;
+                    subdivisionFraction = (rhythmRoll % 3);
+                } else {
+                    // Late in beat - usually anticipation
+                    chosenSubdivision = Subdivision::Triplet8th;
+                    subdivisionFraction = 2;
                 }
             }
 
-            // BEAT 2: Swing 8th opportunity (classic jazz)
-            else if (adjusted.beatInBar == 1) {
-                int playProb = int((40 + energy * 50) * lhDensityMult);  // Base 40-90%, scaled
-                if (phraseMiddle) playProb += 10;
-                if (isResolution) playProb -= 15;
-                playProb = qBound(5, playProb, 98);
+            // Apply hit's expression parameters
+            patternVelocityDelta = currentHit->velocityDelta;
+            patternTimingMs = currentHit->timingMs;
+        }
 
-                if (rhythmRoll % 100 < playProb) {
-                    lhPlays = true;
-                    // Choose subdivision based on feel
-                    if (rhythmRoll % 10 < 3) {
-                        chosenSubdivision = Subdivision::Quarter;
-                    } else if (rhythmRoll % 10 < 6) {
-                        chosenSubdivision = Subdivision::Swing8th;
-                        subdivisionFraction = 1;
-                    } else if (rhythmRoll % 10 < 9) {
-                        chosenSubdivision = Subdivision::Triplet8th;
-                        subdivisionFraction = (rhythmRoll % 3);
-                    } else {
-                        chosenSubdivision = Subdivision::Straight8th;
-                        subdivisionFraction = 1;
-                    }
-                }
+        // ============================================================
+        // PROBABILISTIC FILLS - Add activity between pattern anchor hits
+        // Pattern provides rhythmic commitment; fills add life without jerkiness
+        // Fill probability is INVERSE to pattern density (sparse patterns need more fills)
+        // ============================================================
+        if (!lhPlays && !userActive && !adjusted.chordIsNew) {
+            // Get pattern density (0.0 = very sparse, 1.0 = busy)
+            double patternDensity = 0.2;  // Default if no pattern
+            if (m_state.phrasePatternIndex >= 0 && m_state.phrasePatternIndex < patterns.size()) {
+                patternDensity = patterns[m_state.phrasePatternIndex].densityRating;
             }
 
-            // BEAT 3: Strong re-articulation point
-            else if (adjusted.beatInBar == 2) {
-                int playProb = int((45 + energy * 50) * lhDensityMult);  // Base 45-95%, scaled
-                if (phraseEnding) playProb += 10;
-                if (isTension) playProb += 10;
-                playProb = qBound(5, playProb, 98);
+            // Fill probability: higher for sparse patterns, lower for dense patterns
+            // Also scaled by energy (more fills at higher energy)
+            // Base: 30-60% for sparse patterns, 10-30% for dense patterns
+            double fillBase = 0.45 - patternDensity * 0.5;  // 0.45 at sparse, 0.2 at dense
+            double fillProb = fillBase + energy * 0.25;     // Energy adds up to 25%
 
-                if (rhythmRoll % 100 < playProb) {
-                    lhPlays = true;
-                    // Beat 3 often on the beat or triplet feel
-                    if (rhythmRoll % 10 < 3) {
-                        chosenSubdivision = Subdivision::Quarter;
-                    } else if (rhythmRoll % 10 < 6) {
-                        chosenSubdivision = Subdivision::Swing8th;
-                        subdivisionFraction = (rhythmRoll % 2);
-                    } else {
-                        chosenSubdivision = Subdivision::Triplet8th;
-                        subdivisionFraction = (rhythmRoll % 2);
-                    }
-                }
+            // Beat-specific modulation (beat 3 is common fill point)
+            if (adjusted.beatInBar == 2) {
+                fillProb += 0.15;  // Beat 3 boost
+            } else if (adjusted.beatInBar == 0) {
+                fillProb += 0.10;  // Downbeat boost
             }
 
-            // BEAT 4: Anticipation/push opportunity
-            else if (adjusted.beatInBar == 3) {
-                int playProb = int((35 + energy * 50) * lhDensityMult);  // Base 35-85%, scaled
-                if (phraseEnding && !isResolution) playProb += 15;
-                playProb = qBound(5, playProb, 95);
+            // Apply density multiplier from activity mode
+            fillProb *= lhDensityMult;
 
-                if (rhythmRoll % 100 < playProb) {
-                    lhPlays = true;
-                    // Beat 4 often anticipates - use swing 8th or triplet
-                    if (rhythmRoll % 10 < 3) {
-                        chosenSubdivision = Subdivision::Quarter;
-                    } else if (rhythmRoll % 10 < 6) {
-                        chosenSubdivision = Subdivision::Swing8th;
-                        subdivisionFraction = 1;
-                    } else {
-                        chosenSubdivision = Subdivision::Triplet8th;
-                        subdivisionFraction = 2;
-                    }
+            // Clamp to reasonable range
+            fillProb = qBound(0.08, fillProb, 0.70);
+
+            // Roll for fill
+            if ((rhythmRoll % 100) < int(fillProb * 100)) {
+                lhPlays = true;
+
+                // Choose subdivision for fill (prefer swung/triplet feel)
+                if (rhythmRoll % 10 < 4) {
+                    chosenSubdivision = Subdivision::Quarter;  // On beat
+                } else if (rhythmRoll % 10 < 7) {
+                    chosenSubdivision = Subdivision::Swing8th;
+                    subdivisionFraction = 1;
+                } else {
+                    chosenSubdivision = Subdivision::Triplet8th;
+                    subdivisionFraction = (rhythmRoll % 3);
                 }
             }
         }
@@ -7603,7 +7600,8 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     // 2. Anticipation or delayed entry (timingModificationMs)
     // 3. Subdivision position within the beat (subdivisionOffsetMs)
     // 4. Micro-timing elasticity (timingElasticityMs)
-    int totalTimingShiftMs = lhTimingOffsetMs + timingModificationMs + int(subdivisionOffsetMs) + int(timingElasticityMs);
+    // 5. Pattern rubato (patternTimingMs) - phrase pattern's timing expression
+    int totalTimingShiftMs = lhTimingOffsetMs + timingModificationMs + int(subdivisionOffsetMs) + int(timingElasticityMs) + patternTimingMs;
     totalTimingShiftMs = qBound(-150, totalTimingShiftMs, maxOffset + 800);  // Allow larger shift for subdivisions
 
     // Track LH velocity for RH to reference (RH should always be softer)
@@ -7778,6 +7776,10 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
         if (isOffbeatHit) baseVel -= 5;     // Offbeats slightly softer
         if (!adjusted.chordIsNew) baseVel -= 8;  // Re-articulations softer than main hit
         if (adjusted.userBusy) baseVel = qMin(baseVel, 62);  // Back off when user active
+
+        // Apply pattern velocity delta (from phrase pattern expression)
+        baseVel += patternVelocityDelta;
+
         baseVel = qBound(42, baseVel, 95);
         baseVel = std::clamp(static_cast<int>(baseVel * decision.leftHand.velocityMult), 30, 100);
 
@@ -7963,12 +7965,12 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     }
 
     // ================================================================
-    // RIGHT HAND: DIALOGUE-BASED GATING (like old code)
-    // RH and LH have a conversational relationship:
-    // - RH plays WITH LH (synchronized timing, not independent subdivisions)
-    // - Higher activity on chord changes, some activity on sustained chords too
+    // RIGHT HAND: PATTERN-DRIVEN WITH LH LOCK
+    // RH follows the phrase pattern commitment, synchronized with LH:
+    // - RH plays when pattern says to (same hits as LH)
+    // - Strong bonus when LH plays (maintains locked texture)
     // - NO independent RH subdivisions - when RH plays, it matches LH exactly
-    // - This creates unified texture, not distracting independent rhythm
+    // - This creates unified texture following phrase patterns
     // ================================================================
 
     bool rhPlaysThisBeat = false;
@@ -7977,77 +7979,35 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     const int rhDialogueHash = (adjusted.playbackBarIndex * 17 + adjusted.beatInBar * 11 + adjusted.chord.rootPc) % 100;
 
     if (!userActive) {
-        // RH plays - higher probability when locked with LH
-        // This creates unified two-hand texture
+        // PRIMARY: RH plays when pattern says to play (same as LH)
+        rhPlaysThisBeat = patternSaysPlay;
 
-        int rhPlayProb;
+        // ALWAYS reinforce chord changes with RH
         if (adjusted.chordIsNew) {
-            // CHORD CHANGE: RH very likely to reinforce
+            int chordChangeProb;
             if (energy < 0.3) {
-                rhPlayProb = int(55 + energy * 50);  // 55-70%
+                chordChangeProb = 55 + int(energy * 50);  // 55-70%
             } else if (energy < 0.6) {
-                rhPlayProb = int(70 + (energy - 0.3) * 50);  // 70-85%
+                chordChangeProb = 70 + int((energy - 0.3) * 50);  // 70-85%
             } else {
-                rhPlayProb = int(85 + (energy - 0.6) * 25);  // 85-95%
+                chordChangeProb = 85 + int((energy - 0.6) * 25);  // 85-95%
             }
-        } else {
-            // SUSTAINED CHORD: RH plays consistently to maintain harmonic color
-            // Especially on beat 3 (backbeat) for rhythmic drive
-            int beatBonus = (adjusted.beatInBar == 2) ? 8 : 0;  // Beat 3 boost
-
-            if (energy < 0.3) {
-                rhPlayProb = int(70 + energy * 30) + beatBonus;  // 70-79% + beat bonus
-            } else if (energy < 0.6) {
-                rhPlayProb = int(79 + (energy - 0.3) * 30) + beatBonus;  // 79-88% + beat bonus
-            } else {
-                rhPlayProb = int(88 + (energy - 0.6) * 20) + beatBonus;  // 88-96% + beat bonus
+            if (rhDialogueHash < chordChangeProb) {
+                rhPlaysThisBeat = true;
             }
         }
 
-        // ================================================================
-        // PHRASE-BASED DENSITY VARIATION (Evans-style)
-        // ================================================================
-        // Evans didn't play RH uniformly - he varied density within phrases:
-        // - Sparse at phrase beginnings (let the phrase breathe)
-        // - Building toward phrase peaks
-        // - Sparse again approaching phrase endings (space for resolution)
-        // ================================================================
-        const double phraseProgress = adjusted.phraseBars > 0 ?
-            double(adjusted.barInPhrase) / adjusted.phraseBars : 0.5;
-
-        double phraseDensityMod = 1.0;
-        if (phraseProgress < 0.2) {
-            // Phrase beginning: slight reduction
-            phraseDensityMod = 0.85 + phraseProgress * 0.75;  // 0.85 -> 1.0
-        } else if (phraseProgress < 0.6) {
-            // Building phase: normal density
-            phraseDensityMod = 1.0;
-        } else if (phraseProgress < 0.85) {
-            // Peak/sustain: normal density
-            phraseDensityMod = 1.0;
-        } else {
-            // Approaching phrase end: slight taper
-            phraseDensityMod = 1.0 - (phraseProgress - 0.85) * 0.5;  // 1.0 -> 0.925
+        // LH-RH LOCK: If LH plays, RH has strong bonus chance to join
+        // This creates unified two-hand texture (LH now includes fills)
+        if (lhPlays && !rhPlaysThisBeat) {
+            int lockProb = 50 + int(energy * 25);  // 50-75% join LH
+            rhPlaysThisBeat = (rhDialogueHash < lockProb);
         }
 
-        // Cadence areas: slight reduction
-        if (adjusted.cadence01 > 0.5) {
-            phraseDensityMod *= (1.0 - (adjusted.cadence01 - 0.5) * 0.2);  // Up to 10% reduction
+        // Very rare independent RH when LH silent
+        if (!lhPlays && !rhPlaysThisBeat) {
+            rhPlaysThisBeat = (rhDialogueHash < 5);  // Only 5% independent
         }
-
-        // Apply density multiplier from activity mode AND phrase position
-        rhPlayProb = int(rhPlayProb * rhDensityMult * phraseDensityMod);
-
-        // BOOST when LH is playing - creates locked two-hand texture
-        if (lhPlays) {
-            rhPlayProb = qMin(98, rhPlayProb + 50);  // +50% when locked with LH
-        } else {
-            rhPlayProb = rhPlayProb / 8;  // Very rare when LH silent
-        }
-
-        rhPlayProb = qBound(10, rhPlayProb, 98);
-
-        rhPlaysThisBeat = (rhDialogueHash < rhPlayProb);
     }
 
     const bool rhPlays = rhPlaysThisBeat &&

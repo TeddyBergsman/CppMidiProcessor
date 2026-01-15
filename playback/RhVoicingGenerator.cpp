@@ -639,6 +639,171 @@ RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateBlockUpper(
 }
 
 // =============================================================================
+// STAGE 9: NEW VOICING TYPES
+// =============================================================================
+
+// =============================================================================
+// HARMONIZED DYAD: Melody + parallel 3rd or 6th below
+// Creates vocal-like, singing texture - Evans/Freeman accompaniment essential
+// =============================================================================
+
+RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateHarmonizedDyad(const Context& c) const {
+    RhVoicing rh;
+    const auto& chord = c.chord;
+
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
+
+    // Select melody target using voice-leading from last position
+    int melodyMidi = selectNextMelodicTarget(c);
+
+    // Ensure in register
+    while (melodyMidi > c.rhHi) melodyMidi -= 12;
+    while (melodyMidi < c.rhLo) melodyMidi += 12;
+
+    // Determine harmony interval: 3rd below (3-4 semitones) or 6th below (8-9 semitones)
+    // Choose based on what creates better chord tones
+    int melodyPc = melodyMidi % 12;
+
+    // Try minor 3rd below first (most common in jazz)
+    int harmonyMidi = melodyMidi - 3;
+    int harmonyPc = harmonyMidi % 12;
+
+    // Check if harmony note is a chord tone or good extension
+    int third = pcForDegree(chord, 3);
+    int fifth = pcForDegree(chord, 5);
+    int seventh = pcForDegree(chord, 7);
+
+    bool harmonyIsChordTone = (harmonyPc == chord.rootPc || harmonyPc == third ||
+                               harmonyPc == fifth || harmonyPc == seventh);
+
+    // If minor 3rd below isn't a chord tone, try major 3rd
+    if (!harmonyIsChordTone) {
+        harmonyMidi = melodyMidi - 4;
+        harmonyPc = harmonyMidi % 12;
+        harmonyIsChordTone = (harmonyPc == chord.rootPc || harmonyPc == third ||
+                              harmonyPc == fifth || harmonyPc == seventh);
+    }
+
+    // If 3rds don't work, try 6th below (creates warmer sound)
+    if (!harmonyIsChordTone && c.energy < 0.5) {
+        harmonyMidi = melodyMidi - 8;  // Minor 6th
+        harmonyPc = harmonyMidi % 12;
+        harmonyIsChordTone = (harmonyPc == chord.rootPc || harmonyPc == third ||
+                              harmonyPc == fifth || harmonyPc == seventh);
+        if (!harmonyIsChordTone) {
+            harmonyMidi = melodyMidi - 9;  // Major 6th
+        }
+    }
+
+    // Ensure harmony is in register
+    if (harmonyMidi < c.rhLo) {
+        harmonyMidi += 12;
+    }
+
+    // Build the dyad (harmony below melody)
+    if (harmonyMidi >= c.rhLo && harmonyMidi < melodyMidi) {
+        rh.midiNotes.push_back(harmonyMidi);
+    }
+    rh.midiNotes.push_back(melodyMidi);
+
+    rh.topNoteMidi = melodyMidi;
+    rh.melodicDirection = (melodyMidi > m_state.lastRhTopMidi) ? 1 :
+                          (melodyMidi < m_state.lastRhTopMidi) ? -1 : 0;
+    rh.type = VoicingType::Dyad;
+    rh.ontologyKey = "piano_rh_harmonized_dyad";
+    rh.isColorTone = !harmonyIsChordTone;
+    rh.cost = voiceLeadingCost(m_state.lastRhMidi, rh.midiNotes);
+
+    return rh;
+}
+
+// =============================================================================
+// OCTAVE DOUBLE: Melody doubled at octave for powerful, singing sound
+// Used at climax moments - creates prominence without full block chord
+// =============================================================================
+
+RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateOctaveDouble(const Context& c) const {
+    RhVoicing rh;
+    const auto& chord = c.chord;
+
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
+
+    // Select melody target - aim for expressive note (3rd, 7th, 9th)
+    int melodyMidi = selectNextMelodicTarget(c);
+
+    // For octave doubling, prefer higher register for brilliance
+    while (melodyMidi < 72) melodyMidi += 12;  // At least C5
+    while (melodyMidi > c.rhHi) melodyMidi -= 12;
+
+    // The octave below
+    int octaveBelow = melodyMidi - 12;
+
+    // Build the octave pair
+    if (octaveBelow >= c.rhLo) {
+        rh.midiNotes.push_back(octaveBelow);
+    }
+    rh.midiNotes.push_back(melodyMidi);
+
+    rh.topNoteMidi = melodyMidi;
+    rh.melodicDirection = (melodyMidi > m_state.lastRhTopMidi) ? 1 :
+                          (melodyMidi < m_state.lastRhTopMidi) ? -1 : 0;
+    rh.type = VoicingType::Dyad;
+    rh.ontologyKey = "piano_rh_octave_double";
+    rh.cost = voiceLeadingCost(m_state.lastRhMidi, rh.midiNotes);
+
+    return rh;
+}
+
+// =============================================================================
+// BLUES GRACE: Main voicing with b3 or b7 grace note approach
+// Adds bluesy inflection - essential for jazz-blues feel on dominants
+// =============================================================================
+
+RhVoicingGenerator::RhVoicing RhVoicingGenerator::generateBluesGrace(const Context& c) const {
+    RhVoicing rh;
+    const auto& chord = c.chord;
+
+    if (chord.placeholder || chord.noChord || chord.rootPc < 0) return rh;
+
+    // Start with a basic dyad voicing
+    rh = generateDyad(c);
+
+    if (rh.midiNotes.isEmpty()) return rh;
+
+    // The blues grace note will be added as timing/ornament data
+    // Here we just mark that this voicing should have blues inflection
+    // The actual grace note timing is handled by the planner
+
+    // For dominant chords, the classic blues grace is:
+    // - Approach the 3rd from b3 (blue note)
+    // - Approach the 7th from below
+
+    if (chord.quality == music::ChordQuality::Dominant) {
+        int third = pcForDegree(chord, 3);
+
+        // Find if we have the 3rd in our voicing - it will be approached from b3
+        for (int i = 0; i < rh.midiNotes.size(); ++i) {
+            int notePc = rh.midiNotes[i] % 12;
+            if (notePc == third) {
+                // This note should be approached from b3 (one semitone below)
+                // Store this info in the ontology key for the planner to use
+                rh.ontologyKey = "piano_rh_blues_grace_b3";
+                rh.isColorTone = true;  // Mark as having color/inflection
+                break;
+            }
+        }
+    }
+
+    // Also works on minor chords - approach 3rd from below
+    if (chord.quality == music::ChordQuality::Minor) {
+        rh.ontologyKey = "piano_rh_blues_grace_minor";
+        rh.isColorTone = true;
+    }
+
+    return rh;
+}
+
+// =============================================================================
 // UPPER STRUCTURE TRIADS
 // =============================================================================
 

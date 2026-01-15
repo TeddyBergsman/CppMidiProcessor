@@ -106,7 +106,13 @@ public:
 
         // Structural moments
         BlockChord,         // Both hands locked together (rare, climax only)
-        Resolution          // Full voicing with gentle roll
+        Resolution,         // Full voicing with gentle roll
+
+        // Stage 9: Vocabulary Expansion (Evans/Freeman advanced techniques)
+        HarmonizedMelody,   // RH plays melody harmonized in 3rds or 6ths
+        OctaveMelody,       // RH plays melody with octave doubling
+        BluesInflection,    // Add b3/b7 grace notes to dominant chords
+        QuartalTexture      // "So What" voicings (4ths stacked) - modal jazz
     };
 
     // Voicing type for each hand
@@ -117,7 +123,13 @@ public:
         Triad,              // 3 notes
         Rootless,           // 4-note rootless (Type A or B)
         Block,              // Full block chord portion
-        MelodicDyad         // Walking 3rds/6ths (chromatic motion)
+        MelodicDyad,        // Walking 3rds/6ths (chromatic motion)
+
+        // Stage 9: New voicing roles
+        Quartal,            // Stacked 4ths ("So What" voicing)
+        HarmonizedDyad,     // Melody + parallel 3rd or 6th below
+        OctaveDouble,       // Melody doubled at octave
+        BluesGrace          // Main voicing with b3/b7 grace approach
     };
 
     // Timing role for each hand
@@ -243,7 +255,24 @@ public:
         DisplacedShell,   // Shell anticipates bass root
         Conversational,   // LH/RH alternate, filling each other's gaps
         Unison,           // LH/RH strike together (reinforced texture)
-        DramaticPause     // Intentional silence for breathing room
+        DramaticPause,    // Intentional silence for breathing room
+
+        // Stage 9: New rhythmic patterns
+        Charleston,       // Classic jazz: beat 1, & of 2 (syncopated groove)
+        DisplacedComping, // Start on & of 1 (pushes forward momentum)
+        TwoBarRest,       // 2-bar intentional rest (breathing room, structural)
+
+        // Stage 9 expansion: More rhythmic vocabulary
+        ReverseCharleston,  // & of 1 + beat 3 (inverse Charleston, laid-back)
+        CharlestonCombo,    // Charleston bar 1, Reverse bar 2 (2-bar groove)
+        RedGarland,         // Block chords on 2 and 4 (classic backbeat)
+        DoubleOffbeat,      // & of 2 + & of 4 (floating syncopation)
+        Breath,             // Beat 1 only, every other bar (ultra-sparse)
+        PedalPulse,         // Sustained LH, rhythmic RH pulses (impressionistic)
+        AnticipationChain,  // Series of anticipations building momentum
+        GospelQuarters,     // All 4 beats, hymn-like warmth (rare)
+        InnerVoicePulse,    // Outer sustain, inner voice moves (Evans shimmer)
+        BrokenRhythm        // 1, &2, 4 - irregular tension pattern
     };
 
     /**
@@ -302,6 +331,23 @@ private:
     RhythmicPhrase generateDisplacedShellPhrase(const OrchestratorInput& input) const;
     RhythmicPhrase generateConversationalPhrase(const OrchestratorInput& input, quint32 hash) const;
     RhythmicPhrase generateUnisonPhrase(const OrchestratorInput& input) const;
+
+    // Stage 9: New phrase generators
+    RhythmicPhrase generateCharlestonPhrase(const OrchestratorInput& input) const;
+    RhythmicPhrase generateDisplacedCompingPhrase(const OrchestratorInput& input) const;
+    RhythmicPhrase generateTwoBarRestPhrase(const OrchestratorInput& input) const;
+
+    // Stage 9 expansion: Additional phrase generators
+    RhythmicPhrase generateReverseCharlestonPhrase(const OrchestratorInput& input) const;
+    RhythmicPhrase generateCharlestonComboPhrase(const OrchestratorInput& input) const;
+    RhythmicPhrase generateRedGarlandPhrase(const OrchestratorInput& input) const;
+    RhythmicPhrase generateDoubleOffbeatPhrase(const OrchestratorInput& input) const;
+    RhythmicPhrase generateBreathPhrase(const OrchestratorInput& input) const;
+    RhythmicPhrase generatePedalPulsePhrase(const OrchestratorInput& input) const;
+    RhythmicPhrase generateAnticipationChainPhrase(const OrchestratorInput& input) const;
+    RhythmicPhrase generateGospelQuartersPhrase(const OrchestratorInput& input) const;
+    RhythmicPhrase generateInnerVoicePulsePhrase(const OrchestratorInput& input) const;
+    RhythmicPhrase generateBrokenRhythmPhrase(const OrchestratorInput& input) const;
 
     /**
      * Select phrase type based on context.

@@ -146,6 +146,20 @@ public:
     /// Coordinated with LH's generateBlockLower()
     RhVoicing generateBlockUpper(const Context& c, int targetTopMidi) const;
 
+    // ========== Stage 9: New Voicing Types ==========
+
+    /// Generate harmonized dyad: melody note + parallel 3rd or 6th below
+    /// Creates singing, vocal-like texture (Evans/Freeman accompaniment style)
+    RhVoicing generateHarmonizedDyad(const Context& c) const;
+
+    /// Generate octave-doubled melody: powerful, singing sound
+    /// Used at climax moments for emphasis
+    RhVoicing generateOctaveDouble(const Context& c) const;
+
+    /// Generate blues grace approach: main note with b3/b7 grace note
+    /// Adds bluesy inflection to dominant chords
+    RhVoicing generateBluesGrace(const Context& c) const;
+
     /// Generate an Upper Structure Triad voicing
     RhVoicing generateUST(const Context& c) const;
     

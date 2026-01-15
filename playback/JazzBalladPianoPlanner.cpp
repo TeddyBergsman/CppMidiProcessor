@@ -7241,19 +7241,19 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     switch (activityMode) {
     case HandActivityMode::LhFeatured:
         lhDensityMult = 1.4;  // LH more likely to play
-        rhDensityMult = 0.6;  // RH backs off
+        rhDensityMult = 0.9;  // RH slightly backs off
         break;
     case HandActivityMode::RhFeatured:
         lhDensityMult = 0.7;  // LH sustains more
-        rhDensityMult = 1.5;  // RH more active
+        rhDensityMult = 1.2;  // RH more active
         break;
     case HandActivityMode::BothDense:
         lhDensityMult = 1.5;  // Both hands active
-        rhDensityMult = 1.5;
+        rhDensityMult = 1.2;
         break;
     case HandActivityMode::BothSparse:
         lhDensityMult = 0.6;  // Both hands laid back
-        rhDensityMult = 0.5;
+        rhDensityMult = 0.85;  // RH still present
         break;
     default:  // Balanced
         break;
@@ -7976,9 +7976,9 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     // userActive already defined above for LH phrase selection
     const int rhDialogueHash = (adjusted.playbackBarIndex * 17 + adjusted.beatInBar * 11 + adjusted.chord.rootPc) % 100;
 
-    if (!userActive && lhPlays) {
-        // RH can play whenever LH plays (synchronized)
-        // Higher probability on chord changes, lower on sustained chords
+    if (!userActive) {
+        // RH plays independently - maintains harmonic color
+        // Higher probability on chord changes, but still active on sustained chords
 
         int rhPlayProb;
         if (adjusted.chordIsNew) {
@@ -7991,16 +7991,16 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
                 rhPlayProb = int(85 + (energy - 0.6) * 25);  // 85-95%
             }
         } else {
-            // SUSTAINED CHORD: RH plays less often but still present
+            // SUSTAINED CHORD: RH plays consistently to maintain harmonic color
             // Especially on beat 3 (backbeat) for rhythmic drive
-            int beatBonus = (adjusted.beatInBar == 2) ? 15 : 0;  // Beat 3 boost
+            int beatBonus = (adjusted.beatInBar == 2) ? 8 : 0;  // Beat 3 boost
 
             if (energy < 0.3) {
-                rhPlayProb = int(15 + energy * 40) + beatBonus;  // 15-27% + beat bonus
+                rhPlayProb = int(70 + energy * 30) + beatBonus;  // 70-79% + beat bonus
             } else if (energy < 0.6) {
-                rhPlayProb = int(27 + (energy - 0.3) * 50) + beatBonus;  // 27-42% + beat bonus
+                rhPlayProb = int(79 + (energy - 0.3) * 30) + beatBonus;  // 79-88% + beat bonus
             } else {
-                rhPlayProb = int(42 + (energy - 0.6) * 40) + beatBonus;  // 42-58% + beat bonus
+                rhPlayProb = int(88 + (energy - 0.6) * 20) + beatBonus;  // 88-96% + beat bonus
             }
         }
 
@@ -8017,22 +8017,22 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
 
         double phraseDensityMod = 1.0;
         if (phraseProgress < 0.2) {
-            // Phrase beginning: sparse, let it breathe
-            phraseDensityMod = 0.5 + phraseProgress * 2.0;  // 0.5 -> 0.9
+            // Phrase beginning: slight reduction
+            phraseDensityMod = 0.85 + phraseProgress * 0.75;  // 0.85 -> 1.0
         } else if (phraseProgress < 0.6) {
-            // Building phase: normal to increased density
-            phraseDensityMod = 0.9 + (phraseProgress - 0.2) * 0.5;  // 0.9 -> 1.1
+            // Building phase: normal density
+            phraseDensityMod = 1.0;
         } else if (phraseProgress < 0.85) {
-            // Peak/sustain: highest density
-            phraseDensityMod = 1.1;
+            // Peak/sustain: normal density
+            phraseDensityMod = 1.0;
         } else {
-            // Approaching phrase end: taper off for resolution space
-            phraseDensityMod = 1.1 - (phraseProgress - 0.85) * 2.0;  // 1.1 -> 0.8
+            // Approaching phrase end: slight taper
+            phraseDensityMod = 1.0 - (phraseProgress - 0.85) * 0.5;  // 1.0 -> 0.925
         }
 
-        // Cadence areas: extra sparse to let harmony breathe
+        // Cadence areas: slight reduction
         if (adjusted.cadence01 > 0.5) {
-            phraseDensityMod *= (1.0 - (adjusted.cadence01 - 0.5) * 0.6);  // Up to 30% reduction
+            phraseDensityMod *= (1.0 - (adjusted.cadence01 - 0.5) * 0.2);  // Up to 10% reduction
         }
 
         // Apply density multiplier from activity mode AND phrase position
@@ -8146,23 +8146,42 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
                 phraseArcPhase = 1;  // Peak
             }
 
-            if (varRoll < 40) {
-                // Move top voice by step (ascending or descending based on phrase)
+            if (varRoll < 70) {
+                // Move top voice melodically (ascending or descending based on phrase)
                 int direction = (rhCtx.cadence01 > 0.5) ? -1 : 1;  // Resolve down at cadence
                 if (phraseArcPhase == 2) direction = -1;  // Resolving phase: descend
                 if (phraseArcPhase == 0) direction = 1;   // Building phase: ascend
 
-                int newTop = rhVoicing.topNoteMidi + direction * (1 + (varHash % 3));  // 1-3 semitones
-                newTop = qBound(rhCtx.rhLo, newTop, rhCtx.rhHi);
-
-                // Validate new top is a chord tone or extension
-                int newTopPc = newTop % 12;
+                // Build list of valid target notes (chord tones and extensions)
                 int thirdPc = pcForDegree(rhCtx.chord, 3);
                 int fifthPc = pcForDegree(rhCtx.chord, 5);
                 int seventhPc = pcForDegree(rhCtx.chord, 7);
                 int ninthPc = pcForDegree(rhCtx.chord, 9);
                 int thirteenthPc = pcForDegree(rhCtx.chord, 13);
 
+                // Find nearest valid note in the desired direction
+                int currentTop = rhVoicing.topNoteMidi;
+                int newTop = currentTop;
+                int searchRange = 12;  // Search up to an octave
+
+                for (int offset = 1; offset <= searchRange; ++offset) {
+                    int candidate = currentTop + (direction * offset);
+                    if (candidate < rhCtx.rhLo || candidate > rhCtx.rhHi) continue;
+
+                    int candidatePc = candidate % 12;
+                    bool validPc = (candidatePc == rhCtx.chord.rootPc || candidatePc == thirdPc ||
+                                   candidatePc == fifthPc || candidatePc == seventhPc ||
+                                   candidatePc == ninthPc || candidatePc == thirteenthPc);
+                    if (validPc) {
+                        newTop = candidate;
+                        break;
+                    }
+                }
+
+                newTop = qBound(rhCtx.rhLo, newTop, rhCtx.rhHi);
+
+                // Validate (should always pass since we searched for valid notes)
+                int newTopPc = newTop % 12;
                 bool validTop = (newTopPc == rhCtx.chord.rootPc || newTopPc == thirdPc ||
                                 newTopPc == fifthPc || newTopPc == seventhPc ||
                                 newTopPc == ninthPc || newTopPc == thirteenthPc);
@@ -8242,9 +8261,9 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
         // Base timing: RH slightly after LH for natural piano feel
         int rhTimingOffsetMs = totalTimingShiftMs;
 
-        // BPM-constrained timing variation (as percentage of beat)
+        // BPM-constrained timing variation (rubato feel)
         const double beatMs = 60000.0 / qBound(40, bpm, 200);  // ms per beat
-        const double maxVariationPct = 0.04;  // Max 4% of beat (subtle but audible)
+        const double maxVariationPct = 0.10;  // Max 10% of beat for expressive rubato
         const int maxVariationMs = int(beatMs * maxVariationPct);
 
         // Hash for this beat determines timing character
@@ -8254,22 +8273,25 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
         // Phrase position influences timing feel (phraseProgress already defined above)
 
         int timingVariationMs = 0;
-        if (phraseProgress < 0.3) {
-            // Phrase beginning: tend to lay back (relaxed entry)
-            timingVariationMs = 3 + (timingHash % maxVariationMs);  // +3 to +maxVar (late)
-        } else if (phraseProgress < 0.7 && energy > 0.4) {
-            // Building phase: tend to anticipate (forward motion)
-            timingVariationMs = -(timingHash % (maxVariationMs / 2));  // Slight anticipation
-        } else if (adjusted.cadence01 > 0.5) {
-            // Cadence: lay back more (letting harmony settle)
-            timingVariationMs = 5 + (timingHash % maxVariationMs);  // More late
-        } else {
-            // Otherwise: vary both ways
+        if (phraseProgress < 0.25) {
+            // Phrase beginning: lay back for relaxed entry
+            timingVariationMs = 8 + (timingHash % maxVariationMs);  // Late, breathing
+        } else if (phraseProgress < 0.5) {
+            // Building phase: push forward (anticipation creates tension)
+            timingVariationMs = -(5 + (timingHash % (maxVariationMs / 2)));  // Ahead of beat
+        } else if (phraseProgress < 0.75) {
+            // Peak: free variation both ways
             timingVariationMs = (timingHash % (maxVariationMs * 2)) - maxVariationMs;
+        } else if (adjusted.cadence01 > 0.4) {
+            // Approaching cadence: stretch time, lay back significantly
+            timingVariationMs = 12 + (timingHash % maxVariationMs);  // Very late, settling
+        } else {
+            // Resolution: gentle variation
+            timingVariationMs = (timingHash % maxVariationMs) - (maxVariationMs / 3);
         }
 
-        // RH always slightly after LH for natural two-hand feel
-        rhTimingOffsetMs += 4 + timingVariationMs;
+        // RH slightly after LH but with rubato character
+        rhTimingOffsetMs += 3 + timingVariationMs;
 
         auto basePos = virtuoso::groove::GrooveGrid::fromBarBeatTuplet(
             adjusted.playbackBarIndex, adjusted.beatInBar, 0, 1, ts);

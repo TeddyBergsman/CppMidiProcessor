@@ -376,9 +376,9 @@ PianoTextureOrchestrator::assignRightHandRole(TextureMode mode, const Orchestrat
 {
     HandRole role;
 
-    // Default register for RH (above LH)
+    // Default register for RH (above LH) - extended for melodic freedom
     role.registerLow = 65;
-    role.registerHigh = 84;
+    role.registerHigh = 92;  // Allow sparkle register access
 
     switch (mode) {
     case TextureMode::Space:

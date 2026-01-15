@@ -7977,8 +7977,8 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
     const int rhDialogueHash = (adjusted.playbackBarIndex * 17 + adjusted.beatInBar * 11 + adjusted.chord.rootPc) % 100;
 
     if (!userActive) {
-        // RH plays independently - maintains harmonic color
-        // Higher probability on chord changes, but still active on sustained chords
+        // RH plays - higher probability when locked with LH
+        // This creates unified two-hand texture
 
         int rhPlayProb;
         if (adjusted.chordIsNew) {
@@ -8037,7 +8037,15 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
 
         // Apply density multiplier from activity mode AND phrase position
         rhPlayProb = int(rhPlayProb * rhDensityMult * phraseDensityMod);
-        rhPlayProb = qBound(10, rhPlayProb, 95);
+
+        // BOOST when LH is playing - creates locked two-hand texture
+        if (lhPlays) {
+            rhPlayProb = qMin(98, rhPlayProb + 50);  // +50% when locked with LH
+        } else {
+            rhPlayProb = rhPlayProb / 8;  // Very rare when LH silent
+        }
+
+        rhPlayProb = qBound(10, rhPlayProb, 98);
 
         rhPlaysThisBeat = (rhDialogueHash < rhPlayProb);
     }
@@ -8425,6 +8433,95 @@ JazzBalladPianoPlanner::planBeatWithOrchestrator(
             note.voicing_type = useRhRoll ? QStringLiteral("RH_roll") : rhVoicing.ontologyKey;
             note.logic_tag = QStringLiteral("RH-color");
             plan.notes.append(note);
+        }
+
+        // ================================================================
+        // RH SYNCOPATION: Add upbeat/offbeat hits for rhythmic interest
+        // ================================================================
+        // Professional pianists don't just play on beats - they add:
+        // - "And" hits (eighth note upbeats)
+        // - Anticipations (playing slightly before the next beat)
+        // - Syncopated re-articulations
+        // ================================================================
+        const quint32 syncHash = virtuoso::util::StableHash::mix(
+            adjusted.determinismSeed + 999,
+            adjusted.playbackBarIndex * 41 + adjusted.beatInBar * 23);
+        const int syncRoll = syncHash % 100;
+
+        // Syncopation probability - rare, tasteful seasoning only
+        int syncProb = 0;
+        if (energy > 0.35 && energy < 0.65) {
+            // Only in narrow moderate energy range
+            if (phraseProgress > 0.3 && phraseProgress < 0.7) {
+                syncProb = 4 + int(energy * 8);  // 4-9% - rare
+            }
+        }
+        // Don't syncopate on chord changes or cadences
+        if (adjusted.chordIsNew || adjusted.cadence01 > 0.3) syncProb = 0;
+
+        if (syncRoll < syncProb && !rhVoicing.midiNotes.isEmpty()) {
+            // Choose rhythm type: favor triplet/swing over straight
+            const int rhythmChoice = (syncHash / 100) % 10;
+            int rhythmType;
+            if (rhythmChoice < 4) {
+                rhythmType = 0;  // 40% triplet
+            } else if (rhythmChoice < 8) {
+                rhythmType = 1;  // 40% swing
+            } else {
+                rhythmType = 2;  // 20% straight
+            }
+
+            double offsetBeats;
+            QString voicingType;
+
+            if (rhythmType == 0) {
+                // TRIPLET: Hit on 3rd triplet (2/3 of beat) - classic jazz feel
+                offsetBeats = 2.0 / 3.0;
+                voicingType = QStringLiteral("RH_triplet");
+            } else if (rhythmType == 1) {
+                // SWING: Hit between triplet and straight (roughly 0.58) - relaxed swing
+                offsetBeats = 0.58;
+                voicingType = QStringLiteral("RH_swing");
+            } else {
+                // STRAIGHT EIGHTH: Classic "and" at 0.5
+                offsetBeats = 0.5;
+                voicingType = QStringLiteral("RH_sync_and");
+            }
+
+            const int offsetMs = int(offsetBeats * 60000.0 / qMax(60, bpm));
+
+            virtuoso::engine::AgentIntentNote syncNote;
+            syncNote.agent = QStringLiteral("Piano");
+            syncNote.channel = midiChannel;
+            syncNote.note = rhVoicing.topNoteMidi;  // Just the top note for lightness
+            syncNote.baseVelocity = qBound(25, rhBaseVel - 18, 65);  // Notably softer
+            syncNote.startPos = applyTimingOffset(finalPos, offsetMs, bpm, ts);
+            syncNote.durationWhole = virtuoso::groove::Rational(
+                static_cast<qint64>(rhDurBeats * 400), 4000);  // Short, punchy
+            syncNote.structural = false;
+            syncNote.voicing_type = voicingType;
+            syncNote.logic_tag = QStringLiteral("RH-syncopation");
+            plan.notes.append(syncNote);
+
+            // TRIPLET BONUS: Sometimes add a second triplet hit for full triplet figure
+            if (rhythmType == 0 && (syncHash % 7) < 2) {  // ~28% chance when doing triplet
+                // Add hit on 1st triplet (1/3 of beat)
+                const double firstTripletBeats = 1.0 / 3.0;
+                const int firstTripletMs = int(firstTripletBeats * 60000.0 / qMax(60, bpm));
+
+                virtuoso::engine::AgentIntentNote tripNote2;
+                tripNote2.agent = QStringLiteral("Piano");
+                tripNote2.channel = midiChannel;
+                tripNote2.note = rhVoicing.topNoteMidi;
+                tripNote2.baseVelocity = qBound(22, rhBaseVel - 22, 58);  // Even softer
+                tripNote2.startPos = applyTimingOffset(finalPos, firstTripletMs, bpm, ts);
+                tripNote2.durationWhole = virtuoso::groove::Rational(
+                    static_cast<qint64>(rhDurBeats * 300), 4000);
+                tripNote2.structural = false;
+                tripNote2.voicing_type = QStringLiteral("RH_triplet_2");
+                tripNote2.logic_tag = QStringLiteral("RH-triplet");
+                plan.notes.append(tripNote2);
+            }
         }
     }
 

@@ -66,6 +66,10 @@ public:
     double vocalVibratoRangeCents() const { return m_vocalVibratoRangeCents; }
     void setVocalVibratoRangeCents(double cents);
 
+    // Vibrato correction: filters out DC offset, keeping only the oscillation
+    bool vibratoCorrectionEnabled() const { return m_vibratoCorrectionEnabled; }
+    void setVibratoCorrectionEnabled(bool enabled);
+
     // Cell index tracking (called by engine on each step)
     void setCurrentCellIndex(int cellIndex);
     int currentCellIndex() const { return m_currentCellIndex; }
@@ -74,6 +78,7 @@ signals:
     void modeChanged(Mode newMode);
     void vocalBendEnabledChanged(bool enabled);
     void vocalVibratoRangeCentsChanged(double cents);
+    void vibratoCorrectionEnabledChanged(bool enabled);
 
 public slots:
     // Guitar input handlers (connected to MidiProcessor signals)
@@ -120,8 +125,9 @@ private:
 
     // State
     Mode m_mode = Mode::Off;
-    bool m_vocalBendEnabled = false;
+    bool m_vocalBendEnabled = true;           // Enabled by default
     double m_vocalVibratoRangeCents = 200.0;  // ±200 cents (default), or ±100 cents
+    bool m_vibratoCorrectionEnabled = true;   // Enabled by default - filter out DC offset from voice
     int m_currentCellIndex = -1;
 
     // Track last known chord (to persist across empty cells)
@@ -143,6 +149,19 @@ private:
 
     // Voice pitch tracking (for vocal bend mode)
     double m_lastVoiceCents = 0.0;
+
+    // Vibrato correction: exponential moving average to track DC offset
+    double m_voiceCentsAverage = 0.0;
+    bool m_voiceCentsAverageInitialized = false;  // True after first voice sample
+    int m_settlingCounter = 0;                    // Counts samples during settling period
+    int m_vibratoFadeInSamples = 0;               // Counter for fade-in (counts up from 0)
+    bool m_oscillationDetected = false;           // True once we've detected vibrato oscillation
+    double m_lastOscillation = 0.0;               // Previous oscillation value (for zero-crossing detection)
+
+    static constexpr double kVibratoCorrectionAlpha = 0.03;  // Smoothing factor (lower = slower adaptation)
+    static constexpr int kSettlingDuration = 30;             // ~300ms settling period before detecting vibrato
+    static constexpr int kVibratoFadeInDuration = 15;        // ~150ms fade-in once vibrato is detected
+    static constexpr double kOscillationThreshold = 8.0;     // Minimum cents deviation to consider as oscillation
 
     // Output channels (1-indexed, matching sendVirtualNoteOn expectations)
     // - AsPlayed mode: snapped notes -> channel 12

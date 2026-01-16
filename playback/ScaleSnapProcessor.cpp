@@ -80,6 +80,21 @@ void ScaleSnapProcessor::setVocalVibratoRangeCents(double cents)
     }
 }
 
+void ScaleSnapProcessor::setVibratoCorrectionEnabled(bool enabled)
+{
+    if (m_vibratoCorrectionEnabled != enabled) {
+        m_vibratoCorrectionEnabled = enabled;
+        // Reset the tracking state when toggling
+        m_voiceCentsAverage = 0.0;
+        m_voiceCentsAverageInitialized = false;
+        m_settlingCounter = 0;
+        m_vibratoFadeInSamples = 0;
+        m_oscillationDetected = false;
+        m_lastOscillation = 0.0;
+        emit vibratoCorrectionEnabledChanged(enabled);
+    }
+}
+
 void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
 {
     m_currentCellIndex = cellIndex;
@@ -92,6 +107,12 @@ void ScaleSnapProcessor::reset()
     m_lastGuitarHz = 0.0;
     m_lastGuitarCents = 0.0;
     m_lastVoiceCents = 0.0;
+    m_voiceCentsAverage = 0.0;
+    m_voiceCentsAverageInitialized = false;
+    m_settlingCounter = 0;
+    m_vibratoFadeInSamples = 0;
+    m_oscillationDetected = false;
+    m_lastOscillation = 0.0;
     // Reset pitch bend to center on both channels
     emitPitchBend(kChannelAsPlayed, 8192);
     emitPitchBend(kChannelHarmony, 8192);
@@ -268,6 +289,12 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
         m_lastGuitarHz = 0.0;
         m_lastGuitarCents = 0.0;
         m_lastVoiceCents = 0.0;
+        m_voiceCentsAverage = 0.0;
+        m_voiceCentsAverageInitialized = false;
+        m_settlingCounter = 0;
+        m_vibratoFadeInSamples = 0;
+        m_oscillationDetected = false;
+        m_lastOscillation = 0.0;
         emitPitchBend(kChannelHarmony, 8192);
         if (m_mode == Mode::AsPlayedPlusHarmony) {
             emitPitchBend(kChannelAsPlayed, 8192);
@@ -355,10 +382,72 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
 
     // Calculate cents deviation: how far is the voice from the snapped note?
     // Positive = voice is sharp, negative = voice is flat
-    double voiceCents = 1200.0 * std::log2(hz / note.referenceHz);
+    double rawVoiceCents = 1200.0 * std::log2(hz / note.referenceHz);
 
-    // Clamp voice vibrato to configurable range (±100 or ±200 cents)
-    voiceCents = qBound(-m_vocalVibratoRangeCents, voiceCents, m_vocalVibratoRangeCents);
+    // Clamp raw voice cents to configurable range before processing
+    rawVoiceCents = qBound(-m_vocalVibratoRangeCents, rawVoiceCents, m_vocalVibratoRangeCents);
+
+    double voiceCents = rawVoiceCents;
+
+    // Vibrato correction: filter out DC offset, keep only the oscillation
+    // Algorithm:
+    // 1. Settling period (~300ms): Track average but output zero bend
+    // 2. Detect oscillation: Look for zero-crossings with sufficient amplitude
+    // 3. Fade-in (~500ms): Once oscillation detected, gradually ramp up vibrato
+    if (m_vibratoCorrectionEnabled) {
+        // On first voice sample after note attack, initialize average to current pitch
+        if (!m_voiceCentsAverageInitialized) {
+            m_voiceCentsAverage = rawVoiceCents;
+            m_voiceCentsAverageInitialized = true;
+            m_settlingCounter = 0;
+            m_vibratoFadeInSamples = 0;
+            m_oscillationDetected = false;
+            m_lastOscillation = 0.0;
+        }
+
+        // Update exponential moving average (tracks the "center" of the voice pitch)
+        m_voiceCentsAverage = kVibratoCorrectionAlpha * rawVoiceCents + (1.0 - kVibratoCorrectionAlpha) * m_voiceCentsAverage;
+
+        // Subtract the average to get just the oscillation (AC component)
+        double oscillation = rawVoiceCents - m_voiceCentsAverage;
+
+        // During settling period: output zero bend, just track the average
+        if (m_settlingCounter < kSettlingDuration) {
+            ++m_settlingCounter;
+            voiceCents = 0.0;
+        } else {
+            // After settling: detect oscillation via zero-crossing with threshold
+            if (!m_oscillationDetected) {
+                // Check for zero-crossing with sufficient amplitude
+                // (sign change AND both values exceed threshold)
+                bool signChange = (m_lastOscillation > 0.0 && oscillation < 0.0) ||
+                                  (m_lastOscillation < 0.0 && oscillation > 0.0);
+                bool sufficientAmplitude = std::abs(m_lastOscillation) > kOscillationThreshold ||
+                                           std::abs(oscillation) > kOscillationThreshold;
+
+                if (signChange && sufficientAmplitude) {
+                    m_oscillationDetected = true;
+                    m_vibratoFadeInSamples = 0;
+                }
+            }
+
+            m_lastOscillation = oscillation;
+
+            // Only apply vibrato if oscillation has been detected
+            if (m_oscillationDetected) {
+                // Fade-in: vibrato ramps up from 0 over kVibratoFadeInDuration samples
+                if (m_vibratoFadeInSamples < kVibratoFadeInDuration) {
+                    ++m_vibratoFadeInSamples;
+                }
+                const double fadeGain = static_cast<double>(m_vibratoFadeInSamples) / kVibratoFadeInDuration;
+                voiceCents = oscillation * fadeGain;
+            } else {
+                // No oscillation detected yet - output zero bend
+                voiceCents = 0.0;
+            }
+        }
+    }
+
     m_lastVoiceCents = voiceCents;
 
     // In Original mode, combine guitar bend + voice vibrato
@@ -377,8 +466,11 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
     bendValue = qBound(0, bendValue, 16383);
 
     qDebug() << "ScaleSnap VoiceHz: voiceHz=" << hz << "refHz=" << note.referenceHz
-             << "voiceCents=" << voiceCents << "guitarCents=" << m_lastGuitarCents
-             << "totalCents=" << totalCents << "bendValue=" << bendValue;
+             << "rawCents=" << rawVoiceCents << "oscillation=" << (rawVoiceCents - m_voiceCentsAverage)
+             << "settling=" << m_settlingCounter << "/" << kSettlingDuration
+             << "oscDetected=" << m_oscillationDetected
+             << "fadeGain=" << (m_oscillationDetected ? static_cast<double>(m_vibratoFadeInSamples) / kVibratoFadeInDuration : 0.0)
+             << "voiceCents=" << voiceCents << "bendValue=" << bendValue;
 
     // Apply pitch bend to all active output channels based on mode
     switch (m_mode) {

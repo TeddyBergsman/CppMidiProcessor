@@ -52,6 +52,10 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
             }
         }
 
+        if (m_vibratoCorrectionCheckbox) {
+            m_vibratoCorrectionCheckbox->setChecked(snap->vibratoCorrectionEnabled());
+        }
+
         // Connect to changes from the processor (in case it changes elsewhere)
         connect(snap, &playback::ScaleSnapProcessor::modeChanged,
                 this, &SnappingWindow::onEngineModeChanged,
@@ -61,6 +65,9 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
                 Qt::UniqueConnection);
         connect(snap, &playback::ScaleSnapProcessor::vocalVibratoRangeCentsChanged,
                 this, &SnappingWindow::onEngineVocalVibratoRangeChanged,
+                Qt::UniqueConnection);
+        connect(snap, &playback::ScaleSnapProcessor::vibratoCorrectionEnabledChanged,
+                this, &SnappingWindow::onEngineVibratoCorrectionChanged,
                 Qt::UniqueConnection);
     }
 
@@ -127,6 +134,11 @@ void SnappingWindow::buildUi()
     vibratoRow->addStretch();
     mainLayout->addLayout(vibratoRow);
 
+    // Vibrato correction checkbox
+    m_vibratoCorrectionCheckbox = new QCheckBox("Vibrato Correction", central);
+    m_vibratoCorrectionCheckbox->setToolTip("Filters out pitch drift from the voice signal, keeping only the vibrato oscillation.\nThis keeps the output perfectly centered around the guitar note, even if you sing slightly flat or sharp.");
+    mainLayout->addWidget(m_vibratoCorrectionCheckbox);
+
     mainLayout->addStretch();
 
     // Connect widgets
@@ -136,6 +148,8 @@ void SnappingWindow::buildUi()
             this, &SnappingWindow::onVocalBendToggled);
     connect(m_vocalVibratoRangeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &SnappingWindow::onVocalVibratoRangeChanged);
+    connect(m_vibratoCorrectionCheckbox, &QCheckBox::toggled,
+            this, &SnappingWindow::onVibratoCorrectionToggled);
 
     updateModeDescription();
 }
@@ -171,6 +185,16 @@ void SnappingWindow::onVocalVibratoRangeChanged(int index)
     auto* snap = m_engine->scaleSnapProcessor();
     if (snap) {
         snap->setVocalVibratoRangeCents(cents);
+    }
+}
+
+void SnappingWindow::onVibratoCorrectionToggled(bool checked)
+{
+    if (!m_engine) return;
+
+    auto* snap = m_engine->scaleSnapProcessor();
+    if (snap) {
+        snap->setVibratoCorrectionEnabled(checked);
     }
 }
 
@@ -219,6 +243,17 @@ void SnappingWindow::onEngineVocalVibratoRangeChanged(double cents)
             }
             break;
         }
+    }
+}
+
+void SnappingWindow::onEngineVibratoCorrectionChanged(bool enabled)
+{
+    if (!m_vibratoCorrectionCheckbox) return;
+
+    if (m_vibratoCorrectionCheckbox->isChecked() != enabled) {
+        m_vibratoCorrectionCheckbox->blockSignals(true);
+        m_vibratoCorrectionCheckbox->setChecked(enabled);
+        m_vibratoCorrectionCheckbox->blockSignals(false);
     }
 }
 

@@ -70,6 +70,16 @@ void ScaleSnapProcessor::setVocalBendEnabled(bool enabled)
     }
 }
 
+void ScaleSnapProcessor::setVocalVibratoRangeCents(double cents)
+{
+    // Clamp to valid range (100 or 200 cents)
+    cents = qBound(100.0, cents, 200.0);
+    if (m_vocalVibratoRangeCents != cents) {
+        m_vocalVibratoRangeCents = cents;
+        emit vocalVibratoRangeCentsChanged(cents);
+    }
+}
+
 void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
 {
     m_currentCellIndex = cellIndex;
@@ -347,9 +357,8 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
     // Positive = voice is sharp, negative = voice is flat
     double voiceCents = 1200.0 * std::log2(hz / note.referenceHz);
 
-    // Clamp voice vibrato to reasonable range (±100 cents = ±1 semitone)
-    const double maxVoiceCents = 100.0;
-    voiceCents = qBound(-maxVoiceCents, voiceCents, maxVoiceCents);
+    // Clamp voice vibrato to configurable range (±100 or ±200 cents)
+    voiceCents = qBound(-m_vocalVibratoRangeCents, voiceCents, m_vocalVibratoRangeCents);
     m_lastVoiceCents = voiceCents;
 
     // In Original mode, combine guitar bend + voice vibrato

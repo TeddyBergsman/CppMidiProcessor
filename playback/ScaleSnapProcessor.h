@@ -62,6 +62,10 @@ public:
     bool vocalBendEnabled() const { return m_vocalBendEnabled; }
     void setVocalBendEnabled(bool enabled);
 
+    // Vocal vibrato range in cents (how much voice deviation affects pitch bend)
+    double vocalVibratoRangeCents() const { return m_vocalVibratoRangeCents; }
+    void setVocalVibratoRangeCents(double cents);
+
     // Cell index tracking (called by engine on each step)
     void setCurrentCellIndex(int cellIndex);
     int currentCellIndex() const { return m_currentCellIndex; }
@@ -69,6 +73,7 @@ public:
 signals:
     void modeChanged(Mode newMode);
     void vocalBendEnabledChanged(bool enabled);
+    void vocalVibratoRangeCentsChanged(double cents);
 
 public slots:
     // Guitar input handlers (connected to MidiProcessor signals)
@@ -116,6 +121,7 @@ private:
     // State
     Mode m_mode = Mode::Off;
     bool m_vocalBendEnabled = false;
+    double m_vocalVibratoRangeCents = 200.0;  // ±200 cents (default), or ±100 cents
     int m_currentCellIndex = -1;
 
     // Track last known chord (to persist across empty cells)

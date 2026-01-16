@@ -28,8 +28,10 @@ public:
 private slots:
     void onModeChanged(int index);
     void onVocalBendToggled(bool checked);
+    void onVocalVibratoRangeChanged(int index);
     void onEngineModeChanged(playback::ScaleSnapProcessor::Mode mode);
     void onEngineVocalBendChanged(bool enabled);
+    void onEngineVocalVibratoRangeChanged(double cents);
 
 private:
     void buildUi();
@@ -39,5 +41,6 @@ private:
 
     QComboBox* m_modeCombo = nullptr;
     QCheckBox* m_vocalBendCheckbox = nullptr;
+    QComboBox* m_vocalVibratoRangeCombo = nullptr;
     QLabel* m_descriptionLabel = nullptr;
 };

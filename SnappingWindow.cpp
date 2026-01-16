@@ -41,12 +41,26 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
             m_vocalBendCheckbox->setChecked(snap->vocalBendEnabled());
         }
 
+        if (m_vocalVibratoRangeCombo) {
+            // Match combo index to current cents value
+            const double cents = snap->vocalVibratoRangeCents();
+            for (int i = 0; i < m_vocalVibratoRangeCombo->count(); ++i) {
+                if (qAbs(m_vocalVibratoRangeCombo->itemData(i).toDouble() - cents) < 1.0) {
+                    m_vocalVibratoRangeCombo->setCurrentIndex(i);
+                    break;
+                }
+            }
+        }
+
         // Connect to changes from the processor (in case it changes elsewhere)
         connect(snap, &playback::ScaleSnapProcessor::modeChanged,
                 this, &SnappingWindow::onEngineModeChanged,
                 Qt::UniqueConnection);
         connect(snap, &playback::ScaleSnapProcessor::vocalBendEnabledChanged,
                 this, &SnappingWindow::onEngineVocalBendChanged,
+                Qt::UniqueConnection);
+        connect(snap, &playback::ScaleSnapProcessor::vocalVibratoRangeCentsChanged,
+                this, &SnappingWindow::onEngineVocalVibratoRangeChanged,
                 Qt::UniqueConnection);
     }
 
@@ -100,6 +114,19 @@ void SnappingWindow::buildUi()
     m_vocalBendCheckbox->setToolTip("When enabled, transfers vocal pitch variations to MIDI pitch bend on output channels 11/12.\nThis adds expressiveness by modulating the snapped/harmony notes with your voice.");
     mainLayout->addWidget(m_vocalBendCheckbox);
 
+    // Vocal vibrato range combo
+    QHBoxLayout* vibratoRow = new QHBoxLayout();
+    vibratoRow->setSpacing(8);
+    QLabel* vibratoLabel = new QLabel("Vocal Vibrato Range:", central);
+    m_vocalVibratoRangeCombo = new QComboBox(central);
+    m_vocalVibratoRangeCombo->addItem("±200 cents (default)", 200.0);
+    m_vocalVibratoRangeCombo->addItem("±100 cents", 100.0);
+    m_vocalVibratoRangeCombo->setToolTip("Maximum vocal pitch deviation that affects pitch bend.\n±200 cents = ±2 semitones, ±100 cents = ±1 semitone.");
+    vibratoRow->addWidget(vibratoLabel);
+    vibratoRow->addWidget(m_vocalVibratoRangeCombo);
+    vibratoRow->addStretch();
+    mainLayout->addLayout(vibratoRow);
+
     mainLayout->addStretch();
 
     // Connect widgets
@@ -107,6 +134,8 @@ void SnappingWindow::buildUi()
             this, &SnappingWindow::onModeChanged);
     connect(m_vocalBendCheckbox, &QCheckBox::toggled,
             this, &SnappingWindow::onVocalBendToggled);
+    connect(m_vocalVibratoRangeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &SnappingWindow::onVocalVibratoRangeChanged);
 
     updateModeDescription();
 }
@@ -131,6 +160,17 @@ void SnappingWindow::onVocalBendToggled(bool checked)
     auto* snap = m_engine->scaleSnapProcessor();
     if (snap) {
         snap->setVocalBendEnabled(checked);
+    }
+}
+
+void SnappingWindow::onVocalVibratoRangeChanged(int index)
+{
+    if (!m_engine || !m_vocalVibratoRangeCombo) return;
+
+    const double cents = m_vocalVibratoRangeCombo->itemData(index).toDouble();
+    auto* snap = m_engine->scaleSnapProcessor();
+    if (snap) {
+        snap->setVocalVibratoRangeCents(cents);
     }
 }
 
@@ -162,6 +202,23 @@ void SnappingWindow::onEngineVocalBendChanged(bool enabled)
         m_vocalBendCheckbox->blockSignals(true);
         m_vocalBendCheckbox->setChecked(enabled);
         m_vocalBendCheckbox->blockSignals(false);
+    }
+}
+
+void SnappingWindow::onEngineVocalVibratoRangeChanged(double cents)
+{
+    if (!m_vocalVibratoRangeCombo) return;
+
+    // Find matching combo index
+    for (int i = 0; i < m_vocalVibratoRangeCombo->count(); ++i) {
+        if (qAbs(m_vocalVibratoRangeCombo->itemData(i).toDouble() - cents) < 1.0) {
+            if (m_vocalVibratoRangeCombo->currentIndex() != i) {
+                m_vocalVibratoRangeCombo->blockSignals(true);
+                m_vocalVibratoRangeCombo->setCurrentIndex(i);
+                m_vocalVibratoRangeCombo->blockSignals(false);
+            }
+            break;
+        }
     }
 }
 

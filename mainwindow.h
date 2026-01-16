@@ -28,6 +28,7 @@ class NoteMonitorWidget;
 class LibraryWindow;
 class GrooveLabWindow;
 class VirtuosoVocabularyWindow;
+class SnappingWindow;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -102,6 +103,9 @@ protected:
     VirtuosoVocabularyWindow* m_vocabPianoWindow = nullptr;
     VirtuosoVocabularyWindow* m_vocabBassWindow = nullptr;
     VirtuosoVocabularyWindow* m_vocabDrumsWindow = nullptr;
+
+    // Snapping settings window (Window → Snapping)
+    SnappingWindow* m_snappingWindow = nullptr;
 };
 
 #endif // MAINWINDOW_H

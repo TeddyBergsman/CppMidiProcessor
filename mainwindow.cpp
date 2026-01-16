@@ -18,6 +18,7 @@
 #include "GrooveLabWindow.h"
 #include "VirtuosoPresetInspectorWindow.h"
 #include "VirtuosoVocabularyWindow.h"
+#include "SnappingWindow.h"
 
 namespace {
 static const char* kIRealLastHtmlPathKey = "ireal/lastHtmlPath";
@@ -251,7 +252,7 @@ void MainWindow::createWidgets(const Preset& preset) {
         QAction* presetInspectorAction = new QAction("Virtuoso Preset Inspector", this);
         presetInspectorAction->setMenuRole(QAction::NoRole);
         connect(presetInspectorAction, &QAction::triggered, this, [this]() {
-            // Make this independent of NoteMonitorWidget; it’s a global library inspector.
+            // Make this independent of NoteMonitorWidget; it's a global library inspector.
             auto* w = new VirtuosoPresetInspectorWindow(m_midiProcessor, this);
             w->setAttribute(Qt::WA_DeleteOnClose, true);
             w->show();
@@ -259,6 +260,22 @@ void MainWindow::createWidgets(const Preset& preset) {
             w->activateWindow();
         });
         windowMenu->addAction(presetInspectorAction);
+
+        QAction* snappingAction = new QAction("Snapping", this);
+        snappingAction->setMenuRole(QAction::NoRole);
+        connect(snappingAction, &QAction::triggered, this, [this]() {
+            if (!m_snappingWindow) {
+                m_snappingWindow = new SnappingWindow(this);
+                m_snappingWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+                if (noteMonitorWidget && noteMonitorWidget->virtuosoPlayback()) {
+                    m_snappingWindow->setPlaybackEngine(noteMonitorWidget->virtuosoPlayback());
+                }
+            }
+            m_snappingWindow->show();
+            m_snappingWindow->raise();
+            m_snappingWindow->activateWindow();
+        });
+        windowMenu->addAction(snappingAction);
     }
 
     // Dynamically create program buttons from preset data

@@ -127,6 +127,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   VirtuosoPresetInspectorWindow.cpp
   VirtuosoVocabularyWindow.h
   VirtuosoVocabularyWindow.cpp
+  SnappingWindow.h
+  SnappingWindow.cpp
   midiprocessor.h
   midiprocessor.cpp
   voicecontroller.h

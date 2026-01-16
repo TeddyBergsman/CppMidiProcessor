@@ -3,6 +3,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QLabel>
 #include <QGroupBox>
 
@@ -13,7 +14,7 @@ SnappingWindow::SnappingWindow(QWidget* parent)
 {
     setWindowTitle("Snapping Settings");
     setAttribute(Qt::WA_DeleteOnClose, false);
-    resize(400, 200);
+    resize(400, 250);
 
     buildUi();
 }
@@ -25,18 +26,27 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
 
     // Sync UI to current engine state
     auto* snap = m_engine->scaleSnapProcessor();
-    if (snap && m_modeCombo) {
-        const int modeInt = static_cast<int>(snap->mode());
-        for (int i = 0; i < m_modeCombo->count(); ++i) {
-            if (m_modeCombo->itemData(i).toInt() == modeInt) {
-                m_modeCombo->setCurrentIndex(i);
-                break;
+    if (snap) {
+        if (m_modeCombo) {
+            const int modeInt = static_cast<int>(snap->mode());
+            for (int i = 0; i < m_modeCombo->count(); ++i) {
+                if (m_modeCombo->itemData(i).toInt() == modeInt) {
+                    m_modeCombo->setCurrentIndex(i);
+                    break;
+                }
             }
         }
 
-        // Connect to mode changes from the processor (in case it changes elsewhere)
+        if (m_vocalBendCheckbox) {
+            m_vocalBendCheckbox->setChecked(snap->vocalBendEnabled());
+        }
+
+        // Connect to changes from the processor (in case it changes elsewhere)
         connect(snap, &playback::ScaleSnapProcessor::modeChanged,
                 this, &SnappingWindow::onEngineModeChanged,
+                Qt::UniqueConnection);
+        connect(snap, &playback::ScaleSnapProcessor::vocalBendEnabledChanged,
+                this, &SnappingWindow::onEngineVocalBendChanged,
                 Qt::UniqueConnection);
     }
 
@@ -65,10 +75,10 @@ void SnappingWindow::buildUi()
     QLabel* modeLabel = new QLabel("Mode:", modeGroup);
     m_modeCombo = new QComboBox(modeGroup);
     m_modeCombo->addItem("Off", static_cast<int>(playback::ScaleSnapProcessor::Mode::Off));
+    m_modeCombo->addItem("Original", static_cast<int>(playback::ScaleSnapProcessor::Mode::Original));
     m_modeCombo->addItem("As Played", static_cast<int>(playback::ScaleSnapProcessor::Mode::AsPlayed));
     m_modeCombo->addItem("Harmony", static_cast<int>(playback::ScaleSnapProcessor::Mode::Harmony));
     m_modeCombo->addItem("Both", static_cast<int>(playback::ScaleSnapProcessor::Mode::AsPlayedPlusHarmony));
-    m_modeCombo->addItem("As Played + Bend", static_cast<int>(playback::ScaleSnapProcessor::Mode::AsPlayedPlusBend));
     m_modeCombo->setMinimumWidth(180);
 
     comboRow->addWidget(modeLabel);
@@ -84,11 +94,19 @@ void SnappingWindow::buildUi()
     modeLayout->addWidget(m_descriptionLabel);
 
     mainLayout->addWidget(modeGroup);
+
+    // Vocal bend checkbox (outside mode group)
+    m_vocalBendCheckbox = new QCheckBox("Apply Vocal Vibrato as Pitch Bend", central);
+    m_vocalBendCheckbox->setToolTip("When enabled, transfers vocal pitch variations to MIDI pitch bend on output channels 11/12.\nThis adds expressiveness by modulating the snapped/harmony notes with your voice.");
+    mainLayout->addWidget(m_vocalBendCheckbox);
+
     mainLayout->addStretch();
 
-    // Connect combo box
+    // Connect widgets
     connect(m_modeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &SnappingWindow::onModeChanged);
+    connect(m_vocalBendCheckbox, &QCheckBox::toggled,
+            this, &SnappingWindow::onVocalBendToggled);
 
     updateModeDescription();
 }
@@ -104,6 +122,16 @@ void SnappingWindow::onModeChanged(int index)
     }
 
     updateModeDescription();
+}
+
+void SnappingWindow::onVocalBendToggled(bool checked)
+{
+    if (!m_engine) return;
+
+    auto* snap = m_engine->scaleSnapProcessor();
+    if (snap) {
+        snap->setVocalBendEnabled(checked);
+    }
 }
 
 void SnappingWindow::onEngineModeChanged(playback::ScaleSnapProcessor::Mode mode)
@@ -126,6 +154,17 @@ void SnappingWindow::onEngineModeChanged(playback::ScaleSnapProcessor::Mode mode
     updateModeDescription();
 }
 
+void SnappingWindow::onEngineVocalBendChanged(bool enabled)
+{
+    if (!m_vocalBendCheckbox) return;
+
+    if (m_vocalBendCheckbox->isChecked() != enabled) {
+        m_vocalBendCheckbox->blockSignals(true);
+        m_vocalBendCheckbox->setChecked(enabled);
+        m_vocalBendCheckbox->blockSignals(false);
+    }
+}
+
 void SnappingWindow::updateModeDescription()
 {
     if (!m_descriptionLabel || !m_modeCombo) return;
@@ -136,7 +175,10 @@ void SnappingWindow::updateModeDescription()
     QString desc;
     switch (mode) {
     case playback::ScaleSnapProcessor::Mode::Off:
-        desc = "Snapping is disabled. Guitar notes pass through unmodified.";
+        desc = "Snapping is disabled. Guitar notes are not duplicated to channels 11/12.";
+        break;
+    case playback::ScaleSnapProcessor::Mode::Original:
+        desc = "Pass through guitar notes unchanged to channel 12 (duplicates channel 1 data including CC2).";
         break;
     case playback::ScaleSnapProcessor::Mode::AsPlayed:
         desc = "Snap guitar notes to the nearest scale/chord tone. Output on MIDI channel 12.";
@@ -146,9 +188,6 @@ void SnappingWindow::updateModeDescription()
         break;
     case playback::ScaleSnapProcessor::Mode::AsPlayedPlusHarmony:
         desc = "Output both snapped notes (channel 11) and harmony notes (channel 12) simultaneously.";
-        break;
-    case playback::ScaleSnapProcessor::Mode::AsPlayedPlusBend:
-        desc = "Snap notes to scale tones with vocal vibrato transferred as pitch bend. Output on MIDI channel 12.";
         break;
     }
 

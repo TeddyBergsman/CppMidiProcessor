@@ -38,10 +38,10 @@ class ScaleSnapProcessor : public QObject {
 public:
     enum class Mode {
         Off = 0,
+        Original,            // Pass through original notes (no snapping) -> channel 12
         AsPlayed,            // Snap to nearest scale tone -> channel 12
         Harmony,             // Generate harmony note -> channel 12
-        AsPlayedPlusHarmony, // As Played -> channel 11, Harmony -> channel 12
-        AsPlayedPlusBend     // Snap + apply vocal vibrato as pitch bend -> channel 12
+        AsPlayedPlusHarmony  // As Played -> channel 11, Harmony -> channel 12
     };
     Q_ENUM(Mode)
 
@@ -58,12 +58,17 @@ public:
     Mode mode() const { return m_mode; }
     void setMode(Mode mode);
 
+    // Vocal bend control (applies pitch bend from voice Hz to all output)
+    bool vocalBendEnabled() const { return m_vocalBendEnabled; }
+    void setVocalBendEnabled(bool enabled);
+
     // Cell index tracking (called by engine on each step)
     void setCurrentCellIndex(int cellIndex);
     int currentCellIndex() const { return m_currentCellIndex; }
 
 signals:
     void modeChanged(Mode newMode);
+    void vocalBendEnabledChanged(bool enabled);
 
 public slots:
     // Guitar input handlers (connected to MidiProcessor signals)
@@ -110,6 +115,7 @@ private:
 
     // State
     Mode m_mode = Mode::Off;
+    bool m_vocalBendEnabled = false;
     int m_currentCellIndex = -1;
 
     // Track last known chord (to persist across empty cells)

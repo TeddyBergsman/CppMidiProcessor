@@ -57,6 +57,19 @@ void ScaleSnapProcessor::setMode(Mode mode)
     }
 }
 
+void ScaleSnapProcessor::setVocalBendEnabled(bool enabled)
+{
+    if (m_vocalBendEnabled != enabled) {
+        m_vocalBendEnabled = enabled;
+        // Reset pitch bend when toggling
+        if (!enabled) {
+            emitPitchBend(kChannelAsPlayed, 8192);
+            emitPitchBend(kChannelHarmony, 8192);
+        }
+        emit vocalBendEnabledChanged(enabled);
+    }
+}
+
 void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
 {
     m_currentCellIndex = cellIndex;
@@ -79,6 +92,23 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
 
     if (m_mode == Mode::Off || !m_midi) {
         qDebug() << "ScaleSnap: Exiting early - mode is Off or no midi processor";
+        return;
+    }
+
+    // Original mode: pass through unchanged to channel 12
+    if (m_mode == Mode::Original) {
+        ActiveNote active;
+        active.originalNote = midiNote;
+        active.snappedNote = midiNote;
+        active.referenceHz = midiNoteToHz(midiNote);
+
+        // Reset pitch bend before new note (unless vocal bend will control it)
+        if (!m_vocalBendEnabled) {
+            emitPitchBend(kChannelHarmony, 8192);
+        }
+
+        emitNoteOn(kChannelHarmony, midiNote, velocity);
+        m_activeNotes.insert(midiNote, active);
         return;
     }
 
@@ -139,10 +169,12 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
     active.snappedNote = snappedNote;
     active.referenceHz = midiNoteToHz(snappedNote);
 
-    // Reset pitch bend before new note
-    emitPitchBend(kChannelHarmony, 8192);
-    if (m_mode == Mode::AsPlayedPlusHarmony) {
-        emitPitchBend(kChannelAsPlayed, 8192);
+    // Reset pitch bend before new note (unless vocal bend will control it)
+    if (!m_vocalBendEnabled) {
+        emitPitchBend(kChannelHarmony, 8192);
+        if (m_mode == Mode::AsPlayedPlusHarmony) {
+            emitPitchBend(kChannelAsPlayed, 8192);
+        }
     }
 
     switch (m_mode) {
@@ -174,11 +206,6 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
         break;
     }
 
-    case Mode::AsPlayedPlusBend:
-        // Same as AsPlayed, but voice pitch updates will modulate pitch bend
-        emitNoteOn(kChannelHarmony, snappedNote, velocity);
-        break;
-
     default:
         break;
     }
@@ -200,6 +227,7 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
     const ActiveNote& note = it.value();
 
     switch (m_mode) {
+    case Mode::Original:
     case Mode::AsPlayed:
         emitNoteOff(kChannelHarmony, note.snappedNote);
         break;
@@ -215,10 +243,6 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
         if (note.harmonyNote >= 0) {
             emitNoteOff(kChannelHarmony, note.harmonyNote);
         }
-        break;
-
-    case Mode::AsPlayedPlusBend:
-        emitNoteOff(kChannelHarmony, note.snappedNote);
         break;
 
     default:
@@ -298,6 +322,7 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
 
     // Forward CC2 (breath control) to scale snap channels
     switch (m_mode) {
+    case Mode::Original:
     case Mode::AsPlayed:
     case Mode::Harmony:
         emitCC(kChannelHarmony, 2, value);
@@ -308,10 +333,6 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
         emitCC(kChannelHarmony, 2, value);
         break;
 
-    case Mode::AsPlayedPlusBend:
-        emitCC(kChannelHarmony, 2, value);
-        break;
-
     default:
         break;
     }
@@ -319,8 +340,8 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
 
 void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
 {
-    // Only active in AsPlayedPlusBend mode with active notes
-    if (m_mode != Mode::AsPlayedPlusBend || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
+    // Only active when vocal bend is enabled, not in Off mode, and there are active notes
+    if (!m_vocalBendEnabled || m_mode == Mode::Off || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
         return;
     }
 
@@ -348,7 +369,22 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
     qDebug() << "ScaleSnap VoiceHz: voiceHz=" << hz << "refHz=" << note.referenceHz
              << "cents=" << m_lastVoiceCents << "bendValue=" << bendValue;
 
-    emitPitchBend(kChannelHarmony, bendValue);
+    // Apply pitch bend to all active output channels based on mode
+    switch (m_mode) {
+    case Mode::Original:
+    case Mode::AsPlayed:
+    case Mode::Harmony:
+        emitPitchBend(kChannelHarmony, bendValue);
+        break;
+
+    case Mode::AsPlayedPlusHarmony:
+        emitPitchBend(kChannelAsPlayed, bendValue);
+        emitPitchBend(kChannelHarmony, bendValue);
+        break;
+
+    default:
+        break;
+    }
 }
 
 QSet<int> ScaleSnapProcessor::computeValidPitchClasses() const
@@ -648,6 +684,7 @@ void ScaleSnapProcessor::emitAllNotesOff()
         const ActiveNote& note = it.value();
 
         switch (m_mode) {
+        case Mode::Original:
         case Mode::AsPlayed:
             emitNoteOff(kChannelHarmony, note.snappedNote);
             break;
@@ -663,10 +700,6 @@ void ScaleSnapProcessor::emitAllNotesOff()
             if (note.harmonyNote >= 0) {
                 emitNoteOff(kChannelHarmony, note.harmonyNote);
             }
-            break;
-
-        case Mode::AsPlayedPlusBend:
-            emitNoteOff(kChannelHarmony, note.snappedNote);
             break;
 
         default:

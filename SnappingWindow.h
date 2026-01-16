@@ -4,6 +4,7 @@
 #include "playback/ScaleSnapProcessor.h"
 
 class QComboBox;
+class QCheckBox;
 class QLabel;
 class MidiProcessor;
 
@@ -26,7 +27,9 @@ public:
 
 private slots:
     void onModeChanged(int index);
+    void onVocalBendToggled(bool checked);
     void onEngineModeChanged(playback::ScaleSnapProcessor::Mode mode);
+    void onEngineVocalBendChanged(bool enabled);
 
 private:
     void buildUi();
@@ -35,5 +38,6 @@ private:
     playback::VirtuosoBalladMvpPlaybackEngine* m_engine = nullptr;
 
     QComboBox* m_modeCombo = nullptr;
+    QCheckBox* m_vocalBendCheckbox = nullptr;
     QLabel* m_descriptionLabel = nullptr;
 };

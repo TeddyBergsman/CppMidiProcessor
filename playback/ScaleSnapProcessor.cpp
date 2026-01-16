@@ -264,28 +264,20 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
 
 void ScaleSnapProcessor::onGuitarHzUpdated(double hz)
 {
-    // TEMPORARILY DISABLED - pitch bend forwarding disabled for debugging
-    Q_UNUSED(hz);
-    return;
-
-    if (m_mode == Mode::Off || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
+    // Only forward guitar pitch bend in Original mode (when vocal bend is not overriding)
+    // For other modes, pitch bend is either disabled or controlled by vocal bend
+    if (m_mode != Mode::Original || m_vocalBendEnabled || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
         return;
     }
 
     m_lastGuitarHz = hz;
-
-    // Find the most recently played active note (usually just one for monophonic guitar)
-    // For polyphonic, we use the first active note's reference
-    if (m_activeNotes.isEmpty()) {
-        return;
-    }
 
     const ActiveNote& note = m_activeNotes.begin().value();
     if (note.referenceHz <= 0.0) {
         return;
     }
 
-    // Calculate cents deviation from the snapped note's reference frequency
+    // Calculate cents deviation from the original note's reference frequency
     const double cents = hzToCents(hz, note.referenceHz);
 
     // Convert to MIDI pitch bend (14-bit, 0-16383, centered at 8192)
@@ -294,24 +286,8 @@ void ScaleSnapProcessor::onGuitarHzUpdated(double hz)
     int bendValue = 8192 + static_cast<int>((cents / bendRange) * 8192.0);
     bendValue = qBound(0, bendValue, 16383);
 
-    // Forward pitch bend to appropriate channels
-    switch (m_mode) {
-    case Mode::AsPlayed:
-        emitPitchBend(kChannelHarmony, bendValue);
-        break;
-
-    case Mode::Harmony:
-        emitPitchBend(kChannelHarmony, bendValue);
-        break;
-
-    case Mode::AsPlayedPlusHarmony:
-        emitPitchBend(kChannelAsPlayed, bendValue);
-        emitPitchBend(kChannelHarmony, bendValue);
-        break;
-
-    default:
-        break;
-    }
+    // Forward guitar pitch bend to channel 12 in Original mode
+    emitPitchBend(kChannelHarmony, bendValue);
 }
 
 void ScaleSnapProcessor::onVoiceCc2Updated(int value)

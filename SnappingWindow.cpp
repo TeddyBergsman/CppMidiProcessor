@@ -14,7 +14,7 @@ SnappingWindow::SnappingWindow(QWidget* parent)
 {
     setWindowTitle("Snapping Settings");
     setAttribute(Qt::WA_DeleteOnClose, false);
-    resize(400, 250);
+    resize(400, 350);
 
     buildUi();
 }
@@ -27,11 +27,23 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
     // Sync UI to current engine state
     auto* snap = m_engine->scaleSnapProcessor();
     if (snap) {
-        if (m_modeCombo) {
-            const int modeInt = static_cast<int>(snap->mode());
-            for (int i = 0; i < m_modeCombo->count(); ++i) {
-                if (m_modeCombo->itemData(i).toInt() == modeInt) {
-                    m_modeCombo->setCurrentIndex(i);
+        // Lead mode combo
+        if (m_leadModeCombo) {
+            const int modeInt = static_cast<int>(snap->leadMode());
+            for (int i = 0; i < m_leadModeCombo->count(); ++i) {
+                if (m_leadModeCombo->itemData(i).toInt() == modeInt) {
+                    m_leadModeCombo->setCurrentIndex(i);
+                    break;
+                }
+            }
+        }
+
+        // Harmony mode combo
+        if (m_harmonyModeCombo) {
+            const int modeInt = static_cast<int>(snap->harmonyMode());
+            for (int i = 0; i < m_harmonyModeCombo->count(); ++i) {
+                if (m_harmonyModeCombo->itemData(i).toInt() == modeInt) {
+                    m_harmonyModeCombo->setCurrentIndex(i);
                     break;
                 }
             }
@@ -61,8 +73,11 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
         }
 
         // Connect to changes from the processor (in case it changes elsewhere)
-        connect(snap, &playback::ScaleSnapProcessor::modeChanged,
-                this, &SnappingWindow::onEngineModeChanged,
+        connect(snap, &playback::ScaleSnapProcessor::leadModeChanged,
+                this, &SnappingWindow::onEngineLeadModeChanged,
+                Qt::UniqueConnection);
+        connect(snap, &playback::ScaleSnapProcessor::harmonyModeChanged,
+                this, &SnappingWindow::onEngineHarmonyModeChanged,
                 Qt::UniqueConnection);
         connect(snap, &playback::ScaleSnapProcessor::vocalBendEnabledChanged,
                 this, &SnappingWindow::onEngineVocalBendChanged,
@@ -78,7 +93,8 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
                 Qt::UniqueConnection);
     }
 
-    updateModeDescription();
+    updateLeadModeDescription();
+    updateHarmonyModeDescription();
 }
 
 void SnappingWindow::buildUi()
@@ -90,42 +106,71 @@ void SnappingWindow::buildUi()
     mainLayout->setContentsMargins(16, 16, 16, 16);
     mainLayout->setSpacing(12);
 
-    // Mode selection group
-    QGroupBox* modeGroup = new QGroupBox("Snap Mode", central);
-    QVBoxLayout* modeLayout = new QVBoxLayout(modeGroup);
-    modeLayout->setContentsMargins(12, 12, 12, 12);
-    modeLayout->setSpacing(8);
+    // ===== LEAD MODE GROUP =====
+    QGroupBox* leadGroup = new QGroupBox("Lead (Channel 12)", central);
+    QVBoxLayout* leadLayout = new QVBoxLayout(leadGroup);
+    leadLayout->setContentsMargins(12, 12, 12, 12);
+    leadLayout->setSpacing(8);
 
-    // Mode combo box
-    QHBoxLayout* comboRow = new QHBoxLayout();
-    comboRow->setSpacing(8);
+    // Lead mode combo box
+    QHBoxLayout* leadComboRow = new QHBoxLayout();
+    leadComboRow->setSpacing(8);
 
-    QLabel* modeLabel = new QLabel("Mode:", modeGroup);
-    m_modeCombo = new QComboBox(modeGroup);
-    m_modeCombo->addItem("Off", static_cast<int>(playback::ScaleSnapProcessor::Mode::Off));
-    m_modeCombo->addItem("Original", static_cast<int>(playback::ScaleSnapProcessor::Mode::Original));
-    m_modeCombo->addItem("As Played", static_cast<int>(playback::ScaleSnapProcessor::Mode::AsPlayed));
-    m_modeCombo->addItem("Harmony", static_cast<int>(playback::ScaleSnapProcessor::Mode::Harmony));
-    m_modeCombo->addItem("Both", static_cast<int>(playback::ScaleSnapProcessor::Mode::AsPlayedPlusHarmony));
-    m_modeCombo->setMinimumWidth(180);
+    QLabel* leadLabel = new QLabel("Mode:", leadGroup);
+    m_leadModeCombo = new QComboBox(leadGroup);
+    m_leadModeCombo->addItem("Off", static_cast<int>(playback::ScaleSnapProcessor::LeadMode::Off));
+    m_leadModeCombo->addItem("Original", static_cast<int>(playback::ScaleSnapProcessor::LeadMode::Original));
+    m_leadModeCombo->addItem("Constrained", static_cast<int>(playback::ScaleSnapProcessor::LeadMode::Constrained));
+    m_leadModeCombo->setMinimumWidth(180);
 
-    comboRow->addWidget(modeLabel);
-    comboRow->addWidget(m_modeCombo);
-    comboRow->addStretch();
-    modeLayout->addLayout(comboRow);
+    leadComboRow->addWidget(leadLabel);
+    leadComboRow->addWidget(m_leadModeCombo);
+    leadComboRow->addStretch();
+    leadLayout->addLayout(leadComboRow);
 
-    // Description label
-    m_descriptionLabel = new QLabel(modeGroup);
-    m_descriptionLabel->setWordWrap(true);
-    m_descriptionLabel->setStyleSheet("QLabel { color: #888; padding: 8px; background: #222; border-radius: 4px; }");
-    m_descriptionLabel->setMinimumHeight(60);
-    modeLayout->addWidget(m_descriptionLabel);
+    // Lead description label
+    m_leadDescriptionLabel = new QLabel(leadGroup);
+    m_leadDescriptionLabel->setWordWrap(true);
+    m_leadDescriptionLabel->setStyleSheet("QLabel { color: #888; padding: 8px; background: #222; border-radius: 4px; }");
+    m_leadDescriptionLabel->setMinimumHeight(50);
+    leadLayout->addWidget(m_leadDescriptionLabel);
 
-    mainLayout->addWidget(modeGroup);
+    mainLayout->addWidget(leadGroup);
 
-    // Vocal bend checkbox (outside mode group)
+    // ===== HARMONY MODE GROUP =====
+    QGroupBox* harmonyGroup = new QGroupBox("Harmony (Channel 11)", central);
+    QVBoxLayout* harmonyLayout = new QVBoxLayout(harmonyGroup);
+    harmonyLayout->setContentsMargins(12, 12, 12, 12);
+    harmonyLayout->setSpacing(8);
+
+    // Harmony mode combo box
+    QHBoxLayout* harmonyComboRow = new QHBoxLayout();
+    harmonyComboRow->setSpacing(8);
+
+    QLabel* harmonyLabel = new QLabel("Mode:", harmonyGroup);
+    m_harmonyModeCombo = new QComboBox(harmonyGroup);
+    m_harmonyModeCombo->addItem("Off", static_cast<int>(playback::ScaleSnapProcessor::HarmonyMode::Off));
+    m_harmonyModeCombo->addItem("Smart Thirds", static_cast<int>(playback::ScaleSnapProcessor::HarmonyMode::SmartThirds));
+    m_harmonyModeCombo->setMinimumWidth(180);
+
+    harmonyComboRow->addWidget(harmonyLabel);
+    harmonyComboRow->addWidget(m_harmonyModeCombo);
+    harmonyComboRow->addStretch();
+    harmonyLayout->addLayout(harmonyComboRow);
+
+    // Harmony description label
+    m_harmonyDescriptionLabel = new QLabel(harmonyGroup);
+    m_harmonyDescriptionLabel->setWordWrap(true);
+    m_harmonyDescriptionLabel->setStyleSheet("QLabel { color: #888; padding: 8px; background: #222; border-radius: 4px; }");
+    m_harmonyDescriptionLabel->setMinimumHeight(50);
+    harmonyLayout->addWidget(m_harmonyDescriptionLabel);
+
+    mainLayout->addWidget(harmonyGroup);
+
+    // ===== VOCAL SETTINGS =====
+    // Vocal bend checkbox
     m_vocalBendCheckbox = new QCheckBox("Apply Vocal Vibrato as Pitch Bend", central);
-    m_vocalBendCheckbox->setToolTip("When enabled, transfers vocal pitch variations to MIDI pitch bend on output channels 11/12.\nThis adds expressiveness by modulating the snapped/harmony notes with your voice.");
+    m_vocalBendCheckbox->setToolTip("When enabled, transfers vocal pitch variations to MIDI pitch bend on output channels 11/12.\nThis adds expressiveness by modulating the lead/harmony notes with your voice.");
     mainLayout->addWidget(m_vocalBendCheckbox);
 
     // Vocal vibrato range combo
@@ -154,8 +199,10 @@ void SnappingWindow::buildUi()
     mainLayout->addStretch();
 
     // Connect widgets
-    connect(m_modeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &SnappingWindow::onModeChanged);
+    connect(m_leadModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &SnappingWindow::onLeadModeChanged);
+    connect(m_harmonyModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &SnappingWindow::onHarmonyModeChanged);
     connect(m_vocalBendCheckbox, &QCheckBox::toggled,
             this, &SnappingWindow::onVocalBendToggled);
     connect(m_vocalVibratoRangeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -165,20 +212,34 @@ void SnappingWindow::buildUi()
     connect(m_voiceSustainCheckbox, &QCheckBox::toggled,
             this, &SnappingWindow::onVoiceSustainToggled);
 
-    updateModeDescription();
+    updateLeadModeDescription();
+    updateHarmonyModeDescription();
 }
 
-void SnappingWindow::onModeChanged(int index)
+void SnappingWindow::onLeadModeChanged(int index)
 {
-    if (!m_engine || !m_modeCombo) return;
+    if (!m_engine || !m_leadModeCombo) return;
 
-    const int modeInt = m_modeCombo->itemData(index).toInt();
+    const int modeInt = m_leadModeCombo->itemData(index).toInt();
     auto* snap = m_engine->scaleSnapProcessor();
     if (snap) {
-        snap->setMode(static_cast<playback::ScaleSnapProcessor::Mode>(modeInt));
+        snap->setLeadMode(static_cast<playback::ScaleSnapProcessor::LeadMode>(modeInt));
     }
 
-    updateModeDescription();
+    updateLeadModeDescription();
+}
+
+void SnappingWindow::onHarmonyModeChanged(int index)
+{
+    if (!m_engine || !m_harmonyModeCombo) return;
+
+    const int modeInt = m_harmonyModeCombo->itemData(index).toInt();
+    auto* snap = m_engine->scaleSnapProcessor();
+    if (snap) {
+        snap->setHarmonyMode(static_cast<playback::ScaleSnapProcessor::HarmonyMode>(modeInt));
+    }
+
+    updateHarmonyModeDescription();
 }
 
 void SnappingWindow::onVocalBendToggled(bool checked)
@@ -222,24 +283,44 @@ void SnappingWindow::onVoiceSustainToggled(bool checked)
     }
 }
 
-void SnappingWindow::onEngineModeChanged(playback::ScaleSnapProcessor::Mode mode)
+void SnappingWindow::onEngineLeadModeChanged(playback::ScaleSnapProcessor::LeadMode mode)
 {
-    if (!m_modeCombo) return;
+    if (!m_leadModeCombo) return;
 
-    // Update combo to match (avoid re-triggering onModeChanged)
+    // Update combo to match (avoid re-triggering onLeadModeChanged)
     const int modeInt = static_cast<int>(mode);
-    for (int i = 0; i < m_modeCombo->count(); ++i) {
-        if (m_modeCombo->itemData(i).toInt() == modeInt) {
-            if (m_modeCombo->currentIndex() != i) {
-                m_modeCombo->blockSignals(true);
-                m_modeCombo->setCurrentIndex(i);
-                m_modeCombo->blockSignals(false);
+    for (int i = 0; i < m_leadModeCombo->count(); ++i) {
+        if (m_leadModeCombo->itemData(i).toInt() == modeInt) {
+            if (m_leadModeCombo->currentIndex() != i) {
+                m_leadModeCombo->blockSignals(true);
+                m_leadModeCombo->setCurrentIndex(i);
+                m_leadModeCombo->blockSignals(false);
             }
             break;
         }
     }
 
-    updateModeDescription();
+    updateLeadModeDescription();
+}
+
+void SnappingWindow::onEngineHarmonyModeChanged(playback::ScaleSnapProcessor::HarmonyMode mode)
+{
+    if (!m_harmonyModeCombo) return;
+
+    // Update combo to match (avoid re-triggering onHarmonyModeChanged)
+    const int modeInt = static_cast<int>(mode);
+    for (int i = 0; i < m_harmonyModeCombo->count(); ++i) {
+        if (m_harmonyModeCombo->itemData(i).toInt() == modeInt) {
+            if (m_harmonyModeCombo->currentIndex() != i) {
+                m_harmonyModeCombo->blockSignals(true);
+                m_harmonyModeCombo->setCurrentIndex(i);
+                m_harmonyModeCombo->blockSignals(false);
+            }
+            break;
+        }
+    }
+
+    updateHarmonyModeDescription();
 }
 
 void SnappingWindow::onEngineVocalBendChanged(bool enabled)
@@ -292,31 +373,45 @@ void SnappingWindow::onEngineVoiceSustainChanged(bool enabled)
     }
 }
 
-void SnappingWindow::updateModeDescription()
+void SnappingWindow::updateLeadModeDescription()
 {
-    if (!m_descriptionLabel || !m_modeCombo) return;
+    if (!m_leadDescriptionLabel || !m_leadModeCombo) return;
 
-    const int modeInt = m_modeCombo->currentData().toInt();
-    const auto mode = static_cast<playback::ScaleSnapProcessor::Mode>(modeInt);
+    const int modeInt = m_leadModeCombo->currentData().toInt();
+    const auto mode = static_cast<playback::ScaleSnapProcessor::LeadMode>(modeInt);
 
     QString desc;
     switch (mode) {
-    case playback::ScaleSnapProcessor::Mode::Off:
-        desc = "Snapping is disabled. Guitar notes are not duplicated to channels 11/12.";
+    case playback::ScaleSnapProcessor::LeadMode::Off:
+        desc = "Lead output is disabled. No notes are sent to channel 12.";
         break;
-    case playback::ScaleSnapProcessor::Mode::Original:
+    case playback::ScaleSnapProcessor::LeadMode::Original:
         desc = "Pass through guitar notes unchanged to channel 12 (duplicates channel 1 data including CC2).";
         break;
-    case playback::ScaleSnapProcessor::Mode::AsPlayed:
+    case playback::ScaleSnapProcessor::LeadMode::Constrained:
         desc = "Snap guitar notes to the nearest scale/chord tone. Output on MIDI channel 12.";
-        break;
-    case playback::ScaleSnapProcessor::Mode::Harmony:
-        desc = "Generate a harmony note (3rd, 4th, or 5th above) for each guitar note. Output on MIDI channel 12.";
-        break;
-    case playback::ScaleSnapProcessor::Mode::AsPlayedPlusHarmony:
-        desc = "Output both snapped notes (channel 11) and harmony notes (channel 12) simultaneously.";
         break;
     }
 
-    m_descriptionLabel->setText(desc);
+    m_leadDescriptionLabel->setText(desc);
+}
+
+void SnappingWindow::updateHarmonyModeDescription()
+{
+    if (!m_harmonyDescriptionLabel || !m_harmonyModeCombo) return;
+
+    const int modeInt = m_harmonyModeCombo->currentData().toInt();
+    const auto mode = static_cast<playback::ScaleSnapProcessor::HarmonyMode>(modeInt);
+
+    QString desc;
+    switch (mode) {
+    case playback::ScaleSnapProcessor::HarmonyMode::Off:
+        desc = "Harmony output is disabled. No notes are sent to channel 11.";
+        break;
+    case playback::ScaleSnapProcessor::HarmonyMode::SmartThirds:
+        desc = "Generate a harmony note (preferring 3rds and 5ths that are chord/scale tones). Output on MIDI channel 11.";
+        break;
+    }
+
+    m_harmonyDescriptionLabel->setText(desc);
 }

@@ -20,9 +20,10 @@ class HarmonyContext;
  * ScaleSnapProcessor - MIDI processor that snaps guitar notes to scale/chord tones
  *
  * Listens to guitar MIDI input and outputs processed notes on dedicated channels:
- * - "As Played" mode: Snaps wrong notes to nearest valid tone -> channel 12
- * - "Harmony" mode: Generates consonant harmony note -> channel 12
- * - "As Played + Harmony": As Played -> channel 11, Harmony -> channel 12
+ * - Lead mode (Off/Original/Constrained): Controls guitar note processing -> channel 12
+ * - Harmony mode (Off/SmartThirds): Generates consonant harmony notes -> channel 11
+ *
+ * Lead and Harmony modes operate independently - both can be active simultaneously.
  *
  * Valid pitch classes are computed as:
  *   (key scale tones from dynamic key detection) + (chord tones) - (avoid notes)
@@ -36,14 +37,20 @@ class ScaleSnapProcessor : public QObject {
     Q_OBJECT
 
 public:
-    enum class Mode {
+    // Lead mode: controls how guitar notes are processed -> Channel 12
+    enum class LeadMode {
         Off = 0,
         Original,            // Pass through original notes (no snapping) -> channel 12
-        AsPlayed,            // Snap to nearest scale tone -> channel 12
-        Harmony,             // Generate harmony note -> channel 12
-        AsPlayedPlusHarmony  // As Played -> channel 11, Harmony -> channel 12
+        Constrained          // Snap to nearest scale/chord tone -> channel 12
     };
-    Q_ENUM(Mode)
+    Q_ENUM(LeadMode)
+
+    // Harmony mode: controls harmony generation -> Channel 11
+    enum class HarmonyMode {
+        Off = 0,
+        SmartThirds          // Prefers 3rds/5ths that are chord/scale tones -> channel 11
+    };
+    Q_ENUM(HarmonyMode)
 
     explicit ScaleSnapProcessor(QObject* parent = nullptr);
     ~ScaleSnapProcessor() override;
@@ -54,9 +61,13 @@ public:
     void setOntology(const virtuoso::ontology::OntologyRegistry* ontology);
     void setChartModel(const chart::ChartModel* model);
 
-    // Mode control
-    Mode mode() const { return m_mode; }
-    void setMode(Mode mode);
+    // Lead mode control
+    LeadMode leadMode() const { return m_leadMode; }
+    void setLeadMode(LeadMode mode);
+
+    // Harmony mode control
+    HarmonyMode harmonyMode() const { return m_harmonyMode; }
+    void setHarmonyMode(HarmonyMode mode);
 
     // Vocal bend control (applies pitch bend from voice Hz to all output)
     bool vocalBendEnabled() const { return m_vocalBendEnabled; }
@@ -79,7 +90,8 @@ public:
     int currentCellIndex() const { return m_currentCellIndex; }
 
 signals:
-    void modeChanged(Mode newMode);
+    void leadModeChanged(LeadMode newMode);
+    void harmonyModeChanged(HarmonyMode newMode);
     void vocalBendEnabledChanged(bool enabled);
     void vocalVibratoRangeCentsChanged(double cents);
     void vibratoCorrectionEnabledChanged(bool enabled);
@@ -141,7 +153,8 @@ private:
     const chart::ChartModel* m_model = nullptr;
 
     // State
-    Mode m_mode = Mode::Off;
+    LeadMode m_leadMode = LeadMode::Off;
+    HarmonyMode m_harmonyMode = HarmonyMode::Off;
     bool m_vocalBendEnabled = true;           // Enabled by default
     double m_vocalVibratoRangeCents = 200.0;  // ±200 cents (default), or ±100 cents
     bool m_vibratoCorrectionEnabled = true;   // Enabled by default - filter out DC offset from voice
@@ -177,11 +190,10 @@ private:
     static constexpr int kVoiceSustainCc2Threshold = 5;      // CC2 must be above this to sustain notes
 
     // Output channels (1-indexed, matching sendVirtualNoteOn expectations)
-    // - AsPlayed mode: snapped notes -> channel 12
-    // - Harmony mode: harmony notes -> channel 12
-    // - AsPlayedPlusHarmony mode: snapped notes -> channel 11, harmony notes -> channel 12
-    static constexpr int kChannelAsPlayed = 11;  // MIDI channel 11 (for dual mode)
-    static constexpr int kChannelHarmony = 12;   // MIDI channel 12 (main output)
+    // - Lead mode (Original/Constrained): output notes -> channel 12
+    // - Harmony mode (SmartThirds): harmony notes -> channel 11
+    static constexpr int kChannelHarmony = 11;   // MIDI channel 11 (harmony output)
+    static constexpr int kChannelLead = 12;      // MIDI channel 12 (lead output)
 };
 
 } // namespace playback

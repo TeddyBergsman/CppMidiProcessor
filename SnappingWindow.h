@@ -26,12 +26,14 @@ public:
     void setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine* engine);
 
 private slots:
-    void onModeChanged(int index);
+    void onLeadModeChanged(int index);
+    void onHarmonyModeChanged(int index);
     void onVocalBendToggled(bool checked);
     void onVocalVibratoRangeChanged(int index);
     void onVibratoCorrectionToggled(bool checked);
     void onVoiceSustainToggled(bool checked);
-    void onEngineModeChanged(playback::ScaleSnapProcessor::Mode mode);
+    void onEngineLeadModeChanged(playback::ScaleSnapProcessor::LeadMode mode);
+    void onEngineHarmonyModeChanged(playback::ScaleSnapProcessor::HarmonyMode mode);
     void onEngineVocalBendChanged(bool enabled);
     void onEngineVocalVibratoRangeChanged(double cents);
     void onEngineVibratoCorrectionChanged(bool enabled);
@@ -39,14 +41,17 @@ private slots:
 
 private:
     void buildUi();
-    void updateModeDescription();
+    void updateLeadModeDescription();
+    void updateHarmonyModeDescription();
 
     playback::VirtuosoBalladMvpPlaybackEngine* m_engine = nullptr;
 
-    QComboBox* m_modeCombo = nullptr;
+    QComboBox* m_leadModeCombo = nullptr;
+    QComboBox* m_harmonyModeCombo = nullptr;
     QCheckBox* m_vocalBendCheckbox = nullptr;
     QComboBox* m_vocalVibratoRangeCombo = nullptr;
     QCheckBox* m_vibratoCorrectionCheckbox = nullptr;
     QCheckBox* m_voiceSustainCheckbox = nullptr;
-    QLabel* m_descriptionLabel = nullptr;
+    QLabel* m_leadDescriptionLabel = nullptr;
+    QLabel* m_harmonyDescriptionLabel = nullptr;
 };

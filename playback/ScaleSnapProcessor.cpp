@@ -47,13 +47,23 @@ void ScaleSnapProcessor::setChartModel(const chart::ChartModel* model)
     m_hasLastKnownChord = false;
 }
 
-void ScaleSnapProcessor::setMode(Mode mode)
+void ScaleSnapProcessor::setLeadMode(LeadMode mode)
 {
-    if (m_mode != mode) {
+    if (m_leadMode != mode) {
         // Clear active notes when mode changes
         reset();
-        m_mode = mode;
-        emit modeChanged(mode);
+        m_leadMode = mode;
+        emit leadModeChanged(mode);
+    }
+}
+
+void ScaleSnapProcessor::setHarmonyMode(HarmonyMode mode)
+{
+    if (m_harmonyMode != mode) {
+        // Clear active notes when mode changes
+        reset();
+        m_harmonyMode = mode;
+        emit harmonyModeChanged(mode);
     }
 }
 
@@ -63,7 +73,7 @@ void ScaleSnapProcessor::setVocalBendEnabled(bool enabled)
         m_vocalBendEnabled = enabled;
         // Reset pitch bend when toggling
         if (!enabled) {
-            emitPitchBend(kChannelAsPlayed, 8192);
+            emitPitchBend(kChannelLead, 8192);
             emitPitchBend(kChannelHarmony, 8192);
         }
         emit vocalBendEnabledChanged(enabled);
@@ -127,40 +137,30 @@ void ScaleSnapProcessor::reset()
     m_lastOscillation = 0.0;
     m_lastCc2Value = 0;
     // Reset pitch bend to center on both channels
-    emitPitchBend(kChannelAsPlayed, 8192);
+    emitPitchBend(kChannelLead, 8192);
     emitPitchBend(kChannelHarmony, 8192);
 }
 
 void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
 {
-    qDebug() << "ScaleSnap::onGuitarNoteOn - mode:" << static_cast<int>(m_mode)
+    qDebug() << "ScaleSnap::onGuitarNoteOn - leadMode:" << static_cast<int>(m_leadMode)
+             << "harmonyMode:" << static_cast<int>(m_harmonyMode)
              << "midi:" << (m_midi != nullptr) << "note:" << midiNote << "vel:" << velocity;
 
-    if (m_mode == Mode::Off || !m_midi) {
-        qDebug() << "ScaleSnap: Exiting early - mode is Off or no midi processor";
+    // Both modes off means nothing to do
+    if (m_leadMode == LeadMode::Off && m_harmonyMode == HarmonyMode::Off) {
+        qDebug() << "ScaleSnap: Exiting early - both modes are Off";
+        return;
+    }
+
+    if (!m_midi) {
+        qDebug() << "ScaleSnap: Exiting early - no midi processor";
         return;
     }
 
     // Release any voice-sustained notes before starting a new note
     // This ensures clean transitions when playing a new note while singing
     releaseVoiceSustainedNotes();
-
-    // Original mode: pass through unchanged to channel 12
-    if (m_mode == Mode::Original) {
-        ActiveNote active;
-        active.originalNote = midiNote;
-        active.snappedNote = midiNote;
-        active.referenceHz = midiNoteToHz(midiNote);
-
-        // Reset pitch bend before new note (unless vocal bend will control it)
-        if (!m_vocalBendEnabled) {
-            emitPitchBend(kChannelHarmony, 8192);
-        }
-
-        emitNoteOn(kChannelHarmony, midiNote, velocity);
-        m_activeNotes.insert(midiNote, active);
-        return;
-    }
 
     qDebug() << "ScaleSnap: cellIndex=" << m_currentCellIndex
              << "hasChord=" << m_hasLastKnownChord
@@ -172,92 +172,78 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
     const QSet<int> validPcs = computeValidPitchClasses();
     qDebug() << "ScaleSnap: validPcs size=" << validPcs.size() << "pcs=" << validPcs;
 
-    // If no chord/scale info available, pass through unchanged on channel 12
-    if (validPcs.isEmpty()) {
-        ActiveNote active;
-        active.originalNote = midiNote;
-        active.snappedNote = midiNote;
-        active.referenceHz = midiNoteToHz(midiNote);
-
-        if (m_mode == Mode::AsPlayedPlusHarmony) {
-            emitNoteOn(kChannelAsPlayed, midiNote, velocity);
-            // Generate harmony anyway
-            active.harmonyNote = midiNote + 4; // Default major 3rd
-            if (active.harmonyNote <= 127) {
-                emitNoteOn(kChannelHarmony, active.harmonyNote, velocity);
-            }
-        } else {
-            emitNoteOn(kChannelHarmony, midiNote, velocity);
-        }
-
-        m_activeNotes.insert(midiNote, active);
-        return;
-    }
-
-    const int inputPc = normalizePc(midiNote);
-    const int inputOctave = noteToOctave(midiNote);
-
-    // Snap to nearest valid pitch class
-    const int snappedPc = snapToNearestValidPc(inputPc, validPcs);
-    int snappedNote = pcToMidiNote(snappedPc, inputOctave);
-
-    qDebug() << "ScaleSnap: inputPc=" << inputPc << "inputOctave=" << inputOctave
-             << "snappedPc=" << snappedPc << "snappedNote=" << snappedNote;
-
-    // Handle octave boundary crossing - keep snapped note close to original
-    if (snappedNote - midiNote > 6) {
-        snappedNote -= 12;
-    } else if (midiNote - snappedNote > 6) {
-        snappedNote += 12;
-    }
-    snappedNote = qBound(0, snappedNote, 127);
-
-    qDebug() << "ScaleSnap: FINAL INPUT" << midiNote << "-> OUTPUT" << snappedNote;
-
     ActiveNote active;
     active.originalNote = midiNote;
-    active.snappedNote = snappedNote;
-    active.referenceHz = midiNoteToHz(snappedNote);
 
     // Reset pitch bend before new note (unless vocal bend will control it)
     if (!m_vocalBendEnabled) {
-        emitPitchBend(kChannelHarmony, 8192);
-        if (m_mode == Mode::AsPlayedPlusHarmony) {
-            emitPitchBend(kChannelAsPlayed, 8192);
+        if (m_leadMode != LeadMode::Off) {
+            emitPitchBend(kChannelLead, 8192);
+        }
+        if (m_harmonyMode != HarmonyMode::Off) {
+            emitPitchBend(kChannelHarmony, 8192);
         }
     }
 
-    switch (m_mode) {
-    case Mode::AsPlayed:
-        emitNoteOn(kChannelHarmony, snappedNote, velocity);
-        break;
+    // === LEAD MODE (Channel 12) ===
+    if (m_leadMode != LeadMode::Off) {
+        if (m_leadMode == LeadMode::Original) {
+            // Original mode: pass through unchanged
+            active.snappedNote = midiNote;
+            active.referenceHz = midiNoteToHz(midiNote);
+            emitNoteOn(kChannelLead, midiNote, velocity);
+        } else if (m_leadMode == LeadMode::Constrained) {
+            // Constrained mode: snap to nearest scale/chord tone
+            if (validPcs.isEmpty()) {
+                // No chord/scale info - pass through unchanged
+                active.snappedNote = midiNote;
+                active.referenceHz = midiNoteToHz(midiNote);
+                emitNoteOn(kChannelLead, midiNote, velocity);
+            } else {
+                const int inputPc = normalizePc(midiNote);
+                const int inputOctave = noteToOctave(midiNote);
+                const int snappedPc = snapToNearestValidPc(inputPc, validPcs);
+                int snappedNote = pcToMidiNote(snappedPc, inputOctave);
 
-    case Mode::Harmony: {
+                // Handle octave boundary crossing - keep snapped note close to original
+                if (snappedNote - midiNote > 6) {
+                    snappedNote -= 12;
+                } else if (midiNote - snappedNote > 6) {
+                    snappedNote += 12;
+                }
+                snappedNote = qBound(0, snappedNote, 127);
+
+                qDebug() << "ScaleSnap: LEAD INPUT" << midiNote << "-> OUTPUT" << snappedNote;
+
+                active.snappedNote = snappedNote;
+                active.referenceHz = midiNoteToHz(snappedNote);
+                emitNoteOn(kChannelLead, snappedNote, velocity);
+            }
+        }
+    } else {
+        // Lead mode off - still set reference Hz for potential harmony notes
+        active.snappedNote = midiNote;
+        active.referenceHz = midiNoteToHz(midiNote);
+    }
+
+    // === HARMONY MODE (Channel 11) ===
+    if (m_harmonyMode != HarmonyMode::Off) {
         const QSet<int> chordTones = computeChordTones(m_lastKnownChord);
         qDebug() << "ScaleSnap Harmony: chordTones=" << chordTones << "validPcs=" << validPcs;
-        active.harmonyNote = generateHarmonyNote(midiNote, chordTones, validPcs);
+
+        // Generate harmony based on original input note
+        if (validPcs.isEmpty()) {
+            // No chord/scale info - default major 3rd
+            active.harmonyNote = midiNote + 4;
+        } else {
+            active.harmonyNote = generateHarmonyNote(midiNote, chordTones, validPcs);
+        }
+
         qDebug() << "ScaleSnap Harmony: INPUT" << midiNote << "-> HARMONY" << active.harmonyNote;
+
         if (active.harmonyNote >= 0 && active.harmonyNote <= 127) {
             emitNoteOn(kChannelHarmony, active.harmonyNote, velocity);
         }
-        break;
-    }
-
-    case Mode::AsPlayedPlusHarmony: {
-        // Output snapped note on channel 11
-        emitNoteOn(kChannelAsPlayed, snappedNote, velocity);
-
-        // Generate and output harmony note on channel 12 (based on original input)
-        const QSet<int> chordTones = computeChordTones(m_lastKnownChord);
-        active.harmonyNote = generateHarmonyNote(midiNote, chordTones, validPcs);
-        if (active.harmonyNote >= 0 && active.harmonyNote <= 127) {
-            emitNoteOn(kChannelHarmony, active.harmonyNote, velocity);
-        }
-        break;
-    }
-
-    default:
-        break;
     }
 
     m_activeNotes.insert(midiNote, active);
@@ -265,7 +251,12 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
 
 void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
 {
-    if (m_mode == Mode::Off || !m_midi) {
+    // Both modes off means nothing to do
+    if (m_leadMode == LeadMode::Off && m_harmonyMode == HarmonyMode::Off) {
+        return;
+    }
+
+    if (!m_midi) {
         return;
     }
 
@@ -297,17 +288,19 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
         m_vibratoFadeInSamples = 0;
         m_oscillationDetected = false;
         m_lastOscillation = 0.0;
-        emitPitchBend(kChannelHarmony, 8192);
-        if (m_mode == Mode::AsPlayedPlusHarmony) {
-            emitPitchBend(kChannelAsPlayed, 8192);
+        if (m_leadMode != LeadMode::Off) {
+            emitPitchBend(kChannelLead, 8192);
+        }
+        if (m_harmonyMode != HarmonyMode::Off) {
+            emitPitchBend(kChannelHarmony, 8192);
         }
     }
 }
 
 void ScaleSnapProcessor::onGuitarHzUpdated(double hz)
 {
-    // Only track/forward guitar pitch bend in Original mode
-    if (m_mode != Mode::Original || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
+    // Only track/forward guitar pitch bend in Original lead mode
+    if (m_leadMode != LeadMode::Original || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
         return;
     }
 
@@ -332,7 +325,11 @@ void ScaleSnapProcessor::onGuitarHzUpdated(double hz)
         int bendValue = 8192 + static_cast<int>((clampedCents / 200.0) * 8192.0);
         bendValue = qBound(0, bendValue, 16383);
 
-        emitPitchBend(kChannelHarmony, bendValue);
+        // Apply to lead channel (and harmony channel if harmony is active)
+        emitPitchBend(kChannelLead, bendValue);
+        if (m_harmonyMode != HarmonyMode::Off) {
+            emitPitchBend(kChannelHarmony, bendValue);
+        }
     } else {
         // Solo guitar bend mode
         // Convert to MIDI pitch bend (14-bit, 0-16383, centered at 8192)
@@ -341,7 +338,10 @@ void ScaleSnapProcessor::onGuitarHzUpdated(double hz)
         int bendValue = 8192 + static_cast<int>((m_lastGuitarCents / bendRange) * 8192.0);
         bendValue = qBound(0, bendValue, 16383);
 
-        emitPitchBend(kChannelHarmony, bendValue);
+        emitPitchBend(kChannelLead, bendValue);
+        if (m_harmonyMode != HarmonyMode::Off) {
+            emitPitchBend(kChannelHarmony, bendValue);
+        }
     }
 }
 
@@ -351,7 +351,12 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
     const int previousCc2 = m_lastCc2Value;
     m_lastCc2Value = value;
 
-    if (m_mode == Mode::Off || !m_midi) {
+    // Both modes off means nothing to do
+    if (m_leadMode == LeadMode::Off && m_harmonyMode == HarmonyMode::Off) {
+        return;
+    }
+
+    if (!m_midi) {
         return;
     }
 
@@ -361,28 +366,20 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
         releaseVoiceSustainedNotes();
     }
 
-    // Forward CC2 (breath control) to scale snap channels
-    switch (m_mode) {
-    case Mode::Original:
-    case Mode::AsPlayed:
-    case Mode::Harmony:
+    // Forward CC2 (breath control) to active channels
+    if (m_leadMode != LeadMode::Off) {
+        emitCC(kChannelLead, 2, value);
+    }
+    if (m_harmonyMode != HarmonyMode::Off) {
         emitCC(kChannelHarmony, 2, value);
-        break;
-
-    case Mode::AsPlayedPlusHarmony:
-        emitCC(kChannelAsPlayed, 2, value);
-        emitCC(kChannelHarmony, 2, value);
-        break;
-
-    default:
-        break;
     }
 }
 
 void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
 {
-    // Only active when vocal bend is enabled, not in Off mode, and there are active notes
-    if (!m_vocalBendEnabled || m_mode == Mode::Off || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
+    // Only active when vocal bend is enabled, at least one mode is on, and there are active notes
+    const bool bothModesOff = (m_leadMode == LeadMode::Off && m_harmonyMode == HarmonyMode::Off);
+    if (!m_vocalBendEnabled || bothModesOff || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
         return;
     }
 
@@ -462,10 +459,10 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
 
     m_lastVoiceCents = voiceCents;
 
-    // In Original mode, combine guitar bend + voice vibrato
+    // In Original lead mode, combine guitar bend + voice vibrato
     // In other modes, just use voice cents
     double totalCents = voiceCents;
-    if (m_mode == Mode::Original) {
+    if (m_leadMode == LeadMode::Original) {
         totalCents = m_lastGuitarCents + voiceCents;
     }
 
@@ -484,21 +481,12 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
              << "fadeGain=" << (m_oscillationDetected ? static_cast<double>(m_vibratoFadeInSamples) / kVibratoFadeInDuration : 0.0)
              << "voiceCents=" << voiceCents << "bendValue=" << bendValue;
 
-    // Apply pitch bend to all active output channels based on mode
-    switch (m_mode) {
-    case Mode::Original:
-    case Mode::AsPlayed:
-    case Mode::Harmony:
+    // Apply pitch bend to all active output channels
+    if (m_leadMode != LeadMode::Off) {
+        emitPitchBend(kChannelLead, bendValue);
+    }
+    if (m_harmonyMode != HarmonyMode::Off) {
         emitPitchBend(kChannelHarmony, bendValue);
-        break;
-
-    case Mode::AsPlayedPlusHarmony:
-        emitPitchBend(kChannelAsPlayed, bendValue);
-        emitPitchBend(kChannelHarmony, bendValue);
-        break;
-
-    default:
-        break;
     }
 }
 
@@ -802,27 +790,14 @@ void ScaleSnapProcessor::emitAllNotesOff()
 
 void ScaleSnapProcessor::releaseNote(const ActiveNote& note)
 {
-    switch (m_mode) {
-    case Mode::Original:
-    case Mode::AsPlayed:
-        emitNoteOff(kChannelHarmony, note.snappedNote);
-        break;
+    // Release lead note on channel 12
+    if (m_leadMode != LeadMode::Off) {
+        emitNoteOff(kChannelLead, note.snappedNote);
+    }
 
-    case Mode::Harmony:
-        if (note.harmonyNote >= 0) {
-            emitNoteOff(kChannelHarmony, note.harmonyNote);
-        }
-        break;
-
-    case Mode::AsPlayedPlusHarmony:
-        emitNoteOff(kChannelAsPlayed, note.snappedNote);
-        if (note.harmonyNote >= 0) {
-            emitNoteOff(kChannelHarmony, note.harmonyNote);
-        }
-        break;
-
-    default:
-        break;
+    // Release harmony note on channel 11
+    if (m_harmonyMode != HarmonyMode::Off && note.harmonyNote >= 0) {
+        emitNoteOff(kChannelHarmony, note.harmonyNote);
     }
 }
 
@@ -851,9 +826,11 @@ void ScaleSnapProcessor::releaseVoiceSustainedNotes()
         m_vibratoFadeInSamples = 0;
         m_oscillationDetected = false;
         m_lastOscillation = 0.0;
-        emitPitchBend(kChannelHarmony, 8192);
-        if (m_mode == Mode::AsPlayedPlusHarmony) {
-            emitPitchBend(kChannelAsPlayed, 8192);
+        if (m_leadMode != LeadMode::Off) {
+            emitPitchBend(kChannelLead, 8192);
+        }
+        if (m_harmonyMode != HarmonyMode::Off) {
+            emitPitchBend(kChannelHarmony, 8192);
         }
     }
 }

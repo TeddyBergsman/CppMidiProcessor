@@ -30,10 +30,12 @@ private slots:
     void onVocalBendToggled(bool checked);
     void onVocalVibratoRangeChanged(int index);
     void onVibratoCorrectionToggled(bool checked);
+    void onVoiceSustainToggled(bool checked);
     void onEngineModeChanged(playback::ScaleSnapProcessor::Mode mode);
     void onEngineVocalBendChanged(bool enabled);
     void onEngineVocalVibratoRangeChanged(double cents);
     void onEngineVibratoCorrectionChanged(bool enabled);
+    void onEngineVoiceSustainChanged(bool enabled);
 
 private:
     void buildUi();
@@ -45,5 +47,6 @@ private:
     QCheckBox* m_vocalBendCheckbox = nullptr;
     QComboBox* m_vocalVibratoRangeCombo = nullptr;
     QCheckBox* m_vibratoCorrectionCheckbox = nullptr;
+    QCheckBox* m_voiceSustainCheckbox = nullptr;
     QLabel* m_descriptionLabel = nullptr;
 };

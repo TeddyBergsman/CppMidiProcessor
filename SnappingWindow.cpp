@@ -56,6 +56,10 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
             m_vibratoCorrectionCheckbox->setChecked(snap->vibratoCorrectionEnabled());
         }
 
+        if (m_voiceSustainCheckbox) {
+            m_voiceSustainCheckbox->setChecked(snap->voiceSustainEnabled());
+        }
+
         // Connect to changes from the processor (in case it changes elsewhere)
         connect(snap, &playback::ScaleSnapProcessor::modeChanged,
                 this, &SnappingWindow::onEngineModeChanged,
@@ -68,6 +72,9 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
                 Qt::UniqueConnection);
         connect(snap, &playback::ScaleSnapProcessor::vibratoCorrectionEnabledChanged,
                 this, &SnappingWindow::onEngineVibratoCorrectionChanged,
+                Qt::UniqueConnection);
+        connect(snap, &playback::ScaleSnapProcessor::voiceSustainEnabledChanged,
+                this, &SnappingWindow::onEngineVoiceSustainChanged,
                 Qt::UniqueConnection);
     }
 
@@ -139,6 +146,11 @@ void SnappingWindow::buildUi()
     m_vibratoCorrectionCheckbox->setToolTip("Filters out pitch drift from the voice signal, keeping only the vibrato oscillation.\nThis keeps the output perfectly centered around the guitar note, even if you sing slightly flat or sharp.");
     mainLayout->addWidget(m_vibratoCorrectionCheckbox);
 
+    // Voice sustain checkbox
+    m_voiceSustainCheckbox = new QCheckBox("Voice Sustain", central);
+    m_voiceSustainCheckbox->setToolTip("Sustain guitar notes for as long as you're singing (CC2 active).\nNotes ring out even after the guitar string stops, allowing longer sustained tones controlled by your voice.");
+    mainLayout->addWidget(m_voiceSustainCheckbox);
+
     mainLayout->addStretch();
 
     // Connect widgets
@@ -150,6 +162,8 @@ void SnappingWindow::buildUi()
             this, &SnappingWindow::onVocalVibratoRangeChanged);
     connect(m_vibratoCorrectionCheckbox, &QCheckBox::toggled,
             this, &SnappingWindow::onVibratoCorrectionToggled);
+    connect(m_voiceSustainCheckbox, &QCheckBox::toggled,
+            this, &SnappingWindow::onVoiceSustainToggled);
 
     updateModeDescription();
 }
@@ -195,6 +209,16 @@ void SnappingWindow::onVibratoCorrectionToggled(bool checked)
     auto* snap = m_engine->scaleSnapProcessor();
     if (snap) {
         snap->setVibratoCorrectionEnabled(checked);
+    }
+}
+
+void SnappingWindow::onVoiceSustainToggled(bool checked)
+{
+    if (!m_engine) return;
+
+    auto* snap = m_engine->scaleSnapProcessor();
+    if (snap) {
+        snap->setVoiceSustainEnabled(checked);
     }
 }
 
@@ -254,6 +278,17 @@ void SnappingWindow::onEngineVibratoCorrectionChanged(bool enabled)
         m_vibratoCorrectionCheckbox->blockSignals(true);
         m_vibratoCorrectionCheckbox->setChecked(enabled);
         m_vibratoCorrectionCheckbox->blockSignals(false);
+    }
+}
+
+void SnappingWindow::onEngineVoiceSustainChanged(bool enabled)
+{
+    if (!m_voiceSustainCheckbox) return;
+
+    if (m_voiceSustainCheckbox->isChecked() != enabled) {
+        m_voiceSustainCheckbox->blockSignals(true);
+        m_voiceSustainCheckbox->setChecked(enabled);
+        m_voiceSustainCheckbox->blockSignals(false);
     }
 }
 

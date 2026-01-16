@@ -95,6 +95,18 @@ void ScaleSnapProcessor::setVibratoCorrectionEnabled(bool enabled)
     }
 }
 
+void ScaleSnapProcessor::setVoiceSustainEnabled(bool enabled)
+{
+    if (m_voiceSustainEnabled != enabled) {
+        m_voiceSustainEnabled = enabled;
+        // Release any currently voice-sustained notes when disabling
+        if (!enabled) {
+            releaseVoiceSustainedNotes();
+        }
+        emit voiceSustainEnabledChanged(enabled);
+    }
+}
+
 void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
 {
     m_currentCellIndex = cellIndex;
@@ -113,6 +125,7 @@ void ScaleSnapProcessor::reset()
     m_vibratoFadeInSamples = 0;
     m_oscillationDetected = false;
     m_lastOscillation = 0.0;
+    m_lastCc2Value = 0;
     // Reset pitch bend to center on both channels
     emitPitchBend(kChannelAsPlayed, 8192);
     emitPitchBend(kChannelHarmony, 8192);
@@ -127,6 +140,10 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
         qDebug() << "ScaleSnap: Exiting early - mode is Off or no midi processor";
         return;
     }
+
+    // Release any voice-sustained notes before starting a new note
+    // This ensures clean transitions when playing a new note while singing
+    releaseVoiceSustainedNotes();
 
     // Original mode: pass through unchanged to channel 12
     if (m_mode == Mode::Original) {
@@ -257,34 +274,19 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
         return;
     }
 
-    const ActiveNote& note = it.value();
-
-    switch (m_mode) {
-    case Mode::Original:
-    case Mode::AsPlayed:
-        emitNoteOff(kChannelHarmony, note.snappedNote);
-        break;
-
-    case Mode::Harmony:
-        if (note.harmonyNote >= 0) {
-            emitNoteOff(kChannelHarmony, note.harmonyNote);
-        }
-        break;
-
-    case Mode::AsPlayedPlusHarmony:
-        emitNoteOff(kChannelAsPlayed, note.snappedNote);
-        if (note.harmonyNote >= 0) {
-            emitNoteOff(kChannelHarmony, note.harmonyNote);
-        }
-        break;
-
-    default:
-        break;
+    // Voice sustain: if enabled and singing (CC2 > threshold), mark as sustained instead of releasing
+    if (m_voiceSustainEnabled && m_lastCc2Value > kVoiceSustainCc2Threshold) {
+        // Mark note as voice-sustained instead of releasing
+        it.value().voiceSustained = true;
+        qDebug() << "ScaleSnap: Voice sustaining note" << midiNote << "CC2=" << m_lastCc2Value;
+        return;
     }
 
+    // Release the note immediately
+    releaseNote(it.value());
     m_activeNotes.erase(it);
 
-    // Reset pitch bend when no notes are active
+    // Reset state when no notes are active
     if (m_activeNotes.isEmpty()) {
         m_lastGuitarHz = 0.0;
         m_lastGuitarCents = 0.0;
@@ -345,8 +347,18 @@ void ScaleSnapProcessor::onGuitarHzUpdated(double hz)
 
 void ScaleSnapProcessor::onVoiceCc2Updated(int value)
 {
+    // Track CC2 value for voice sustain feature
+    const int previousCc2 = m_lastCc2Value;
+    m_lastCc2Value = value;
+
     if (m_mode == Mode::Off || !m_midi) {
         return;
+    }
+
+    // Voice sustain: release sustained notes when CC2 drops below threshold
+    if (m_voiceSustainEnabled && previousCc2 > kVoiceSustainCc2Threshold && value <= kVoiceSustainCc2Threshold) {
+        qDebug() << "ScaleSnap: CC2 dropped below threshold, releasing voice-sustained notes";
+        releaseVoiceSustainedNotes();
     }
 
     // Forward CC2 (breath control) to scale snap channels
@@ -784,29 +796,64 @@ void ScaleSnapProcessor::emitCC(int channel, int cc, int value)
 void ScaleSnapProcessor::emitAllNotesOff()
 {
     for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
-        const ActiveNote& note = it.value();
+        releaseNote(it.value());
+    }
+}
 
-        switch (m_mode) {
-        case Mode::Original:
-        case Mode::AsPlayed:
-            emitNoteOff(kChannelHarmony, note.snappedNote);
-            break;
+void ScaleSnapProcessor::releaseNote(const ActiveNote& note)
+{
+    switch (m_mode) {
+    case Mode::Original:
+    case Mode::AsPlayed:
+        emitNoteOff(kChannelHarmony, note.snappedNote);
+        break;
 
-        case Mode::Harmony:
-            if (note.harmonyNote >= 0) {
-                emitNoteOff(kChannelHarmony, note.harmonyNote);
-            }
-            break;
+    case Mode::Harmony:
+        if (note.harmonyNote >= 0) {
+            emitNoteOff(kChannelHarmony, note.harmonyNote);
+        }
+        break;
 
-        case Mode::AsPlayedPlusHarmony:
-            emitNoteOff(kChannelAsPlayed, note.snappedNote);
-            if (note.harmonyNote >= 0) {
-                emitNoteOff(kChannelHarmony, note.harmonyNote);
-            }
-            break;
+    case Mode::AsPlayedPlusHarmony:
+        emitNoteOff(kChannelAsPlayed, note.snappedNote);
+        if (note.harmonyNote >= 0) {
+            emitNoteOff(kChannelHarmony, note.harmonyNote);
+        }
+        break;
 
-        default:
-            break;
+    default:
+        break;
+    }
+}
+
+void ScaleSnapProcessor::releaseVoiceSustainedNotes()
+{
+    // Release all notes that are being held by voice sustain
+    QList<int> toRemove;
+    for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
+        if (it.value().voiceSustained) {
+            releaseNote(it.value());
+            toRemove.append(it.key());
+        }
+    }
+    for (int key : toRemove) {
+        m_activeNotes.remove(key);
+    }
+
+    // Reset state when no notes are active
+    if (m_activeNotes.isEmpty()) {
+        m_lastGuitarHz = 0.0;
+        m_lastGuitarCents = 0.0;
+        m_lastVoiceCents = 0.0;
+        m_voiceCentsAverage = 0.0;
+        m_voiceCentsAverageInitialized = false;
+        m_settlingCounter = 0;
+        m_vibratoFadeInSamples = 0;
+        m_oscillationDetected = false;
+        m_lastOscillation = 0.0;
+        emitPitchBend(kChannelHarmony, 8192);
+        if (m_mode == Mode::AsPlayedPlusHarmony) {
+            emitPitchBend(kChannelAsPlayed, 8192);
         }
     }
 }

@@ -70,6 +70,10 @@ public:
     bool vibratoCorrectionEnabled() const { return m_vibratoCorrectionEnabled; }
     void setVibratoCorrectionEnabled(bool enabled);
 
+    // Voice sustain: keep notes sounding while singing (CC2 > threshold)
+    bool voiceSustainEnabled() const { return m_voiceSustainEnabled; }
+    void setVoiceSustainEnabled(bool enabled);
+
     // Cell index tracking (called by engine on each step)
     void setCurrentCellIndex(int cellIndex);
     int currentCellIndex() const { return m_currentCellIndex; }
@@ -79,6 +83,7 @@ signals:
     void vocalBendEnabledChanged(bool enabled);
     void vocalVibratoRangeCentsChanged(double cents);
     void vibratoCorrectionEnabledChanged(bool enabled);
+    void voiceSustainEnabledChanged(bool enabled);
 
 public slots:
     // Guitar input handlers (connected to MidiProcessor signals)
@@ -96,6 +101,16 @@ public slots:
     void reset();
 
 private:
+    // Active note tracking (for note-off routing and pitch bend)
+    // Defined here so it can be used by helper method declarations below
+    struct ActiveNote {
+        int originalNote = 0;
+        int snappedNote = 0;      // Channel 11 (AsPlayedPlusHarmony) or channel 12 (AsPlayed)
+        int harmonyNote = -1;     // Channel 12 (Harmony modes), -1 if not active
+        double referenceHz = 0.0; // Hz of the snapped note (for pitch bend calculation)
+        bool voiceSustained = false; // True if guitar note-off received but held by voice
+    };
+
     // Core snapping logic
     int snapToNearestValidPc(int inputPc, const QSet<int>& validPcs) const;
     int generateHarmonyNote(int inputNote, const QSet<int>& chordTones, const QSet<int>& scaleTones) const;
@@ -109,6 +124,8 @@ private:
     void emitPitchBend(int channel, int bendValue);
     void emitCC(int channel, int cc, int value);
     void emitAllNotesOff();
+    void releaseVoiceSustainedNotes();  // Release all notes held by voice sustain
+    void releaseNote(const ActiveNote& note);  // Release a single note based on mode
 
     // Pitch conversion utilities
     static int normalizePc(int pc);
@@ -128,19 +145,14 @@ private:
     bool m_vocalBendEnabled = true;           // Enabled by default
     double m_vocalVibratoRangeCents = 200.0;  // ±200 cents (default), or ±100 cents
     bool m_vibratoCorrectionEnabled = true;   // Enabled by default - filter out DC offset from voice
+    bool m_voiceSustainEnabled = true;        // Enabled by default - hold notes while singing
     int m_currentCellIndex = -1;
+    int m_lastCc2Value = 0;                   // Track current CC2 (breath) value for voice sustain
 
     // Track last known chord (to persist across empty cells)
     music::ChordSymbol m_lastKnownChord;
     bool m_hasLastKnownChord = false;
 
-    // Active note tracking (for note-off routing and pitch bend)
-    struct ActiveNote {
-        int originalNote = 0;
-        int snappedNote = 0;      // Channel 11 (AsPlayedPlusHarmony) or channel 12 (AsPlayed)
-        int harmonyNote = -1;     // Channel 12 (Harmony modes), -1 if not active
-        double referenceHz = 0.0; // Hz of the snapped note (for pitch bend calculation)
-    };
     QHash<int, ActiveNote> m_activeNotes;  // key = original input note
 
     // Hz tracking for pitch bend
@@ -162,6 +174,7 @@ private:
     static constexpr int kSettlingDuration = 30;             // ~300ms settling period before detecting vibrato
     static constexpr int kVibratoFadeInDuration = 15;        // ~150ms fade-in once vibrato is detected
     static constexpr double kOscillationThreshold = 8.0;     // Minimum cents deviation to consider as oscillation
+    static constexpr int kVoiceSustainCc2Threshold = 5;      // CC2 must be above this to sustain notes
 
     // Output channels (1-indexed, matching sendVirtualNoteOn expectations)
     // - AsPlayed mode: snapped notes -> channel 12

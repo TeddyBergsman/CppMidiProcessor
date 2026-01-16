@@ -174,6 +174,11 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
         break;
     }
 
+    case Mode::AsPlayedPlusBend:
+        // Same as AsPlayed, but voice pitch updates will modulate pitch bend
+        emitNoteOn(kChannelHarmony, snappedNote, velocity);
+        break;
+
     default:
         break;
     }
@@ -212,6 +217,10 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
         }
         break;
 
+    case Mode::AsPlayedPlusBend:
+        emitNoteOff(kChannelHarmony, note.snappedNote);
+        break;
+
     default:
         break;
     }
@@ -221,6 +230,7 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
     // Reset pitch bend when no notes are active
     if (m_activeNotes.isEmpty()) {
         m_lastGuitarHz = 0.0;
+        m_lastVoiceCents = 0.0;
         emitPitchBend(kChannelHarmony, 8192);
         if (m_mode == Mode::AsPlayedPlusHarmony) {
             emitPitchBend(kChannelAsPlayed, 8192);
@@ -298,9 +308,47 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
         emitCC(kChannelHarmony, 2, value);
         break;
 
+    case Mode::AsPlayedPlusBend:
+        emitCC(kChannelHarmony, 2, value);
+        break;
+
     default:
         break;
     }
+}
+
+void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
+{
+    // Only active in AsPlayedPlusBend mode with active notes
+    if (m_mode != Mode::AsPlayedPlusBend || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
+        return;
+    }
+
+    // Get the reference Hz of the snapped note (what we're bending around)
+    const ActiveNote& note = m_activeNotes.begin().value();
+    if (note.referenceHz <= 0.0) {
+        return;
+    }
+
+    // Calculate cents deviation: how far is the voice from the snapped note?
+    // Positive = voice is sharp, negative = voice is flat
+    double cents = 1200.0 * std::log2(hz / note.referenceHz);
+    m_lastVoiceCents = cents;
+
+    // Clamp to reasonable vibrato range (±100 cents = ±1 semitone)
+    const double maxCents = 100.0;
+    cents = qBound(-maxCents, cents, maxCents);
+
+    // Convert to 14-bit MIDI pitch bend
+    // Assuming synth has standard ±2 semitone (±200 cents) bend range
+    // So ±100 cents maps to ±half the bend range
+    int bendValue = 8192 + static_cast<int>((cents / 200.0) * 8192.0);
+    bendValue = qBound(0, bendValue, 16383);
+
+    qDebug() << "ScaleSnap VoiceHz: voiceHz=" << hz << "refHz=" << note.referenceHz
+             << "cents=" << m_lastVoiceCents << "bendValue=" << bendValue;
+
+    emitPitchBend(kChannelHarmony, bendValue);
 }
 
 QSet<int> ScaleSnapProcessor::computeValidPitchClasses() const
@@ -615,6 +663,10 @@ void ScaleSnapProcessor::emitAllNotesOff()
             if (note.harmonyNote >= 0) {
                 emitNoteOff(kChannelHarmony, note.harmonyNote);
             }
+            break;
+
+        case Mode::AsPlayedPlusBend:
+            emitNoteOff(kChannelHarmony, note.snappedNote);
             break;
 
         default:

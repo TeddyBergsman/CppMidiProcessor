@@ -313,6 +313,11 @@ void VirtuosoBalladMvpPlaybackEngine::setMidiProcessor(MidiProcessor* midi) {
     connect(m_midi, &MidiProcessor::voiceCc2Updated,
             &m_scaleSnap, &ScaleSnapProcessor::onVoiceCc2Updated,
             static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+
+    // Forward voice Hz (for AsPlayedPlusBend mode - measures delta from snapped note for vibrato)
+    connect(m_midi, &MidiProcessor::voiceHzUpdated,
+            &m_scaleSnap, &ScaleSnapProcessor::onVoiceHzUpdated,
+            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
 }
 
 void VirtuosoBalladMvpPlaybackEngine::setTempoBpm(int bpm) {

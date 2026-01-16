@@ -40,7 +40,8 @@ public:
         Off = 0,
         AsPlayed,            // Snap to nearest scale tone -> channel 12
         Harmony,             // Generate harmony note -> channel 12
-        AsPlayedPlusHarmony  // As Played -> channel 11, Harmony -> channel 12
+        AsPlayedPlusHarmony, // As Played -> channel 11, Harmony -> channel 12
+        AsPlayedPlusBend     // Snap + apply vocal vibrato as pitch bend -> channel 12
     };
     Q_ENUM(Mode)
 
@@ -72,6 +73,9 @@ public slots:
 
     // CC2 (breath) forwarding from voice
     void onVoiceCc2Updated(int value);
+
+    // Voice Hz (for AsPlayedPlusBend mode - measures delta from snapped note for vibrato)
+    void onVoiceHzUpdated(double hz);
 
     // Clear all active notes
     void reset();
@@ -123,6 +127,9 @@ private:
 
     // Hz tracking for pitch bend
     double m_lastGuitarHz = 0.0;
+
+    // Voice pitch tracking (for AsPlayedPlusBend mode)
+    double m_lastVoiceCents = 0.0;
 
     // Output channels (1-indexed, matching sendVirtualNoteOn expectations)
     // - AsPlayed mode: snapped notes -> channel 12

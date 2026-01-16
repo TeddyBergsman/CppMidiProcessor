@@ -473,9 +473,10 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_scaleSnapModeCombo->addItem("As Played", static_cast<int>(playback::ScaleSnapProcessor::Mode::AsPlayed));
     m_scaleSnapModeCombo->addItem("Harmony", static_cast<int>(playback::ScaleSnapProcessor::Mode::Harmony));
     m_scaleSnapModeCombo->addItem("Both", static_cast<int>(playback::ScaleSnapProcessor::Mode::AsPlayedPlusHarmony));
+    m_scaleSnapModeCombo->addItem("As Played + Bend", static_cast<int>(playback::ScaleSnapProcessor::Mode::AsPlayedPlusBend));
     m_scaleSnapModeCombo->setCurrentIndex(0);
-    m_scaleSnapModeCombo->setToolTip("Scale snap mode:\n- As Played: Snap notes to scale (ch 12)\n- Harmony: Generate harmony (ch 12)\n- Both: As Played (ch 11) + Harmony (ch 12)");
-    m_scaleSnapModeCombo->setFixedWidth(100);
+    m_scaleSnapModeCombo->setToolTip("Scale snap mode:\n- As Played: Snap notes to scale (ch 12)\n- Harmony: Generate harmony (ch 12)\n- Both: As Played (ch 11) + Harmony (ch 12)\n- As Played + Bend: Snap + vocal vibrato (ch 12)");
+    m_scaleSnapModeCombo->setFixedWidth(120);
     m_scaleSnapModeCombo->setStyleSheet("QComboBox { background-color: #111; color: #eee; padding: 4px; }");
 
     m_virtuosoPlayButton = new QPushButton(chartHeader);

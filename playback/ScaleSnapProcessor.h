@@ -133,8 +133,9 @@ private:
 
     // Hz tracking for pitch bend
     double m_lastGuitarHz = 0.0;
+    double m_lastGuitarCents = 0.0;  // Guitar pitch deviation (for combining with vocal bend)
 
-    // Voice pitch tracking (for AsPlayedPlusBend mode)
+    // Voice pitch tracking (for vocal bend mode)
     double m_lastVoiceCents = 0.0;
 
     // Output channels (1-indexed, matching sendVirtualNoteOn expectations)

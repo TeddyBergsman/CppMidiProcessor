@@ -576,6 +576,17 @@ void VirtuosoBalladMvpPlaybackEngine::onTick() {
         return;
     }
 
+    // Calculate beat position within measure for ScaleSnapProcessor conformance
+    // (0.0 = beat 1, 1.0 = beat 2, etc. for 4/4 time)
+    {
+        const double beatFraction = std::fmod(double(songMs) / beatMs, double(ts.num));
+        m_scaleSnap.setBeatPosition(static_cast<float>(beatFraction));
+    }
+
+    // Update ScaleSnapProcessor conformance (for BEND and DELAY behaviors)
+    // The tick timer runs every 10ms
+    m_scaleSnap.updateConformance(10.0f);
+
     // Update playhead highlight once per beat-step.
     if (stepNow != m_lastPlayheadStep) {
         m_lastPlayheadStep = stepNow;

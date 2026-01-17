@@ -119,6 +119,14 @@ public:
     void setCurrentCellIndex(int cellIndex);
     int currentCellIndex() const { return m_currentCellIndex; }
 
+    // Beat position tracking for conformance (0.0 = beat 1, 1.0 = beat 2, etc.)
+    void setBeatPosition(float beatPosition);
+    float beatPosition() const { return m_beatPosition; }
+
+    // Periodic update for time-based conformance (call from audio/timer callback)
+    // deltaMs: milliseconds since last update
+    void updateConformance(float deltaMs);
+
 signals:
     void leadModeChanged(LeadMode newMode);
     void harmonyModeChanged(HarmonyMode newMode);
@@ -147,10 +155,18 @@ private:
     // Defined here so it can be used by helper method declarations below
     struct ActiveNote {
         int originalNote = 0;
-        int snappedNote = 0;      // Channel 11 (AsPlayedPlusHarmony) or channel 12 (AsPlayed)
-        int harmonyNote = -1;     // Channel 12 (Harmony modes), -1 if not active
+        int snappedNote = 0;      // Output note (may be snapped from original)
+        int harmonyNote = -1;     // Harmony note, -1 if not active
         double referenceHz = 0.0; // Hz of the snapped note (for pitch bend calculation)
         bool voiceSustained = false; // True if guitar note-off received but held by voice
+
+        // Conformance behavior tracking
+        ConformanceBehavior behavior = ConformanceBehavior::ALLOW;
+        float conformanceBendTarget = 0.0f;  // Target bend in cents (for BEND behavior)
+        float conformanceBendCurrent = 0.0f; // Current bend position (interpolates toward target)
+        bool isDelayed = false;              // True if note is waiting for delay
+        float delayRemainingMs = 0.0f;       // Remaining delay time
+        int delayedVelocity = 0;             // Velocity for delayed note
     };
 
     // Core snapping logic
@@ -196,6 +212,8 @@ private:
     bool m_voiceSustainEnabled = true;        // Enabled by default - hold notes while singing
     int m_currentCellIndex = -1;
     int m_lastCc2Value = 0;                   // Track current CC2 (breath) value for voice sustain
+    float m_beatPosition = 0.0f;              // Current beat position (0.0-3.999 for 4/4)
+    int m_lastPlayedNote = -1;                // For melodic direction analysis in conformance
 
     // Track last known chord (to persist across empty cells)
     music::ChordSymbol m_lastKnownChord;
@@ -223,6 +241,7 @@ private:
     static constexpr int kVibratoFadeInDuration = 15;        // ~150ms fade-in once vibrato is detected
     static constexpr double kOscillationThreshold = 8.0;     // Minimum cents deviation to consider as oscillation
     static constexpr int kVoiceSustainCc2Threshold = 5;      // CC2 must be above this to sustain notes
+    static constexpr float kConformanceBendRatePerMs = 0.5f; // Cents per ms for conformance bend
 
     // Output channels (1-indexed, matching sendVirtualNoteOn expectations)
     // - Lead mode (Original/Conformed): output notes -> channel 1

@@ -1,6 +1,7 @@
 #include "PitchConformanceEngine.h"
 #include <algorithm>
 #include <cmath>
+#include <QDebug>
 
 namespace playback {
 
@@ -20,6 +21,10 @@ GravityResult PitchConformanceEngine::calculateGravity(int pitchClass, const Act
 
     result.tier = ChordOntology::instance().getTier(pitchClass, chord);
     result.isAvoidNote = chord.isAvoidNote(pitchClass);
+
+    qDebug() << "PitchConformance: calculateGravity pc=" << pitchClass
+             << "tier=" << result.tier << "isAvoid=" << result.isAvoidNote
+             << "chord.tier1 size=" << chord.tier1Absolute.size();
 
     // T1 pitches: no gravity (already home)
     if (result.tier == 1) {

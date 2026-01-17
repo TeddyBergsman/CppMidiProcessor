@@ -182,6 +182,65 @@ void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
     m_currentCellIndex = cellIndex;
 }
 
+void ScaleSnapProcessor::setBeatPosition(float beatPosition)
+{
+    m_beatPosition = beatPosition;
+}
+
+void ScaleSnapProcessor::updateConformance(float deltaMs)
+{
+    if (m_leadMode != LeadMode::Conformed || m_activeNotes.isEmpty()) {
+        return;
+    }
+
+    bool needsBendUpdate = false;
+
+    for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
+        ActiveNote& note = it.value();
+
+        // Handle delayed notes
+        if (note.isDelayed) {
+            note.delayRemainingMs -= deltaMs;
+            if (note.delayRemainingMs <= 0.0f) {
+                // Delay complete - emit the note now
+                note.isDelayed = false;
+                emitNoteOn(kChannelLead, note.snappedNote, note.delayedVelocity);
+                qDebug() << "ScaleSnap: Delayed note" << note.snappedNote << "now playing after delay";
+            }
+        }
+
+        // Handle bend interpolation for BEND behavior
+        if (note.behavior == ConformanceBehavior::BEND && !note.isDelayed) {
+            float diff = note.conformanceBendTarget - note.conformanceBendCurrent;
+            if (std::abs(diff) > 0.5f) {  // More than 0.5 cents difference
+                float maxChange = kConformanceBendRatePerMs * deltaMs;
+                if (std::abs(diff) <= maxChange) {
+                    note.conformanceBendCurrent = note.conformanceBendTarget;
+                } else {
+                    note.conformanceBendCurrent += (diff > 0 ? maxChange : -maxChange);
+                }
+                needsBendUpdate = true;
+            }
+        }
+    }
+
+    // If conformance bend changed, we need to update the pitch bend output
+    // This is combined with vocal bend in the onVoiceHzUpdated handler
+    if (needsBendUpdate) {
+        // Get the first active note's conformance bend
+        const ActiveNote& note = m_activeNotes.begin().value();
+        if (note.behavior == ConformanceBehavior::BEND) {
+            // If vocal bend is disabled, we need to apply conformance bend directly
+            if (!m_vocalBendEnabled) {
+                int bendValue = 8192 + static_cast<int>((note.conformanceBendCurrent / 200.0) * 8192.0);
+                bendValue = qBound(0, bendValue, 16383);
+                emitPitchBend(kChannelLead, bendValue);
+            }
+            // If vocal bend is enabled, the bend will be combined in onVoiceHzUpdated
+        }
+    }
+}
+
 void ScaleSnapProcessor::reset()
 {
     emitAllNotesOff();
@@ -258,20 +317,32 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
             emitNoteOn(kChannelLead, midiNote, velocity);
         } else if (m_leadMode == LeadMode::Conformed) {
             // Conformed mode: use PitchConformanceEngine for gravity-based correction
+            qDebug() << "ScaleSnap CONFORMED: validPcs.isEmpty()=" << validPcs.isEmpty()
+                     << "m_hasLastKnownChord=" << m_hasLastKnownChord;
+
             if (validPcs.isEmpty() || !m_hasLastKnownChord) {
                 // No chord/scale info - pass through unchanged
+                qDebug() << "ScaleSnap CONFORMED: No chord/scale info - passing through unchanged";
                 active.snappedNote = midiNote;
                 active.referenceHz = midiNoteToHz(midiNote);
+                active.behavior = ConformanceBehavior::ALLOW;
                 emitNoteOn(kChannelLead, midiNote, velocity);
             } else {
                 // Build ActiveChord for conformance
                 ActiveChord activeChord = buildActiveChord();
+                qDebug() << "ScaleSnap CONFORMED: ActiveChord rootPc=" << activeChord.rootPc
+                         << "tier1 size=" << activeChord.tier1Absolute.size()
+                         << "tier2 size=" << activeChord.tier2Absolute.size()
+                         << "tier3 size=" << activeChord.tier3Absolute.size();
 
-                // Build ConformanceContext
+                // Build ConformanceContext with beat position and previous note
                 ConformanceContext ctx;
                 ctx.currentChord = activeChord;
                 ctx.velocity = velocity;
-                // TODO: Add beat position and duration estimation when available
+                ctx.beatPosition = m_beatPosition;
+                ctx.isStrongBeat = (m_beatPosition < 0.5f) || (m_beatPosition >= 2.0f && m_beatPosition < 2.5f);
+                ctx.previousPitch = m_lastPlayedNote;
+                // TODO: Add duration estimation and next chord for ANTICIPATE
 
                 // Get conformance result
                 ConformanceResult result = m_conformanceEngine.conformPitch(midiNote, ctx);
@@ -280,14 +351,46 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
                 outputNote = qBound(0, outputNote, 127);
 
                 qDebug() << "ScaleSnap: LEAD INPUT" << midiNote << "-> OUTPUT" << outputNote
-                         << "behavior:" << static_cast<int>(result.behavior);
+                         << "behavior:" << static_cast<int>(result.behavior)
+                         << "bendCents:" << result.pitchBendCents
+                         << "delayMs:" << result.delayMs;
 
                 active.snappedNote = outputNote;
                 active.referenceHz = midiNoteToHz(outputNote);
-                emitNoteOn(kChannelLead, outputNote, velocity);
+                active.behavior = result.behavior;
 
-                // TODO: Handle BEND behavior with pitch bend output
-                // TODO: Handle DELAY behavior with note timing
+                // Handle behavior-specific actions
+                switch (result.behavior) {
+                    case ConformanceBehavior::ALLOW:
+                    case ConformanceBehavior::SNAP:
+                    case ConformanceBehavior::ANTICIPATE:
+                        // Emit note immediately
+                        emitNoteOn(kChannelLead, outputNote, velocity);
+                        break;
+
+                    case ConformanceBehavior::BEND:
+                        // Emit original note, but set up pitch bend toward target
+                        active.snappedNote = midiNote;  // Keep original note
+                        active.referenceHz = midiNoteToHz(midiNote);
+                        active.conformanceBendTarget = result.pitchBendCents;
+                        active.conformanceBendCurrent = 0.0f;  // Start at center
+                        emitNoteOn(kChannelLead, midiNote, velocity);
+                        qDebug() << "ScaleSnap: BEND behavior - note" << midiNote
+                                 << "will bend toward target by" << result.pitchBendCents << "cents";
+                        break;
+
+                    case ConformanceBehavior::DELAY:
+                        // Don't emit yet - schedule for later
+                        active.isDelayed = true;
+                        active.delayRemainingMs = result.delayMs;
+                        active.delayedVelocity = velocity;
+                        qDebug() << "ScaleSnap: DELAY behavior - note" << outputNote
+                                 << "delayed by" << result.delayMs << "ms";
+                        break;
+                }
+
+                // Track last played note for melodic analysis
+                m_lastPlayedNote = midiNote;
             }
         }
     } else {
@@ -536,11 +639,14 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
 
     m_lastVoiceCents = voiceCents;
 
-    // In Original lead mode, combine guitar bend + voice vibrato
-    // In other modes, just use voice cents
+    // Combine all bend sources based on lead mode
     double totalCents = voiceCents;
     if (m_leadMode == LeadMode::Original) {
+        // Original mode: guitar bend + voice vibrato
         totalCents = m_lastGuitarCents + voiceCents;
+    } else if (m_leadMode == LeadMode::Conformed && note.behavior == ConformanceBehavior::BEND) {
+        // Conformed mode with BEND behavior: conformance bend + voice vibrato
+        totalCents = note.conformanceBendCurrent + voiceCents;
     }
 
     // Clamp combined to reasonable range (±200 cents = ±2 semitones)
@@ -571,39 +677,70 @@ QSet<int> ScaleSnapProcessor::computeValidPitchClasses() const
 {
     QSet<int> validPcs;
 
-    if (!m_harmony || !m_ontology || !m_model || m_currentCellIndex < 0) {
+    qDebug() << "ScaleSnap::computeValidPitchClasses - harmony=" << (m_harmony != nullptr)
+             << "ontology=" << (m_ontology != nullptr)
+             << "model=" << (m_model != nullptr)
+             << "cellIndex=" << m_currentCellIndex
+             << "hasLastKnownChord=" << m_hasLastKnownChord;
+
+    if (!m_harmony || !m_ontology || !m_model) {
+        qDebug() << "ScaleSnap::computeValidPitchClasses - missing dependency, returning empty";
         return validPcs;
     }
 
-    // Try to get chord for current cell
     music::ChordSymbol chord;
     bool isExplicit = false;
-    chord = m_harmony->parseCellChordNoState(
-        *m_model,
-        m_currentCellIndex,
-        music::ChordSymbol{},
-        &isExplicit
-    );
 
-    // If current cell has explicit chord, update our tracking
-    if (isExplicit && chord.rootPc >= 0 && !chord.noChord && !chord.placeholder) {
-        // Use this chord
-        const_cast<ScaleSnapProcessor*>(this)->m_lastKnownChord = chord;
-        const_cast<ScaleSnapProcessor*>(this)->m_hasLastKnownChord = true;
-    } else if (m_hasLastKnownChord && m_lastKnownChord.rootPc >= 0) {
-        // Use last known chord
-        chord = m_lastKnownChord;
+    // If we have a valid cell index (playback is active), use it
+    if (m_currentCellIndex >= 0) {
+        // Try to get chord for current cell
+        chord = m_harmony->parseCellChordNoState(
+            *m_model,
+            m_currentCellIndex,
+            music::ChordSymbol{},
+            &isExplicit
+        );
+
+        // If current cell has explicit chord, update our tracking
+        if (isExplicit && chord.rootPc >= 0 && !chord.noChord && !chord.placeholder) {
+            // Use this chord
+            const_cast<ScaleSnapProcessor*>(this)->m_lastKnownChord = chord;
+            const_cast<ScaleSnapProcessor*>(this)->m_hasLastKnownChord = true;
+        } else if (m_hasLastKnownChord && m_lastKnownChord.rootPc >= 0) {
+            // Use last known chord
+            chord = m_lastKnownChord;
+        } else {
+            // Scan backward to find most recent chord
+            for (int i = m_currentCellIndex - 1; i >= 0; --i) {
+                music::ChordSymbol prevChord = m_harmony->parseCellChordNoState(
+                    *m_model, i, music::ChordSymbol{}, &isExplicit
+                );
+                if (isExplicit && prevChord.rootPc >= 0 && !prevChord.noChord && !prevChord.placeholder) {
+                    chord = prevChord;
+                    const_cast<ScaleSnapProcessor*>(this)->m_lastKnownChord = chord;
+                    const_cast<ScaleSnapProcessor*>(this)->m_hasLastKnownChord = true;
+                    break;
+                }
+            }
+        }
     } else {
-        // Scan backward to find most recent chord
-        for (int i = m_currentCellIndex - 1; i >= 0; --i) {
-            music::ChordSymbol prevChord = m_harmony->parseCellChordNoState(
-                *m_model, i, music::ChordSymbol{}, &isExplicit
-            );
-            if (isExplicit && prevChord.rootPc >= 0 && !prevChord.noChord && !prevChord.placeholder) {
-                chord = prevChord;
-                const_cast<ScaleSnapProcessor*>(this)->m_lastKnownChord = chord;
-                const_cast<ScaleSnapProcessor*>(this)->m_hasLastKnownChord = true;
-                break;
+        // Playback not active - try to use the first chord in the chart as fallback
+        // or use last known chord if we have one
+        if (m_hasLastKnownChord && m_lastKnownChord.rootPc >= 0) {
+            chord = m_lastKnownChord;
+        } else {
+            // Scan from the beginning to find the first chord (limit to first 32 cells)
+            for (int i = 0; i < 32; ++i) {
+                music::ChordSymbol firstChord = m_harmony->parseCellChordNoState(
+                    *m_model, i, music::ChordSymbol{}, &isExplicit
+                );
+                if (isExplicit && firstChord.rootPc >= 0 && !firstChord.noChord && !firstChord.placeholder) {
+                    chord = firstChord;
+                    const_cast<ScaleSnapProcessor*>(this)->m_lastKnownChord = chord;
+                    const_cast<ScaleSnapProcessor*>(this)->m_hasLastKnownChord = true;
+                    qDebug() << "ScaleSnap: Found first chord at cell" << i << "root=" << chord.rootPc;
+                    break;
+                }
             }
         }
     }

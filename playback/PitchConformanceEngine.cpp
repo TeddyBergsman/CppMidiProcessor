@@ -34,21 +34,12 @@ GravityResult PitchConformanceEngine::calculateGravity(int pitchClass, const Act
         return result;
     }
 
-    // Find nearest T1 or T2 pitch
+    // Find nearest T1 pitch (chord tone) - STRICT: only snap to chord tones
     int bestTarget = -1;
     int bestDistance = 7;  // Max is 6 semitones
 
-    // Search T1 first (stronger targets)
+    // Search T1 only (chord tones are the only valid snap targets)
     for (int target : chord.tier1Absolute) {
-        int dist = ChordOntology::minDistance(pitchClass, target);
-        if (dist < bestDistance) {
-            bestDistance = dist;
-            bestTarget = target;
-        }
-    }
-
-    // Also consider T2 if closer
-    for (int target : chord.tier2Absolute) {
         int dist = ChordOntology::minDistance(pitchClass, target);
         if (dist < bestDistance) {
             bestDistance = dist;
@@ -105,71 +96,22 @@ ConformanceResult PitchConformanceEngine::selectBehavior(
     result.pitchBendCents = 0.0f;
     result.delayMs = 0.0f;
 
-    // T1 pitches: always allow
+    // STRICT MODE: Only T1 chord tones are allowed
+    // Everything else gets snapped to the nearest chord tone
+
     if (gravity.tier == 1) {
+        // T1 = chord tones (root, 3rd, 5th, 7th) - allow these
         result.behavior = ConformanceBehavior::ALLOW;
+        qDebug() << "ALLOW T1: note" << inputPitch << "pc" << (inputPitch % 12);
         return result;
     }
 
-    // T2 pitches: allow, mild bend on long notes
-    if (gravity.tier == 2) {
-        if (ctx.estimatedDurationMs > kLongDurationMs && ctx.isStrongBeat) {
-            result.behavior = ConformanceBehavior::BEND;
-            // Gentle bend toward target (20 cents per semitone of distance)
-            result.pitchBendCents = gravity.distance * 20.0f;
-        } else {
-            result.behavior = ConformanceBehavior::ALLOW;
-        }
-        return result;
-    }
-
-    // Check anticipation first - if note is valid for next chord
-    if (ctx.inAnticipationWindow()) {
-        int pc = ChordOntology::normalizePc(inputPitch);
-        if (ctx.nextChord.tier1Absolute.count(pc) ||
-            ctx.nextChord.tier2Absolute.count(pc)) {
-            result.behavior = ConformanceBehavior::ANTICIPATE;
-            return result;
-        }
-    }
-
-    // T3 scale tones
-    if (gravity.tier == 3) {
-        // Short duration + weak beat + stepwise = allow as passing tone
-        if (ctx.estimatedDurationMs < kShortDurationMs &&
-            !ctx.isStrongBeat &&
-            ctx.previousPitch >= 0 &&
-            isStepwiseMotion(ctx.previousPitch, inputPitch)) {
-            result.behavior = ConformanceBehavior::ALLOW;
-            return result;
-        }
-
-        // Avoid notes on strong beats: snap
-        if (gravity.isAvoidNote && ctx.isStrongBeat) {
-            result.behavior = ConformanceBehavior::SNAP;
-            result.outputPitch = ChordOntology::findNearestInOctave(inputPitch, gravity.nearestTarget);
-            return result;
-        }
-
-        // Otherwise: bend toward target
-        result.behavior = ConformanceBehavior::BEND;
-        result.pitchBendCents = gravity.distance * gravity.gravityStrength * 100.0f;
-        return result;
-    }
-
-    // T4 chromatic
-    // Stepwise approach: delay to recontextualize
-    if (ctx.previousPitch >= 0 &&
-        isStepwiseMotion(ctx.previousPitch, inputPitch) &&
-        std::abs(gravity.distance) == 1) {
-        result.behavior = ConformanceBehavior::DELAY;
-        result.delayMs = kChromaticDelayMs;
-        return result;
-    }
-
-    // Otherwise: snap (chromatic is too wrong to sustain)
+    // T2, T3, T4 all get SNAPPED to nearest chord tone
     result.behavior = ConformanceBehavior::SNAP;
     result.outputPitch = ChordOntology::findNearestInOctave(inputPitch, gravity.nearestTarget);
+    qDebug() << "SNAP T" << gravity.tier << ": input" << inputPitch
+             << "-> output" << result.outputPitch
+             << "(target pc" << gravity.nearestTarget << ")";
     return result;
 }
 
@@ -221,7 +163,7 @@ void PitchConformanceEngine::updateBend(BendState& state, float deltaMs) {
 int PitchConformanceEngine::centsToMidiBend(float cents, int bendRangeSemitones) {
     // MIDI bend: 0 = -range, 8192 = center, 16383 = +range
     float normalized = cents / (bendRangeSemitones * 100.0f);
-    normalized = std::clamp(normalized, -1.0f, 1.0f);
+    normalized = std::max(-1.0f, std::min(1.0f, normalized));
     return static_cast<int>((normalized + 1.0f) * 8191.5f);
 }
 

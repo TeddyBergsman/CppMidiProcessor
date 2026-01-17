@@ -330,10 +330,17 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
             } else {
                 // Build ActiveChord for conformance
                 ActiveChord activeChord = buildActiveChord();
-                qDebug() << "ScaleSnap CONFORMED: ActiveChord rootPc=" << activeChord.rootPc
-                         << "tier1 size=" << activeChord.tier1Absolute.size()
-                         << "tier2 size=" << activeChord.tier2Absolute.size()
-                         << "tier3 size=" << activeChord.tier3Absolute.size();
+
+                // Debug: show actual pitch classes in tier1
+                QString tier1Pcs;
+                for (int pc : activeChord.tier1Absolute) {
+                    static const char* noteNames[] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+                    tier1Pcs += QString("%1(%2) ").arg(noteNames[pc]).arg(pc);
+                }
+                qDebug() << "ScaleSnap CONFORMED: rootPc=" << activeChord.rootPc
+                         << "chordKey=" << activeChord.ontologyChordKey
+                         << "T1 notes:" << tier1Pcs
+                         << "T1 size=" << activeChord.tier1Absolute.size();
 
                 // Build ConformanceContext with beat position and previous note
                 ConformanceContext ctx;

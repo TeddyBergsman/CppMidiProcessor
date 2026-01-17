@@ -4,8 +4,12 @@
 #include <QSet>
 #include <QHash>
 #include <QVector>
+#include <array>
 
 #include "music/ChordSymbol.h"
+#include "playback/HarmonyTypes.h"
+#include "playback/ChordOntology.h"
+#include "playback/PitchConformanceEngine.h"
 
 class MidiProcessor;
 
@@ -17,40 +21,50 @@ namespace playback {
 class HarmonyContext;
 
 /**
- * ScaleSnapProcessor - MIDI processor that snaps guitar notes to scale/chord tones
+ * ScaleSnapProcessor - MIDI processor for guitar note processing and harmony generation
+ *
+ * HARMONIC INTELLIGENCE ENGINE v3.0
  *
  * Listens to guitar MIDI input and outputs processed notes on dedicated channels:
- * - Lead mode (Off/Original/Constrained): Controls guitar note processing -> channel 12
- * - Harmony mode (Off/SmartThirds): Generates consonant harmony notes -> channel 11
+ * - Lead mode (Off/Original/Conformed): Controls guitar note processing -> channel 1
+ * - Harmony mode (Off/Single/PrePlanned/Voice): Generates harmony voices -> channels 12-15
  *
  * Lead and Harmony modes operate independently - both can be active simultaneously.
  *
- * Valid pitch classes are computed as:
- *   (key scale tones from dynamic key detection) + (chord tones) - (avoid notes)
+ * When Lead mode is NOT Off, guitar passthrough to channel 1 in MidiProcessor is suppressed,
+ * and this processor outputs the processed lead on channel 1 with vocal bend, conformance, etc.
  *
- * Avoid notes are any pitch class that creates a minor 2nd (1 semitone) with a chord tone,
- * preventing clashes like F against E on a C7 chord.
+ * Pitch conformance uses a 4-tier system:
+ * - T1: Chord tones (always valid)
+ * - T2: Tensions (9th, 11th, 13th - valid with light gravity)
+ * - T3: Scale tones (moderate gravity, avoid notes flagged)
+ * - T4: Chromatic (strong gravity, must resolve)
  *
- * Harmony is always generated relative to the original input note (not the snapped note).
+ * Conformance behaviors: ALLOW, SNAP, BEND, ANTICIPATE, DELAY
  */
 class ScaleSnapProcessor : public QObject {
     Q_OBJECT
 
 public:
-    // Lead mode: controls how guitar notes are processed -> Channel 12
+    // Lead mode: controls how guitar notes are processed -> Channel 1
     enum class LeadMode {
         Off = 0,
-        Original,            // Pass through original notes (no snapping) -> channel 12
-        Constrained          // Snap to nearest scale/chord tone -> channel 12
+        Original,            // Pass through original notes with vocal bend -> channel 1
+        Conformed            // Apply pitch conformance (gravity-based) -> channel 1
     };
     Q_ENUM(LeadMode)
 
-    // Harmony mode: controls harmony generation -> Channel 11
-    enum class HarmonyMode {
+    // Harmony mode: controls harmony generation -> Channels 12-15
+    // Uses playback::HarmonyMode from HarmonyTypes.h for full mode set
+    // This enum is for backwards compatibility with existing UI
+    enum class HarmonyModeCompat {
         Off = 0,
-        SmartThirds          // Prefers 3rds/5ths that are chord/scale tones -> channel 11
+        SmartThirds,         // DEPRECATED: Use HarmonyMode::SINGLE + HarmonyType::PARALLEL
+        Single,              // User-selected harmony type
+        PrePlanned,          // Automatic phrase-based selection
+        Voice                // Vocal MIDI as harmony source
     };
-    Q_ENUM(HarmonyMode)
+    Q_ENUM(HarmonyModeCompat)
 
     explicit ScaleSnapProcessor(QObject* parent = nullptr);
     ~ScaleSnapProcessor() override;
@@ -65,9 +79,25 @@ public:
     LeadMode leadMode() const { return m_leadMode; }
     void setLeadMode(LeadMode mode);
 
-    // Harmony mode control
-    HarmonyMode harmonyMode() const { return m_harmonyMode; }
-    void setHarmonyMode(HarmonyMode mode);
+    // Harmony mode control (uses HarmonyModeCompat for backward compatibility)
+    HarmonyModeCompat harmonyModeCompat() const { return m_harmonyModeCompat; }
+    void setHarmonyModeCompat(HarmonyModeCompat mode);
+
+    // New harmony configuration (full control)
+    const HarmonyConfig& harmonyConfig() const { return m_harmonyConfig; }
+    void setHarmonyConfig(const HarmonyConfig& config);
+
+    // Harmony type (when mode is Single)
+    HarmonyType harmonyType() const { return m_harmonyConfig.singleType; }
+    void setHarmonyType(HarmonyType type);
+
+    // Voice count (1-4)
+    int harmonyVoiceCount() const { return m_harmonyConfig.voiceCount; }
+    void setHarmonyVoiceCount(int count);
+
+    // Lead conformance gravity multiplier (0.0-2.0)
+    float leadGravityMultiplier() const { return m_leadConfig.gravityMultiplier; }
+    void setLeadGravityMultiplier(float multiplier);
 
     // Vocal bend control (applies pitch bend from voice Hz to all output)
     bool vocalBendEnabled() const { return m_vocalBendEnabled; }
@@ -129,6 +159,7 @@ private:
     QSet<int> computeValidPitchClasses() const;
     QSet<int> computeChordTones(const music::ChordSymbol& chord) const;
     QSet<int> computeKeyScaleTones() const;  // Uses dynamic key detection
+    ActiveChord buildActiveChord() const;    // Build ActiveChord from current context
 
     // MIDI output helpers
     void emitNoteOn(int channel, int note, int velocity);
@@ -154,7 +185,11 @@ private:
 
     // State
     LeadMode m_leadMode = LeadMode::Off;
-    HarmonyMode m_harmonyMode = HarmonyMode::Off;
+    HarmonyMode m_harmonyMode = HarmonyMode::OFF;
+    HarmonyModeCompat m_harmonyModeCompat = HarmonyModeCompat::Off;
+    HarmonyConfig m_harmonyConfig;
+    LeadConfig m_leadConfig;
+    PitchConformanceEngine m_conformanceEngine;
     bool m_vocalBendEnabled = true;           // Enabled by default
     double m_vocalVibratoRangeCents = 200.0;  // ±200 cents (default), or ±100 cents
     bool m_vibratoCorrectionEnabled = true;   // Enabled by default - filter out DC offset from voice
@@ -190,10 +225,13 @@ private:
     static constexpr int kVoiceSustainCc2Threshold = 5;      // CC2 must be above this to sustain notes
 
     // Output channels (1-indexed, matching sendVirtualNoteOn expectations)
-    // - Lead mode (Original/Constrained): output notes -> channel 12
-    // - Harmony mode (SmartThirds): harmony notes -> channel 11
-    static constexpr int kChannelHarmony = 11;   // MIDI channel 11 (harmony output)
-    static constexpr int kChannelLead = 12;      // MIDI channel 12 (lead output)
+    // - Lead mode (Original/Conformed): output notes -> channel 1
+    // - Harmony mode: harmony notes -> channels 12-15
+    static constexpr int kChannelLead = channels::LEAD;        // MIDI channel 1 (lead output)
+    static constexpr int kChannelHarmony1 = channels::HARMONY_1;  // MIDI channel 12 (primary harmony)
+    static constexpr int kChannelHarmony2 = channels::HARMONY_2;  // MIDI channel 13 (second harmony)
+    static constexpr int kChannelHarmony3 = channels::HARMONY_3;  // MIDI channel 14 (third harmony)
+    static constexpr int kChannelHarmony4 = channels::HARMONY_4;  // MIDI channel 15 (fourth harmony)
 };
 
 } // namespace playback

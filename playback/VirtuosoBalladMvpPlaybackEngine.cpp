@@ -298,16 +298,19 @@ void VirtuosoBalladMvpPlaybackEngine::setMidiProcessor(MidiProcessor* midi) {
             static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
 
     // ScaleSnapProcessor: connect guitar signals for scale-aware pitch correction.
+    // IMPORTANT: Use DirectConnection for note on/off to ensure notes are added to m_activeNotes
+    // immediately, before any queued voiceHzUpdated events are processed. This prevents a race
+    // condition where voiceHzUpdated would find m_activeNotes empty and bail out.
     m_scaleSnap.setMidiProcessor(m_midi);
     connect(m_midi, &MidiProcessor::guitarNoteOn,
             &m_scaleSnap, &ScaleSnapProcessor::onGuitarNoteOn,
-            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+            static_cast<Qt::ConnectionType>(Qt::DirectConnection | Qt::UniqueConnection));
     connect(m_midi, &MidiProcessor::guitarNoteOff,
             &m_scaleSnap, &ScaleSnapProcessor::onGuitarNoteOff,
-            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+            static_cast<Qt::ConnectionType>(Qt::DirectConnection | Qt::UniqueConnection));
     connect(m_midi, &MidiProcessor::guitarHzUpdated,
             &m_scaleSnap, &ScaleSnapProcessor::onGuitarHzUpdated,
-            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+            static_cast<Qt::ConnectionType>(Qt::DirectConnection | Qt::UniqueConnection));
 
     // Forward CC2 (breath) from voice to ScaleSnapProcessor for expression on snapped channels.
     connect(m_midi, &MidiProcessor::voiceCc2Updated,

@@ -31,6 +31,9 @@ public slots:
     void setVoiceControlEnabled(bool enabled);
     void setTranspose(int semitones);
     void applyTranspose(int semitones);
+    // Suppress guitar passthrough to channel 1 (used by ScaleSnapProcessor when Lead mode is active)
+    void setSuppressGuitarPassthrough(bool suppress);
+    bool suppressGuitarPassthrough() const { return m_suppressGuitarPassthrough.load(); }
     // Virtual musician MIDI (thread-safe; enqueued to worker thread)
     void sendVirtualNoteOn(int channel, int note, int velocity);
     void sendVirtualNoteOff(int channel, int note);
@@ -94,6 +97,10 @@ private:
     // Backpressure: prevent unbounded growth when VirtualBand + live MIDI arrive together.
     static constexpr size_t kMaxEventQueue = 16384;
     std::atomic<quint64> m_droppedMidiEvents{0};
+
+    // Suppress guitar passthrough: when true, guitar notes/CC are NOT passed through to channel 1.
+    // ScaleSnapProcessor sets this when Lead mode is active so it can output processed notes instead.
+    std::atomic<bool> m_suppressGuitarPassthrough{false};
     
     QTimer* m_logPollTimer;
     std::queue<std::string> m_logQueue;

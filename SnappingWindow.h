@@ -33,7 +33,7 @@ private slots:
     void onVibratoCorrectionToggled(bool checked);
     void onVoiceSustainToggled(bool checked);
     void onEngineLeadModeChanged(playback::ScaleSnapProcessor::LeadMode mode);
-    void onEngineHarmonyModeChanged(playback::ScaleSnapProcessor::HarmonyMode mode);
+    void onEngineHarmonyModeChanged(playback::HarmonyMode mode);
     void onEngineVocalBendChanged(bool enabled);
     void onEngineVocalVibratoRangeChanged(double cents);
     void onEngineVibratoCorrectionChanged(bool enabled);

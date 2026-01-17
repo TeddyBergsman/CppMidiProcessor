@@ -38,9 +38,9 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
             }
         }
 
-        // Harmony mode combo
+        // Harmony mode combo (uses compat enum for backward compatibility)
         if (m_harmonyModeCombo) {
-            const int modeInt = static_cast<int>(snap->harmonyMode());
+            const int modeInt = static_cast<int>(snap->harmonyModeCompat());
             for (int i = 0; i < m_harmonyModeCombo->count(); ++i) {
                 if (m_harmonyModeCombo->itemData(i).toInt() == modeInt) {
                     m_harmonyModeCombo->setCurrentIndex(i);
@@ -107,7 +107,7 @@ void SnappingWindow::buildUi()
     mainLayout->setSpacing(12);
 
     // ===== LEAD MODE GROUP =====
-    QGroupBox* leadGroup = new QGroupBox("Lead (Channel 12)", central);
+    QGroupBox* leadGroup = new QGroupBox("Lead (Channel 1)", central);
     QVBoxLayout* leadLayout = new QVBoxLayout(leadGroup);
     leadLayout->setContentsMargins(12, 12, 12, 12);
     leadLayout->setSpacing(8);
@@ -120,7 +120,7 @@ void SnappingWindow::buildUi()
     m_leadModeCombo = new QComboBox(leadGroup);
     m_leadModeCombo->addItem("Off", static_cast<int>(playback::ScaleSnapProcessor::LeadMode::Off));
     m_leadModeCombo->addItem("Original", static_cast<int>(playback::ScaleSnapProcessor::LeadMode::Original));
-    m_leadModeCombo->addItem("Constrained", static_cast<int>(playback::ScaleSnapProcessor::LeadMode::Constrained));
+    m_leadModeCombo->addItem("Conformed", static_cast<int>(playback::ScaleSnapProcessor::LeadMode::Conformed));
     m_leadModeCombo->setMinimumWidth(180);
 
     leadComboRow->addWidget(leadLabel);
@@ -138,19 +138,19 @@ void SnappingWindow::buildUi()
     mainLayout->addWidget(leadGroup);
 
     // ===== HARMONY MODE GROUP =====
-    QGroupBox* harmonyGroup = new QGroupBox("Harmony (Channel 11)", central);
+    QGroupBox* harmonyGroup = new QGroupBox("Harmony (Channels 12-15)", central);
     QVBoxLayout* harmonyLayout = new QVBoxLayout(harmonyGroup);
     harmonyLayout->setContentsMargins(12, 12, 12, 12);
     harmonyLayout->setSpacing(8);
 
-    // Harmony mode combo box
+    // Harmony mode combo box (uses HarmonyModeCompat for backward compatibility)
     QHBoxLayout* harmonyComboRow = new QHBoxLayout();
     harmonyComboRow->setSpacing(8);
 
     QLabel* harmonyLabel = new QLabel("Mode:", harmonyGroup);
     m_harmonyModeCombo = new QComboBox(harmonyGroup);
-    m_harmonyModeCombo->addItem("Off", static_cast<int>(playback::ScaleSnapProcessor::HarmonyMode::Off));
-    m_harmonyModeCombo->addItem("Smart Thirds", static_cast<int>(playback::ScaleSnapProcessor::HarmonyMode::SmartThirds));
+    m_harmonyModeCombo->addItem("Off", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Off));
+    m_harmonyModeCombo->addItem("Smart Thirds", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::SmartThirds));
     m_harmonyModeCombo->setMinimumWidth(180);
 
     harmonyComboRow->addWidget(harmonyLabel);
@@ -236,7 +236,7 @@ void SnappingWindow::onHarmonyModeChanged(int index)
     const int modeInt = m_harmonyModeCombo->itemData(index).toInt();
     auto* snap = m_engine->scaleSnapProcessor();
     if (snap) {
-        snap->setHarmonyMode(static_cast<playback::ScaleSnapProcessor::HarmonyMode>(modeInt));
+        snap->setHarmonyModeCompat(static_cast<playback::ScaleSnapProcessor::HarmonyModeCompat>(modeInt));
     }
 
     updateHarmonyModeDescription();
@@ -303,14 +303,27 @@ void SnappingWindow::onEngineLeadModeChanged(playback::ScaleSnapProcessor::LeadM
     updateLeadModeDescription();
 }
 
-void SnappingWindow::onEngineHarmonyModeChanged(playback::ScaleSnapProcessor::HarmonyMode mode)
+void SnappingWindow::onEngineHarmonyModeChanged(playback::HarmonyMode mode)
 {
     if (!m_harmonyModeCombo) return;
 
+    // Map HarmonyMode back to HarmonyModeCompat for UI update
+    // This is a simplified mapping - full UI update will come in Phase UI
+    int compatModeInt = 0;
+    switch (mode) {
+        case playback::HarmonyMode::OFF:
+            compatModeInt = static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Off);
+            break;
+        case playback::HarmonyMode::SINGLE:
+        case playback::HarmonyMode::PRE_PLANNED:
+        case playback::HarmonyMode::VOICE:
+            compatModeInt = static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::SmartThirds);
+            break;
+    }
+
     // Update combo to match (avoid re-triggering onHarmonyModeChanged)
-    const int modeInt = static_cast<int>(mode);
     for (int i = 0; i < m_harmonyModeCombo->count(); ++i) {
-        if (m_harmonyModeCombo->itemData(i).toInt() == modeInt) {
+        if (m_harmonyModeCombo->itemData(i).toInt() == compatModeInt) {
             if (m_harmonyModeCombo->currentIndex() != i) {
                 m_harmonyModeCombo->blockSignals(true);
                 m_harmonyModeCombo->setCurrentIndex(i);
@@ -383,13 +396,13 @@ void SnappingWindow::updateLeadModeDescription()
     QString desc;
     switch (mode) {
     case playback::ScaleSnapProcessor::LeadMode::Off:
-        desc = "Lead output is disabled. No notes are sent to channel 12.";
+        desc = "Lead output is disabled. Guitar notes pass through normally to channel 1.";
         break;
     case playback::ScaleSnapProcessor::LeadMode::Original:
-        desc = "Pass through guitar notes unchanged to channel 12 (duplicates channel 1 data including CC2).";
+        desc = "Pass through guitar notes unchanged to channel 1, with vocal bend and vibrato correction applied.";
         break;
-    case playback::ScaleSnapProcessor::LeadMode::Constrained:
-        desc = "Snap guitar notes to the nearest scale/chord tone. Output on MIDI channel 12.";
+    case playback::ScaleSnapProcessor::LeadMode::Conformed:
+        desc = "Apply gravity-based pitch conformance to snap notes toward chord/scale tones. Output on MIDI channel 1.";
         break;
     }
 
@@ -401,15 +414,24 @@ void SnappingWindow::updateHarmonyModeDescription()
     if (!m_harmonyDescriptionLabel || !m_harmonyModeCombo) return;
 
     const int modeInt = m_harmonyModeCombo->currentData().toInt();
-    const auto mode = static_cast<playback::ScaleSnapProcessor::HarmonyMode>(modeInt);
+    const auto mode = static_cast<playback::ScaleSnapProcessor::HarmonyModeCompat>(modeInt);
 
     QString desc;
     switch (mode) {
-    case playback::ScaleSnapProcessor::HarmonyMode::Off:
-        desc = "Harmony output is disabled. No notes are sent to channel 11.";
+    case playback::ScaleSnapProcessor::HarmonyModeCompat::Off:
+        desc = "Harmony output is disabled. No notes are sent to harmony channels.";
         break;
-    case playback::ScaleSnapProcessor::HarmonyMode::SmartThirds:
-        desc = "Generate a harmony note (preferring 3rds and 5ths that are chord/scale tones). Output on MIDI channel 11.";
+    case playback::ScaleSnapProcessor::HarmonyModeCompat::SmartThirds:
+        desc = "Generate a harmony note (preferring 3rds and 5ths that are chord/scale tones). Output on MIDI channel 12.";
+        break;
+    case playback::ScaleSnapProcessor::HarmonyModeCompat::Single:
+        desc = "User-selected harmony type (Parallel, Contrary, etc.). Output on MIDI channels 12-15.";
+        break;
+    case playback::ScaleSnapProcessor::HarmonyModeCompat::PrePlanned:
+        desc = "Automatic phrase-based harmony selection. Output on MIDI channels 12-15.";
+        break;
+    case playback::ScaleSnapProcessor::HarmonyModeCompat::Voice:
+        desc = "Use vocal MIDI as harmony source. Output on MIDI channels 12-15.";
         break;
     }
 

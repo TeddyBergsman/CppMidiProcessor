@@ -305,6 +305,10 @@ void MidiProcessor::setVoiceControlEnabled(bool enabled) {
     m_voiceControlEnabled.store(enabled);
 }
 
+void MidiProcessor::setSuppressGuitarPassthrough(bool suppress) {
+    m_suppressGuitarPassthrough.store(suppress);
+}
+
 void MidiProcessor::setTranspose(int semitones) {
     m_transposeAmount.store(semitones);
     {
@@ -455,8 +459,18 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                         if (status == 0x90 && vel > 0) emit guitarNoteOn(note, vel);
                         else if (status == 0x80 || (status == 0x90 && vel == 0)) emit guitarNoteOff(note);
                     }
-                    
-                    safeSendMessage(passthroughMsg);
+
+                    // When ScaleSnapProcessor has Lead mode active, suppress passthrough of:
+                    // - Note on/off (so ScaleSnapProcessor outputs processed notes instead)
+                    // - Pitch bend (so vocal vibrato from ScaleSnapProcessor isn't overwritten by guitar bend)
+                    // CC and aftertouch still pass through for expression control.
+                    const bool isNoteMessage = (status == 0x90 || status == 0x80);
+                    const bool isPitchBend = (status == 0xE0);
+                    if ((isNoteMessage || isPitchBend) && m_suppressGuitarPassthrough.load()) {
+                        // Skip raw passthrough - ScaleSnapProcessor will output on channel 1
+                    } else {
+                        safeSendMessage(passthroughMsg);
+                    }
                     
                 } else if (event.source == MidiSource::VoiceAmp) {
                     // Handle aftertouch → CC2 and CC104; ignore voice notes here to avoid duplicates

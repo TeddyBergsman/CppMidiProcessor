@@ -83,6 +83,9 @@ add_test(NAME VirtuosoCoreTests COMMAND VirtuosoCoreTests)
 
 add_executable(VirtuosoPlaybackTests
   playback/tests/VirtuosoPlaybackTests.cpp
+  playback/ChordOntology.cpp
+  playback/PitchConformanceEngine.cpp
+  playback/HarmonyVoiceManager.cpp
   playback/HarmonyContext.cpp
   playback/InteractionContext.cpp
   playback/AutoWeightController.cpp
@@ -158,10 +161,16 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/VirtuosoBalladMvpPlaybackEngine.h
   playback/VirtuosoBalladMvpPlaybackEngine.cpp
   playback/HarmonyTypes.h
+  playback/ChordOntology.h
+  playback/ChordOntology.cpp
+  playback/PitchConformanceEngine.h
+  playback/PitchConformanceEngine.cpp
   playback/HarmonyContext.h
   playback/HarmonyContext.cpp
   playback/ScaleSnapProcessor.h
   playback/ScaleSnapProcessor.cpp
+  playback/HarmonyGenerator.h
+  playback/HarmonyVoiceManager.cpp
   playback/InteractionContext.h
   playback/InteractionContext.cpp
   playback/StoryState.h

@@ -304,6 +304,10 @@ void ScaleSnapProcessor::reset()
     m_lastNoteOnTimestamp = 0;
     m_currentlyPlayingNote = -1;
     m_currentNoteWasSnapped = false;
+    // Reset chromatic sweep detection
+    m_recentIntervals.fill(0);
+    m_recentIntervalsIndex = 0;
+    m_lastInputNote = -1;
     // Reset pitch bend to center on all channels
     emitPitchBend(kChannelLead, 8192);
     emitPitchBend(kChannelHarmony1, 8192);
@@ -394,10 +398,23 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
                          << "T1 size=" << activeChord.tier1Absolute.size();
 
                 // ================================================================
+                // INTERVAL TRACKING FOR CHROMATIC SWEEP DETECTION
+                // Track the interval between consecutive notes to detect
+                // chromatic sweeps (±1 semitone runs) vs melodic patterns
+                // ================================================================
+                if (m_lastInputNote >= 0) {
+                    int interval = midiNote - m_lastInputNote;
+                    m_recentIntervals[m_recentIntervalsIndex] = interval;
+                    m_recentIntervalsIndex = (m_recentIntervalsIndex + 1) % kRecentIntervalsSize;
+                }
+                m_lastInputNote = midiNote;
+
+                // ================================================================
                 // FAST PLAYING DETECTION
-                // If notes are coming faster than kFastPlayingThresholdMs,
-                // skip non-chord tones entirely (don't play them, let previous
-                // note sustain via voice sustain)
+                // If notes are coming faster than kFastPlayingThresholdMs AND
+                // the pattern looks like a chromatic sweep (consecutive semitones),
+                // skip non-chord tones. But if it's a melodic pattern (larger
+                // intervals, mixed directions), allow scale tones.
                 // ================================================================
                 const qint64 now = QDateTime::currentMSecsSinceEpoch();
                 const qint64 timeSinceLastNote = now - m_lastNoteOnTimestamp;
@@ -406,20 +423,37 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
                 const bool isFastPlaying = (timeSinceLastNote > 0 && timeSinceLastNote < kFastPlayingThresholdMs);
                 const int inputPc = normalizePc(midiNote);
                 const bool isChordTone = (activeChord.tier1Absolute.count(inputPc) > 0);
+                const bool isScaleTone = activeChord.isValidScaleTone(inputPc);  // T1, T2, or T3
+                const bool isChromaticSweep = isLikelyChromaticSweep();
 
                 qDebug() << "ScaleSnap: timeSinceLastNote=" << timeSinceLastNote
                          << "isFastPlaying=" << isFastPlaying
-                         << "isChordTone=" << isChordTone;
+                         << "isChordTone=" << isChordTone
+                         << "isScaleTone=" << isScaleTone
+                         << "isChromaticSweep=" << isChromaticSweep;
 
-                // Fast playing + non-chord tone = skip (previous note sustains)
+                // Fast chromatic sweep + non-chord tone = skip (previous note sustains)
+                // Fast melodic pattern + scale tone = allow (it's intentional)
                 if (isFastPlaying && !isChordTone) {
-                    qDebug() << "ScaleSnap: SKIPPING non-chord tone during fast playing (previous note sustains)";
-                    // Mark all currently playing notes as voice-sustained so they
-                    // won't be released when their physical keys are released
-                    for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
-                        it.value().voiceSustained = true;
+                    if (isChromaticSweep) {
+                        // Chromatic sweep: skip non-chord tones
+                        qDebug() << "ScaleSnap: SKIPPING non-chord tone during chromatic sweep";
+                        for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
+                            it.value().voiceSustained = true;
+                        }
+                        return;  // Exit early - don't process this note
+                    } else if (isScaleTone) {
+                        // Melodic pattern with scale tone: allow it through
+                        qDebug() << "ScaleSnap: ALLOWING scale tone during fast melodic pattern";
+                        // Fall through to normal processing
+                    } else {
+                        // Fast playing + chromatic (T4) note = skip
+                        qDebug() << "ScaleSnap: SKIPPING chromatic note during fast playing";
+                        for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
+                            it.value().voiceSustained = true;
+                        }
+                        return;
                     }
-                    return;  // Exit early - don't process this note at all
                 }
 
                 // ================================================================
@@ -1448,6 +1482,56 @@ double ScaleSnapProcessor::hzToCents(double hz, double referenceHz)
         return 0.0;
     }
     return 1200.0 * std::log2(hz / referenceHz);
+}
+
+bool ScaleSnapProcessor::isLikelyChromaticSweep() const
+{
+    // A chromatic sweep is characterized by consecutive semitone intervals (±1)
+    // We check the recent interval history to detect this pattern.
+    //
+    // Criteria:
+    // - Most intervals are ±1 (chromatic)
+    // - Intervals are in the same direction (ascending or descending sweep)
+    //
+    // A melodic pattern will have:
+    // - Larger intervals (2, 3, 4+ semitones)
+    // - Mixed directions
+    // - Scale-based movement
+
+    int chromaticCount = 0;   // Intervals that are ±1
+    int sameDirection = 0;    // Intervals in same direction as first
+    int firstDirection = 0;   // +1 for ascending, -1 for descending
+
+    for (int i = 0; i < kRecentIntervalsSize; ++i) {
+        int interval = m_recentIntervals[i];
+        if (interval == 0) continue;  // Skip uninitialized slots
+
+        // Count chromatic (±1) intervals
+        if (std::abs(interval) == 1) {
+            ++chromaticCount;
+        }
+
+        // Track direction consistency
+        int direction = (interval > 0) ? 1 : -1;
+        if (firstDirection == 0) {
+            firstDirection = direction;
+        }
+        if (direction == firstDirection) {
+            ++sameDirection;
+        }
+    }
+
+    // It's likely a chromatic sweep if:
+    // - At least 3 out of 4 recent intervals are chromatic (±1)
+    // - AND they're mostly in the same direction
+    const bool mostlyChromatic = (chromaticCount >= 3);
+    const bool consistentDirection = (sameDirection >= 3);
+
+    qDebug() << "ChromaticSweep check: chromaticCount=" << chromaticCount
+             << "sameDirection=" << sameDirection
+             << "result=" << (mostlyChromatic && consistentDirection);
+
+    return mostlyChromatic && consistentDirection;
 }
 
 } // namespace playback

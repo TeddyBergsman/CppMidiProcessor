@@ -62,8 +62,19 @@ ActiveChord ChordOntology::createActiveChord(
     const virtuoso::ontology::ChordDef* chordDef,
     const virtuoso::ontology::ScaleDef* scaleDef
 ) const {
+    // Delegate to the version with separate key root, using chord root as key root
+    // (backwards compatible behavior)
+    return createActiveChord(rootPc, rootPc, chordDef, scaleDef);
+}
+
+ActiveChord ChordOntology::createActiveChord(
+    int chordRootPc,
+    int keyRootPc,
+    const virtuoso::ontology::ChordDef* chordDef,
+    const virtuoso::ontology::ScaleDef* scaleDef
+) const {
     ActiveChord chord;
-    chord.rootPc = normalizePc(rootPc);
+    chord.rootPc = normalizePc(chordRootPc);
 
     if (chordDef) {
         chord.ontologyChordKey = chordDef->key;
@@ -72,7 +83,7 @@ ActiveChord ChordOntology::createActiveChord(
         chord.ontologyScaleKey = scaleDef->key;
     }
 
-    // Build T1 (chord tones) from chord intervals
+    // Build T1 (chord tones) from chord intervals - relative to CHORD root
     if (chordDef) {
         for (int interval : chordDef->intervals) {
             // Normalize to 0-11 (intervals can be >12 for extensions like 13th)
@@ -84,16 +95,17 @@ ActiveChord ChordOntology::createActiveChord(
         chord.tier1Absolute.insert(chord.rootPc);
     }
 
-    // Build scale tones set (for computing T2 and T3)
+    // Build scale tones set - relative to KEY root (not chord root!)
     std::set<int> scaleTones;
     if (scaleDef) {
+        int keyRoot = normalizePc(keyRootPc);
         for (int interval : scaleDef->intervals) {
-            int pc = normalizePc(chord.rootPc + interval);
+            int pc = normalizePc(keyRoot + interval);
             scaleTones.insert(pc);
         }
     }
 
-    // Compute T2 (tensions) - scale tones that are 9th, 11th, 13th
+    // Compute T2 (tensions) - scale tones that are 9th, 11th, 13th from CHORD root
     chord.tier2Absolute = computeTensions(chord.rootPc, chord.tier1Absolute, scaleTones);
 
     // Build T3 (remaining scale tones, excluding T1 and T2)
@@ -105,6 +117,59 @@ ActiveChord ChordOntology::createActiveChord(
 
     // Compute avoid notes
     chord.avoidAbsolute = computeAvoidNotes(chord.rootPc, chord.tier1Absolute, scaleTones);
+
+    return chord;
+}
+
+ActiveChord ChordOntology::createActiveChord(
+    int chordRootPc,
+    const virtuoso::ontology::ChordDef* chordDef,
+    const QVector<const virtuoso::ontology::ScaleDef*>& scaleDefs
+) const {
+    ActiveChord chord;
+    chord.rootPc = normalizePc(chordRootPc);
+
+    if (chordDef) {
+        chord.ontologyChordKey = chordDef->key;
+    }
+
+    // Build T1 (chord tones) from chord intervals - relative to CHORD root
+    if (chordDef) {
+        for (int interval : chordDef->intervals) {
+            int pc = normalizePc(chord.rootPc + interval);
+            chord.tier1Absolute.insert(pc);
+        }
+    } else {
+        chord.tier1Absolute.insert(chord.rootPc);
+    }
+
+    // Build scale tones set by unioning ALL compatible scales (from chord root)
+    std::set<int> allScaleTones;
+    for (const auto* scaleDef : scaleDefs) {
+        if (!scaleDef) continue;
+        // Store first scale key for reference
+        if (chord.ontologyScaleKey.isEmpty()) {
+            chord.ontologyScaleKey = scaleDef->key;
+        }
+        // Add all scale intervals (from chord root)
+        for (int interval : scaleDef->intervals) {
+            int pc = normalizePc(chord.rootPc + interval);
+            allScaleTones.insert(pc);
+        }
+    }
+
+    // Compute T2 (tensions) - notes that are 9th, 11th, 13th from chord root
+    chord.tier2Absolute = computeTensions(chord.rootPc, chord.tier1Absolute, allScaleTones);
+
+    // Build T3 (remaining scale tones, excluding T1 and T2)
+    for (int pc : allScaleTones) {
+        if (chord.tier1Absolute.count(pc) == 0 && chord.tier2Absolute.count(pc) == 0) {
+            chord.tier3Absolute.insert(pc);
+        }
+    }
+
+    // Compute avoid notes
+    chord.avoidAbsolute = computeAvoidNotes(chord.rootPc, chord.tier1Absolute, allScaleTones);
 
     return chord;
 }

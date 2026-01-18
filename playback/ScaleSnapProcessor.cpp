@@ -1,6 +1,7 @@
 #include "ScaleSnapProcessor.h"
 
 #include <QDebug>
+#include <QDateTime>
 #include <cmath>
 #include <algorithm>
 
@@ -8,6 +9,7 @@
 #include "playback/HarmonyContext.h"
 #include "chart/ChartModel.h"
 #include "virtuoso/ontology/OntologyRegistry.h"
+#include "virtuoso/theory/ScaleSuggester.h"
 
 namespace playback {
 
@@ -179,7 +181,17 @@ void ScaleSnapProcessor::setVoiceSustainEnabled(bool enabled)
 
 void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
 {
+    if (m_currentCellIndex == cellIndex) {
+        return;  // No change
+    }
+
+    const int previousCellIndex = m_currentCellIndex;
     m_currentCellIndex = cellIndex;
+
+    // Check if chord changed and re-conform any active notes
+    if (m_leadMode == LeadMode::Conformed && !m_activeNotes.isEmpty()) {
+        checkAndReconformOnChordChange(previousCellIndex);
+    }
 }
 
 void ScaleSnapProcessor::setBeatPosition(float beatPosition)
@@ -209,6 +221,39 @@ void ScaleSnapProcessor::updateConformance(float deltaMs)
             }
         }
 
+        // Handle TIMED_SNAP - note held too long, snap to chord tone
+        if (note.isTimedSnap) {
+            note.timedSnapRemainingMs -= deltaMs;
+            if (note.timedSnapRemainingMs <= 0.0f) {
+                // Time's up! Snap to the target note
+                note.isTimedSnap = false;
+                int oldNote = note.snappedNote;
+                int newNote = note.timedSnapTarget;
+
+                // If target is different, do the swap
+                if (oldNote != newNote) {
+                    emitNoteOff(kChannelLead, oldNote);
+                    emitNoteOn(kChannelLead, newNote, note.velocity);
+                    note.snappedNote = newNote;
+                    note.referenceHz = midiNoteToHz(newNote);
+                    qDebug() << "ScaleSnap: TIMED_SNAP triggered - snapped" << oldNote << "->" << newNote;
+                }
+            }
+        }
+
+        // Handle TIMED_BEND - smoothly bend to target over duration
+        if (note.isTimedBend) {
+            note.timedBendElapsedMs += deltaMs;
+            float progress = note.timedBendElapsedMs / note.timedBendDurationMs;
+            if (progress >= 1.0f) {
+                progress = 1.0f;
+                note.isTimedBend = false;  // Bend complete
+            }
+            // Linear interpolation from 0 to target
+            note.conformanceBendCurrent = progress * note.timedBendTargetCents;
+            needsBendUpdate = true;
+        }
+
         // Handle bend interpolation for BEND behavior
         if (note.behavior == ConformanceBehavior::BEND && !note.isDelayed) {
             float diff = note.conformanceBendTarget - note.conformanceBendCurrent;
@@ -225,19 +270,19 @@ void ScaleSnapProcessor::updateConformance(float deltaMs)
     }
 
     // If conformance bend changed, we need to update the pitch bend output
-    // This is combined with vocal bend in the onVoiceHzUpdated handler
-    if (needsBendUpdate) {
+    if (needsBendUpdate && !m_activeNotes.isEmpty()) {
         // Get the first active note's conformance bend
         const ActiveNote& note = m_activeNotes.begin().value();
-        if (note.behavior == ConformanceBehavior::BEND) {
-            // If vocal bend is disabled, we need to apply conformance bend directly
-            if (!m_vocalBendEnabled) {
-                int bendValue = 8192 + static_cast<int>((note.conformanceBendCurrent / 200.0) * 8192.0);
-                bendValue = qBound(0, bendValue, 16383);
-                emitPitchBend(kChannelLead, bendValue);
-            }
-            // If vocal bend is enabled, the bend will be combined in onVoiceHzUpdated
-        }
+
+        // Always apply the bend if we have an active conformance bend
+        // Pitch bend range is 2 semitones = 200 cents, so divide by 200
+        // bendValue: 0 = -200 cents, 8192 = center, 16383 = +200 cents
+        int bendValue = 8192 + static_cast<int>((note.conformanceBendCurrent / 200.0) * 8192.0);
+        bendValue = qBound(0, bendValue, 16383);
+        emitPitchBend(kChannelLead, bendValue);
+
+        qDebug() << "ScaleSnap: Applying bend" << note.conformanceBendCurrent
+                 << "cents, MIDI value:" << bendValue;
     }
 }
 
@@ -255,6 +300,10 @@ void ScaleSnapProcessor::reset()
     m_oscillationDetected = false;
     m_lastOscillation = 0.0;
     m_lastCc2Value = 0;
+    // Reset fast playing and machine-gun prevention tracking
+    m_lastNoteOnTimestamp = 0;
+    m_currentlyPlayingNote = -1;
+    m_currentNoteWasSnapped = false;
     // Reset pitch bend to center on all channels
     emitPitchBend(kChannelLead, 8192);
     emitPitchBend(kChannelHarmony1, 8192);
@@ -280,9 +329,9 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
         return;
     }
 
-    // Release any voice-sustained notes before starting a new note
-    // This ensures clean transitions when playing a new note while singing
-    releaseVoiceSustainedNotes();
+    // NOTE: We do NOT call releaseVoiceSustainedNotes() here anymore.
+    // It will be called later, only if we're actually going to play a new note.
+    // This allows repeated wrong notes and fast-playing skips to keep notes sustained.
 
     qDebug() << "ScaleSnap: cellIndex=" << m_currentCellIndex
              << "hasChord=" << m_hasLastKnownChord
@@ -311,6 +360,7 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
     if (m_leadMode != LeadMode::Off) {
         if (m_leadMode == LeadMode::Original) {
             // Original mode: pass through unchanged
+            releaseVoiceSustainedNotes();
             active.snappedNote = midiNote;
             active.referenceHz = midiNoteToHz(midiNote);
             qDebug() << "ScaleSnap ORIGINAL: Emitting note" << midiNote << "on channel" << kChannelLead;
@@ -323,6 +373,7 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
             if (validPcs.isEmpty() || !m_hasLastKnownChord) {
                 // No chord/scale info - pass through unchanged
                 qDebug() << "ScaleSnap CONFORMED: No chord/scale info - passing through unchanged";
+                releaseVoiceSustainedNotes();
                 active.snappedNote = midiNote;
                 active.referenceHz = midiNoteToHz(midiNote);
                 active.behavior = ConformanceBehavior::ALLOW;
@@ -342,48 +393,139 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
                          << "T1 notes:" << tier1Pcs
                          << "T1 size=" << activeChord.tier1Absolute.size();
 
-                // Build ConformanceContext with beat position and previous note
+                // ================================================================
+                // FAST PLAYING DETECTION
+                // If notes are coming faster than kFastPlayingThresholdMs,
+                // skip non-chord tones entirely (don't play them, let previous
+                // note sustain via voice sustain)
+                // ================================================================
+                const qint64 now = QDateTime::currentMSecsSinceEpoch();
+                const qint64 timeSinceLastNote = now - m_lastNoteOnTimestamp;
+                m_lastNoteOnTimestamp = now;
+
+                const bool isFastPlaying = (timeSinceLastNote > 0 && timeSinceLastNote < kFastPlayingThresholdMs);
+                const int inputPc = normalizePc(midiNote);
+                const bool isChordTone = (activeChord.tier1Absolute.count(inputPc) > 0);
+
+                qDebug() << "ScaleSnap: timeSinceLastNote=" << timeSinceLastNote
+                         << "isFastPlaying=" << isFastPlaying
+                         << "isChordTone=" << isChordTone;
+
+                // Fast playing + non-chord tone = skip (previous note sustains)
+                if (isFastPlaying && !isChordTone) {
+                    qDebug() << "ScaleSnap: SKIPPING non-chord tone during fast playing (previous note sustains)";
+                    // Mark all currently playing notes as voice-sustained so they
+                    // won't be released when their physical keys are released
+                    for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
+                        it.value().voiceSustained = true;
+                    }
+                    return;  // Exit early - don't process this note at all
+                }
+
+                // ================================================================
+                // MACHINE-GUN PREVENTION
+                //
+                // If a note is already playing (m_currentlyPlayingNote), we check:
+                // 1. If playing the SAME output note from a WRONG fret → sustain, don't retrigger
+                // 2. If playing the CORRECT fret for the note → allow retrigger
+                // 3. If playing a DIFFERENT note → normal behavior
+                //
+                // This prevents the "machine gun" effect when repeatedly hitting
+                // wrong frets that all snap to the same chord tone.
+                // ================================================================
+
+                // We need to know what note this input would produce BEFORE deciding
+                // Get conformance result early to know the output
                 ConformanceContext ctx;
                 ctx.currentChord = activeChord;
                 ctx.velocity = velocity;
                 ctx.beatPosition = m_beatPosition;
                 ctx.isStrongBeat = (m_beatPosition < 0.5f) || (m_beatPosition >= 2.0f && m_beatPosition < 2.5f);
                 ctx.previousPitch = m_lastPlayedNote;
-                // TODO: Add duration estimation and next chord for ANTICIPATE
 
-                // Get conformance result
                 ConformanceResult result = m_conformanceEngine.conformPitch(midiNote, ctx);
+                int outputNote = qBound(0, result.outputPitch, 127);
+                bool wouldBeSnapped = (result.behavior == ConformanceBehavior::SNAP ||
+                                       result.behavior == ConformanceBehavior::TIMED_SNAP);
 
-                int outputNote = result.outputPitch;
-                outputNote = qBound(0, outputNote, 127);
+                // Check if this would produce the same note that's already playing
+                if (m_currentlyPlayingNote >= 0 && outputNote == m_currentlyPlayingNote) {
+                    // Same output note - but is this the "right" way to play it?
+                    if (wouldBeSnapped) {
+                        // Player is hitting a wrong fret that snaps to the current note
+                        // → sustain, don't retrigger
+                        qDebug() << "ScaleSnap: Wrong fret" << midiNote << "would snap to already-playing"
+                                 << m_currentlyPlayingNote << "- sustaining instead";
+                        for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
+                            it.value().voiceSustained = true;
+                        }
+                        return;  // Exit early
+                    }
+                    // else: Player is playing the correct fret for this note
+                    // Allow retrigger (fall through to normal processing)
+                    qDebug() << "ScaleSnap: Correct fret" << midiNote << "for note"
+                             << outputNote << "- allowing retrigger";
+                }
+
+                // (conformance result already computed above for machine-gun check)
 
                 qDebug() << "ScaleSnap: LEAD INPUT" << midiNote << "-> OUTPUT" << outputNote
                          << "behavior:" << static_cast<int>(result.behavior)
-                         << "bendCents:" << result.pitchBendCents
-                         << "delayMs:" << result.delayMs;
+                         << "snapTarget:" << result.snapTargetPitch;
 
                 active.snappedNote = outputNote;
                 active.referenceHz = midiNoteToHz(outputNote);
                 active.behavior = result.behavior;
 
+                // We're about to emit a new note - release any voice-sustained notes first
+                releaseVoiceSustainedNotes();
+
                 // Handle behavior-specific actions
+                // NOTE: BEND behaviors are now disabled - engine returns ALLOW, SNAP, or TIMED_SNAP
                 switch (result.behavior) {
                     case ConformanceBehavior::ALLOW:
-                    case ConformanceBehavior::SNAP:
                     case ConformanceBehavior::ANTICIPATE:
-                        // Emit note immediately
+                        // Emit note immediately (it's already a chord tone or valid scale/tension)
                         emitNoteOn(kChannelLead, outputNote, velocity);
+                        // Track: this note was played correctly (not snapped)
+                        m_currentlyPlayingNote = outputNote;
+                        m_currentNoteWasSnapped = false;
                         break;
 
-                    case ConformanceBehavior::BEND:
-                        // Emit original note, but set up pitch bend toward target
-                        active.snappedNote = midiNote;  // Keep original note
+                    case ConformanceBehavior::SNAP:
+                        // Immediate snap (down direction) - play the snapped note
+                        emitNoteOn(kChannelLead, outputNote, velocity);
+                        // Track: this note was snapped (wrong fret)
+                        m_currentlyPlayingNote = outputNote;
+                        m_currentNoteWasSnapped = true;
+                        qDebug() << "ScaleSnap: SNAP (down) - note" << midiNote
+                                 << "snapped to" << outputNote;
+                        break;
+
+                    case ConformanceBehavior::TIMED_SNAP:
+                        // Play original note, but set up timer to snap later (up direction)
+                        active.snappedNote = midiNote;  // Currently playing original
                         active.referenceHz = midiNoteToHz(midiNote);
-                        active.conformanceBendTarget = result.pitchBendCents;
-                        active.conformanceBendCurrent = 0.0f;  // Start at center
+                        active.isTimedSnap = true;
+                        active.timedSnapRemainingMs = result.snapDelayMs;
+                        active.timedSnapTarget = result.snapTargetPitch;
+                        active.velocity = velocity;
                         emitNoteOn(kChannelLead, midiNote, velocity);
-                        qDebug() << "ScaleSnap: BEND behavior - note" << midiNote
-                                 << "will bend toward target by" << result.pitchBendCents << "cents";
+                        // Track: will snap to target (wrong fret)
+                        m_currentlyPlayingNote = result.snapTargetPitch;
+                        m_currentNoteWasSnapped = true;
+
+                        qDebug() << "ScaleSnap: TIMED_SNAP (up) - note" << midiNote
+                                 << "will snap to" << result.snapTargetPitch
+                                 << "after" << result.snapDelayMs << "ms if held";
+                        break;
+
+                    // BEND behaviors are disabled but keep code for reference
+                    case ConformanceBehavior::TIMED_BEND:
+                    case ConformanceBehavior::BEND:
+                        // Bends disabled - just emit the note unchanged
+                        qDebug() << "ScaleSnap: BEND behavior disabled, emitting note unchanged";
+                        emitNoteOn(kChannelLead, midiNote, velocity);
                         break;
 
                     case ConformanceBehavior::DELAY:
@@ -438,6 +580,9 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
 
 void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
 {
+    qDebug() << "ScaleSnap::onGuitarNoteOff - note:" << midiNote
+             << "activeNotes count:" << m_activeNotes.size();
+
     // Both modes off means nothing to do
     if (m_leadMode == LeadMode::Off && m_harmonyMode == HarmonyMode::OFF) {
         return;
@@ -449,6 +594,17 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
 
     auto it = m_activeNotes.find(midiNote);
     if (it == m_activeNotes.end()) {
+        qDebug() << "ScaleSnap: Note" << midiNote << "not found in activeNotes, ignoring noteOff";
+        return;
+    }
+
+    qDebug() << "ScaleSnap: Found note" << midiNote << "in activeNotes, voiceSustained="
+             << it.value().voiceSustained << "snappedNote=" << it.value().snappedNote;
+
+    // If note is already marked as voice-sustained (e.g., from repeated wrong note
+    // or fast playing skip), don't release it - just return
+    if (it.value().voiceSustained) {
+        qDebug() << "ScaleSnap: Note" << midiNote << "is voice-sustained, not releasing";
         return;
     }
 
@@ -475,6 +631,9 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
         m_vibratoFadeInSamples = 0;
         m_oscillationDetected = false;
         m_lastOscillation = 0.0;
+        // Clear machine-gun prevention state when all notes released
+        m_currentlyPlayingNote = -1;
+        m_currentNoteWasSnapped = false;
         if (m_leadMode != LeadMode::Off) {
             emitPitchBend(kChannelLead, 8192);
         }
@@ -891,16 +1050,20 @@ ActiveChord ScaleSnapProcessor::buildActiveChord() const
         chord.ontologyChordKey = chordDef->key;
     }
 
-    // Get scale key from local key estimate
+    // Get scale key and key root from local key estimate
     QString scaleKey;
+    int keyRootPc = chord.rootPc;  // Default to chord root if no key info
+
     if (m_currentCellIndex >= 0) {
         const int barIndex = m_currentCellIndex / 4;
         const auto& localKeys = m_harmony->localKeysByBar();
 
         if (barIndex >= 0 && barIndex < localKeys.size()) {
             scaleKey = localKeys[barIndex].scaleKey;
+            keyRootPc = localKeys[barIndex].tonicPc;  // Use the key's tonic!
         } else if (m_harmony->hasKeyPcGuess()) {
             scaleKey = m_harmony->keyScaleKey();
+            keyRootPc = m_harmony->keyPcGuess();  // Use the key's tonic!
         }
     }
     chord.ontologyScaleKey = scaleKey;
@@ -909,13 +1072,170 @@ ActiveChord ScaleSnapProcessor::buildActiveChord() const
     ChordOntology::instance().setOntologyRegistry(m_ontology);
 
     if (chordDef) {
-        const auto* scaleDef = m_ontology->scale(scaleKey);
-        chord = ChordOntology::instance().createActiveChord(
-            chord.rootPc, chordDef, scaleDef
+        // Get chord-type-specific scale hints (e.g., maj7 -> ionian, lydian)
+        // This uses music theory rules, not generic pitch class matching
+        const auto scaleHints = virtuoso::theory::explicitHintScalesForContext(
+            QString(), chordDef->key
         );
+
+        // Build list of scale definitions from hints
+        QVector<const virtuoso::ontology::ScaleDef*> scaleDefs;
+        QString scaleNames;
+        for (const auto& hintKey : scaleHints) {
+            if (const auto* scaleDef = m_ontology->scale(hintKey)) {
+                scaleDefs.append(scaleDef);
+                if (!scaleNames.isEmpty()) scaleNames += ", ";
+                scaleNames += scaleDef->name;
+            }
+        }
+
+        // Fallback: if no hints, use ionian for major-ish, dorian for minor-ish
+        if (scaleDefs.isEmpty()) {
+            // Check if chord has minor 3rd (interval 3)
+            bool hasMinor3rd = false;
+            for (int interval : chordDef->intervals) {
+                if (interval == 3) { hasMinor3rd = true; break; }
+            }
+            const QString fallbackKey = hasMinor3rd ? "dorian" : "ionian";
+            if (const auto* fallbackScale = m_ontology->scale(fallbackKey)) {
+                scaleDefs.append(fallbackScale);
+                scaleNames = fallbackScale->name;
+            }
+        }
+
+        qDebug() << "ScaleSnap buildActiveChord: chordRoot=" << chord.rootPc
+                 << "chordKey=" << chordDef->key
+                 << "numScales=" << scaleDefs.size()
+                 << "scales:" << scaleNames;
+
+        // Create chord with compatible scales (union of scale tones from chord root)
+        chord = ChordOntology::instance().createActiveChord(
+            chord.rootPc, chordDef, scaleDefs
+        );
+
+        // Debug: show all tiers
+        QString t1Str, t2Str, t3Str;
+        static const char* noteNames[] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+        for (int pc : chord.tier1Absolute) t1Str += QString("%1 ").arg(noteNames[pc]);
+        for (int pc : chord.tier2Absolute) t2Str += QString("%1 ").arg(noteNames[pc]);
+        for (int pc : chord.tier3Absolute) t3Str += QString("%1 ").arg(noteNames[pc]);
+
+        qDebug() << "ScaleSnap buildActiveChord: T1=" << t1Str
+                 << "T2=" << t2Str << "T3=" << t3Str;
     }
 
     return chord;
+}
+
+void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
+{
+    // Get the new chord for the current cell
+    if (!m_harmony || !m_ontology || !m_model) {
+        return;
+    }
+
+    // First, force refresh of chord by checking current cell
+    // This updates m_lastKnownChord if there's a new chord
+    music::ChordSymbol newChord;
+    bool isExplicit = false;
+
+    if (m_currentCellIndex >= 0) {
+        newChord = m_harmony->parseCellChordNoState(
+            *m_model,
+            m_currentCellIndex,
+            music::ChordSymbol{},
+            &isExplicit
+        );
+
+        // If current cell has explicit chord, use it
+        if (isExplicit && newChord.rootPc >= 0 && !newChord.noChord && !newChord.placeholder) {
+            // Check if chord actually changed
+            if (m_hasLastKnownChord &&
+                m_lastKnownChord.rootPc == newChord.rootPc &&
+                m_lastKnownChord.quality == newChord.quality) {
+                return;  // Same chord, no re-conformance needed
+            }
+
+            // Chord changed - update tracking
+            m_lastKnownChord = newChord;
+            m_hasLastKnownChord = true;
+        } else {
+            // No explicit chord in this cell - keep using last known chord
+            return;
+        }
+    } else {
+        return;  // No valid cell index
+    }
+
+    // Build the new ActiveChord
+    ActiveChord activeChord = buildActiveChord();
+    if (activeChord.tier1Absolute.empty()) {
+        return;  // No valid chord data
+    }
+
+    qDebug() << "ScaleSnap: Chord changed at cell" << m_currentCellIndex
+             << "- checking" << m_activeNotes.size() << "active notes for re-conformance";
+
+    // Check each active note and re-conform if needed
+    for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
+        ActiveNote& note = it.value();
+        const int currentOutputPc = normalizePc(note.snappedNote);
+
+        // Check if the current output note is still valid (T1 chord tone)
+        const int tier = ChordOntology::instance().getTier(currentOutputPc, activeChord);
+
+        qDebug() << "ScaleSnap: Note" << note.snappedNote << "(pc" << currentOutputPc << ") tier=" << tier;
+
+        // If note is no longer a chord tone (T1), we need to snap it
+        // Only T1 stays, snap T2/T3/T4 (tensions disabled)
+        if (tier > 1) {
+            // Find nearest chord tone
+            int nearestTarget = -1;
+            int minDistance = 7;
+
+            for (int target : activeChord.tier1Absolute) {
+                int dist = ChordOntology::minDistance(currentOutputPc, target);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    nearestTarget = target;
+                }
+            }
+
+            if (nearestTarget >= 0) {
+                // Compute the new note in the same octave
+                int newNote = ChordOntology::findNearestInOctave(note.snappedNote, nearestTarget);
+
+                if (newNote != note.snappedNote) {
+                    qDebug() << "ScaleSnap: Re-conforming note" << note.snappedNote
+                             << "->" << newNote << "due to chord change";
+
+                    // Emit note change (note-off old, note-on new)
+                    emitNoteOff(kChannelLead, note.snappedNote);
+                    emitNoteOn(kChannelLead, newNote, note.velocity);
+
+                    // Update the active note
+                    note.snappedNote = newNote;
+                    note.referenceHz = midiNoteToHz(newNote);
+
+                    // Update tracking
+                    m_currentlyPlayingNote = newNote;
+                    m_currentNoteWasSnapped = true;
+
+                    // Also update harmony if active
+                    if (m_harmonyMode != HarmonyMode::OFF && note.harmonyNote >= 0) {
+                        emitNoteOff(kChannelHarmony1, note.harmonyNote);
+                        const QSet<int> chordTones = computeChordTones(m_lastKnownChord);
+                        const QSet<int> validPcs = computeValidPitchClasses();
+                        int newHarmony = generateHarmonyNote(newNote, chordTones, validPcs);
+                        int harmonyVelocity = static_cast<int>(note.velocity * m_harmonyConfig.velocityRatio);
+                        harmonyVelocity = qBound(1, harmonyVelocity, 127);
+                        emitNoteOn(kChannelHarmony1, newHarmony, harmonyVelocity);
+                        note.harmonyNote = newHarmony;
+                    }
+                }
+            }
+        }
+    }
 }
 
 int ScaleSnapProcessor::snapToNearestValidPc(int inputPc, const QSet<int>& validPcs) const

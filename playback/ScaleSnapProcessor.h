@@ -237,6 +237,15 @@ private:
 
     static constexpr qint64 kFastPlayingThresholdMs = 100;  // Notes faster than this = fast playing
 
+    // Chromatic sweep detection - track recent intervals
+    static constexpr int kRecentIntervalsSize = 4;  // Track last N intervals
+    std::array<int, kRecentIntervalsSize> m_recentIntervals = {0, 0, 0, 0};  // Circular buffer
+    int m_recentIntervalsIndex = 0;           // Current index in circular buffer
+    int m_lastInputNote = -1;                 // Last input note for interval calculation
+
+    // Returns true if recent playing pattern looks like a chromatic sweep
+    bool isLikelyChromaticSweep() const;
+
     // Track last known chord (to persist across empty cells)
     music::ChordSymbol m_lastKnownChord;
     bool m_hasLastKnownChord = false;

@@ -95,23 +95,63 @@ ConformanceResult PitchConformanceEngine::selectBehavior(
     result.outputPitch = inputPitch;
     result.pitchBendCents = 0.0f;
     result.delayMs = 0.0f;
+    result.snapDelayMs = 0.0f;
+    result.snapTargetPitch = inputPitch;
 
-    // STRICT MODE: Only T1 chord tones are allowed
-    // Everything else gets snapped to the nearest chord tone
+    // ========================================================================
+    // SIMPLIFIED CONFORMANCE (v3.3)
+    //
+    // T1 (chord tones): Always allowed
+    // T2 (tensions - 9th, 11th, 13th): Allowed - these are color tones
+    // T3 (scale tones): Allowed - these are passing tones
+    // T4 (chromatic/avoid notes): Snap to nearest chord tone - truly dissonant
+    //
+    // Only T4 notes get corrected. This gives musical freedom for color/passing
+    // tones while still preventing truly wrong notes.
+    // ========================================================================
 
+    int targetPitch = ChordOntology::findNearestInOctave(inputPitch, gravity.nearestTarget);
+    bool goingUp = targetPitch > inputPitch;
+
+    // T1 (chord tones): Always allowed - these are home
     if (gravity.tier == 1) {
-        // T1 = chord tones (root, 3rd, 5th, 7th) - allow these
         result.behavior = ConformanceBehavior::ALLOW;
-        qDebug() << "ALLOW T1: note" << inputPitch << "pc" << (inputPitch % 12);
+        qDebug() << "ALLOW T1 (chord tone): note" << inputPitch << "pc" << (inputPitch % 12);
         return result;
     }
 
-    // T2, T3, T4 all get SNAPPED to nearest chord tone
+    // T2 (tensions): Allowed - 9th, 11th, 13th are color tones
+    if (gravity.tier == 2) {
+        result.behavior = ConformanceBehavior::ALLOW;
+        qDebug() << "ALLOW T2 (tension): note" << inputPitch << "pc" << (inputPitch % 12);
+        return result;
+    }
+
+    // T3 (scale tones): Allowed - these are passing tones
+    if (gravity.tier == 3) {
+        result.behavior = ConformanceBehavior::ALLOW;
+        qDebug() << "ALLOW T3 (scale tone): note" << inputPitch << "pc" << (inputPitch % 12);
+        return result;
+    }
+
+    // T4 (chromatic/avoid): Snap to nearest chord tone
+    // These are truly dissonant and should be corrected
+    if (goingUp) {
+        // Snap UP with a short grace note delay
+        result.behavior = ConformanceBehavior::TIMED_SNAP;
+        result.outputPitch = inputPitch;
+        result.snapTargetPitch = targetPitch;
+        result.snapDelayMs = 30.0f;  // Quick grace note
+        qDebug() << "TIMED_SNAP T4 (up): note" << inputPitch << "->" << targetPitch
+                 << "after 30ms";
+        return result;
+    }
+
+    // Snap DOWN: immediate snap (no grace note delay)
     result.behavior = ConformanceBehavior::SNAP;
-    result.outputPitch = ChordOntology::findNearestInOctave(inputPitch, gravity.nearestTarget);
-    qDebug() << "SNAP T" << gravity.tier << ": input" << inputPitch
-             << "-> output" << result.outputPitch
-             << "(target pc" << gravity.nearestTarget << ")";
+    result.outputPitch = targetPitch;
+    result.snapTargetPitch = targetPitch;
+    qDebug() << "SNAP T4 (down): note" << inputPitch << "->" << targetPitch;
     return result;
 }
 

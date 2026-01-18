@@ -159,6 +159,7 @@ private:
         int harmonyNote = -1;     // Harmony note, -1 if not active
         double referenceHz = 0.0; // Hz of the snapped note (for pitch bend calculation)
         bool voiceSustained = false; // True if guitar note-off received but held by voice
+        int velocity = 64;        // Velocity of the note
 
         // Conformance behavior tracking
         ConformanceBehavior behavior = ConformanceBehavior::ALLOW;
@@ -167,6 +168,17 @@ private:
         bool isDelayed = false;              // True if note is waiting for delay
         float delayRemainingMs = 0.0f;       // Remaining delay time
         int delayedVelocity = 0;             // Velocity for delayed note
+
+        // TIMED_SNAP behavior tracking
+        bool isTimedSnap = false;            // True if waiting for timed snap
+        float timedSnapRemainingMs = 0.0f;   // Time remaining before snap
+        int timedSnapTarget = 0;             // Note to snap to when timer expires
+
+        // TIMED_BEND behavior tracking
+        bool isTimedBend = false;            // True if performing timed bend
+        float timedBendDurationMs = 0.0f;    // Total duration of bend
+        float timedBendElapsedMs = 0.0f;     // Time elapsed since bend started
+        float timedBendTargetCents = 0.0f;   // Target bend in cents
     };
 
     // Core snapping logic
@@ -176,6 +188,9 @@ private:
     QSet<int> computeChordTones(const music::ChordSymbol& chord) const;
     QSet<int> computeKeyScaleTones() const;  // Uses dynamic key detection
     ActiveChord buildActiveChord() const;    // Build ActiveChord from current context
+
+    // Chord change handling
+    void checkAndReconformOnChordChange(int previousCellIndex);  // Re-conform notes when chord changes
 
     // MIDI output helpers
     void emitNoteOn(int channel, int note, int velocity);
@@ -214,6 +229,13 @@ private:
     int m_lastCc2Value = 0;                   // Track current CC2 (breath) value for voice sustain
     float m_beatPosition = 0.0f;              // Current beat position (0.0-3.999 for 4/4)
     int m_lastPlayedNote = -1;                // For melodic direction analysis in conformance
+
+    // Fast playing detection and machine-gun prevention
+    qint64 m_lastNoteOnTimestamp = 0;         // Timestamp of last note-on (for fast playing detection)
+    int m_currentlyPlayingNote = -1;          // The note currently sounding (after any snapping)
+    bool m_currentNoteWasSnapped = false;     // True if current note was a correction (not played correctly)
+
+    static constexpr qint64 kFastPlayingThresholdMs = 100;  // Notes faster than this = fast playing
 
     // Track last known chord (to persist across empty cells)
     music::ChordSymbol m_lastKnownChord;

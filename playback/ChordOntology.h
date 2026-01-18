@@ -74,6 +74,21 @@ public:
         const virtuoso::ontology::ScaleDef* scaleDef
     ) const;
 
+    // Create with separate key root (for when scale is built from key, not chord)
+    ActiveChord createActiveChord(
+        int chordRootPc,
+        int keyRootPc,              // Root of the key (for building scale)
+        const virtuoso::ontology::ChordDef* chordDef,
+        const virtuoso::ontology::ScaleDef* scaleDef
+    ) const;
+
+    // Create with multiple compatible scales (union of all scale tones for T2/T3)
+    ActiveChord createActiveChord(
+        int chordRootPc,
+        const virtuoso::ontology::ChordDef* chordDef,
+        const QVector<const virtuoso::ontology::ScaleDef*>& scaleDefs
+    ) const;
+
     // Get the tier (1-4) of a pitch class relative to an active chord
     // Returns: 1 = chord tone, 2 = tension, 3 = scale tone, 4 = chromatic
     int getTier(int pitchClass, const ActiveChord& chord) const;

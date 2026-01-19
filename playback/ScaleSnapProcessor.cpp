@@ -80,9 +80,14 @@ void ScaleSnapProcessor::setHarmonyModeCompat(HarmonyModeCompat mode)
                 newMode = HarmonyMode::OFF;
                 break;
             case HarmonyModeCompat::SmartThirds:
-                // SmartThirds is deprecated - map to SINGLE with PARALLEL
+                // SmartThirds is parallel motion
                 newMode = HarmonyMode::SINGLE;
                 m_harmonyConfig.singleType = HarmonyType::PARALLEL;
+                break;
+            case HarmonyModeCompat::Contrary:
+                // Contrary motion
+                newMode = HarmonyMode::SINGLE;
+                m_harmonyConfig.singleType = HarmonyType::CONTRARY;
                 break;
             case HarmonyModeCompat::Single:
                 newMode = HarmonyMode::SINGLE;
@@ -308,6 +313,12 @@ void ScaleSnapProcessor::reset()
     m_recentIntervals.fill(0);
     m_recentIntervalsIndex = 0;
     m_lastInputNote = -1;
+    // Reset lead melody direction tracking
+    m_lastHarmonyLeadNote = -1;
+    m_leadMelodyDirection = 0;
+    m_lastHarmonyOutputNote = -1;
+    m_lastGuitarNoteOffTimestamp = 0;  // Reset phrase tracking
+    m_guitarNotesHeld = 0;
     // Reset pitch bend to center on all channels
     emitPitchBend(kChannelLead, 8192);
     emitPitchBend(kChannelHarmony1, 8192);
@@ -584,19 +595,59 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
 
     // === HARMONY MODE (Channels 12-15) ===
     if (m_harmonyMode != HarmonyMode::OFF) {
-        qDebug() << "ScaleSnap: HARMONY MODE IS ACTIVE - generating harmony for lead note" << midiNote;
+        qDebug() << "ScaleSnap: HARMONY MODE IS ACTIVE - generating harmony for lead note" << midiNote
+                 << "harmonyModeCompat=" << static_cast<int>(m_harmonyModeCompat);
         const QSet<int> chordTones = computeChordTones(m_lastKnownChord);
         qDebug() << "ScaleSnap Harmony: chordTones=" << chordTones << "validPcs=" << validPcs;
 
-        // Generate harmony based on original input note
-        // For now, use existing generateHarmonyNote for SINGLE mode with PARALLEL type
-        // TODO: Replace with HarmonyVoiceManager in Phase 4
-        if (validPcs.isEmpty()) {
-            // No chord/scale info - default major 3rd
-            active.harmonyNote = midiNote + 4;
-        } else {
-            active.harmonyNote = generateHarmonyNote(midiNote, chordTones, validPcs);
+        // Check for phrase timeout (new phrase = reset contrary motion)
+        // The phrase resets when you STOPPED PLAYING GUITAR for > threshold
+        // m_lastGuitarNoteOffTimestamp is set when m_guitarNotesHeld drops to 0
+        // This is independent of voice sustain - voice sustain holds the SOUND but
+        // we track when you physically stopped playing the guitar
+        if (m_guitarNotesHeld == 0 && m_lastGuitarNoteOffTimestamp > 0) {
+            // We were silent (no guitar notes held), check how long
+            qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+            qint64 silenceDuration = currentTime - m_lastGuitarNoteOffTimestamp;
+            qDebug() << "ScaleSnap CONTRARY: was silent for" << silenceDuration << "ms (threshold=" << kPhraseTimeoutMs << ")";
+            if (silenceDuration > kPhraseTimeoutMs) {
+                // New phrase! Reset contrary motion tracking
+                qDebug() << "ScaleSnap CONTRARY: NEW PHRASE detected after" << silenceDuration << "ms silence";
+                m_lastHarmonyLeadNote = -1;
+                m_lastHarmonyOutputNote = -1;
+                m_leadMelodyDirection = 0;
+            }
         }
+        // We're now holding a guitar note
+        m_guitarNotesHeld++;
+        m_lastGuitarNoteOffTimestamp = 0;  // Clear since we're playing
+
+        // Store previous lead note before updating (needed for contrary motion)
+        int previousLeadNote = m_lastHarmonyLeadNote;
+        m_lastHarmonyLeadNote = midiNote;
+
+        // Generate harmony based on harmony mode
+        switch (m_harmonyModeCompat) {
+            case HarmonyModeCompat::Contrary:
+                // Contrary motion uses consonance-aware algorithm
+                // Pass previous lead and harmony notes for parallel 5th/octave detection
+                active.harmonyNote = generateContraryHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
+                break;
+
+            case HarmonyModeCompat::SmartThirds:
+            default:
+                if (validPcs.isEmpty()) {
+                    // No chord/scale info - default major 3rd
+                    active.harmonyNote = midiNote + 4;
+                } else {
+                    // SmartThirds is parallel motion (default)
+                    active.harmonyNote = generateHarmonyNote(midiNote, chordTones, validPcs);
+                }
+                break;
+        }
+
+        // Track the harmony output for next iteration (used by CONTRARY mode)
+        m_lastHarmonyOutputNote = active.harmonyNote;
 
         qDebug() << "ScaleSnap Harmony: INPUT" << midiNote << "-> HARMONY" << active.harmonyNote;
 
@@ -615,7 +666,19 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
 void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
 {
     qDebug() << "ScaleSnap::onGuitarNoteOff - note:" << midiNote
-             << "activeNotes count:" << m_activeNotes.size();
+             << "activeNotes count:" << m_activeNotes.size()
+             << "guitarNotesHeld:" << m_guitarNotesHeld;
+
+    // Track guitar note release for phrase detection (BEFORE checking modes or voice sustain)
+    // This tracks when you physically release the guitar string, regardless of voice sustain
+    if (m_guitarNotesHeld > 0) {
+        m_guitarNotesHeld--;
+        if (m_guitarNotesHeld == 0) {
+            // All guitar notes released - start silence timer
+            m_lastGuitarNoteOffTimestamp = QDateTime::currentMSecsSinceEpoch();
+            qDebug() << "ScaleSnap: All guitar notes released - silence timer started";
+        }
+    }
 
     // Both modes off means nothing to do
     if (m_leadMode == LeadMode::Off && m_harmonyMode == HarmonyMode::OFF) {
@@ -668,6 +731,7 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
         // Clear machine-gun prevention state when all notes released
         m_currentlyPlayingNote = -1;
         m_currentNoteWasSnapped = false;
+        qDebug() << "ScaleSnap: All notes released";
         if (m_leadMode != LeadMode::Off) {
             emitPitchBend(kChannelLead, 8192);
         }
@@ -1371,6 +1435,170 @@ int ScaleSnapProcessor::generateHarmonyNote(int inputNote, const QSet<int>& chor
     return qBound(0, inputNote + 4, 127);
 }
 
+int ScaleSnapProcessor::generateContraryHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove) const
+{
+    // =========================================================================
+    // CONSONANCE-AWARE CONTRARY MOTION (Species Counterpoint Rules)
+    // =========================================================================
+    //
+    // Classical contrary motion prioritizes:
+    // 1. CONSONANT INTERVALS with the lead (3rds, 6ths preferred; 5ths, octaves allowed)
+    // 2. OPPOSITE DIRECTION movement from lead
+    // 3. STEPWISE MOTION when possible (smoother melody)
+    // 4. NO PARALLEL 5THS OR OCTAVES (forbidden - destroys voice independence)
+    //
+    // The algorithm finds harmony candidates that satisfy these rules and scores them.
+
+    // First note of phrase: start with an imperfect consonance (3rd or 6th)
+    // This establishes separation between the voices from the start
+    if (previousHarmonyNote < 0 || previousLeadNote < 0) {
+        // Find a consonant starting interval (prefer 3rd below or above based on setting)
+        int direction = harmonyAbove ? 1 : -1;
+
+        // Try intervals in order of preference: 3rd, 6th, 5th, octave
+        static const int preferredIntervals[] = {3, 4, 8, 9, 7, 12};  // m3, M3, m6, M6, P5, P8
+
+        for (int interval : preferredIntervals) {
+            int candidate = inputNote + (direction * interval);
+            int candidatePc = normalizePc(candidate);
+
+            // Check if this candidate is in the valid pitch classes
+            const QSet<int>& validTones = validPcs.isEmpty() ? chordTones : validPcs;
+            if (validTones.isEmpty() || validTones.contains(candidatePc)) {
+                qDebug() << "ScaleSnap CONTRARY: PHRASE START - harmony at interval"
+                         << interval << "=" << candidate << (harmonyAbove ? "(above)" : "(below)");
+                return qBound(0, candidate, 127);
+            }
+        }
+
+        // Fallback: just use a 3rd in the preferred direction
+        int fallback = inputNote + (direction * 4);  // Major 3rd
+        qDebug() << "ScaleSnap CONTRARY: PHRASE START fallback - harmony at" << fallback;
+        return qBound(0, fallback, 127);
+    }
+
+    // Calculate lead movement
+    int leadMovement = inputNote - previousLeadNote;
+
+    // No lead movement = use oblique motion (harmony stays)
+    if (leadMovement == 0) {
+        qDebug() << "ScaleSnap CONTRARY: no lead movement, keeping harmony at" << previousHarmonyNote;
+        return previousHarmonyNote;
+    }
+
+    // Determine harmony direction (OPPOSITE to lead)
+    int harmonyDir = (leadMovement > 0) ? -1 : 1;
+
+    qDebug() << "ScaleSnap CONTRARY: lead moved" << leadMovement
+             << ", harmony should move" << (harmonyDir > 0 ? "UP" : "DOWN");
+
+    // =========================================================================
+    // CANDIDATE SEARCH: Find harmony notes that satisfy counterpoint rules
+    // =========================================================================
+
+    const QSet<int>& validTones = validPcs.isEmpty() ? chordTones : validPcs;
+
+    struct Candidate {
+        int note;
+        int score;
+    };
+    QVector<Candidate> candidates;
+
+    // Search range: up to 12 semitones in the harmony direction from previous harmony
+    // We want stepwise motion, so prioritize small movements
+    for (int delta = 1; delta <= 12; ++delta) {
+        int candidateNote = previousHarmonyNote + (delta * harmonyDir);
+
+        // Skip if out of MIDI range
+        if (candidateNote < 0 || candidateNote > 127) continue;
+
+        int candidatePc = normalizePc(candidateNote);
+
+        // Skip if not a valid pitch class (unless we have no chord info)
+        if (!validTones.isEmpty() && !validTones.contains(candidatePc)) continue;
+
+        // Check the interval this would form with the lead
+        int intervalWithLead = getIntervalClass(inputNote, candidateNote);
+
+        // Skip dissonant intervals
+        if (!isConsonant(intervalWithLead)) continue;
+
+        // =====================================================================
+        // CRITICAL: Check for parallel 5ths and octaves (FORBIDDEN)
+        // =====================================================================
+        if (wouldCreateParallelPerfect(previousLeadNote, previousHarmonyNote, inputNote, candidateNote)) {
+            qDebug() << "ScaleSnap CONTRARY: REJECTING candidate" << candidateNote
+                     << "- would create parallel 5ths/octaves";
+            continue;  // Skip this candidate entirely
+        }
+
+        // =====================================================================
+        // SCORING: Prefer imperfect consonances and stepwise motion
+        // =====================================================================
+        int score = 0;
+
+        // Strongly prefer imperfect consonances (3rds, 6ths) - the "sweet" intervals
+        if (isImperfectConsonance(intervalWithLead)) {
+            score += 10;
+        } else if (isPerfectConsonance(intervalWithLead)) {
+            // Perfect consonances are allowed but less preferred in the middle of phrases
+            score += 3;
+        }
+
+        // Prefer stepwise motion (delta 1-2 semitones) - sounds more melodic
+        if (delta <= 2) {
+            score += 8;  // Strong bonus for stepwise
+        } else if (delta <= 4) {
+            score += 4;  // Moderate bonus for small skip
+        } else {
+            score -= (delta - 4);  // Penalty for large leaps
+        }
+
+        // Prefer staying in the correct register (above or below lead)
+        bool isAboveLead = candidateNote > inputNote;
+        if (isAboveLead == harmonyAbove) {
+            score += 2;
+        }
+
+        // Bonus if it's a chord tone (not just a scale tone)
+        if (chordTones.contains(candidatePc)) {
+            score += 3;
+        }
+
+        candidates.append({candidateNote, score});
+    }
+
+    // =========================================================================
+    // SELECT BEST CANDIDATE
+    // =========================================================================
+
+    if (!candidates.isEmpty()) {
+        // Sort by score (descending) and pick the best
+        std::sort(candidates.begin(), candidates.end(),
+                  [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
+
+        int bestNote = candidates.first().note;
+        int bestScore = candidates.first().score;
+
+        qDebug() << "ScaleSnap CONTRARY: Selected harmony" << bestNote
+                 << "with score" << bestScore
+                 << "(interval with lead:" << getIntervalClass(inputNote, bestNote) << ")";
+
+        return bestNote;
+    }
+
+    // =========================================================================
+    // FALLBACK: If no valid candidates, try basic contrary motion
+    // =========================================================================
+
+    // Move in opposite direction by same amount as lead, then snap to nearest valid
+    int rawHarmony = previousHarmonyNote - leadMovement;
+    rawHarmony = qBound(0, rawHarmony, 127);
+
+    qDebug() << "ScaleSnap CONTRARY: No valid candidates, using fallback" << rawHarmony;
+    return rawHarmony;
+}
+
 void ScaleSnapProcessor::emitNoteOn(int channel, int note, int velocity)
 {
     if (m_midi && note >= 0 && note <= 127) {
@@ -1444,6 +1672,7 @@ void ScaleSnapProcessor::releaseVoiceSustainedNotes()
         m_vibratoFadeInSamples = 0;
         m_oscillationDetected = false;
         m_lastOscillation = 0.0;
+        qDebug() << "ScaleSnap: Voice sustain notes released";
         if (m_leadMode != LeadMode::Off) {
             emitPitchBend(kChannelLead, 8192);
         }
@@ -1482,6 +1711,130 @@ double ScaleSnapProcessor::hzToCents(double hz, double referenceHz)
         return 0.0;
     }
     return 1200.0 * std::log2(hz / referenceHz);
+}
+
+// ============================================================================
+// COUNTERPOINT INTERVAL ANALYSIS UTILITIES
+// ============================================================================
+// These utilities support classical counterpoint rules for harmony generation.
+// Based on species counterpoint principles (Fux, Gradus ad Parnassum).
+
+int ScaleSnapProcessor::getIntervalClass(int note1, int note2)
+{
+    // Return the interval in semitones (0-11), always positive
+    int diff = std::abs(note1 - note2);
+    return diff % 12;
+}
+
+bool ScaleSnapProcessor::isConsonant(int intervalSemitones)
+{
+    // Normalize to 0-11 range
+    int interval = intervalSemitones % 12;
+    if (interval < 0) interval += 12;
+
+    // Consonant intervals:
+    // - P1 (unison): 0 semitones
+    // - m3 (minor 3rd): 3 semitones
+    // - M3 (major 3rd): 4 semitones
+    // - P5 (perfect 5th): 7 semitones
+    // - m6 (minor 6th): 8 semitones
+    // - M6 (major 6th): 9 semitones
+    // - P8 (octave): 0 semitones (same as unison in pitch class)
+    //
+    // Note: Perfect 4th (5 semitones) is dissonant when above bass in two-voice texture
+    switch (interval) {
+        case 0:  // Unison/Octave
+        case 3:  // Minor 3rd
+        case 4:  // Major 3rd
+        case 7:  // Perfect 5th
+        case 8:  // Minor 6th
+        case 9:  // Major 6th
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool ScaleSnapProcessor::isPerfectConsonance(int intervalSemitones)
+{
+    // Normalize to 0-11 range
+    int interval = intervalSemitones % 12;
+    if (interval < 0) interval += 12;
+
+    // Perfect consonances:
+    // - P1 (unison): 0 semitones
+    // - P5 (perfect 5th): 7 semitones
+    // - P8 (octave): 0 semitones (same as unison)
+    //
+    // These are "stable" but should NOT be approached by parallel motion
+    return (interval == 0 || interval == 7);
+}
+
+bool ScaleSnapProcessor::isImperfectConsonance(int intervalSemitones)
+{
+    // Normalize to 0-11 range
+    int interval = intervalSemitones % 12;
+    if (interval < 0) interval += 12;
+
+    // Imperfect consonances:
+    // - m3 (minor 3rd): 3 semitones
+    // - M3 (major 3rd): 4 semitones
+    // - m6 (minor 6th): 8 semitones
+    // - M6 (major 6th): 9 semitones
+    //
+    // These are the "sweet" intervals preferred for harmony - can be approached by any motion
+    switch (interval) {
+        case 3:  // Minor 3rd
+        case 4:  // Major 3rd
+        case 8:  // Minor 6th
+        case 9:  // Major 6th
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool ScaleSnapProcessor::wouldCreateParallelPerfect(int prevLead, int prevHarmony, int newLead, int newHarmony)
+{
+    // Check if moving from (prevLead, prevHarmony) to (newLead, newHarmony)
+    // would create forbidden parallel 5ths or octaves.
+    //
+    // Parallel perfect consonances (parallel 5ths, parallel octaves) are forbidden
+    // because they destroy voice independence - the voices sound like one.
+
+    int prevInterval = getIntervalClass(prevLead, prevHarmony);
+    int newInterval = getIntervalClass(newLead, newHarmony);
+
+    // Check if both intervals are perfect consonances (0=unison/octave, 7=fifth)
+    bool prevIsPerfect = isPerfectConsonance(prevInterval);
+    bool newIsPerfect = isPerfectConsonance(newInterval);
+
+    if (!prevIsPerfect || !newIsPerfect) {
+        return false;  // Not both perfect consonances, so no parallel perfect
+    }
+
+    // Check if both intervals are the SAME type (both 5ths or both unisons/octaves)
+    // Parallel 5th→5th or 8ve→8ve is forbidden
+    // Moving from 5th to octave (or vice versa) is called "direct" motion to perfect, also problematic
+    // but technically different intervals, so we check if same
+    if (prevInterval == newInterval) {
+        // Both voices must be moving in the same direction for "parallel" motion
+        int leadMovement = newLead - prevLead;
+        int harmonyMovement = newHarmony - prevHarmony;
+
+        // Parallel = same direction (both positive or both negative)
+        // Contrary = opposite direction (one positive, one negative)
+        bool sameDirection = (leadMovement > 0 && harmonyMovement > 0) ||
+                            (leadMovement < 0 && harmonyMovement < 0);
+
+        if (sameDirection && leadMovement != 0 && harmonyMovement != 0) {
+            qDebug() << "ScaleSnap COUNTERPOINT: FORBIDDEN parallel"
+                     << (prevInterval == 7 ? "5ths" : "octaves") << "detected!";
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool ScaleSnapProcessor::isLikelyChromaticSweep() const

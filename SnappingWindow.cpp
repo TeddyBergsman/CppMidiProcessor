@@ -159,6 +159,33 @@ void SnappingWindow::buildUi()
     harmonyComboRow->addStretch();
     harmonyLayout->addLayout(harmonyComboRow);
 
+    // Harmony instrument range combo
+    QHBoxLayout* harmonyRangeRow = new QHBoxLayout();
+    harmonyRangeRow->setSpacing(8);
+
+    QLabel* rangeLabel = new QLabel("Range:", harmonyGroup);
+    m_harmonyRangeCombo = new QComboBox(harmonyGroup);
+    // Store min,max as a pair encoded in user data (min * 1000 + max)
+    m_harmonyRangeCombo->addItem("Full Range (C-1 to G9)", 0 * 1000 + 127);
+    m_harmonyRangeCombo->addItem("Trumpet (E3-C6)", 52 * 1000 + 84);
+    m_harmonyRangeCombo->addItem("Alto Sax (Db3-Ab5)", 49 * 1000 + 80);
+    m_harmonyRangeCombo->addItem("Tenor Sax (Ab2-E5)", 44 * 1000 + 76);
+    m_harmonyRangeCombo->addItem("Violin (G3-E7)", 55 * 1000 + 100);
+    m_harmonyRangeCombo->addItem("Flute (C4-C7)", 60 * 1000 + 96);
+    m_harmonyRangeCombo->addItem("Clarinet (E3-C7)", 52 * 1000 + 96);
+    m_harmonyRangeCombo->addItem("Trombone (E2-Bb4)", 40 * 1000 + 70);
+    m_harmonyRangeCombo->addItem("Voice Soprano (C4-C6)", 60 * 1000 + 84);
+    m_harmonyRangeCombo->addItem("Voice Alto (F3-F5)", 53 * 1000 + 77);
+    m_harmonyRangeCombo->addItem("Voice Tenor (C3-C5)", 48 * 1000 + 72);
+    m_harmonyRangeCombo->addItem("Voice Bass (E2-E4)", 40 * 1000 + 64);
+    m_harmonyRangeCombo->setMinimumWidth(180);
+    m_harmonyRangeCombo->setToolTip("Constrain harmony notes to the playable range of an instrument.\nPrevents silence when harmony would go out of range.");
+
+    harmonyRangeRow->addWidget(rangeLabel);
+    harmonyRangeRow->addWidget(m_harmonyRangeCombo);
+    harmonyRangeRow->addStretch();
+    harmonyLayout->addLayout(harmonyRangeRow);
+
     // Harmony description label
     m_harmonyDescriptionLabel = new QLabel(harmonyGroup);
     m_harmonyDescriptionLabel->setWordWrap(true);
@@ -204,6 +231,8 @@ void SnappingWindow::buildUi()
             this, &SnappingWindow::onLeadModeChanged);
     connect(m_harmonyModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &SnappingWindow::onHarmonyModeChanged);
+    connect(m_harmonyRangeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &SnappingWindow::onHarmonyRangeChanged);
     connect(m_vocalBendCheckbox, &QCheckBox::toggled,
             this, &SnappingWindow::onVocalBendToggled);
     connect(m_vocalVibratoRangeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -241,6 +270,21 @@ void SnappingWindow::onHarmonyModeChanged(int index)
     }
 
     updateHarmonyModeDescription();
+}
+
+void SnappingWindow::onHarmonyRangeChanged(int index)
+{
+    if (!m_engine || !m_harmonyRangeCombo) return;
+
+    // Decode the min/max from the stored value (min * 1000 + max)
+    const int encoded = m_harmonyRangeCombo->itemData(index).toInt();
+    const int minNote = encoded / 1000;
+    const int maxNote = encoded % 1000;
+
+    auto* snap = m_engine->scaleSnapProcessor();
+    if (snap) {
+        snap->setHarmonyRange(minNote, maxNote);
+    }
 }
 
 void SnappingWindow::onVocalBendToggled(bool checked)

@@ -184,6 +184,23 @@ void ScaleSnapProcessor::setVoiceSustainEnabled(bool enabled)
     }
 }
 
+void ScaleSnapProcessor::setHarmonyRange(int minNote, int maxNote)
+{
+    // Validate and clamp to MIDI range
+    minNote = qBound(0, minNote, 127);
+    maxNote = qBound(0, maxNote, 127);
+
+    // Ensure min <= max
+    if (minNote > maxNote) {
+        std::swap(minNote, maxNote);
+    }
+
+    m_harmonyRangeMin = minNote;
+    m_harmonyRangeMax = maxNote;
+
+    qDebug() << "ScaleSnap: Harmony range set to" << minNote << "-" << maxNote;
+}
+
 void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
 {
     if (m_currentCellIndex == cellIndex) {
@@ -1446,8 +1463,14 @@ int ScaleSnapProcessor::generateContraryHarmonyNote(int inputNote, int previousL
     // 2. OPPOSITE DIRECTION movement from lead
     // 3. STEPWISE MOTION when possible (smoother melody)
     // 4. NO PARALLEL 5THS OR OCTAVES (forbidden - destroys voice independence)
+    // 5. INSTRUMENT RANGE CONSTRAINTS (stay within playable range)
     //
     // The algorithm finds harmony candidates that satisfy these rules and scores them.
+
+    // Helper lambda to check if a note is within instrument range
+    auto isInRange = [this](int note) {
+        return note >= m_harmonyRangeMin && note <= m_harmonyRangeMax;
+    };
 
     // First note of phrase: start with an imperfect consonance (3rd or 6th)
     // This establishes separation between the voices from the start
@@ -1456,41 +1479,65 @@ int ScaleSnapProcessor::generateContraryHarmonyNote(int inputNote, int previousL
         int direction = harmonyAbove ? 1 : -1;
 
         // Try intervals in order of preference: 3rd, 6th, 5th, octave
+        // Also try octave transpositions to find one within range
         static const int preferredIntervals[] = {3, 4, 8, 9, 7, 12};  // m3, M3, m6, M6, P5, P8
 
-        for (int interval : preferredIntervals) {
-            int candidate = inputNote + (direction * interval);
-            int candidatePc = normalizePc(candidate);
+        const QSet<int>& validTones = validPcs.isEmpty() ? chordTones : validPcs;
 
-            // Check if this candidate is in the valid pitch classes
-            const QSet<int>& validTones = validPcs.isEmpty() ? chordTones : validPcs;
-            if (validTones.isEmpty() || validTones.contains(candidatePc)) {
-                qDebug() << "ScaleSnap CONTRARY: PHRASE START - harmony at interval"
-                         << interval << "=" << candidate << (harmonyAbove ? "(above)" : "(below)");
-                return qBound(0, candidate, 127);
+        for (int interval : preferredIntervals) {
+            // Try the interval in the preferred direction
+            int candidate = inputNote + (direction * interval);
+
+            // Try different octaves to find one in range
+            for (int octaveShift = 0; octaveShift <= 2; ++octaveShift) {
+                int shifted = candidate + (octaveShift * 12 * direction);
+                // Also try the opposite octave direction
+                int shiftedOpp = candidate - (octaveShift * 12 * direction);
+
+                for (int c : {shifted, shiftedOpp}) {
+                    if (c < 0 || c > 127) continue;
+                    if (!isInRange(c)) continue;
+
+                    int candidatePc = normalizePc(c);
+                    if (validTones.isEmpty() || validTones.contains(candidatePc)) {
+                        qDebug() << "ScaleSnap CONTRARY: PHRASE START - harmony at interval"
+                                 << interval << "=" << c << (harmonyAbove ? "(above)" : "(below)")
+                                 << "(range:" << m_harmonyRangeMin << "-" << m_harmonyRangeMax << ")";
+                        return c;
+                    }
+                }
             }
         }
 
-        // Fallback: just use a 3rd in the preferred direction
+        // Fallback: find ANY consonant note within range
         int fallback = inputNote + (direction * 4);  // Major 3rd
+        // Shift into range if needed
+        while (fallback < m_harmonyRangeMin && fallback + 12 <= 127) fallback += 12;
+        while (fallback > m_harmonyRangeMax && fallback - 12 >= 0) fallback -= 12;
+        fallback = qBound(m_harmonyRangeMin, fallback, m_harmonyRangeMax);
+
         qDebug() << "ScaleSnap CONTRARY: PHRASE START fallback - harmony at" << fallback;
-        return qBound(0, fallback, 127);
+        return fallback;
     }
 
     // Calculate lead movement
     int leadMovement = inputNote - previousLeadNote;
 
-    // No lead movement = use oblique motion (harmony stays)
+    // No lead movement = use oblique motion (harmony stays, if in range)
     if (leadMovement == 0) {
-        qDebug() << "ScaleSnap CONTRARY: no lead movement, keeping harmony at" << previousHarmonyNote;
-        return previousHarmonyNote;
+        if (isInRange(previousHarmonyNote)) {
+            qDebug() << "ScaleSnap CONTRARY: no lead movement, keeping harmony at" << previousHarmonyNote;
+            return previousHarmonyNote;
+        }
+        // Previous note is now out of range, need to find new one
     }
 
     // Determine harmony direction (OPPOSITE to lead)
     int harmonyDir = (leadMovement > 0) ? -1 : 1;
 
     qDebug() << "ScaleSnap CONTRARY: lead moved" << leadMovement
-             << ", harmony should move" << (harmonyDir > 0 ? "UP" : "DOWN");
+             << ", harmony should move" << (harmonyDir > 0 ? "UP" : "DOWN")
+             << "(range:" << m_harmonyRangeMin << "-" << m_harmonyRangeMax << ")";
 
     // =========================================================================
     // CANDIDATE SEARCH: Find harmony notes that satisfy counterpoint rules
@@ -1504,13 +1551,18 @@ int ScaleSnapProcessor::generateContraryHarmonyNote(int inputNote, int previousL
     };
     QVector<Candidate> candidates;
 
-    // Search range: up to 12 semitones in the harmony direction from previous harmony
+    // Search range: up to 24 semitones (2 octaves) to find candidates within instrument range
     // We want stepwise motion, so prioritize small movements
-    for (int delta = 1; delta <= 12; ++delta) {
+    for (int delta = 1; delta <= 24; ++delta) {
         int candidateNote = previousHarmonyNote + (delta * harmonyDir);
 
         // Skip if out of MIDI range
         if (candidateNote < 0 || candidateNote > 127) continue;
+
+        // =====================================================================
+        // INSTRUMENT RANGE CHECK: Skip if outside playable range
+        // =====================================================================
+        if (!isInRange(candidateNote)) continue;
 
         int candidatePc = normalizePc(candidateNote);
 
@@ -1569,6 +1621,60 @@ int ScaleSnapProcessor::generateContraryHarmonyNote(int inputNote, int previousL
     }
 
     // =========================================================================
+    // ALSO SEARCH IN THE OPPOSITE DIRECTION (in case we hit range limit)
+    // =========================================================================
+    // If the natural contrary direction would go out of range, we might need
+    // to search the other direction to find any valid consonant note in range.
+
+    if (candidates.isEmpty()) {
+        int oppositeDir = -harmonyDir;
+        for (int delta = 1; delta <= 24; ++delta) {
+            int candidateNote = previousHarmonyNote + (delta * oppositeDir);
+
+            if (candidateNote < 0 || candidateNote > 127) continue;
+            if (!isInRange(candidateNote)) continue;
+
+            int candidatePc = normalizePc(candidateNote);
+            if (!validTones.isEmpty() && !validTones.contains(candidatePc)) continue;
+
+            int intervalWithLead = getIntervalClass(inputNote, candidateNote);
+            if (!isConsonant(intervalWithLead)) continue;
+
+            if (wouldCreateParallelPerfect(previousLeadNote, previousHarmonyNote, inputNote, candidateNote)) {
+                continue;
+            }
+
+            // Score (with penalty for being in wrong direction)
+            int score = 0;
+            if (isImperfectConsonance(intervalWithLead)) {
+                score += 10;
+            } else if (isPerfectConsonance(intervalWithLead)) {
+                score += 3;
+            }
+            score -= 5;  // Penalty for not being contrary motion
+
+            if (delta <= 2) {
+                score += 8;
+            } else if (delta <= 4) {
+                score += 4;
+            } else {
+                score -= (delta - 4);
+            }
+
+            bool isAboveLead = candidateNote > inputNote;
+            if (isAboveLead == harmonyAbove) {
+                score += 2;
+            }
+
+            if (chordTones.contains(candidatePc)) {
+                score += 3;
+            }
+
+            candidates.append({candidateNote, score});
+        }
+    }
+
+    // =========================================================================
     // SELECT BEST CANDIDATE
     // =========================================================================
 
@@ -1588,15 +1694,12 @@ int ScaleSnapProcessor::generateContraryHarmonyNote(int inputNote, int previousL
     }
 
     // =========================================================================
-    // FALLBACK: If no valid candidates, try basic contrary motion
+    // FALLBACK: If no valid candidates, clamp previous to range
     // =========================================================================
 
-    // Move in opposite direction by same amount as lead, then snap to nearest valid
-    int rawHarmony = previousHarmonyNote - leadMovement;
-    rawHarmony = qBound(0, rawHarmony, 127);
-
-    qDebug() << "ScaleSnap CONTRARY: No valid candidates, using fallback" << rawHarmony;
-    return rawHarmony;
+    int fallback = qBound(m_harmonyRangeMin, previousHarmonyNote, m_harmonyRangeMax);
+    qDebug() << "ScaleSnap CONTRARY: No valid candidates, using clamped fallback" << fallback;
+    return fallback;
 }
 
 void ScaleSnapProcessor::emitNoteOn(int channel, int note, int velocity)

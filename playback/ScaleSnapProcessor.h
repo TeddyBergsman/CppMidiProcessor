@@ -116,6 +116,13 @@ public:
     bool voiceSustainEnabled() const { return m_voiceSustainEnabled; }
     void setVoiceSustainEnabled(bool enabled);
 
+    // Harmony instrument range (constrains harmony notes to playable range)
+    // Default is full MIDI range (0-127). Set to instrument-specific range.
+    // Common ranges: Trumpet E3-C6 (52-84), Alto Sax Db3-Ab5 (49-80), Violin G3-E7 (55-100)
+    int harmonyRangeMin() const { return m_harmonyRangeMin; }
+    int harmonyRangeMax() const { return m_harmonyRangeMax; }
+    void setHarmonyRange(int minNote, int maxNote);
+
     // Cell index tracking (called by engine on each step)
     void setCurrentCellIndex(int cellIndex);
     int currentCellIndex() const { return m_currentCellIndex; }
@@ -239,6 +246,8 @@ private:
     double m_vocalVibratoRangeCents = 200.0;  // ±200 cents (default), or ±100 cents
     bool m_vibratoCorrectionEnabled = true;   // Enabled by default - filter out DC offset from voice
     bool m_voiceSustainEnabled = true;        // Enabled by default - hold notes while singing
+    int m_harmonyRangeMin = 0;                // Min MIDI note for harmony (default: no limit)
+    int m_harmonyRangeMax = 127;              // Max MIDI note for harmony (default: no limit)
     int m_currentCellIndex = -1;
     int m_lastCc2Value = 0;                   // Track current CC2 (breath) value for voice sustain
     float m_beatPosition = 0.0f;              // Current beat position (0.0-3.999 for 4/4)

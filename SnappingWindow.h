@@ -28,6 +28,7 @@ public:
 private slots:
     void onLeadModeChanged(int index);
     void onHarmonyModeChanged(int index);
+    void onHarmonyRangeChanged(int index);
     void onVocalBendToggled(bool checked);
     void onVocalVibratoRangeChanged(int index);
     void onVibratoCorrectionToggled(bool checked);
@@ -48,6 +49,7 @@ private:
 
     QComboBox* m_leadModeCombo = nullptr;
     QComboBox* m_harmonyModeCombo = nullptr;
+    QComboBox* m_harmonyRangeCombo = nullptr;
     QCheckBox* m_vocalBendCheckbox = nullptr;
     QComboBox* m_vocalVibratoRangeCombo = nullptr;
     QCheckBox* m_vibratoCorrectionCheckbox = nullptr;

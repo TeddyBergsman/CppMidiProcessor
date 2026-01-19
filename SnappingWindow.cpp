@@ -152,6 +152,7 @@ void SnappingWindow::buildUi()
     m_harmonyModeCombo->addItem("Off", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Off));
     m_harmonyModeCombo->addItem("Smart Thirds", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::SmartThirds));
     m_harmonyModeCombo->addItem("Contrary", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Contrary));
+    m_harmonyModeCombo->addItem("Similar", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Similar));
     m_harmonyModeCombo->setMinimumWidth(180);
 
     harmonyComboRow->addWidget(harmonyLabel);
@@ -471,6 +472,9 @@ void SnappingWindow::updateHarmonyModeDescription()
         break;
     case playback::ScaleSnapProcessor::HarmonyModeCompat::Contrary:
         desc = "Contrary motion: Harmony moves opposite to lead melody direction. Output on MIDI channel 12.";
+        break;
+    case playback::ScaleSnapProcessor::HarmonyModeCompat::Similar:
+        desc = "Similar motion: Both voices move in the same direction but by different intervals. Cannot approach perfect 5ths/octaves (direct 5ths forbidden). Output on MIDI channel 12.";
         break;
     case playback::ScaleSnapProcessor::HarmonyModeCompat::Single:
         desc = "User-selected harmony type (Parallel, Contrary, etc.). Output on MIDI channels 12-15.";

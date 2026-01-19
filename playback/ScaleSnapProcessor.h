@@ -61,6 +61,7 @@ public:
         Off = 0,
         SmartThirds,         // Parallel motion - harmony follows lead direction (3rds/5ths)
         Contrary,            // Contrary motion - harmony moves opposite to lead direction
+        Similar,             // Similar motion - same direction, different intervals (no perfect consonances)
         Single,              // User-selected harmony type
         PrePlanned,          // Automatic phrase-based selection
         Voice                // Vocal MIDI as harmony source
@@ -193,6 +194,7 @@ private:
     int snapToNearestValidPc(int inputPc, const QSet<int>& validPcs) const;
     int generateHarmonyNote(int inputNote, const QSet<int>& chordTones, const QSet<int>& scaleTones) const;
     int generateContraryHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove = false) const;
+    int generateSimilarHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove = false) const;
     QSet<int> computeValidPitchClasses() const;
     QSet<int> computeChordTones(const music::ChordSymbol& chord) const;
     QSet<int> computeKeyScaleTones() const;  // Uses dynamic key detection

@@ -272,6 +272,10 @@ std::unique_ptr<IHarmonyGenerator> createHarmonyGenerator(HarmonyType type) {
             return std::make_unique<DescantGenerator>();
         case HarmonyType::SHADOW:
             return std::make_unique<ShadowGenerator>();
+        case HarmonyType::SIMILAR:
+            // Similar motion is handled directly in ScaleSnapProcessor,
+            // but provide fallback to Parallel for generator-based path
+            return std::make_unique<ParallelGenerator>();
     }
     return std::make_unique<ParallelGenerator>();  // Default fallback
 }

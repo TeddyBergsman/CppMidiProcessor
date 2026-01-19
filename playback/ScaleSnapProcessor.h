@@ -193,8 +193,14 @@ private:
     // Core snapping logic
     int snapToNearestValidPc(int inputPc, const QSet<int>& validPcs) const;
     int generateHarmonyNote(int inputNote, const QSet<int>& chordTones, const QSet<int>& scaleTones) const;
+    int generateParallelHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove = false) const;
     int generateContraryHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove = false) const;
     int generateSimilarHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove = false) const;
+
+    // Final validation: ensures harmony note is T1, T2, or T3 (not chromatic T4)
+    // If T4, snaps to nearest T1 (chord tone). Returns validated MIDI note.
+    int validateHarmonyNote(int harmonyNote, int leadNote, const ActiveChord& chord) const;
+
     QSet<int> computeValidPitchClasses() const;
     QSet<int> computeChordTones(const music::ChordSymbol& chord) const;
     QSet<int> computeKeyScaleTones() const;  // Uses dynamic key detection

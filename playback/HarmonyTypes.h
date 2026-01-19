@@ -67,7 +67,9 @@ enum class ScaleType {
 enum class ConformanceBehavior {
     ALLOW,      // No correction - output pitch as-is
     SNAP,       // Immediately correct to nearest T1/T2 target
-    BEND,       // Output original pitch, apply pitch bend toward target
+    TIMED_SNAP, // Play original, then snap after delay (for passing tones)
+    TIMED_BEND, // Play original, then bend to target over time
+    BEND,       // Output original pitch, apply pitch bend toward target (immediate)
     ANTICIPATE, // Allow note as anticipation of upcoming chord
     DELAY       // Micro-delay note onset to recontextualize as approach
 };
@@ -87,6 +89,8 @@ struct ConformanceResult {
     int outputPitch = 0;        // May differ from input if SNAP
     float pitchBendCents = 0.0f;// Non-zero if BEND
     float delayMs = 0.0f;       // Non-zero if DELAY
+    int snapTargetPitch = 0;    // For TIMED_SNAP: pitch to snap to
+    float snapDelayMs = 0.0f;   // For TIMED_SNAP: time before snap
 };
 
 // State for tracking pitch bend over time

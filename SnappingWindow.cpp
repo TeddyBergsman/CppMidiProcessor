@@ -151,6 +151,7 @@ void SnappingWindow::buildUi()
     m_harmonyModeCombo = new QComboBox(harmonyGroup);
     m_harmonyModeCombo->addItem("Off", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Off));
     m_harmonyModeCombo->addItem("Smart Thirds", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::SmartThirds));
+    m_harmonyModeCombo->addItem("Contrary", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Contrary));
     m_harmonyModeCombo->setMinimumWidth(180);
 
     harmonyComboRow->addWidget(harmonyLabel);
@@ -422,7 +423,10 @@ void SnappingWindow::updateHarmonyModeDescription()
         desc = "Harmony output is disabled. No notes are sent to harmony channels.";
         break;
     case playback::ScaleSnapProcessor::HarmonyModeCompat::SmartThirds:
-        desc = "Generate a harmony note (preferring 3rds and 5ths that are chord/scale tones). Output on MIDI channel 12.";
+        desc = "Parallel motion: Harmony follows the lead melody direction (preferring 3rds and 5ths). Output on MIDI channel 12.";
+        break;
+    case playback::ScaleSnapProcessor::HarmonyModeCompat::Contrary:
+        desc = "Contrary motion: Harmony moves opposite to lead melody direction. Output on MIDI channel 12.";
         break;
     case playback::ScaleSnapProcessor::HarmonyModeCompat::Single:
         desc = "User-selected harmony type (Parallel, Contrary, etc.). Output on MIDI channels 12-15.";

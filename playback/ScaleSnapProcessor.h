@@ -59,7 +59,8 @@ public:
     // This enum is for backwards compatibility with existing UI
     enum class HarmonyModeCompat {
         Off = 0,
-        SmartThirds,         // DEPRECATED: Use HarmonyMode::SINGLE + HarmonyType::PARALLEL
+        SmartThirds,         // Parallel motion - harmony follows lead direction (3rds/5ths)
+        Contrary,            // Contrary motion - harmony moves opposite to lead direction
         Single,              // User-selected harmony type
         PrePlanned,          // Automatic phrase-based selection
         Voice                // Vocal MIDI as harmony source
@@ -184,6 +185,7 @@ private:
     // Core snapping logic
     int snapToNearestValidPc(int inputPc, const QSet<int>& validPcs) const;
     int generateHarmonyNote(int inputNote, const QSet<int>& chordTones, const QSet<int>& scaleTones) const;
+    int generateContraryHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove = false) const;
     QSet<int> computeValidPitchClasses() const;
     QSet<int> computeChordTones(const music::ChordSymbol& chord) const;
     QSet<int> computeKeyScaleTones() const;  // Uses dynamic key detection
@@ -207,6 +209,18 @@ private:
     static int pcToMidiNote(int pc, int targetOctave);
     static double midiNoteToHz(int midiNote);
     static double hzToCents(double hz, double referenceHz);
+
+    // Counterpoint interval analysis utilities
+    // Get the interval in semitones between two notes (0-11, always positive, mod 12)
+    static int getIntervalClass(int note1, int note2);
+    // Is this interval consonant? (unison, 3rd, 5th, 6th, octave - 0, 3, 4, 7, 8, 9 semitones)
+    static bool isConsonant(int intervalSemitones);
+    // Is this a perfect consonance? (unison, 5th, octave - 0, 7, 12 semitones)
+    static bool isPerfectConsonance(int intervalSemitones);
+    // Is this an imperfect consonance? (3rd, 6th - 3, 4, 8, 9 semitones)
+    static bool isImperfectConsonance(int intervalSemitones);
+    // Would moving from (prevLead, prevHarmony) to (newLead, newHarmony) create parallel 5ths or octaves?
+    static bool wouldCreateParallelPerfect(int prevLead, int prevHarmony, int newLead, int newHarmony);
 
     // Dependencies (not owned)
     MidiProcessor* m_midi = nullptr;
@@ -236,6 +250,15 @@ private:
     bool m_currentNoteWasSnapped = false;     // True if current note was a correction (not played correctly)
 
     static constexpr qint64 kFastPlayingThresholdMs = 100;  // Notes faster than this = fast playing
+
+    // Lead melody direction tracking for CONTRARY harmony
+    int m_lastHarmonyLeadNote = -1;   // Previous lead note for direction calculation
+    int m_leadMelodyDirection = 0;    // +1 = ascending, -1 = descending, 0 = none
+    int m_lastHarmonyOutputNote = -1; // Previous harmony output note (for contrary motion)
+    qint64 m_lastGuitarNoteOffTimestamp = 0;  // Timestamp of last guitar note-off (for phrase detection)
+    int m_guitarNotesHeld = 0;                // Count of guitar notes currently being held (before voice sustain)
+
+    static constexpr qint64 kPhraseTimeoutMs = 500;  // Silence longer than this = new phrase
 
     // Chromatic sweep detection - track recent intervals
     static constexpr int kRecentIntervalsSize = 4;  // Track last N intervals

@@ -216,7 +216,12 @@ void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
     m_currentCellIndex = cellIndex;
 
     // Check if chord changed and re-conform any active notes
-    if (m_leadMode == LeadMode::Conformed && !m_activeNotes.isEmpty()) {
+    // This applies to BOTH lead conformance AND harmony - harmony notes need
+    // to be re-validated when chords change, regardless of lead mode!
+    bool needsReconform = !m_activeNotes.isEmpty() &&
+                          (m_leadMode == LeadMode::Conformed || m_harmonyMode != HarmonyMode::OFF);
+
+    if (needsReconform) {
         checkAndReconformOnChordChange(previousCellIndex);
     }
 }
@@ -664,15 +669,16 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
 
             case HarmonyModeCompat::SmartThirds:
             default:
-                if (validPcs.isEmpty()) {
-                    // No chord/scale info - default major 3rd
-                    active.harmonyNote = midiNote + 4;
-                } else {
-                    // SmartThirds is parallel motion (default)
-                    active.harmonyNote = generateHarmonyNote(midiNote, chordTones, validPcs);
-                }
+                // Parallel motion - both voices move same direction, same interval
+                // Maintains constant interval (3rd or 6th) between lead and harmony
+                active.harmonyNote = generateParallelHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
                 break;
         }
+
+        // FINAL VALIDATION: Ensure harmony note is T1/T2/T3 (not chromatic T4)
+        // This catches edge cases from generator fallbacks that could return invalid notes
+        ActiveChord activeChord = buildActiveChord();
+        active.harmonyNote = validateHarmonyNote(active.harmonyNote, midiNote, activeChord);
 
         // Track the harmony output for next iteration (used by CONTRARY mode)
         m_lastHarmonyOutputNote = active.harmonyNote;
@@ -1302,19 +1308,29 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
     qDebug() << "ScaleSnap: Chord changed at cell" << m_currentCellIndex
              << "- checking" << m_activeNotes.size() << "active notes for re-conformance";
 
+    // Precompute chord tones and valid pitch classes for harmony re-conformance
+    const QSet<int> chordTones = computeChordTones(m_lastKnownChord);
+    const QSet<int> validPcs = computeValidPitchClasses();
+
     // Check each active note and re-conform if needed
     for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
         ActiveNote& note = it.value();
         const int currentOutputPc = normalizePc(note.snappedNote);
 
         // Check if the current output note is still valid (T1 chord tone)
-        const int tier = ChordOntology::instance().getTier(currentOutputPc, activeChord);
+        const int leadTier = ChordOntology::instance().getTier(currentOutputPc, activeChord);
 
-        qDebug() << "ScaleSnap: Note" << note.snappedNote << "(pc" << currentOutputPc << ") tier=" << tier;
+        qDebug() << "ScaleSnap: Lead note" << note.snappedNote << "(pc" << currentOutputPc << ") tier=" << leadTier;
 
-        // If note is no longer a chord tone (T1), we need to snap it
+        bool leadChanged = false;
+        int currentLeadNote = note.snappedNote;
+
+        // =========================================================================
+        // LEAD CHORD-CHANGE CONFORMANCE (only when lead mode is Conformed)
+        // =========================================================================
+        // If lead note is no longer a chord tone (T1), we need to snap it
         // Only T1 stays, snap T2/T3/T4 (tensions disabled)
-        if (tier > 1) {
+        if (m_leadMode == LeadMode::Conformed && leadTier > 1) {
             // Find nearest chord tone
             int nearestTarget = -1;
             int minDistance = 7;
@@ -1332,7 +1348,7 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
                 int newNote = ChordOntology::findNearestInOctave(note.snappedNote, nearestTarget);
 
                 if (newNote != note.snappedNote) {
-                    qDebug() << "ScaleSnap: Re-conforming note" << note.snappedNote
+                    qDebug() << "ScaleSnap: Re-conforming lead" << note.snappedNote
                              << "->" << newNote << "due to chord change";
 
                     // Emit note change (note-off old, note-on new)
@@ -1346,20 +1362,98 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
                     // Update tracking
                     m_currentlyPlayingNote = newNote;
                     m_currentNoteWasSnapped = true;
-
-                    // Also update harmony if active
-                    if (m_harmonyMode != HarmonyMode::OFF && note.harmonyNote >= 0) {
-                        emitNoteOff(kChannelHarmony1, note.harmonyNote);
-                        const QSet<int> chordTones = computeChordTones(m_lastKnownChord);
-                        const QSet<int> validPcs = computeValidPitchClasses();
-                        int newHarmony = generateHarmonyNote(newNote, chordTones, validPcs);
-                        int harmonyVelocity = static_cast<int>(note.velocity * m_harmonyConfig.velocityRatio);
-                        harmonyVelocity = qBound(1, harmonyVelocity, 127);
-                        emitNoteOn(kChannelHarmony1, newHarmony, harmonyVelocity);
-                        note.harmonyNote = newHarmony;
-                    }
+                    leadChanged = true;
+                    currentLeadNote = newNote;
                 }
             }
+        }
+
+        // =========================================================================
+        // INDEPENDENT HARMONY CHORD-CHANGE CONFORMANCE
+        // =========================================================================
+        // Check if harmony note needs re-conforming, regardless of whether lead changed.
+        // This ensures harmony stays consonant even when lead is already a chord tone.
+
+        if (m_harmonyMode != HarmonyMode::OFF && note.harmonyNote >= 0) {
+            const int harmonyPc = normalizePc(note.harmonyNote);
+            const int harmonyTier = ChordOntology::instance().getTier(harmonyPc, activeChord);
+
+            qDebug() << "ScaleSnap: Harmony note" << note.harmonyNote << "(pc" << harmonyPc << ") tier=" << harmonyTier;
+
+            // Harmony should stay on T1 (chord tones) or T2 (tensions like 9th, 11th, 13th)
+            // Re-conform if harmony is T3 (scale tone) or T4 (chromatic)
+            bool harmonyNeedsReconform = (harmonyTier > 2);
+
+            // Also re-conform harmony if lead changed (to maintain proper voice leading)
+            if (leadChanged || harmonyNeedsReconform) {
+                qDebug() << "ScaleSnap: Re-conforming harmony (leadChanged=" << leadChanged
+                         << ", harmonyTier=" << harmonyTier << ")";
+
+                // Turn off old harmony note
+                emitNoteOff(kChannelHarmony1, note.harmonyNote);
+
+                // Generate new harmony using the CORRECT motion-type generator
+                // This preserves voice leading context (parallel/contrary/similar motion)
+                int newHarmony = -1;
+
+                switch (m_harmonyModeCompat) {
+                    case HarmonyModeCompat::Contrary:
+                        // For contrary motion, re-generate with current context
+                        // Note: On chord change, we treat this as a "phrase continuation"
+                        // so we pass the previous lead/harmony for proper voice leading
+                        newHarmony = generateContraryHarmonyNote(
+                            currentLeadNote,
+                            m_lastHarmonyLeadNote,
+                            m_lastHarmonyOutputNote,
+                            chordTones,
+                            validPcs,
+                            false  // harmonyAbove
+                        );
+                        break;
+
+                    case HarmonyModeCompat::Similar:
+                        newHarmony = generateSimilarHarmonyNote(
+                            currentLeadNote,
+                            m_lastHarmonyLeadNote,
+                            m_lastHarmonyOutputNote,
+                            chordTones,
+                            validPcs,
+                            false
+                        );
+                        break;
+
+                    case HarmonyModeCompat::SmartThirds:
+                    default:
+                        newHarmony = generateParallelHarmonyNote(
+                            currentLeadNote,
+                            m_lastHarmonyLeadNote,
+                            m_lastHarmonyOutputNote,
+                            chordTones,
+                            validPcs,
+                            false
+                        );
+                        break;
+                }
+
+                // FINAL VALIDATION: Ensure re-conformed harmony is T1/T2/T3 (not chromatic T4)
+                newHarmony = validateHarmonyNote(newHarmony, currentLeadNote, activeChord);
+
+                // Emit new harmony note
+                int harmonyVelocity = static_cast<int>(note.velocity * m_harmonyConfig.velocityRatio);
+                harmonyVelocity = qBound(1, harmonyVelocity, 127);
+                emitNoteOn(kChannelHarmony1, newHarmony, harmonyVelocity);
+
+                // Update tracking
+                note.harmonyNote = newHarmony;
+                m_lastHarmonyOutputNote = newHarmony;
+
+                qDebug() << "ScaleSnap: Harmony re-conformed to" << newHarmony;
+            }
+        }
+
+        // Update lead tracking if lead changed
+        if (leadChanged) {
+            m_lastHarmonyLeadNote = currentLeadNote;
         }
     }
 }
@@ -1461,6 +1555,254 @@ int ScaleSnapProcessor::generateHarmonyNote(int inputNote, const QSet<int>& chor
     // Last resort: major 3rd above
     qDebug() << "ScaleSnap Harmony: last resort major 3rd above";
     return qBound(0, inputNote + 4, 127);
+}
+
+int ScaleSnapProcessor::generateParallelHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove) const
+{
+    // =========================================================================
+    // TRUE PARALLEL MOTION (Species Counterpoint Rules)
+    // =========================================================================
+    //
+    // Classical parallel motion:
+    // - Both voices move in the SAME direction
+    // - By the SAME interval amount (maintaining constant interval)
+    // - ONLY allowed for IMPERFECT consonances (3rds and 6ths)
+    // - Parallel 5ths and octaves are FORBIDDEN
+    //
+    // Example (parallel 3rds below):
+    //   Lead:    C  D  E  F  G
+    //   Harmony: A  B  C  D  E  (each a 3rd below)
+
+    qDebug() << "ScaleSnap PARALLEL: inputNote=" << inputNote
+             << "prevLead=" << previousLeadNote
+             << "prevHarmony=" << previousHarmonyNote
+             << "harmonyAbove=" << harmonyAbove;
+
+    // === PHRASE START: Pick initial interval ===
+    if (previousLeadNote < 0 || previousHarmonyNote < 0) {
+        // First note of phrase - start at a diatonic 3rd
+        qDebug() << "ScaleSnap PARALLEL: NEW PHRASE - starting at 3rd";
+
+        // Try to find a 3rd (minor or major) that's in the valid pitch classes
+        int targetInterval = harmonyAbove ? 3 : -3;  // 3rd above or below
+
+        // Search for the best starting interval (prefer 3rds, then 6ths)
+        static const int kStartingIntervals[] = {-3, -4, 3, 4, -8, -9, 8, 9};  // m3, M3 below/above, m6, M6 below/above
+
+        for (int interval : kStartingIntervals) {
+            // Skip intervals that don't match our direction preference
+            if (harmonyAbove && interval < 0) continue;
+            if (!harmonyAbove && interval > 0) continue;
+
+            int candidate = inputNote + interval;
+            if (candidate < m_harmonyRangeMin || candidate > m_harmonyRangeMax) continue;
+
+            int candidatePc = normalizePc(candidate);
+            if (chordTones.contains(candidatePc) || validPcs.contains(candidatePc)) {
+                qDebug() << "ScaleSnap PARALLEL: starting interval=" << interval << "harmonyNote=" << candidate;
+                return qBound(m_harmonyRangeMin, candidate, m_harmonyRangeMax);
+            }
+        }
+
+        // Fallback: just use a minor 3rd
+        int fallback = inputNote + (harmonyAbove ? 3 : -3);
+        qDebug() << "ScaleSnap PARALLEL: fallback starting interval, harmonyNote=" << fallback;
+        return qBound(m_harmonyRangeMin, fallback, m_harmonyRangeMax);
+    }
+
+    // === CONTINUATION: Move harmony by same amount as lead ===
+    int leadMovement = inputNote - previousLeadNote;
+    int rawHarmonyNote = previousHarmonyNote + leadMovement;
+
+    qDebug() << "ScaleSnap PARALLEL: leadMovement=" << leadMovement
+             << "rawHarmonyNote=" << rawHarmonyNote;
+
+    // Check the resulting interval
+    int intervalWithLead = getIntervalClass(inputNote, rawHarmonyNote);
+
+    // === VALIDATION: Must be imperfect consonance (3rd or 6th) ===
+    if (isImperfectConsonance(intervalWithLead)) {
+        // Great! The parallel motion maintains an imperfect consonance
+        // Just need to snap to a valid pitch class if needed
+
+        int rawPc = normalizePc(rawHarmonyNote);
+        if (chordTones.contains(rawPc) || validPcs.contains(rawPc)) {
+            // Already valid
+            qDebug() << "ScaleSnap PARALLEL: valid imperfect consonance, harmonyNote=" << rawHarmonyNote;
+            return qBound(m_harmonyRangeMin, rawHarmonyNote, m_harmonyRangeMax);
+        }
+
+        // Need to snap to nearest valid pitch class while staying close
+        int bestCandidate = rawHarmonyNote;
+        int bestDistance = 12;
+
+        for (int offset = -2; offset <= 2; ++offset) {
+            if (offset == 0) continue;
+            int candidate = rawHarmonyNote + offset;
+            int candidatePc = normalizePc(candidate);
+
+            if (!chordTones.contains(candidatePc) && !validPcs.contains(candidatePc)) continue;
+            if (candidate < m_harmonyRangeMin || candidate > m_harmonyRangeMax) continue;
+
+            // Check that the adjusted note is still an imperfect consonance
+            int adjustedInterval = getIntervalClass(inputNote, candidate);
+            if (!isImperfectConsonance(adjustedInterval)) continue;
+
+            if (std::abs(offset) < bestDistance) {
+                bestDistance = std::abs(offset);
+                bestCandidate = candidate;
+            }
+        }
+
+        qDebug() << "ScaleSnap PARALLEL: snapped to valid pc, harmonyNote=" << bestCandidate;
+        return qBound(m_harmonyRangeMin, bestCandidate, m_harmonyRangeMax);
+    }
+
+    // === CORRECTION: We've drifted to a non-imperfect consonance ===
+    // This can happen when the lead moves chromatically or by unusual intervals
+    // Find the nearest imperfect consonance (3rd or 6th) from the lead note
+
+    qDebug() << "ScaleSnap PARALLEL: interval=" << intervalWithLead
+             << "is NOT imperfect consonance, correcting...";
+
+    // Target intervals: 3rds and 6ths (semitones: 3, 4, 8, 9)
+    // Direction preference based on harmonyAbove and maintaining voice position
+    bool harmonyIsCurrentlyAbove = (rawHarmonyNote > inputNote);
+    bool shouldBeAbove = harmonyAbove;
+
+    // Search for the best correction
+    struct Candidate {
+        int note;
+        int score;
+    };
+    QVector<Candidate> candidates;
+
+    // Check all imperfect consonance intervals
+    static const int kImperfectIntervals[] = {3, 4, 8, 9, -3, -4, -8, -9};
+
+    for (int interval : kImperfectIntervals) {
+        int candidate = inputNote + interval;
+        if (candidate < m_harmonyRangeMin || candidate > m_harmonyRangeMax) continue;
+
+        int candidatePc = normalizePc(candidate);
+
+        // Prefer chord tones, then scale tones
+        bool isChordTone = chordTones.contains(candidatePc);
+        bool isScaleTone = validPcs.contains(candidatePc);
+        if (!isChordTone && !isScaleTone) continue;
+
+        // Score the candidate
+        int score = 0;
+
+        // Prefer chord tones
+        if (isChordTone) score += 4;
+
+        // Prefer staying close to where parallel motion would have gone
+        int distanceFromRaw = std::abs(candidate - rawHarmonyNote);
+        score -= distanceFromRaw;  // Penalize distance
+
+        // Prefer maintaining above/below relationship
+        bool candidateAbove = (candidate > inputNote);
+        if (candidateAbove == shouldBeAbove) score += 2;
+
+        // Prefer 3rds over 6ths (tighter harmony)
+        int absInterval = std::abs(interval);
+        if (absInterval == 3 || absInterval == 4) score += 1;
+
+        candidates.append({candidate, score});
+    }
+
+    if (!candidates.isEmpty()) {
+        // Sort by score (highest first)
+        std::sort(candidates.begin(), candidates.end(),
+                  [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
+
+        int bestNote = candidates.first().note;
+        qDebug() << "ScaleSnap PARALLEL: corrected to imperfect consonance, harmonyNote=" << bestNote
+                 << "score=" << candidates.first().score;
+        return qBound(m_harmonyRangeMin, bestNote, m_harmonyRangeMax);
+    }
+
+    // =========================================================================
+    // SMART FALLBACK: Find best consonant chord tone maintaining melodic continuity
+    // =========================================================================
+    qDebug() << "ScaleSnap PARALLEL: correction search failed, using smart fallback";
+
+    // Determine the direction harmony should be moving (parallel to lead)
+    int harmonyDirection = leadMovement > 0 ? 1 : (leadMovement < 0 ? -1 : 0);
+
+    struct FallbackCandidate {
+        int note;
+        int score;
+    };
+    QVector<FallbackCandidate> fallbackCandidates;
+
+    // Search entire range for chord tones
+    for (int candidate = m_harmonyRangeMin; candidate <= m_harmonyRangeMax; ++candidate) {
+        int candidatePc = normalizePc(candidate);
+
+        // Must be a chord tone (T1) for fallback
+        if (!chordTones.contains(candidatePc)) continue;
+
+        // Check interval with lead
+        int intervalWithLead = getIntervalClass(inputNote, candidate);
+
+        // Prefer imperfect consonances, but accept any consonance
+        if (!isConsonant(intervalWithLead)) continue;
+
+        int score = 0;
+
+        // Prefer imperfect consonances
+        if (isImperfectConsonance(intervalWithLead)) {
+            score += 10;
+        } else if (isPerfectConsonance(intervalWithLead)) {
+            score += 3;
+        }
+
+        // MELODIC CONTINUITY: Prefer continuing in same direction as lead (parallel motion)
+        if (previousHarmonyNote >= 0 && harmonyDirection != 0) {
+            int movement = candidate - previousHarmonyNote;
+            if ((movement > 0 && harmonyDirection > 0) || (movement < 0 && harmonyDirection < 0)) {
+                score += 5;  // Moving same direction as lead - good for parallel
+            } else if (movement == 0) {
+                score += 2;  // Staying put - acceptable
+            }
+        }
+
+        // Prefer stepwise motion
+        if (previousHarmonyNote >= 0) {
+            int absMovement = std::abs(candidate - previousHarmonyNote);
+            if (absMovement <= 2) {
+                score += 4;
+            } else if (absMovement <= 4) {
+                score += 2;
+            } else {
+                score -= (absMovement - 4);
+            }
+        }
+
+        // Prefer staying in correct register
+        bool candidateAbove = (candidate > inputNote);
+        if (candidateAbove == harmonyAbove) {
+            score += 2;
+        }
+
+        fallbackCandidates.append({candidate, score});
+    }
+
+    if (!fallbackCandidates.isEmpty()) {
+        std::sort(fallbackCandidates.begin(), fallbackCandidates.end(),
+                  [](const FallbackCandidate& a, const FallbackCandidate& b) { return a.score > b.score; });
+
+        int bestFallback = fallbackCandidates.first().note;
+        qDebug() << "ScaleSnap PARALLEL: Smart fallback selected" << bestFallback
+                 << "with score" << fallbackCandidates.first().score;
+        return bestFallback;
+    }
+
+    // Absolute last resort: use the raw parallel motion result clamped to range
+    qDebug() << "ScaleSnap PARALLEL: No chord tones in range, using clamped raw result";
+    return qBound(m_harmonyRangeMin, rawHarmonyNote, m_harmonyRangeMax);
 }
 
 int ScaleSnapProcessor::generateContraryHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove) const
@@ -1705,11 +2047,105 @@ int ScaleSnapProcessor::generateContraryHarmonyNote(int inputNote, int previousL
     }
 
     // =========================================================================
-    // FALLBACK: If no valid candidates, clamp previous to range
+    // SMART FALLBACK: Find best consonant chord tone maintaining melodic continuity
     // =========================================================================
+    // When range constraints prevent true contrary motion, we still want:
+    // 1. A consonant interval with the lead (prefer 3rds/6ths)
+    // 2. Melodic continuity - prefer continuing in the direction harmony was moving
+    // 3. Avoid random jumping back and forth
 
+    qDebug() << "ScaleSnap CONTRARY: Primary searches failed, using smart fallback";
+
+    // Determine the direction harmony was moving (for melodic continuity)
+    int harmonyDirection = 0;
+    if (previousHarmonyNote >= 0 && m_lastHarmonyOutputNote >= 0 &&
+        previousHarmonyNote != m_lastHarmonyOutputNote) {
+        // Use the direction from two notes ago to previous note
+        // (m_lastHarmonyOutputNote is actually the note before previousHarmonyNote was set)
+        harmonyDirection = (previousHarmonyNote > m_lastHarmonyOutputNote) ? 1 : -1;
+    } else {
+        // No history - default to contrary direction
+        harmonyDirection = harmonyDir;
+    }
+
+    // Search for any consonant chord tone within range
+    struct FallbackCandidate {
+        int note;
+        int score;
+    };
+    QVector<FallbackCandidate> fallbackCandidates;
+
+    // Search entire range for chord tones
+    for (int candidate = m_harmonyRangeMin; candidate <= m_harmonyRangeMax; ++candidate) {
+        int candidatePc = normalizePc(candidate);
+
+        // Must be a chord tone (T1) for fallback - ensures harmonic validity
+        if (!chordTones.contains(candidatePc)) continue;
+
+        // Check interval with lead
+        int intervalWithLead = getIntervalClass(inputNote, candidate);
+
+        // Must be consonant
+        if (!isConsonant(intervalWithLead)) continue;
+
+        // Score the candidate
+        int score = 0;
+
+        // Prefer imperfect consonances
+        if (isImperfectConsonance(intervalWithLead)) {
+            score += 10;
+        } else if (isPerfectConsonance(intervalWithLead)) {
+            score += 3;
+        }
+
+        // MELODIC CONTINUITY: Prefer notes in the direction harmony was moving
+        if (previousHarmonyNote >= 0) {
+            int movement = candidate - previousHarmonyNote;
+            if (harmonyDirection != 0) {
+                if ((movement > 0 && harmonyDirection > 0) || (movement < 0 && harmonyDirection < 0)) {
+                    // Same direction as harmony was moving - good for continuity
+                    score += 5;
+                } else if (movement == 0) {
+                    // Staying on same note - acceptable
+                    score += 2;
+                }
+                // Opposite direction gets no bonus (but not penalized heavily)
+            }
+
+            // Prefer stepwise motion
+            int absMovement = std::abs(movement);
+            if (absMovement <= 2) {
+                score += 4;
+            } else if (absMovement <= 4) {
+                score += 2;
+            } else {
+                score -= (absMovement - 4);  // Penalize large leaps
+            }
+        }
+
+        // Prefer staying in correct register relative to lead
+        bool isAboveLead = candidate > inputNote;
+        if (isAboveLead == harmonyAbove) {
+            score += 2;
+        }
+
+        fallbackCandidates.append({candidate, score});
+    }
+
+    if (!fallbackCandidates.isEmpty()) {
+        std::sort(fallbackCandidates.begin(), fallbackCandidates.end(),
+                  [](const FallbackCandidate& a, const FallbackCandidate& b) { return a.score > b.score; });
+
+        int bestFallback = fallbackCandidates.first().note;
+        qDebug() << "ScaleSnap CONTRARY: Smart fallback selected" << bestFallback
+                 << "with score" << fallbackCandidates.first().score
+                 << "(harmonyDirection was" << harmonyDirection << ")";
+        return bestFallback;
+    }
+
+    // Absolute last resort: clamp previous to range
     int fallback = qBound(m_harmonyRangeMin, previousHarmonyNote, m_harmonyRangeMax);
-    qDebug() << "ScaleSnap CONTRARY: No valid candidates, using clamped fallback" << fallback;
+    qDebug() << "ScaleSnap CONTRARY: No chord tones in range, using clamped fallback" << fallback;
     return fallback;
 }
 
@@ -1892,6 +2328,74 @@ int ScaleSnapProcessor::generateSimilarHarmonyNote(int inputNote, int previousLe
 
     qDebug() << "ScaleSnap SIMILAR: No valid similar motion candidates, falling back to contrary";
     return generateContraryHarmonyNote(inputNote, previousLeadNote, previousHarmonyNote, chordTones, validPcs, harmonyAbove);
+}
+
+int ScaleSnapProcessor::validateHarmonyNote(int harmonyNote, int leadNote, const ActiveChord& chord) const
+{
+    // =========================================================================
+    // FINAL HARMONY VALIDATION
+    // =========================================================================
+    // Ensures harmony note is harmonically valid (T1, T2, or T3 - not chromatic T4).
+    // This catches edge cases where generators return invalid notes from fallbacks.
+    //
+    // Music theory rationale:
+    // - T1 (chord tones): Always valid - the foundation of harmony
+    // - T2 (tensions): Valid in jazz/pop - add color (9th, 11th, 13th)
+    // - T3 (scale tones): Acceptable - diatonic, won't clash badly
+    // - T4 (chromatic): INVALID - outside scale, sounds wrong
+
+    if (harmonyNote < 0 || harmonyNote > 127) {
+        qDebug() << "ScaleSnap VALIDATE: harmony note" << harmonyNote << "out of MIDI range";
+        return qBound(0, harmonyNote, 127);
+    }
+
+    // Check if chord data is available
+    if (chord.tier1Absolute.empty()) {
+        // No chord data - can't validate, return as-is
+        qDebug() << "ScaleSnap VALIDATE: no chord data, passing through harmony" << harmonyNote;
+        return harmonyNote;
+    }
+
+    const int harmonyPc = normalizePc(harmonyNote);
+    const int tier = ChordOntology::instance().getTier(harmonyPc, chord);
+
+    // T1, T2, T3 are all acceptable
+    if (tier <= 3) {
+        qDebug() << "ScaleSnap VALIDATE: harmony" << harmonyNote << "(pc" << harmonyPc << ") tier=" << tier << "- OK";
+        return harmonyNote;
+    }
+
+    // T4 (chromatic) - snap to nearest T1 (chord tone)
+    qDebug() << "ScaleSnap VALIDATE: harmony" << harmonyNote << "(pc" << harmonyPc << ") is T4 (chromatic) - correcting";
+
+    int bestTarget = -1;
+    int bestDistance = 12;
+
+    // Find nearest T1 pitch class
+    for (int t1Pc : chord.tier1Absolute) {
+        int dist = ChordOntology::minDistance(harmonyPc, t1Pc);
+        if (dist < bestDistance) {
+            bestDistance = dist;
+            bestTarget = t1Pc;
+        }
+    }
+
+    if (bestTarget < 0) {
+        // Shouldn't happen if chord has T1, but fallback to root
+        qDebug() << "ScaleSnap VALIDATE: no T1 found, using chord root" << chord.rootPc;
+        bestTarget = chord.rootPc;
+    }
+
+    // Find the MIDI note with bestTarget pitch class, nearest to original harmony note
+    int correctedNote = ChordOntology::findNearestInOctave(harmonyNote, bestTarget);
+
+    // Ensure still within instrument range
+    correctedNote = qBound(m_harmonyRangeMin, correctedNote, m_harmonyRangeMax);
+
+    qDebug() << "ScaleSnap VALIDATE: corrected harmony" << harmonyNote << "->" << correctedNote
+             << "(T4 pc" << harmonyPc << "-> T1 pc" << bestTarget << ")";
+
+    return correctedNote;
 }
 
 void ScaleSnapProcessor::emitNoteOn(int channel, int note, int velocity)

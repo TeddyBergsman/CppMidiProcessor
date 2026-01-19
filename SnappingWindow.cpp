@@ -468,7 +468,7 @@ void SnappingWindow::updateHarmonyModeDescription()
         desc = "Harmony output is disabled. No notes are sent to harmony channels.";
         break;
     case playback::ScaleSnapProcessor::HarmonyModeCompat::SmartThirds:
-        desc = "Parallel motion: Harmony follows the lead melody direction (preferring 3rds and 5ths). Output on MIDI channel 12.";
+        desc = "Parallel motion: Both voices move together, maintaining a constant interval (3rd or 6th). Creates sweet, traditional harmony. Output on MIDI channel 12.";
         break;
     case playback::ScaleSnapProcessor::HarmonyModeCompat::Contrary:
         desc = "Contrary motion: Harmony moves opposite to lead melody direction. Output on MIDI channel 12.";

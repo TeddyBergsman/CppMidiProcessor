@@ -89,6 +89,11 @@ void ScaleSnapProcessor::setHarmonyModeCompat(HarmonyModeCompat mode)
                 newMode = HarmonyMode::SINGLE;
                 m_harmonyConfig.singleType = HarmonyType::CONTRARY;
                 break;
+            case HarmonyModeCompat::Similar:
+                // Similar motion - same direction, different intervals
+                newMode = HarmonyMode::SINGLE;
+                m_harmonyConfig.singleType = HarmonyType::SIMILAR;
+                break;
             case HarmonyModeCompat::Single:
                 newMode = HarmonyMode::SINGLE;
                 break;
@@ -649,6 +654,12 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
                 // Contrary motion uses consonance-aware algorithm
                 // Pass previous lead and harmony notes for parallel 5th/octave detection
                 active.harmonyNote = generateContraryHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
+                break;
+
+            case HarmonyModeCompat::Similar:
+                // Similar motion - both voices move same direction, different intervals
+                // Cannot approach perfect consonances (direct 5ths/octaves forbidden)
+                active.harmonyNote = generateSimilarHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
                 break;
 
             case HarmonyModeCompat::SmartThirds:
@@ -1700,6 +1711,187 @@ int ScaleSnapProcessor::generateContraryHarmonyNote(int inputNote, int previousL
     int fallback = qBound(m_harmonyRangeMin, previousHarmonyNote, m_harmonyRangeMax);
     qDebug() << "ScaleSnap CONTRARY: No valid candidates, using clamped fallback" << fallback;
     return fallback;
+}
+
+int ScaleSnapProcessor::generateSimilarHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove) const
+{
+    // =========================================================================
+    // SIMILAR MOTION (Species Counterpoint Rules)
+    // =========================================================================
+    //
+    // Similar motion: both voices move in the SAME direction, but by DIFFERENT intervals.
+    // The interval between them changes (unlike parallel motion where it stays the same).
+    //
+    // Rules:
+    // 1. OK for approaching IMPERFECT consonances (3rds, 6ths)
+    // 2. FORBIDDEN to approach perfect consonances (5ths, octaves) - "direct 5ths/octaves"
+    // 3. Prefer stepwise motion in harmony voice
+    // 4. Stay within instrument range
+    //
+    // Similar motion is less independent than contrary, but creates forward momentum.
+
+    // Helper lambda to check if a note is within instrument range
+    auto isInRange = [this](int note) {
+        return note >= m_harmonyRangeMin && note <= m_harmonyRangeMax;
+    };
+
+    // First note of phrase: start with an imperfect consonance (3rd or 6th)
+    if (previousHarmonyNote < 0 || previousLeadNote < 0) {
+        int direction = harmonyAbove ? 1 : -1;
+        static const int preferredIntervals[] = {3, 4, 8, 9};  // m3, M3, m6, M6 (imperfect only for similar)
+
+        const QSet<int>& validTones = validPcs.isEmpty() ? chordTones : validPcs;
+
+        for (int interval : preferredIntervals) {
+            int candidate = inputNote + (direction * interval);
+
+            for (int octaveShift = 0; octaveShift <= 2; ++octaveShift) {
+                int shifted = candidate + (octaveShift * 12 * direction);
+                int shiftedOpp = candidate - (octaveShift * 12 * direction);
+
+                for (int c : {shifted, shiftedOpp}) {
+                    if (c < 0 || c > 127) continue;
+                    if (!isInRange(c)) continue;
+
+                    int candidatePc = normalizePc(c);
+                    if (validTones.isEmpty() || validTones.contains(candidatePc)) {
+                        qDebug() << "ScaleSnap SIMILAR: PHRASE START - harmony at interval"
+                                 << interval << "=" << c << (harmonyAbove ? "(above)" : "(below)");
+                        return c;
+                    }
+                }
+            }
+        }
+
+        // Fallback
+        int fallback = inputNote + (direction * 4);
+        while (fallback < m_harmonyRangeMin && fallback + 12 <= 127) fallback += 12;
+        while (fallback > m_harmonyRangeMax && fallback - 12 >= 0) fallback -= 12;
+        fallback = qBound(m_harmonyRangeMin, fallback, m_harmonyRangeMax);
+        return fallback;
+    }
+
+    // Calculate lead movement
+    int leadMovement = inputNote - previousLeadNote;
+
+    // No lead movement = use oblique motion (harmony stays)
+    if (leadMovement == 0) {
+        if (isInRange(previousHarmonyNote)) {
+            qDebug() << "ScaleSnap SIMILAR: no lead movement, keeping harmony at" << previousHarmonyNote;
+            return previousHarmonyNote;
+        }
+    }
+
+    // SIMILAR motion: harmony moves in the SAME direction as lead
+    int harmonyDir = (leadMovement > 0) ? 1 : -1;
+
+    qDebug() << "ScaleSnap SIMILAR: lead moved" << leadMovement
+             << ", harmony should also move" << (harmonyDir > 0 ? "UP" : "DOWN")
+             << "(range:" << m_harmonyRangeMin << "-" << m_harmonyRangeMax << ")";
+
+    // =========================================================================
+    // CANDIDATE SEARCH
+    // =========================================================================
+
+    const QSet<int>& validTones = validPcs.isEmpty() ? chordTones : validPcs;
+
+    struct Candidate {
+        int note;
+        int score;
+    };
+    QVector<Candidate> candidates;
+
+    // Search in the same direction as lead
+    for (int delta = 1; delta <= 24; ++delta) {
+        int candidateNote = previousHarmonyNote + (delta * harmonyDir);
+
+        if (candidateNote < 0 || candidateNote > 127) continue;
+        if (!isInRange(candidateNote)) continue;
+
+        int candidatePc = normalizePc(candidateNote);
+        if (!validTones.isEmpty() && !validTones.contains(candidatePc)) continue;
+
+        // Check the interval with lead
+        int intervalWithLead = getIntervalClass(inputNote, candidateNote);
+
+        // Skip dissonant intervals
+        if (!isConsonant(intervalWithLead)) continue;
+
+        // =====================================================================
+        // CRITICAL: Similar motion to PERFECT consonances is FORBIDDEN
+        // =====================================================================
+        if (isPerfectConsonance(intervalWithLead)) {
+            qDebug() << "ScaleSnap SIMILAR: REJECTING candidate" << candidateNote
+                     << "- similar motion to perfect consonance (direct 5th/octave)";
+            continue;
+        }
+
+        // Check for parallel 5ths/octaves (still forbidden)
+        if (wouldCreateParallelPerfect(previousLeadNote, previousHarmonyNote, inputNote, candidateNote)) {
+            qDebug() << "ScaleSnap SIMILAR: REJECTING candidate" << candidateNote
+                     << "- would create parallel 5ths/octaves";
+            continue;
+        }
+
+        // =====================================================================
+        // SCORING
+        // =====================================================================
+        int score = 0;
+
+        // Imperfect consonances are the only valid targets for similar motion
+        if (isImperfectConsonance(intervalWithLead)) {
+            score += 10;
+        }
+
+        // Prefer stepwise motion
+        if (delta <= 2) {
+            score += 8;
+        } else if (delta <= 4) {
+            score += 4;
+        } else {
+            score -= (delta - 4);
+        }
+
+        // Prefer correct register
+        bool isAboveLead = candidateNote > inputNote;
+        if (isAboveLead == harmonyAbove) {
+            score += 2;
+        }
+
+        // Bonus for chord tones
+        if (chordTones.contains(candidatePc)) {
+            score += 3;
+        }
+
+        candidates.append({candidateNote, score});
+    }
+
+    // =========================================================================
+    // SELECT BEST CANDIDATE
+    // =========================================================================
+
+    if (!candidates.isEmpty()) {
+        std::sort(candidates.begin(), candidates.end(),
+                  [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
+
+        int bestNote = candidates.first().note;
+        int bestScore = candidates.first().score;
+
+        qDebug() << "ScaleSnap SIMILAR: Selected harmony" << bestNote
+                 << "with score" << bestScore
+                 << "(interval with lead:" << getIntervalClass(inputNote, bestNote) << ")";
+
+        return bestNote;
+    }
+
+    // =========================================================================
+    // FALLBACK: If no valid similar motion candidates, try contrary motion
+    // =========================================================================
+    // Similar motion is more restricted (can't approach perfect consonances),
+    // so fall back to contrary motion which has more options.
+
+    qDebug() << "ScaleSnap SIMILAR: No valid similar motion candidates, falling back to contrary";
+    return generateContraryHarmonyNote(inputNote, previousLeadNote, previousHarmonyNote, chordTones, validPcs, harmonyAbove);
 }
 
 void ScaleSnapProcessor::emitNoteOn(int channel, int note, int velocity)

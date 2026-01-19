@@ -126,7 +126,8 @@ enum class HarmonyMode {
 
 // Harmony generation types (for Single and Pre-Planned modes)
 enum class HarmonyType {
-    PARALLEL,       // Same direction, diatonic interval
+    PARALLEL,       // Same direction, same interval (3rds/6ths only)
+    SIMILAR,        // Same direction, different intervals (cannot approach perfect consonances)
     CONTRARY,       // Opposite direction movement
     OBLIQUE,        // Pedal tone held while lead moves
     CONVERGENT,     // Voices move toward unison

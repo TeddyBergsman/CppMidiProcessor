@@ -62,6 +62,7 @@ public:
         SmartThirds,         // Parallel motion - harmony follows lead direction (3rds/5ths)
         Contrary,            // Contrary motion - harmony moves opposite to lead direction
         Similar,             // Similar motion - same direction, different intervals (no perfect consonances)
+        Oblique,             // Oblique motion - harmony holds pedal tone while lead moves
         Single,              // User-selected harmony type
         PrePlanned,          // Automatic phrase-based selection
         Voice                // Vocal MIDI as harmony source
@@ -196,6 +197,7 @@ private:
     int generateParallelHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove = false) const;
     int generateContraryHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove = false) const;
     int generateSimilarHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove = false) const;
+    int generateObliqueHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove = false) const;
 
     // Final validation: ensures harmony note is T1, T2, or T3 (not chromatic T4)
     // If T4, snaps to nearest T1 (chord tone). Returns validated MIDI note.

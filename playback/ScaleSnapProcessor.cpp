@@ -94,6 +94,11 @@ void ScaleSnapProcessor::setHarmonyModeCompat(HarmonyModeCompat mode)
                 newMode = HarmonyMode::SINGLE;
                 m_harmonyConfig.singleType = HarmonyType::SIMILAR;
                 break;
+            case HarmonyModeCompat::Oblique:
+                // Oblique motion - pedal tone held while lead moves
+                newMode = HarmonyMode::SINGLE;
+                m_harmonyConfig.singleType = HarmonyType::OBLIQUE;
+                break;
             case HarmonyModeCompat::Single:
                 newMode = HarmonyMode::SINGLE;
                 break;
@@ -665,6 +670,12 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
                 // Similar motion - both voices move same direction, different intervals
                 // Cannot approach perfect consonances (direct 5ths/octaves forbidden)
                 active.harmonyNote = generateSimilarHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
+                break;
+
+            case HarmonyModeCompat::Oblique:
+                // Oblique motion - harmony holds pedal tone while lead moves
+                // Creates stability/anchoring effect; moves only when pedal becomes invalid
+                active.harmonyNote = generateObliqueHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
                 break;
 
             case HarmonyModeCompat::SmartThirds:
@@ -1413,6 +1424,19 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
 
                     case HarmonyModeCompat::Similar:
                         newHarmony = generateSimilarHarmonyNote(
+                            currentLeadNote,
+                            m_lastHarmonyLeadNote,
+                            m_lastHarmonyOutputNote,
+                            chordTones,
+                            validPcs,
+                            false
+                        );
+                        break;
+
+                    case HarmonyModeCompat::Oblique:
+                        // Oblique motion re-conform: the pedal may need to move if it's
+                        // no longer valid against the new chord
+                        newHarmony = generateObliqueHarmonyNote(
                             currentLeadNote,
                             m_lastHarmonyLeadNote,
                             m_lastHarmonyOutputNote,
@@ -2328,6 +2352,241 @@ int ScaleSnapProcessor::generateSimilarHarmonyNote(int inputNote, int previousLe
 
     qDebug() << "ScaleSnap SIMILAR: No valid similar motion candidates, falling back to contrary";
     return generateContraryHarmonyNote(inputNote, previousLeadNote, previousHarmonyNote, chordTones, validPcs, harmonyAbove);
+}
+
+int ScaleSnapProcessor::generateObliqueHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove) const
+{
+    // =========================================================================
+    // OBLIQUE MOTION (Species Counterpoint / Pedal Point)
+    // =========================================================================
+    //
+    // Oblique motion: one voice remains stationary (the "pedal point") while
+    // the other voice moves. This creates:
+    // - A sense of stability and anchoring from the held note
+    // - Tension and release as the moving voice creates consonances/dissonances
+    // - Voice independence similar to contrary motion
+    //
+    // Rules (from species counterpoint):
+    // 1. Perfect consonances (P5, P8) can be approached by oblique motion
+    // 2. Pedal should begin on a consonance (ideally chord tone)
+    // 3. Pedal can "ride through" dissonance but should resolve
+    // 4. Best pedal notes: tonic (root) and dominant (5th)
+    //
+    // When to HOLD:
+    // - When the held note is still T1 (chord tone) or T2 (tension)
+    // - When the interval with lead is not extremely dissonant (m2/M7)
+    //
+    // When to MOVE (select new pedal):
+    // - When held note becomes T4 (chromatic) against new chord
+    // - When it creates a minor 2nd with the lead (too harsh)
+    // - At phrase boundaries (large leaps)
+
+    // Helper lambda to check if a note is within instrument range
+    auto isInRange = [this](int note) {
+        return note >= m_harmonyRangeMin && note <= m_harmonyRangeMax;
+    };
+
+    // =========================================================================
+    // FIRST NOTE: Select initial pedal note
+    // =========================================================================
+    if (previousHarmonyNote < 0) {
+        // Prefer root (tonic) or 5th (dominant) of the chord
+        // These create the strongest, most stable pedal points
+
+        int direction = harmonyAbove ? 1 : -1;
+
+        // Try to find root or 5th as pedal
+        int rootNote = -1;
+        int fifthNote = -1;
+        int thirdNote = -1;
+
+        // Search for chord tones in the target register
+        for (int octave = 0; octave <= 10; ++octave) {
+            for (int chordPc : chordTones) {
+                int candidate = chordPc + (octave * 12);
+                if (!isInRange(candidate)) continue;
+
+                // Check position relative to lead
+                bool aboveLead = candidate > inputNote;
+                if (aboveLead != harmonyAbove) continue;
+
+                // Check interval - prefer consonant intervals
+                int interval = getIntervalClass(inputNote, candidate);
+                if (interval == 1 || interval == 11) continue;  // Avoid m2/M7
+
+                // Identify root and 5th (root is first in tier1, 5th is typically 7 semitones above root)
+                // We'll use the fact that tier1 contains chord tones
+                if (rootNote < 0) rootNote = candidate;
+
+                // Check for 5th relationship
+                int rootPc = *chordTones.begin();  // First chord tone is typically root
+                int intervalFromRoot = (chordPc - rootPc + 12) % 12;
+                if (intervalFromRoot == 7 && fifthNote < 0) fifthNote = candidate;
+                if ((intervalFromRoot == 3 || intervalFromRoot == 4) && thirdNote < 0) thirdNote = candidate;
+            }
+        }
+
+        // Prefer: root > 5th > 3rd > any chord tone
+        int pedalNote = -1;
+        if (rootNote >= 0) {
+            pedalNote = rootNote;
+            qDebug() << "ScaleSnap OBLIQUE: PHRASE START - pedal on ROOT" << pedalNote;
+        } else if (fifthNote >= 0) {
+            pedalNote = fifthNote;
+            qDebug() << "ScaleSnap OBLIQUE: PHRASE START - pedal on 5TH" << pedalNote;
+        } else if (thirdNote >= 0) {
+            pedalNote = thirdNote;
+            qDebug() << "ScaleSnap OBLIQUE: PHRASE START - pedal on 3RD" << pedalNote;
+        } else {
+            // Fallback: use any interval that works
+            int baseInterval = harmonyAbove ? 4 : -3;  // M3 above or m3 below
+            pedalNote = inputNote + baseInterval;
+            while (pedalNote < m_harmonyRangeMin && pedalNote + 12 <= 127) pedalNote += 12;
+            while (pedalNote > m_harmonyRangeMax && pedalNote - 12 >= 0) pedalNote -= 12;
+            pedalNote = qBound(m_harmonyRangeMin, pedalNote, m_harmonyRangeMax);
+            qDebug() << "ScaleSnap OBLIQUE: PHRASE START - fallback pedal" << pedalNote;
+        }
+
+        return pedalNote;
+    }
+
+    // =========================================================================
+    // CHECK IF WE SHOULD HOLD THE CURRENT PEDAL
+    // =========================================================================
+
+    int pedalPc = normalizePc(previousHarmonyNote);
+    bool isChordTone = chordTones.contains(pedalPc);
+    bool isScaleTone = validPcs.contains(pedalPc);
+    int intervalWithLead = getIntervalClass(inputNote, previousHarmonyNote);
+
+    // Check for extremely harsh intervals (minor 2nd = 1 semitone, major 7th = 11 semitones)
+    bool isHarshInterval = (intervalWithLead == 1 || intervalWithLead == 11);
+
+    // Detect phrase boundary (large leap in lead suggests new musical phrase)
+    int leadMovement = std::abs(inputNote - previousLeadNote);
+    bool isPhraseBreak = (leadMovement > 7);  // More than a 5th suggests phrase break
+
+    qDebug() << "ScaleSnap OBLIQUE: pedal=" << previousHarmonyNote << "(pc" << pedalPc << ")"
+             << "isChordTone=" << isChordTone << "isScaleTone=" << isScaleTone
+             << "intervalWithLead=" << intervalWithLead << "isHarsh=" << isHarshInterval
+             << "leadMovement=" << leadMovement << "isPhraseBreak=" << isPhraseBreak;
+
+    bool shouldHold = false;
+
+    if (isChordTone) {
+        // Chord tones make excellent pedals - hold unless interval is too harsh
+        // Even mild dissonance is OK for pedal points (they "ride through")
+        shouldHold = !isHarshInterval && !isPhraseBreak;
+
+        if (shouldHold) {
+            qDebug() << "ScaleSnap OBLIQUE: HOLDING chord tone pedal" << previousHarmonyNote;
+        }
+    } else if (isScaleTone) {
+        // Scale tones can hold if consonant with lead
+        // More restrictive than chord tones
+        shouldHold = isConsonant(intervalWithLead) && !isPhraseBreak;
+
+        if (shouldHold) {
+            qDebug() << "ScaleSnap OBLIQUE: HOLDING scale tone pedal" << previousHarmonyNote;
+        }
+    }
+    // Chromatic (T4) notes should always move - they become "wrong notes"
+
+    // Check range - can't hold if pedal is now out of range
+    if (!isInRange(previousHarmonyNote)) {
+        shouldHold = false;
+        qDebug() << "ScaleSnap OBLIQUE: pedal out of range, must move";
+    }
+
+    // =========================================================================
+    // HOLD: Return the same pedal note
+    // =========================================================================
+    if (shouldHold) {
+        return previousHarmonyNote;
+    }
+
+    // =========================================================================
+    // MOVE: Select a new pedal note
+    // =========================================================================
+    // When we need to move, prefer:
+    // 1. Root of current chord (tonic pedal)
+    // 2. 5th of current chord (dominant pedal)
+    // 3. Smooth voice leading from previous pedal (stepwise if possible)
+
+    qDebug() << "ScaleSnap OBLIQUE: selecting new pedal note";
+
+    struct PedalCandidate {
+        int note;
+        int score;
+    };
+    QVector<PedalCandidate> candidates;
+
+    // Search chord tones within range
+    for (int octave = 0; octave <= 10; ++octave) {
+        for (int chordPc : chordTones) {
+            int candidate = chordPc + (octave * 12);
+            if (candidate < 0 || candidate > 127) continue;
+            if (!isInRange(candidate)) continue;
+
+            // Check position relative to lead
+            bool aboveLead = candidate > inputNote;
+            if (aboveLead != harmonyAbove) continue;
+
+            // Check interval with lead
+            int interval = getIntervalClass(inputNote, candidate);
+            if (interval == 1 || interval == 11) continue;  // Avoid m2/M7
+
+            int score = 0;
+
+            // Prefer consonant intervals
+            if (isImperfectConsonance(interval)) {
+                score += 10;  // 3rds/6ths - sweet harmony
+            } else if (isPerfectConsonance(interval)) {
+                score += 8;   // 5ths/octaves - stable but less colorful
+            } else {
+                score += 2;   // Dissonant but not harsh - pedal can "ride through"
+            }
+
+            // Prefer root and 5th for pedal stability
+            int rootPc = *chordTones.begin();
+            int intervalFromRoot = (chordPc - rootPc + 12) % 12;
+            if (intervalFromRoot == 0) {
+                score += 6;  // Root - most stable pedal
+            } else if (intervalFromRoot == 7) {
+                score += 4;  // 5th - second most stable
+            }
+
+            // Prefer smooth voice leading from previous pedal
+            int movement = std::abs(candidate - previousHarmonyNote);
+            if (movement == 0) {
+                score += 5;  // Same note - most stable (oblique!)
+            } else if (movement <= 2) {
+                score += 4;  // Stepwise - smooth
+            } else if (movement <= 4) {
+                score += 2;  // Small leap - OK
+            } else {
+                score -= (movement - 4);  // Large leap - less desirable
+            }
+
+            candidates.append({candidate, score});
+        }
+    }
+
+    if (!candidates.isEmpty()) {
+        std::sort(candidates.begin(), candidates.end(),
+                  [](const PedalCandidate& a, const PedalCandidate& b) { return a.score > b.score; });
+
+        int bestPedal = candidates.first().note;
+        qDebug() << "ScaleSnap OBLIQUE: new pedal" << bestPedal
+                 << "with score" << candidates.first().score;
+        return bestPedal;
+    }
+
+    // =========================================================================
+    // FALLBACK: Use parallel motion if no good pedal found
+    // =========================================================================
+    qDebug() << "ScaleSnap OBLIQUE: no valid pedal found, falling back to parallel";
+    return generateParallelHarmonyNote(inputNote, previousLeadNote, previousHarmonyNote, chordTones, validPcs, harmonyAbove);
 }
 
 int ScaleSnapProcessor::validateHarmonyNote(int harmonyNote, int leadNote, const ActiveChord& chord) const

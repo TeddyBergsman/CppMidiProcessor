@@ -153,6 +153,7 @@ void SnappingWindow::buildUi()
     m_harmonyModeCombo->addItem("Smart Thirds", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::SmartThirds));
     m_harmonyModeCombo->addItem("Contrary", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Contrary));
     m_harmonyModeCombo->addItem("Similar", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Similar));
+    m_harmonyModeCombo->addItem("Oblique", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Oblique));
     m_harmonyModeCombo->setMinimumWidth(180);
 
     harmonyComboRow->addWidget(harmonyLabel);
@@ -475,6 +476,9 @@ void SnappingWindow::updateHarmonyModeDescription()
         break;
     case playback::ScaleSnapProcessor::HarmonyModeCompat::Similar:
         desc = "Similar motion: Both voices move in the same direction but by different intervals. Cannot approach perfect 5ths/octaves (direct 5ths forbidden). Output on MIDI channel 12.";
+        break;
+    case playback::ScaleSnapProcessor::HarmonyModeCompat::Oblique:
+        desc = "Oblique motion: Harmony holds a pedal tone (root or 5th) while lead moves freely. Creates anchoring/stability effect. Pedal moves only when it becomes invalid against the chord. Output on MIDI channel 12.";
         break;
     case playback::ScaleSnapProcessor::HarmonyModeCompat::Single:
         desc = "User-selected harmony type (Parallel, Contrary, etc.). Output on MIDI channels 12-15.";

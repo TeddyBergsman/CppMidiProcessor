@@ -75,6 +75,10 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
             m_vibratoCorrectionCheckbox->setChecked(snap->vibratoCorrectionEnabled());
         }
 
+        if (m_harmonyVibratoCheckbox) {
+            m_harmonyVibratoCheckbox->setChecked(snap->harmonyVibratoEnabled());
+        }
+
         if (m_voiceSustainCheckbox) {
             m_voiceSustainCheckbox->setChecked(snap->voiceSustainEnabled());
         }
@@ -94,6 +98,9 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
                 Qt::UniqueConnection);
         connect(snap, &playback::ScaleSnapProcessor::vibratoCorrectionEnabledChanged,
                 this, &SnappingWindow::onEngineVibratoCorrectionChanged,
+                Qt::UniqueConnection);
+        connect(snap, &playback::ScaleSnapProcessor::harmonyVibratoEnabledChanged,
+                this, &SnappingWindow::onEngineHarmonyVibratoChanged,
                 Qt::UniqueConnection);
         connect(snap, &playback::ScaleSnapProcessor::voiceSustainEnabledChanged,
                 this, &SnappingWindow::onEngineVoiceSustainChanged,
@@ -285,6 +292,11 @@ void SnappingWindow::buildUi()
     m_vibratoCorrectionCheckbox->setToolTip("Filters out pitch drift from the voice signal, keeping only the vibrato oscillation.\nThis keeps the output perfectly centered around the guitar note, even if you sing slightly flat or sharp.");
     mainLayout->addWidget(m_vibratoCorrectionCheckbox);
 
+    // Harmony vibrato checkbox
+    m_harmonyVibratoCheckbox = new QCheckBox("Harmony Vibrato", central);
+    m_harmonyVibratoCheckbox->setToolTip("Apply vocal vibrato pitch bend to harmony voices.\nWhen disabled (default), harmony voices stay at a fixed pitch without vibrato wobble.");
+    mainLayout->addWidget(m_harmonyVibratoCheckbox);
+
     // Voice sustain checkbox
     m_voiceSustainCheckbox = new QCheckBox("Voice Sustain", central);
     m_voiceSustainCheckbox->setToolTip("Sustain guitar notes for as long as you're singing (CC2 active).\nNotes ring out even after the guitar string stops, allowing longer sustained tones controlled by your voice.");
@@ -301,6 +313,8 @@ void SnappingWindow::buildUi()
             this, &SnappingWindow::onVocalVibratoRangeChanged);
     connect(m_vibratoCorrectionCheckbox, &QCheckBox::toggled,
             this, &SnappingWindow::onVibratoCorrectionToggled);
+    connect(m_harmonyVibratoCheckbox, &QCheckBox::toggled,
+            this, &SnappingWindow::onHarmonyVibratoToggled);
     connect(m_voiceSustainCheckbox, &QCheckBox::toggled,
             this, &SnappingWindow::onVoiceSustainToggled);
 
@@ -381,6 +395,16 @@ void SnappingWindow::onVibratoCorrectionToggled(bool checked)
     }
 }
 
+void SnappingWindow::onHarmonyVibratoToggled(bool checked)
+{
+    if (!m_engine) return;
+
+    auto* snap = m_engine->scaleSnapProcessor();
+    if (snap) {
+        snap->setHarmonyVibratoEnabled(checked);
+    }
+}
+
 void SnappingWindow::onVoiceSustainToggled(bool checked)
 {
     if (!m_engine) return;
@@ -454,6 +478,17 @@ void SnappingWindow::onEngineVibratoCorrectionChanged(bool enabled)
         m_vibratoCorrectionCheckbox->blockSignals(true);
         m_vibratoCorrectionCheckbox->setChecked(enabled);
         m_vibratoCorrectionCheckbox->blockSignals(false);
+    }
+}
+
+void SnappingWindow::onEngineHarmonyVibratoChanged(bool enabled)
+{
+    if (!m_harmonyVibratoCheckbox) return;
+
+    if (m_harmonyVibratoCheckbox->isChecked() != enabled) {
+        m_harmonyVibratoCheckbox->blockSignals(true);
+        m_harmonyVibratoCheckbox->setChecked(enabled);
+        m_harmonyVibratoCheckbox->blockSignals(false);
     }
 }
 

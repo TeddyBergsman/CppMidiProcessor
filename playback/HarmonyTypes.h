@@ -157,6 +157,33 @@ struct HarmonyVoice {
 };
 
 // ============================================================================
+// Phase 5: Multi-Voice Configuration Types
+// ============================================================================
+
+// Motion type for each harmony voice (matches HarmonyModeCompat in ScaleSnapProcessor)
+enum class VoiceMotionType {
+    OFF,         // Voice disabled
+    PARALLEL,    // Parallel motion (Smart Thirds)
+    CONTRARY,    // Contrary motion
+    SIMILAR,     // Similar motion
+    OBLIQUE      // Oblique/pedal motion
+};
+
+// Per-voice configuration for multi-voice harmony
+struct HarmonyVoiceConfig {
+    VoiceMotionType motionType = VoiceMotionType::OFF;
+    int rangeMin = 0;                  // Instrument range minimum (MIDI note)
+    int rangeMax = 127;                // Instrument range maximum (MIDI note)
+
+    // Runtime state (not persisted)
+    int lastOutputNote = -1;           // Last harmony note output
+    int lastLeadNote = -1;             // Lead note when last harmony was generated
+
+    // Helper: is this voice enabled?
+    bool isEnabled() const { return motionType != VoiceMotionType::OFF; }
+};
+
+// ============================================================================
 // Phase 6: Pre-Planned Mode Types
 // ============================================================================
 

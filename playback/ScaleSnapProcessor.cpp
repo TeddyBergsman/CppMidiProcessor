@@ -211,6 +211,64 @@ void ScaleSnapProcessor::setHarmonyRange(int minNote, int maxNote)
     qDebug() << "ScaleSnap: Harmony range set to" << minNote << "-" << maxNote;
 }
 
+const HarmonyVoiceConfig& ScaleSnapProcessor::voiceConfig(int voiceIndex) const
+{
+    static HarmonyVoiceConfig defaultConfig;
+    if (voiceIndex < 0 || voiceIndex >= 4) {
+        qWarning() << "ScaleSnap: Invalid voice index" << voiceIndex;
+        return defaultConfig;
+    }
+    return m_voiceConfigs[voiceIndex];
+}
+
+void ScaleSnapProcessor::setVoiceConfig(int voiceIndex, const HarmonyVoiceConfig& config)
+{
+    if (voiceIndex < 0 || voiceIndex >= 4) {
+        qWarning() << "ScaleSnap: Invalid voice index" << voiceIndex;
+        return;
+    }
+    m_voiceConfigs[voiceIndex] = config;
+    qDebug() << "ScaleSnap: Voice" << voiceIndex << "config set - motion:"
+             << static_cast<int>(config.motionType) << "range:" << config.rangeMin << "-" << config.rangeMax;
+}
+
+void ScaleSnapProcessor::setVoiceMotionType(int voiceIndex, VoiceMotionType type)
+{
+    if (voiceIndex < 0 || voiceIndex >= 4) {
+        qWarning() << "ScaleSnap: Invalid voice index" << voiceIndex;
+        return;
+    }
+    m_voiceConfigs[voiceIndex].motionType = type;
+    qDebug() << "ScaleSnap: Voice" << voiceIndex << "motion type set to" << static_cast<int>(type);
+}
+
+void ScaleSnapProcessor::setVoiceRange(int voiceIndex, int minNote, int maxNote)
+{
+    if (voiceIndex < 0 || voiceIndex >= 4) {
+        qWarning() << "ScaleSnap: Invalid voice index" << voiceIndex;
+        return;
+    }
+    // Validate and clamp
+    minNote = qBound(0, minNote, 127);
+    maxNote = qBound(0, maxNote, 127);
+    if (minNote > maxNote) {
+        std::swap(minNote, maxNote);
+    }
+    m_voiceConfigs[voiceIndex].rangeMin = minNote;
+    m_voiceConfigs[voiceIndex].rangeMax = maxNote;
+    qDebug() << "ScaleSnap: Voice" << voiceIndex << "range set to" << minNote << "-" << maxNote;
+}
+
+bool ScaleSnapProcessor::isMultiVoiceModeActive() const
+{
+    for (int i = 0; i < 4; ++i) {
+        if (m_voiceConfigs[i].isEnabled()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
 {
     if (m_currentCellIndex == cellIndex) {
@@ -223,8 +281,11 @@ void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
     // Check if chord changed and re-conform any active notes
     // This applies to BOTH lead conformance AND harmony - harmony notes need
     // to be re-validated when chords change, regardless of lead mode!
+    // Also applies to multi-voice mode where each voice needs re-conformance.
+    const bool multiVoiceActive = isMultiVoiceModeActive();
+    const bool legacyHarmonyActive = !multiVoiceActive && (m_harmonyMode != HarmonyMode::OFF);
     bool needsReconform = !m_activeNotes.isEmpty() &&
-                          (m_leadMode == LeadMode::Conformed || m_harmonyMode != HarmonyMode::OFF);
+                          (m_leadMode == LeadMode::Conformed || multiVoiceActive || legacyHarmonyActive);
 
     if (needsReconform) {
         checkAndReconformOnChordChange(previousCellIndex);
@@ -626,9 +687,14 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
     }
 
     // === HARMONY MODE (Channels 12-15) ===
-    if (m_harmonyMode != HarmonyMode::OFF) {
-        qDebug() << "ScaleSnap: HARMONY MODE IS ACTIVE - generating harmony for lead note" << midiNote
-                 << "harmonyModeCompat=" << static_cast<int>(m_harmonyModeCompat);
+    // Multi-voice mode: each voice has its own motion type and range
+    // Legacy mode: single harmony on channel 12 (when m_harmonyMode != OFF)
+    const bool multiVoiceActive = isMultiVoiceModeActive();
+    const bool legacyHarmonyActive = !multiVoiceActive && (m_harmonyMode != HarmonyMode::OFF);
+
+    if (multiVoiceActive || legacyHarmonyActive) {
+        qDebug() << "ScaleSnap: HARMONY MODE IS ACTIVE - multiVoice:" << multiVoiceActive
+                 << "legacy:" << legacyHarmonyActive << "lead note:" << midiNote;
         const QSet<int> chordTones = computeChordTones(m_lastKnownChord);
         qDebug() << "ScaleSnap Harmony: chordTones=" << chordTones << "validPcs=" << validPcs;
 
@@ -643,65 +709,111 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
             qint64 silenceDuration = currentTime - m_lastGuitarNoteOffTimestamp;
             qDebug() << "ScaleSnap CONTRARY: was silent for" << silenceDuration << "ms (threshold=" << kPhraseTimeoutMs << ")";
             if (silenceDuration > kPhraseTimeoutMs) {
-                // New phrase! Reset contrary motion tracking
+                // New phrase! Reset contrary motion tracking for legacy mode
                 qDebug() << "ScaleSnap CONTRARY: NEW PHRASE detected after" << silenceDuration << "ms silence";
                 m_lastHarmonyLeadNote = -1;
                 m_lastHarmonyOutputNote = -1;
                 m_leadMelodyDirection = 0;
+                // Reset multi-voice state
+                for (int i = 0; i < 4; ++i) {
+                    m_voiceConfigs[i].lastLeadNote = -1;
+                    m_voiceConfigs[i].lastOutputNote = -1;
+                }
             }
         }
         // We're now holding a guitar note
         m_guitarNotesHeld++;
         m_lastGuitarNoteOffTimestamp = 0;  // Clear since we're playing
 
-        // Store previous lead note before updating (needed for contrary motion)
-        int previousLeadNote = m_lastHarmonyLeadNote;
-        m_lastHarmonyLeadNote = midiNote;
-
-        // Generate harmony based on harmony mode
-        switch (m_harmonyModeCompat) {
-            case HarmonyModeCompat::Contrary:
-                // Contrary motion uses consonance-aware algorithm
-                // Pass previous lead and harmony notes for parallel 5th/octave detection
-                active.harmonyNote = generateContraryHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
-                break;
-
-            case HarmonyModeCompat::Similar:
-                // Similar motion - both voices move same direction, different intervals
-                // Cannot approach perfect consonances (direct 5ths/octaves forbidden)
-                active.harmonyNote = generateSimilarHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
-                break;
-
-            case HarmonyModeCompat::Oblique:
-                // Oblique motion - harmony holds pedal tone while lead moves
-                // Creates stability/anchoring effect; moves only when pedal becomes invalid
-                active.harmonyNote = generateObliqueHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
-                break;
-
-            case HarmonyModeCompat::SmartThirds:
-            default:
-                // Parallel motion - both voices move same direction, same interval
-                // Maintains constant interval (3rd or 6th) between lead and harmony
-                active.harmonyNote = generateParallelHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
-                break;
-        }
-
-        // FINAL VALIDATION: Ensure harmony note is T1/T2/T3 (not chromatic T4)
-        // This catches edge cases from generator fallbacks that could return invalid notes
+        // Build active chord for validation
         ActiveChord activeChord = buildActiveChord();
-        active.harmonyNote = validateHarmonyNote(active.harmonyNote, midiNote, activeChord);
-
-        // Track the harmony output for next iteration (used by CONTRARY mode)
-        m_lastHarmonyOutputNote = active.harmonyNote;
-
-        qDebug() << "ScaleSnap Harmony: INPUT" << midiNote << "-> HARMONY" << active.harmonyNote;
 
         // Apply harmony velocity scaling
         int harmonyVelocity = static_cast<int>(velocity * m_harmonyConfig.velocityRatio);
         harmonyVelocity = qBound(1, harmonyVelocity, 127);
 
-        if (active.harmonyNote >= 0 && active.harmonyNote <= 127) {
-            emitNoteOn(kChannelHarmony1, active.harmonyNote, harmonyVelocity);
+        if (multiVoiceActive) {
+            // MULTI-VOICE MODE: Generate harmony for each enabled voice
+            // Each voice checks against previously generated voices to avoid clashing intervals
+            static const int kHarmonyChannels[4] = {kChannelHarmony1, kChannelHarmony2, kChannelHarmony3, kChannelHarmony4};
+
+            // Collect already-generated harmony notes to pass to subsequent voices
+            QVector<int> generatedHarmonyNotes;
+            generatedHarmonyNotes.append(midiNote);  // Include lead note to avoid clashes with it too
+
+            for (int voiceIdx = 0; voiceIdx < 4; ++voiceIdx) {
+                if (!m_voiceConfigs[voiceIdx].isEnabled()) {
+                    active.harmonyNotes[voiceIdx] = -1;
+                    continue;
+                }
+
+                // Generate harmony for this voice, passing already-generated notes for clash avoidance
+                int harmonyNote = generateHarmonyForVoice(voiceIdx, midiNote, chordTones, validPcs, generatedHarmonyNotes);
+
+                // Validate (ensure not chromatic T4)
+                if (harmonyNote >= 0) {
+                    harmonyNote = validateHarmonyNote(harmonyNote, midiNote, activeChord);
+                }
+
+                active.harmonyNotes[voiceIdx] = harmonyNote;
+
+                // Add this voice's harmony note to the list for subsequent voices to check against
+                if (harmonyNote >= 0) {
+                    generatedHarmonyNotes.append(harmonyNote);
+                }
+
+                // Update voice tracking state
+                m_voiceConfigs[voiceIdx].lastLeadNote = midiNote;
+                m_voiceConfigs[voiceIdx].lastOutputNote = harmonyNote;
+
+                qDebug() << "ScaleSnap Multi-Voice" << voiceIdx << ":" << midiNote << "->" << harmonyNote
+                         << "ch" << kHarmonyChannels[voiceIdx];
+
+                // Emit the harmony note
+                if (harmonyNote >= 0 && harmonyNote <= 127) {
+                    emitNoteOn(kHarmonyChannels[voiceIdx], harmonyNote, harmonyVelocity);
+                }
+            }
+
+            // Keep legacy field in sync (use voice 0's note if enabled)
+            active.harmonyNote = active.harmonyNotes[0];
+        } else {
+            // LEGACY SINGLE-VOICE MODE: Generate harmony based on harmony mode compat
+            // Store previous lead note before updating (needed for contrary motion)
+            int previousLeadNote = m_lastHarmonyLeadNote;
+            m_lastHarmonyLeadNote = midiNote;
+
+            // Generate harmony based on harmony mode
+            switch (m_harmonyModeCompat) {
+                case HarmonyModeCompat::Contrary:
+                    active.harmonyNote = generateContraryHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
+                    break;
+
+                case HarmonyModeCompat::Similar:
+                    active.harmonyNote = generateSimilarHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
+                    break;
+
+                case HarmonyModeCompat::Oblique:
+                    active.harmonyNote = generateObliqueHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
+                    break;
+
+                case HarmonyModeCompat::SmartThirds:
+                default:
+                    active.harmonyNote = generateParallelHarmonyNote(midiNote, previousLeadNote, m_lastHarmonyOutputNote, chordTones, validPcs, false);
+                    break;
+            }
+
+            // FINAL VALIDATION: Ensure harmony note is T1/T2/T3 (not chromatic T4)
+            active.harmonyNote = validateHarmonyNote(active.harmonyNote, midiNote, activeChord);
+
+            // Track the harmony output for next iteration (used by CONTRARY mode)
+            m_lastHarmonyOutputNote = active.harmonyNote;
+
+            qDebug() << "ScaleSnap Harmony (legacy): INPUT" << midiNote << "-> HARMONY" << active.harmonyNote;
+
+            if (active.harmonyNote >= 0 && active.harmonyNote <= 127) {
+                emitNoteOn(kChannelHarmony1, active.harmonyNote, harmonyVelocity);
+            }
         }
     }
 
@@ -840,8 +952,12 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
     const int previousCc2 = m_lastCc2Value;
     m_lastCc2Value = value;
 
-    // Both modes off means nothing to do
-    if (m_leadMode == LeadMode::Off && m_harmonyMode == HarmonyMode::OFF) {
+    // Check if any mode is active
+    const bool multiVoiceActive = isMultiVoiceModeActive();
+    const bool legacyHarmonyActive = !multiVoiceActive && (m_harmonyMode != HarmonyMode::OFF);
+    const bool anyModeActive = (m_leadMode != LeadMode::Off) || multiVoiceActive || legacyHarmonyActive;
+
+    if (!anyModeActive) {
         return;
     }
 
@@ -859,7 +975,16 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
     if (m_leadMode != LeadMode::Off) {
         emitCC(kChannelLead, 2, value);
     }
-    if (m_harmonyMode != HarmonyMode::OFF) {
+
+    if (multiVoiceActive) {
+        // Multi-voice: forward to all enabled harmony channels
+        static const int kHarmonyChannels[4] = {kChannelHarmony1, kChannelHarmony2, kChannelHarmony3, kChannelHarmony4};
+        for (int i = 0; i < 4; ++i) {
+            if (m_voiceConfigs[i].isEnabled()) {
+                emitCC(kHarmonyChannels[i], 2, value);
+            }
+        }
+    } else if (legacyHarmonyActive) {
         emitCC(kChannelHarmony1, 2, value);
     }
 }
@@ -867,8 +992,11 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
 void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
 {
     // Only active when vocal bend is enabled, at least one mode is on, and there are active notes
-    const bool bothModesOff = (m_leadMode == LeadMode::Off && m_harmonyMode == HarmonyMode::OFF);
-    if (!m_vocalBendEnabled || bothModesOff || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
+    const bool multiVoiceActive = isMultiVoiceModeActive();
+    const bool legacyHarmonyActive = !multiVoiceActive && (m_harmonyMode != HarmonyMode::OFF);
+    const bool anyModeActive = (m_leadMode != LeadMode::Off) || multiVoiceActive || legacyHarmonyActive;
+
+    if (!m_vocalBendEnabled || !anyModeActive || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
         return;
     }
 
@@ -977,7 +1105,16 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
     if (m_leadMode != LeadMode::Off) {
         emitPitchBend(kChannelLead, bendValue);
     }
-    if (m_harmonyMode != HarmonyMode::OFF) {
+
+    if (multiVoiceActive) {
+        // Multi-voice: forward pitch bend to all enabled harmony channels
+        static const int kHarmonyChannels[4] = {kChannelHarmony1, kChannelHarmony2, kChannelHarmony3, kChannelHarmony4};
+        for (int i = 0; i < 4; ++i) {
+            if (m_voiceConfigs[i].isEnabled()) {
+                emitPitchBend(kHarmonyChannels[i], bendValue);
+            }
+        }
+    } else if (legacyHarmonyActive) {
         emitPitchBend(kChannelHarmony1, bendValue);
     }
 }
@@ -1385,7 +1522,92 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
         // Check if harmony note needs re-conforming, regardless of whether lead changed.
         // This ensures harmony stays consonant even when lead is already a chord tone.
 
-        if (m_harmonyMode != HarmonyMode::OFF && note.harmonyNote >= 0) {
+        // Check if multi-voice or legacy harmony mode is active
+        const bool multiVoiceActive = isMultiVoiceModeActive();
+        const bool legacyHarmonyActive = !multiVoiceActive && (m_harmonyMode != HarmonyMode::OFF);
+
+        if (multiVoiceActive) {
+            // MULTI-VOICE MODE: Re-conform each enabled voice
+            // Collect already-generated harmony notes to pass to subsequent voices for clash avoidance
+            static const int kHarmonyChannels[4] = {kChannelHarmony1, kChannelHarmony2, kChannelHarmony3, kChannelHarmony4};
+
+            QVector<int> generatedHarmonyNotes;
+            generatedHarmonyNotes.append(currentLeadNote);  // Include lead note
+
+            for (int voiceIdx = 0; voiceIdx < 4; ++voiceIdx) {
+                if (!m_voiceConfigs[voiceIdx].isEnabled() || note.harmonyNotes[voiceIdx] < 0) {
+                    continue;
+                }
+
+                const int harmonyPc = normalizePc(note.harmonyNotes[voiceIdx]);
+                const int harmonyTier = ChordOntology::instance().getTier(harmonyPc, activeChord);
+
+                qDebug() << "ScaleSnap Multi-Voice" << voiceIdx << ": harmony note" << note.harmonyNotes[voiceIdx]
+                         << "(pc" << harmonyPc << ") tier=" << harmonyTier;
+
+                // Harmony should stay on T1 (chord tones) or T2 (tensions)
+                // Re-conform if harmony is T3 (scale tone) or T4 (chromatic)
+                bool harmonyNeedsReconform = (harmonyTier > 2);
+
+                // CRITICAL: Also check if harmony now forms a DISSONANT INTERVAL with the lead
+                // A T1/T2 note might still clash with the lead (e.g., minor 2nd)
+                if (!harmonyNeedsReconform) {
+                    int intervalWithLead = getIntervalClass(currentLeadNote, note.harmonyNotes[voiceIdx]);
+                    if (!isConsonant(intervalWithLead)) {
+                        qDebug() << "ScaleSnap Multi-Voice" << voiceIdx << ": harmony" << note.harmonyNotes[voiceIdx]
+                                 << "forms dissonant interval" << intervalWithLead << "with lead - forcing re-conform";
+                        harmonyNeedsReconform = true;
+                    }
+                }
+
+                // CRITICAL: Also check if harmony clashes with already-generated voices
+                if (!harmonyNeedsReconform && wouldClashWithOtherVoices(note.harmonyNotes[voiceIdx], generatedHarmonyNotes)) {
+                    qDebug() << "ScaleSnap Multi-Voice" << voiceIdx << ": harmony" << note.harmonyNotes[voiceIdx]
+                             << "clashes with other voices - forcing re-conform";
+                    harmonyNeedsReconform = true;
+                }
+
+                // Also re-conform harmony if lead changed (to maintain proper voice leading)
+                if (leadChanged || harmonyNeedsReconform) {
+                    qDebug() << "ScaleSnap Multi-Voice" << voiceIdx << ": Re-conforming (leadChanged=" << leadChanged
+                             << ", harmonyTier=" << harmonyTier << ")";
+
+                    // Turn off old harmony note
+                    emitNoteOff(kHarmonyChannels[voiceIdx], note.harmonyNotes[voiceIdx]);
+
+                    // Generate new harmony using the voice's motion type, with inter-voice clash avoidance
+                    int newHarmony = generateHarmonyForVoice(voiceIdx, currentLeadNote, chordTones, validPcs, generatedHarmonyNotes);
+
+                    // FINAL VALIDATION: Ensure re-conformed harmony is T1/T2/T3 (not chromatic T4)
+                    newHarmony = validateHarmonyNote(newHarmony, currentLeadNote, activeChord);
+
+                    // Emit new harmony note
+                    int harmonyVelocity = static_cast<int>(note.velocity * m_harmonyConfig.velocityRatio);
+                    harmonyVelocity = qBound(1, harmonyVelocity, 127);
+                    emitNoteOn(kHarmonyChannels[voiceIdx], newHarmony, harmonyVelocity);
+
+                    // Update tracking
+                    note.harmonyNotes[voiceIdx] = newHarmony;
+                    m_voiceConfigs[voiceIdx].lastOutputNote = newHarmony;
+                    m_voiceConfigs[voiceIdx].lastLeadNote = currentLeadNote;
+
+                    // Add to generated notes for subsequent voices
+                    if (newHarmony >= 0) {
+                        generatedHarmonyNotes.append(newHarmony);
+                    }
+
+                    qDebug() << "ScaleSnap Multi-Voice" << voiceIdx << ": Harmony re-conformed to" << newHarmony;
+                } else {
+                    // Voice not re-conformed but still add to list for subsequent voice clash detection
+                    generatedHarmonyNotes.append(note.harmonyNotes[voiceIdx]);
+                }
+            }
+
+            // Keep legacy field in sync
+            note.harmonyNote = note.harmonyNotes[0];
+
+        } else if (legacyHarmonyActive && note.harmonyNote >= 0) {
+            // LEGACY SINGLE-VOICE MODE
             const int harmonyPc = normalizePc(note.harmonyNote);
             const int harmonyTier = ChordOntology::instance().getTier(harmonyPc, activeChord);
 
@@ -1394,6 +1616,16 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
             // Harmony should stay on T1 (chord tones) or T2 (tensions like 9th, 11th, 13th)
             // Re-conform if harmony is T3 (scale tone) or T4 (chromatic)
             bool harmonyNeedsReconform = (harmonyTier > 2);
+
+            // CRITICAL: Also check if harmony now forms a DISSONANT INTERVAL with the lead
+            if (!harmonyNeedsReconform) {
+                int intervalWithLead = getIntervalClass(currentLeadNote, note.harmonyNote);
+                if (!isConsonant(intervalWithLead)) {
+                    qDebug() << "ScaleSnap: harmony" << note.harmonyNote << "forms dissonant interval"
+                             << intervalWithLead << "with lead - forcing re-conform";
+                    harmonyNeedsReconform = true;
+                }
+            }
 
             // Also re-conform harmony if lead changed (to maintain proper voice leading)
             if (leadChanged || harmonyNeedsReconform) {
@@ -1824,9 +2056,26 @@ int ScaleSnapProcessor::generateParallelHarmonyNote(int inputNote, int previousL
         return bestFallback;
     }
 
-    // Absolute last resort: use the raw parallel motion result clamped to range
-    qDebug() << "ScaleSnap PARALLEL: No chord tones in range, using clamped raw result";
-    return qBound(m_harmonyRangeMin, rawHarmonyNote, m_harmonyRangeMax);
+    // Absolute last resort: use the raw parallel motion result, but verify it's consonant
+    int fallbackNote = qBound(m_harmonyRangeMin, rawHarmonyNote, m_harmonyRangeMax);
+    int fallbackInterval = getIntervalClass(inputNote, fallbackNote);
+
+    // If the raw result is dissonant, try shifting by minor 2nd to find consonance
+    if (!isConsonant(fallbackInterval)) {
+        qDebug() << "ScaleSnap PARALLEL: Raw result" << fallbackNote << "is dissonant, adjusting";
+        // Try shifting up or down by 1-2 semitones to find consonance
+        for (int offset : {1, -1, 2, -2}) {
+            int adjusted = fallbackNote + offset;
+            if (adjusted < m_harmonyRangeMin || adjusted > m_harmonyRangeMax) continue;
+            if (isConsonant(getIntervalClass(inputNote, adjusted))) {
+                qDebug() << "ScaleSnap PARALLEL: Adjusted to consonant" << adjusted;
+                return adjusted;
+            }
+        }
+    }
+
+    qDebug() << "ScaleSnap PARALLEL: Last resort fallback" << fallbackNote;
+    return fallbackNote;
 }
 
 int ScaleSnapProcessor::generateContraryHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove) const
@@ -2167,9 +2416,24 @@ int ScaleSnapProcessor::generateContraryHarmonyNote(int inputNote, int previousL
         return bestFallback;
     }
 
-    // Absolute last resort: clamp previous to range
+    // Absolute last resort: clamp previous to range, but verify it's consonant
     int fallback = qBound(m_harmonyRangeMin, previousHarmonyNote, m_harmonyRangeMax);
-    qDebug() << "ScaleSnap CONTRARY: No chord tones in range, using clamped fallback" << fallback;
+    int intervalWithLead = getIntervalClass(inputNote, fallback);
+
+    // If the fallback is dissonant, try shifting to find consonance
+    if (!isConsonant(intervalWithLead)) {
+        qDebug() << "ScaleSnap CONTRARY: Fallback" << fallback << "is dissonant, adjusting";
+        for (int offset : {1, -1, 2, -2}) {
+            int adjusted = fallback + offset;
+            if (adjusted < m_harmonyRangeMin || adjusted > m_harmonyRangeMax) continue;
+            if (isConsonant(getIntervalClass(inputNote, adjusted))) {
+                qDebug() << "ScaleSnap CONTRARY: Adjusted to consonant" << adjusted;
+                return adjusted;
+            }
+        }
+    }
+
+    qDebug() << "ScaleSnap CONTRARY: No chord tones in range, using fallback" << fallback;
     return fallback;
 }
 
@@ -2618,19 +2882,83 @@ int ScaleSnapProcessor::validateHarmonyNote(int harmonyNote, int leadNote, const
     const int harmonyPc = normalizePc(harmonyNote);
     const int tier = ChordOntology::instance().getTier(harmonyPc, chord);
 
-    // T1, T2, T3 are all acceptable
-    if (tier <= 3) {
-        qDebug() << "ScaleSnap VALIDATE: harmony" << harmonyNote << "(pc" << harmonyPc << ") tier=" << tier << "- OK";
+    // CRITICAL: Check if harmony forms a CONSONANT interval with lead
+    // Even a T1 chord tone can form a dissonant interval (e.g., minor 2nd) with the lead
+    int intervalWithLead = getIntervalClass(leadNote, harmonyNote);
+    bool isConsonantWithLead = isConsonant(intervalWithLead);
+
+    // T1, T2, T3 are acceptable IF they form consonant intervals with lead
+    if (tier <= 3 && isConsonantWithLead) {
+        qDebug() << "ScaleSnap VALIDATE: harmony" << harmonyNote << "(pc" << harmonyPc << ") tier=" << tier
+                 << "interval=" << intervalWithLead << "- OK";
         return harmonyNote;
     }
 
-    // T4 (chromatic) - snap to nearest T1 (chord tone)
-    qDebug() << "ScaleSnap VALIDATE: harmony" << harmonyNote << "(pc" << harmonyPc << ") is T4 (chromatic) - correcting";
+    // Need to find a better note - either T4 (wrong pitch class) or dissonant interval
+    if (!isConsonantWithLead) {
+        qDebug() << "ScaleSnap VALIDATE: harmony" << harmonyNote << "forms dissonant interval" << intervalWithLead
+                 << "with lead" << leadNote << "- correcting";
+    }
 
+    // Find a CONSONANT chord tone (T1) to replace the problematic harmony
+    qDebug() << "ScaleSnap VALIDATE: Finding consonant chord tone replacement";
+
+    // Score candidates by: consonance with lead, distance from original, and tier
+    struct Candidate {
+        int note;
+        int score;
+    };
+    QVector<Candidate> candidates;
+
+    // Search for chord tones within range
+    for (int candidate = m_harmonyRangeMin; candidate <= m_harmonyRangeMax; ++candidate) {
+        int candidatePc = normalizePc(candidate);
+
+        // Must be a chord tone (T1)
+        bool isT1 = false;
+        for (int t1Pc : chord.tier1Absolute) {
+            if (candidatePc == t1Pc) {
+                isT1 = true;
+                break;
+            }
+        }
+        if (!isT1) continue;
+
+        // Must form consonant interval with lead
+        int intervalWithLead = getIntervalClass(leadNote, candidate);
+        if (!isConsonant(intervalWithLead)) continue;
+
+        // Score the candidate
+        int score = 0;
+
+        // Prefer imperfect consonances (3rds, 6ths)
+        if (isImperfectConsonance(intervalWithLead)) {
+            score += 10;
+        } else if (isPerfectConsonance(intervalWithLead)) {
+            score += 3;
+        }
+
+        // Prefer notes closer to original harmony
+        int distance = std::abs(candidate - harmonyNote);
+        score -= distance;
+
+        candidates.append({candidate, score});
+    }
+
+    if (!candidates.isEmpty()) {
+        std::sort(candidates.begin(), candidates.end(),
+                  [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
+
+        int correctedNote = candidates.first().note;
+        qDebug() << "ScaleSnap VALIDATE: corrected harmony" << harmonyNote << "->" << correctedNote
+                 << "(score=" << candidates.first().score << ")";
+        return correctedNote;
+    }
+
+    // Fallback: find nearest T1 even if it's dissonant (better than chromatic)
     int bestTarget = -1;
     int bestDistance = 12;
 
-    // Find nearest T1 pitch class
     for (int t1Pc : chord.tier1Absolute) {
         int dist = ChordOntology::minDistance(harmonyPc, t1Pc);
         if (dist < bestDistance) {
@@ -2640,21 +2968,157 @@ int ScaleSnapProcessor::validateHarmonyNote(int harmonyNote, int leadNote, const
     }
 
     if (bestTarget < 0) {
-        // Shouldn't happen if chord has T1, but fallback to root
         qDebug() << "ScaleSnap VALIDATE: no T1 found, using chord root" << chord.rootPc;
         bestTarget = chord.rootPc;
     }
 
-    // Find the MIDI note with bestTarget pitch class, nearest to original harmony note
     int correctedNote = ChordOntology::findNearestInOctave(harmonyNote, bestTarget);
-
-    // Ensure still within instrument range
     correctedNote = qBound(m_harmonyRangeMin, correctedNote, m_harmonyRangeMax);
 
-    qDebug() << "ScaleSnap VALIDATE: corrected harmony" << harmonyNote << "->" << correctedNote
-             << "(T4 pc" << harmonyPc << "-> T1 pc" << bestTarget << ")";
-
+    qDebug() << "ScaleSnap VALIDATE: fallback corrected harmony" << harmonyNote << "->" << correctedNote;
     return correctedNote;
+}
+
+int ScaleSnapProcessor::generateHarmonyForVoice(int voiceIndex, int inputNote,
+                                                  const QSet<int>& chordTones,
+                                                  const QSet<int>& validPcs,
+                                                  const QVector<int>& otherVoiceNotes) const
+{
+    if (voiceIndex < 0 || voiceIndex >= 4) {
+        return -1;
+    }
+
+    const HarmonyVoiceConfig& config = m_voiceConfigs[voiceIndex];
+    if (!config.isEnabled()) {
+        return -1;
+    }
+
+    // Get previous lead and harmony notes for this voice
+    int previousLeadNote = config.lastLeadNote;
+    int previousHarmonyNote = config.lastOutputNote;
+
+    int harmonyNote = -1;
+
+    // Generate harmony based on motion type
+    switch (config.motionType) {
+        case VoiceMotionType::PARALLEL:
+            harmonyNote = generateParallelHarmonyNote(inputNote, previousLeadNote, previousHarmonyNote,
+                                                       chordTones, validPcs, false);
+            break;
+        case VoiceMotionType::CONTRARY:
+            harmonyNote = generateContraryHarmonyNote(inputNote, previousLeadNote, previousHarmonyNote,
+                                                       chordTones, validPcs, false);
+            break;
+        case VoiceMotionType::SIMILAR:
+            harmonyNote = generateSimilarHarmonyNote(inputNote, previousLeadNote, previousHarmonyNote,
+                                                      chordTones, validPcs, false);
+            break;
+        case VoiceMotionType::OBLIQUE:
+            harmonyNote = generateObliqueHarmonyNote(inputNote, previousLeadNote, previousHarmonyNote,
+                                                      chordTones, validPcs, false);
+            break;
+        case VoiceMotionType::OFF:
+        default:
+            return -1;
+    }
+
+    // Apply instrument range constraint (octave shift to fit)
+    if (harmonyNote >= 0) {
+        harmonyNote = applyVoiceRange(harmonyNote, config.rangeMin, config.rangeMax);
+    }
+
+    // Check for clashes with other voices and adjust if needed
+    if (harmonyNote >= 0 && !otherVoiceNotes.isEmpty() && wouldClashWithOtherVoices(harmonyNote, otherVoiceNotes)) {
+        qDebug() << "ScaleSnap Voice" << voiceIndex << ": harmony" << harmonyNote
+                 << "clashes with other voices, attempting adjustment";
+
+        // Try shifting by octave first (preserves pitch class)
+        int octaveUp = harmonyNote + 12;
+        int octaveDown = harmonyNote - 12;
+
+        if (octaveUp <= config.rangeMax && !wouldClashWithOtherVoices(octaveUp, otherVoiceNotes)) {
+            qDebug() << "ScaleSnap Voice" << voiceIndex << ": adjusted up octave to" << octaveUp;
+            harmonyNote = octaveUp;
+        } else if (octaveDown >= config.rangeMin && !wouldClashWithOtherVoices(octaveDown, otherVoiceNotes)) {
+            qDebug() << "ScaleSnap Voice" << voiceIndex << ": adjusted down octave to" << octaveDown;
+            harmonyNote = octaveDown;
+        } else {
+            // Try finding a nearby chord tone that doesn't clash
+            for (int offset = 1; offset <= 4; ++offset) {
+                for (int dir : {1, -1}) {
+                    int candidate = harmonyNote + (offset * dir);
+                    if (candidate < config.rangeMin || candidate > config.rangeMax) continue;
+
+                    int candidatePc = normalizePc(candidate);
+                    if (!chordTones.contains(candidatePc) && !validPcs.contains(candidatePc)) continue;
+
+                    if (!wouldClashWithOtherVoices(candidate, otherVoiceNotes)) {
+                        qDebug() << "ScaleSnap Voice" << voiceIndex << ": found non-clashing alternative" << candidate;
+                        harmonyNote = candidate;
+                        goto adjusted;
+                    }
+                }
+            }
+            adjusted:;
+            // If still clashing, just use the original note (better than silence)
+        }
+    }
+
+    return harmonyNote;
+}
+
+bool ScaleSnapProcessor::wouldClashWithOtherVoices(int candidateNote, const QVector<int>& otherVoiceNotes) const
+{
+    if (candidateNote < 0 || otherVoiceNotes.isEmpty()) {
+        return false;
+    }
+
+    for (int otherNote : otherVoiceNotes) {
+        if (otherNote < 0) continue;
+
+        int interval = std::abs(candidateNote - otherNote);
+
+        // Unison (same note) - definitely a clash
+        if (interval == 0) {
+            qDebug() << "ScaleSnap: Clash detected - unison with" << otherNote;
+            return true;
+        }
+
+        // Minor 2nd (1 semitone) or Major 7th (11 semitones) - harsh dissonance
+        int intervalClass = interval % 12;
+        if (intervalClass == 1 || intervalClass == 11) {
+            qDebug() << "ScaleSnap: Clash detected - m2/M7 between" << candidateNote << "and" << otherNote;
+            return true;
+        }
+
+        // Major 2nd (2 semitones) - mild dissonance, but allow it to avoid being too restrictive
+        // Tritone (6 semitones) - allow it, as it can be resolved
+    }
+
+    return false;
+}
+
+int ScaleSnapProcessor::applyVoiceRange(int note, int minNote, int maxNote) const
+{
+    if (note < 0 || note > 127) {
+        return note;
+    }
+
+    // Already in range
+    if (note >= minNote && note <= maxNote) {
+        return note;
+    }
+
+    // Shift by octaves to fit in range
+    while (note < minNote && note + 12 <= 127) {
+        note += 12;
+    }
+    while (note > maxNote && note - 12 >= 0) {
+        note -= 12;
+    }
+
+    // Final clamp
+    return qBound(minNote, note, maxNote);
 }
 
 void ScaleSnapProcessor::emitNoteOn(int channel, int note, int velocity)
@@ -2699,8 +3163,19 @@ void ScaleSnapProcessor::releaseNote(const ActiveNote& note)
         emitNoteOff(kChannelLead, note.snappedNote);
     }
 
-    // Release harmony note on channel 12
-    if (m_harmonyMode != HarmonyMode::OFF && note.harmonyNote >= 0) {
+    // Release harmony notes
+    const bool multiVoiceActive = isMultiVoiceModeActive();
+
+    if (multiVoiceActive) {
+        // Multi-voice mode: release all active harmony voices
+        static const int kHarmonyChannels[4] = {kChannelHarmony1, kChannelHarmony2, kChannelHarmony3, kChannelHarmony4};
+        for (int i = 0; i < 4; ++i) {
+            if (note.harmonyNotes[i] >= 0) {
+                emitNoteOff(kHarmonyChannels[i], note.harmonyNotes[i]);
+            }
+        }
+    } else if (m_harmonyMode != HarmonyMode::OFF && note.harmonyNote >= 0) {
+        // Legacy mode: release harmony note on channel 12
         emitNoteOff(kChannelHarmony1, note.harmonyNote);
     }
 }

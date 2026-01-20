@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QLabel>
 #include <QGroupBox>
+#include <QGridLayout>
 
 #include "playback/VirtuosoBalladMvpPlaybackEngine.h"
 
@@ -14,7 +15,7 @@ SnappingWindow::SnappingWindow(QWidget* parent)
 {
     setWindowTitle("Snapping Settings");
     setAttribute(Qt::WA_DeleteOnClose, false);
-    resize(400, 350);
+    resize(500, 450);
 
     buildUi();
 }
@@ -38,16 +39,22 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
             }
         }
 
-        // Harmony mode combo (uses compat enum for backward compatibility)
-        if (m_harmonyModeCombo) {
-            const int modeInt = static_cast<int>(snap->harmonyModeCompat());
-            for (int i = 0; i < m_harmonyModeCombo->count(); ++i) {
-                if (m_harmonyModeCombo->itemData(i).toInt() == modeInt) {
-                    m_harmonyModeCombo->setCurrentIndex(i);
-                    break;
-                }
+        // Apply multi-voice defaults to engine (from current UI state)
+        // This ensures the engine matches the UI defaults
+        for (int voiceIdx = 0; voiceIdx < 4; ++voiceIdx) {
+            if (m_voiceModeCombo[voiceIdx] && m_voiceRangeCombo[voiceIdx]) {
+                const int modeInt = m_voiceModeCombo[voiceIdx]->currentData().toInt();
+                snap->setVoiceMotionType(voiceIdx, static_cast<playback::VoiceMotionType>(modeInt));
+
+                const int encoded = m_voiceRangeCombo[voiceIdx]->currentData().toInt();
+                const int minNote = encoded / 1000;
+                const int maxNote = encoded % 1000;
+                snap->setVoiceRange(voiceIdx, minNote, maxNote);
             }
         }
+
+        // Sync multi-voice harmony UI (in case engine had different values)
+        syncMultiVoiceUiToEngine();
 
         if (m_vocalBendCheckbox) {
             m_vocalBendCheckbox->setChecked(snap->vocalBendEnabled());
@@ -94,7 +101,52 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
     }
 
     updateLeadModeDescription();
-    updateHarmonyModeDescription();
+}
+
+// Helper to populate mode combo items
+static void populateModeCombo(QComboBox* combo) {
+    combo->addItem("Off", static_cast<int>(playback::VoiceMotionType::OFF));
+    combo->addItem("Smart Thirds", static_cast<int>(playback::VoiceMotionType::PARALLEL));
+    combo->addItem("Contrary", static_cast<int>(playback::VoiceMotionType::CONTRARY));
+    combo->addItem("Similar", static_cast<int>(playback::VoiceMotionType::SIMILAR));
+    combo->addItem("Oblique", static_cast<int>(playback::VoiceMotionType::OBLIQUE));
+}
+
+// Helper to populate range combo items (reusing existing instrument ranges)
+static void populateRangeCombo(QComboBox* combo) {
+    // Store min,max as a pair encoded in user data (min * 1000 + max)
+    combo->addItem("Full Range (C-1 to G9)", 0 * 1000 + 127);
+    combo->addItem("Trumpet (E3-C6)", 52 * 1000 + 84);
+    combo->addItem("Alto Sax (Db3-Ab5)", 49 * 1000 + 80);
+    combo->addItem("Tenor Sax (Ab2-E5)", 44 * 1000 + 76);
+    combo->addItem("Violin (G3-E7)", 55 * 1000 + 100);
+    combo->addItem("Flute (C4-C7)", 60 * 1000 + 96);
+    combo->addItem("Clarinet (E3-C7)", 52 * 1000 + 96);
+    combo->addItem("Trombone (E2-Bb4)", 40 * 1000 + 70);
+    combo->addItem("Voice Soprano (C4-C6)", 60 * 1000 + 84);
+    combo->addItem("Voice Alto (F3-F5)", 53 * 1000 + 77);
+    combo->addItem("Voice Tenor (C3-C5)", 48 * 1000 + 72);
+    combo->addItem("Voice Bass (E2-E4)", 40 * 1000 + 64);
+}
+
+// Helper to find combo index by encoded range value
+static int findRangeIndex(QComboBox* combo, int encodedValue) {
+    for (int i = 0; i < combo->count(); ++i) {
+        if (combo->itemData(i).toInt() == encodedValue) {
+            return i;
+        }
+    }
+    return 0; // Default to first item
+}
+
+// Helper to find combo index by mode value
+static int findModeIndex(QComboBox* combo, int modeValue) {
+    for (int i = 0; i < combo->count(); ++i) {
+        if (combo->itemData(i).toInt() == modeValue) {
+            return i;
+        }
+    }
+    return 0; // Default to first item (Off)
 }
 
 void SnappingWindow::buildUi()
@@ -137,70 +189,82 @@ void SnappingWindow::buildUi()
 
     mainLayout->addWidget(leadGroup);
 
-    // ===== HARMONY MODE GROUP =====
-    QGroupBox* harmonyGroup = new QGroupBox("Harmony (Channels 12-15)", central);
-    QVBoxLayout* harmonyLayout = new QVBoxLayout(harmonyGroup);
+    // ===== HARMONY GROUP (4 voices on channels 12-15) =====
+    m_harmonyGroup = new QGroupBox("Harmony (Channels 12-15)", central);
+    QVBoxLayout* harmonyLayout = new QVBoxLayout(m_harmonyGroup);
     harmonyLayout->setContentsMargins(12, 12, 12, 12);
     harmonyLayout->setSpacing(8);
 
-    // Harmony mode combo box (uses HarmonyModeCompat for backward compatibility)
-    QHBoxLayout* harmonyComboRow = new QHBoxLayout();
-    harmonyComboRow->setSpacing(8);
+    // Grid layout for 4 voice rows
+    QGridLayout* voiceGrid = new QGridLayout();
+    voiceGrid->setSpacing(8);
 
-    QLabel* harmonyLabel = new QLabel("Mode:", harmonyGroup);
-    m_harmonyModeCombo = new QComboBox(harmonyGroup);
-    m_harmonyModeCombo->addItem("Off", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Off));
-    m_harmonyModeCombo->addItem("Smart Thirds", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::SmartThirds));
-    m_harmonyModeCombo->addItem("Contrary", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Contrary));
-    m_harmonyModeCombo->addItem("Similar", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Similar));
-    m_harmonyModeCombo->addItem("Oblique", static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Oblique));
-    m_harmonyModeCombo->setMinimumWidth(180);
+    // Header row
+    voiceGrid->addWidget(new QLabel("Channel", m_harmonyGroup), 0, 0);
+    voiceGrid->addWidget(new QLabel("Mode", m_harmonyGroup), 0, 1);
+    voiceGrid->addWidget(new QLabel("Range", m_harmonyGroup), 0, 2);
 
-    harmonyComboRow->addWidget(harmonyLabel);
-    harmonyComboRow->addWidget(m_harmonyModeCombo);
-    harmonyComboRow->addStretch();
-    harmonyLayout->addLayout(harmonyComboRow);
+    // Default configurations as specified by user (for TESTING):
+    // Channel 12: Contrary, Voice Bass (E2-E4)
+    // Channel 13: Smart Thirds, Tenor Sax (Ab2-E5)
+    // Channel 14: Similar, Trumpet (E3-C6)
+    // Channel 15: Oblique, Clarinet (E3-C7)
+    struct VoiceDefault {
+        int channel;
+        playback::VoiceMotionType mode;
+        int rangeEncoded;  // min * 1000 + max
+    };
+    const VoiceDefault defaults[4] = {
+        {12, playback::VoiceMotionType::CONTRARY, 40 * 1000 + 64},  // Voice Bass (E2-E4)
+        {13, playback::VoiceMotionType::PARALLEL, 44 * 1000 + 76},  // Tenor Sax (Ab2-E5)
+        {14, playback::VoiceMotionType::SIMILAR, 52 * 1000 + 84},   // Trumpet (E3-C6)
+        {15, playback::VoiceMotionType::OBLIQUE, 52 * 1000 + 96}    // Clarinet (E3-C7)
+    };
 
-    // Harmony instrument range combo
-    QHBoxLayout* harmonyRangeRow = new QHBoxLayout();
-    harmonyRangeRow->setSpacing(8);
+    for (int voiceIdx = 0; voiceIdx < 4; ++voiceIdx) {
+        int row = voiceIdx + 1;
+        int channel = 12 + voiceIdx;
 
-    QLabel* rangeLabel = new QLabel("Range:", harmonyGroup);
-    m_harmonyRangeCombo = new QComboBox(harmonyGroup);
-    // Store min,max as a pair encoded in user data (min * 1000 + max)
-    m_harmonyRangeCombo->addItem("Full Range (C-1 to G9)", 0 * 1000 + 127);
-    m_harmonyRangeCombo->addItem("Trumpet (E3-C6)", 52 * 1000 + 84);
-    m_harmonyRangeCombo->addItem("Alto Sax (Db3-Ab5)", 49 * 1000 + 80);
-    m_harmonyRangeCombo->addItem("Tenor Sax (Ab2-E5)", 44 * 1000 + 76);
-    m_harmonyRangeCombo->addItem("Violin (G3-E7)", 55 * 1000 + 100);
-    m_harmonyRangeCombo->addItem("Flute (C4-C7)", 60 * 1000 + 96);
-    m_harmonyRangeCombo->addItem("Clarinet (E3-C7)", 52 * 1000 + 96);
-    m_harmonyRangeCombo->addItem("Trombone (E2-Bb4)", 40 * 1000 + 70);
-    m_harmonyRangeCombo->addItem("Voice Soprano (C4-C6)", 60 * 1000 + 84);
-    m_harmonyRangeCombo->addItem("Voice Alto (F3-F5)", 53 * 1000 + 77);
-    m_harmonyRangeCombo->addItem("Voice Tenor (C3-C5)", 48 * 1000 + 72);
-    m_harmonyRangeCombo->addItem("Voice Bass (E2-E4)", 40 * 1000 + 64);
-    m_harmonyRangeCombo->setMinimumWidth(180);
-    m_harmonyRangeCombo->setToolTip("Constrain harmony notes to the playable range of an instrument.\nPrevents silence when harmony would go out of range.");
+        // Channel label
+        QLabel* channelLabel = new QLabel(QString("Ch. %1").arg(channel), m_harmonyGroup);
+        voiceGrid->addWidget(channelLabel, row, 0);
 
-    harmonyRangeRow->addWidget(rangeLabel);
-    harmonyRangeRow->addWidget(m_harmonyRangeCombo);
-    harmonyRangeRow->addStretch();
-    harmonyLayout->addLayout(harmonyRangeRow);
+        // Mode combo
+        m_voiceModeCombo[voiceIdx] = new QComboBox(m_harmonyGroup);
+        populateModeCombo(m_voiceModeCombo[voiceIdx]);
+        m_voiceModeCombo[voiceIdx]->setMinimumWidth(120);
 
-    // Harmony description label
-    m_harmonyDescriptionLabel = new QLabel(harmonyGroup);
-    m_harmonyDescriptionLabel->setWordWrap(true);
-    m_harmonyDescriptionLabel->setStyleSheet("QLabel { color: #888; padding: 8px; background: #222; border-radius: 4px; }");
-    m_harmonyDescriptionLabel->setMinimumHeight(50);
-    harmonyLayout->addWidget(m_harmonyDescriptionLabel);
+        // Set default mode
+        int defaultModeIdx = findModeIndex(m_voiceModeCombo[voiceIdx], static_cast<int>(defaults[voiceIdx].mode));
+        m_voiceModeCombo[voiceIdx]->setCurrentIndex(defaultModeIdx);
 
-    mainLayout->addWidget(harmonyGroup);
+        voiceGrid->addWidget(m_voiceModeCombo[voiceIdx], row, 1);
+
+        // Range combo
+        m_voiceRangeCombo[voiceIdx] = new QComboBox(m_harmonyGroup);
+        populateRangeCombo(m_voiceRangeCombo[voiceIdx]);
+        m_voiceRangeCombo[voiceIdx]->setMinimumWidth(150);
+
+        // Set default range
+        int defaultRangeIdx = findRangeIndex(m_voiceRangeCombo[voiceIdx], defaults[voiceIdx].rangeEncoded);
+        m_voiceRangeCombo[voiceIdx]->setCurrentIndex(defaultRangeIdx);
+
+        voiceGrid->addWidget(m_voiceRangeCombo[voiceIdx], row, 2);
+
+        // Connect signals with lambda to capture voice index
+        connect(m_voiceModeCombo[voiceIdx], QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this, voiceIdx](int comboIdx) { onVoiceModeChanged(voiceIdx, comboIdx); });
+        connect(m_voiceRangeCombo[voiceIdx], QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this, voiceIdx](int comboIdx) { onVoiceRangeChanged(voiceIdx, comboIdx); });
+    }
+
+    harmonyLayout->addLayout(voiceGrid);
+    mainLayout->addWidget(m_harmonyGroup);
 
     // ===== VOCAL SETTINGS =====
     // Vocal bend checkbox
     m_vocalBendCheckbox = new QCheckBox("Apply Vocal Vibrato as Pitch Bend", central);
-    m_vocalBendCheckbox->setToolTip("When enabled, transfers vocal pitch variations to MIDI pitch bend on output channels 11/12.\nThis adds expressiveness by modulating the lead/harmony notes with your voice.");
+    m_vocalBendCheckbox->setToolTip("When enabled, transfers vocal pitch variations to MIDI pitch bend on output channels.\nThis adds expressiveness by modulating the lead/harmony notes with your voice.");
     mainLayout->addWidget(m_vocalBendCheckbox);
 
     // Vocal vibrato range combo
@@ -208,9 +272,9 @@ void SnappingWindow::buildUi()
     vibratoRow->setSpacing(8);
     QLabel* vibratoLabel = new QLabel("Vocal Vibrato Range:", central);
     m_vocalVibratoRangeCombo = new QComboBox(central);
-    m_vocalVibratoRangeCombo->addItem("±200 cents (default)", 200.0);
-    m_vocalVibratoRangeCombo->addItem("±100 cents", 100.0);
-    m_vocalVibratoRangeCombo->setToolTip("Maximum vocal pitch deviation that affects pitch bend.\n±200 cents = ±2 semitones, ±100 cents = ±1 semitone.");
+    m_vocalVibratoRangeCombo->addItem(QString::fromUtf8("\u00b1200 cents (default)"), 200.0);
+    m_vocalVibratoRangeCombo->addItem(QString::fromUtf8("\u00b1100 cents"), 100.0);
+    m_vocalVibratoRangeCombo->setToolTip(QString::fromUtf8("Maximum vocal pitch deviation that affects pitch bend.\n\u00b1200 cents = \u00b12 semitones, \u00b1100 cents = \u00b11 semitone."));
     vibratoRow->addWidget(vibratoLabel);
     vibratoRow->addWidget(m_vocalVibratoRangeCombo);
     vibratoRow->addStretch();
@@ -231,10 +295,6 @@ void SnappingWindow::buildUi()
     // Connect widgets
     connect(m_leadModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &SnappingWindow::onLeadModeChanged);
-    connect(m_harmonyModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &SnappingWindow::onHarmonyModeChanged);
-    connect(m_harmonyRangeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &SnappingWindow::onHarmonyRangeChanged);
     connect(m_vocalBendCheckbox, &QCheckBox::toggled,
             this, &SnappingWindow::onVocalBendToggled);
     connect(m_vocalVibratoRangeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -245,7 +305,10 @@ void SnappingWindow::buildUi()
             this, &SnappingWindow::onVoiceSustainToggled);
 
     updateLeadModeDescription();
-    updateHarmonyModeDescription();
+
+    // Apply default voice configurations to engine (if available)
+    // This will be called again in setPlaybackEngine, but we set up defaults here
+    // so the UI reflects them even before the engine is connected
 }
 
 void SnappingWindow::onLeadModeChanged(int index)
@@ -261,31 +324,29 @@ void SnappingWindow::onLeadModeChanged(int index)
     updateLeadModeDescription();
 }
 
-void SnappingWindow::onHarmonyModeChanged(int index)
+void SnappingWindow::onVoiceModeChanged(int voiceIndex, int modeComboIndex)
 {
-    if (!m_engine || !m_harmonyModeCombo) return;
+    if (!m_engine || voiceIndex < 0 || voiceIndex >= 4 || !m_voiceModeCombo[voiceIndex]) return;
 
-    const int modeInt = m_harmonyModeCombo->itemData(index).toInt();
+    const int modeInt = m_voiceModeCombo[voiceIndex]->itemData(modeComboIndex).toInt();
     auto* snap = m_engine->scaleSnapProcessor();
     if (snap) {
-        snap->setHarmonyModeCompat(static_cast<playback::ScaleSnapProcessor::HarmonyModeCompat>(modeInt));
+        snap->setVoiceMotionType(voiceIndex, static_cast<playback::VoiceMotionType>(modeInt));
     }
-
-    updateHarmonyModeDescription();
 }
 
-void SnappingWindow::onHarmonyRangeChanged(int index)
+void SnappingWindow::onVoiceRangeChanged(int voiceIndex, int rangeComboIndex)
 {
-    if (!m_engine || !m_harmonyRangeCombo) return;
+    if (!m_engine || voiceIndex < 0 || voiceIndex >= 4 || !m_voiceRangeCombo[voiceIndex]) return;
 
     // Decode the min/max from the stored value (min * 1000 + max)
-    const int encoded = m_harmonyRangeCombo->itemData(index).toInt();
+    const int encoded = m_voiceRangeCombo[voiceIndex]->itemData(rangeComboIndex).toInt();
     const int minNote = encoded / 1000;
     const int maxNote = encoded % 1000;
 
     auto* snap = m_engine->scaleSnapProcessor();
     if (snap) {
-        snap->setHarmonyRange(minNote, maxNote);
+        snap->setVoiceRange(voiceIndex, minNote, maxNote);
     }
 }
 
@@ -350,37 +411,11 @@ void SnappingWindow::onEngineLeadModeChanged(playback::ScaleSnapProcessor::LeadM
     updateLeadModeDescription();
 }
 
-void SnappingWindow::onEngineHarmonyModeChanged(playback::HarmonyMode mode)
+void SnappingWindow::onEngineHarmonyModeChanged(playback::HarmonyMode /*mode*/)
 {
-    if (!m_harmonyModeCombo) return;
-
-    // Map HarmonyMode back to HarmonyModeCompat for UI update
-    // This is a simplified mapping - full UI update will come in Phase UI
-    int compatModeInt = 0;
-    switch (mode) {
-        case playback::HarmonyMode::OFF:
-            compatModeInt = static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::Off);
-            break;
-        case playback::HarmonyMode::SINGLE:
-        case playback::HarmonyMode::PRE_PLANNED:
-        case playback::HarmonyMode::VOICE:
-            compatModeInt = static_cast<int>(playback::ScaleSnapProcessor::HarmonyModeCompat::SmartThirds);
-            break;
-    }
-
-    // Update combo to match (avoid re-triggering onHarmonyModeChanged)
-    for (int i = 0; i < m_harmonyModeCombo->count(); ++i) {
-        if (m_harmonyModeCombo->itemData(i).toInt() == compatModeInt) {
-            if (m_harmonyModeCombo->currentIndex() != i) {
-                m_harmonyModeCombo->blockSignals(true);
-                m_harmonyModeCombo->setCurrentIndex(i);
-                m_harmonyModeCombo->blockSignals(false);
-            }
-            break;
-        }
-    }
-
-    updateHarmonyModeDescription();
+    // Multi-voice mode doesn't use HarmonyMode directly
+    // Sync UI to engine state
+    syncMultiVoiceUiToEngine();
 }
 
 void SnappingWindow::onEngineVocalBendChanged(bool enabled)
@@ -456,40 +491,35 @@ void SnappingWindow::updateLeadModeDescription()
     m_leadDescriptionLabel->setText(desc);
 }
 
-void SnappingWindow::updateHarmonyModeDescription()
+void SnappingWindow::syncMultiVoiceUiToEngine()
 {
-    if (!m_harmonyDescriptionLabel || !m_harmonyModeCombo) return;
+    if (!m_engine) return;
 
-    const int modeInt = m_harmonyModeCombo->currentData().toInt();
-    const auto mode = static_cast<playback::ScaleSnapProcessor::HarmonyModeCompat>(modeInt);
+    auto* snap = m_engine->scaleSnapProcessor();
+    if (!snap) return;
 
-    QString desc;
-    switch (mode) {
-    case playback::ScaleSnapProcessor::HarmonyModeCompat::Off:
-        desc = "Harmony output is disabled. No notes are sent to harmony channels.";
-        break;
-    case playback::ScaleSnapProcessor::HarmonyModeCompat::SmartThirds:
-        desc = "Parallel motion: Both voices move together, maintaining a constant interval (3rd or 6th). Creates sweet, traditional harmony. Output on MIDI channel 12.";
-        break;
-    case playback::ScaleSnapProcessor::HarmonyModeCompat::Contrary:
-        desc = "Contrary motion: Harmony moves opposite to lead melody direction. Output on MIDI channel 12.";
-        break;
-    case playback::ScaleSnapProcessor::HarmonyModeCompat::Similar:
-        desc = "Similar motion: Both voices move in the same direction but by different intervals. Cannot approach perfect 5ths/octaves (direct 5ths forbidden). Output on MIDI channel 12.";
-        break;
-    case playback::ScaleSnapProcessor::HarmonyModeCompat::Oblique:
-        desc = "Oblique motion: Harmony holds a pedal tone (root or 5th) while lead moves freely. Creates anchoring/stability effect. Pedal moves only when it becomes invalid against the chord. Output on MIDI channel 12.";
-        break;
-    case playback::ScaleSnapProcessor::HarmonyModeCompat::Single:
-        desc = "User-selected harmony type (Parallel, Contrary, etc.). Output on MIDI channels 12-15.";
-        break;
-    case playback::ScaleSnapProcessor::HarmonyModeCompat::PrePlanned:
-        desc = "Automatic phrase-based harmony selection. Output on MIDI channels 12-15.";
-        break;
-    case playback::ScaleSnapProcessor::HarmonyModeCompat::Voice:
-        desc = "Use vocal MIDI as harmony source. Output on MIDI channels 12-15.";
-        break;
+    for (int voiceIdx = 0; voiceIdx < 4; ++voiceIdx) {
+        const auto& config = snap->voiceConfig(voiceIdx);
+
+        // Sync mode combo
+        if (m_voiceModeCombo[voiceIdx]) {
+            int modeIdx = findModeIndex(m_voiceModeCombo[voiceIdx], static_cast<int>(config.motionType));
+            if (m_voiceModeCombo[voiceIdx]->currentIndex() != modeIdx) {
+                m_voiceModeCombo[voiceIdx]->blockSignals(true);
+                m_voiceModeCombo[voiceIdx]->setCurrentIndex(modeIdx);
+                m_voiceModeCombo[voiceIdx]->blockSignals(false);
+            }
+        }
+
+        // Sync range combo
+        if (m_voiceRangeCombo[voiceIdx]) {
+            int encodedRange = config.rangeMin * 1000 + config.rangeMax;
+            int rangeIdx = findRangeIndex(m_voiceRangeCombo[voiceIdx], encodedRange);
+            if (m_voiceRangeCombo[voiceIdx]->currentIndex() != rangeIdx) {
+                m_voiceRangeCombo[voiceIdx]->blockSignals(true);
+                m_voiceRangeCombo[voiceIdx]->setCurrentIndex(rangeIdx);
+                m_voiceRangeCombo[voiceIdx]->blockSignals(false);
+            }
+        }
     }
-
-    m_harmonyDescriptionLabel->setText(desc);
 }

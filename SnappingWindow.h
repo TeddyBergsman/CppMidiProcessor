@@ -36,12 +36,14 @@ private slots:
     void onVocalBendToggled(bool checked);
     void onVocalVibratoRangeChanged(int index);
     void onVibratoCorrectionToggled(bool checked);
+    void onHarmonyVibratoToggled(bool checked);
     void onVoiceSustainToggled(bool checked);
     void onEngineLeadModeChanged(playback::ScaleSnapProcessor::LeadMode mode);
     void onEngineHarmonyModeChanged(playback::HarmonyMode mode);
     void onEngineVocalBendChanged(bool enabled);
     void onEngineVocalVibratoRangeChanged(double cents);
     void onEngineVibratoCorrectionChanged(bool enabled);
+    void onEngineHarmonyVibratoChanged(bool enabled);
     void onEngineVoiceSustainChanged(bool enabled);
 
     // Multi-voice harmony slots
@@ -59,6 +61,7 @@ private:
     QCheckBox* m_vocalBendCheckbox = nullptr;
     QComboBox* m_vocalVibratoRangeCombo = nullptr;
     QCheckBox* m_vibratoCorrectionCheckbox = nullptr;
+    QCheckBox* m_harmonyVibratoCheckbox = nullptr;
     QCheckBox* m_voiceSustainCheckbox = nullptr;
     QLabel* m_leadDescriptionLabel = nullptr;
 

@@ -182,6 +182,24 @@ void ScaleSnapProcessor::setVibratoCorrectionEnabled(bool enabled)
     }
 }
 
+void ScaleSnapProcessor::setHarmonyVibratoEnabled(bool enabled)
+{
+    if (m_harmonyVibratoEnabled != enabled) {
+        m_harmonyVibratoEnabled = enabled;
+        // When disabling, reset harmony pitch bends to center
+        if (!enabled) {
+            static const int kHarmonyChannels[4] = {kChannelHarmony1, kChannelHarmony2,
+                                                    kChannelHarmony3, kChannelHarmony4};
+            for (int i = 0; i < 4; ++i) {
+                if (m_voiceConfigs[i].isEnabled()) {
+                    emitPitchBend(kHarmonyChannels[i], 8192);  // Center pitch bend
+                }
+            }
+        }
+        emit harmonyVibratoEnabledChanged(enabled);
+    }
+}
+
 void ScaleSnapProcessor::setVoiceSustainEnabled(bool enabled)
 {
     if (m_voiceSustainEnabled != enabled) {
@@ -1106,16 +1124,19 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
         emitPitchBend(kChannelLead, bendValue);
     }
 
-    if (multiVoiceActive) {
-        // Multi-voice: forward pitch bend to all enabled harmony channels
-        static const int kHarmonyChannels[4] = {kChannelHarmony1, kChannelHarmony2, kChannelHarmony3, kChannelHarmony4};
-        for (int i = 0; i < 4; ++i) {
-            if (m_voiceConfigs[i].isEnabled()) {
-                emitPitchBend(kHarmonyChannels[i], bendValue);
+    // Apply pitch bend to harmony channels only if harmony vibrato is enabled
+    if (m_harmonyVibratoEnabled) {
+        if (multiVoiceActive) {
+            // Multi-voice: forward pitch bend to all enabled harmony channels
+            static const int kHarmonyChannels[4] = {kChannelHarmony1, kChannelHarmony2, kChannelHarmony3, kChannelHarmony4};
+            for (int i = 0; i < 4; ++i) {
+                if (m_voiceConfigs[i].isEnabled()) {
+                    emitPitchBend(kHarmonyChannels[i], bendValue);
+                }
             }
+        } else if (legacyHarmonyActive) {
+            emitPitchBend(kChannelHarmony1, bendValue);
         }
-    } else if (legacyHarmonyActive) {
-        emitPitchBend(kChannelHarmony1, bendValue);
     }
 }
 

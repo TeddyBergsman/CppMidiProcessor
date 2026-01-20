@@ -114,6 +114,11 @@ public:
     bool vibratoCorrectionEnabled() const { return m_vibratoCorrectionEnabled; }
     void setVibratoCorrectionEnabled(bool enabled);
 
+    // Harmony vibrato: apply vocal vibrato pitch bend to harmony voices
+    // When disabled (default), harmony voices stay at center pitch (no vibrato wobble)
+    bool harmonyVibratoEnabled() const { return m_harmonyVibratoEnabled; }
+    void setHarmonyVibratoEnabled(bool enabled);
+
     // Voice sustain: keep notes sounding while singing (CC2 > threshold)
     bool voiceSustainEnabled() const { return m_voiceSustainEnabled; }
     void setVoiceSustainEnabled(bool enabled);
@@ -150,6 +155,7 @@ signals:
     void vocalBendEnabledChanged(bool enabled);
     void vocalVibratoRangeCentsChanged(double cents);
     void vibratoCorrectionEnabledChanged(bool enabled);
+    void harmonyVibratoEnabledChanged(bool enabled);
     void voiceSustainEnabledChanged(bool enabled);
 
 public slots:
@@ -270,6 +276,7 @@ private:
     bool m_vocalBendEnabled = true;           // Enabled by default
     double m_vocalVibratoRangeCents = 200.0;  // ±200 cents (default), or ±100 cents
     bool m_vibratoCorrectionEnabled = true;   // Enabled by default - filter out DC offset from voice
+    bool m_harmonyVibratoEnabled = false;     // Disabled by default - harmony voices get no vibrato pitch bend
     bool m_voiceSustainEnabled = true;        // Enabled by default - hold notes while singing
     int m_harmonyRangeMin = 0;                // Min MIDI note for harmony (default: no limit)
     int m_harmonyRangeMax = 127;              // Max MIDI note for harmony (default: no limit)

@@ -79,6 +79,10 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
             m_harmonyVibratoCheckbox->setChecked(snap->harmonyVibratoEnabled());
         }
 
+        if (m_harmonyHumanizationCheckbox) {
+            m_harmonyHumanizationCheckbox->setChecked(snap->harmonyHumanizationEnabled());
+        }
+
         if (m_voiceSustainCheckbox) {
             m_voiceSustainCheckbox->setChecked(snap->voiceSustainEnabled());
         }
@@ -101,6 +105,9 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
                 Qt::UniqueConnection);
         connect(snap, &playback::ScaleSnapProcessor::harmonyVibratoEnabledChanged,
                 this, &SnappingWindow::onEngineHarmonyVibratoChanged,
+                Qt::UniqueConnection);
+        connect(snap, &playback::ScaleSnapProcessor::harmonyHumanizationEnabledChanged,
+                this, &SnappingWindow::onEngineHarmonyHumanizationChanged,
                 Qt::UniqueConnection);
         connect(snap, &playback::ScaleSnapProcessor::voiceSustainEnabledChanged,
                 this, &SnappingWindow::onEngineVoiceSustainChanged,
@@ -297,6 +304,12 @@ void SnappingWindow::buildUi()
     m_harmonyVibratoCheckbox->setToolTip("Apply vocal vibrato pitch bend to harmony voices.\nWhen disabled (default), harmony voices stay at a fixed pitch without vibrato wobble.");
     mainLayout->addWidget(m_harmonyVibratoCheckbox);
 
+    // Harmony humanization checkbox
+    m_harmonyHumanizationCheckbox = new QCheckBox("Harmony Humanization", central);
+    m_harmonyHumanizationCheckbox->setToolTip("Add BPM-constrained timing offsets to harmony voices.\nCreates more natural, human-like timing variation between voices.");
+    m_harmonyHumanizationCheckbox->setChecked(true);  // Default on
+    mainLayout->addWidget(m_harmonyHumanizationCheckbox);
+
     // Voice sustain checkbox
     m_voiceSustainCheckbox = new QCheckBox("Voice Sustain", central);
     m_voiceSustainCheckbox->setToolTip("Sustain guitar notes for as long as you're singing (CC2 active).\nNotes ring out even after the guitar string stops, allowing longer sustained tones controlled by your voice.");
@@ -315,6 +328,8 @@ void SnappingWindow::buildUi()
             this, &SnappingWindow::onVibratoCorrectionToggled);
     connect(m_harmonyVibratoCheckbox, &QCheckBox::toggled,
             this, &SnappingWindow::onHarmonyVibratoToggled);
+    connect(m_harmonyHumanizationCheckbox, &QCheckBox::toggled,
+            this, &SnappingWindow::onHarmonyHumanizationToggled);
     connect(m_voiceSustainCheckbox, &QCheckBox::toggled,
             this, &SnappingWindow::onVoiceSustainToggled);
 
@@ -405,6 +420,16 @@ void SnappingWindow::onHarmonyVibratoToggled(bool checked)
     }
 }
 
+void SnappingWindow::onHarmonyHumanizationToggled(bool checked)
+{
+    if (!m_engine) return;
+
+    auto* snap = m_engine->scaleSnapProcessor();
+    if (snap) {
+        snap->setHarmonyHumanizationEnabled(checked);
+    }
+}
+
 void SnappingWindow::onVoiceSustainToggled(bool checked)
 {
     if (!m_engine) return;
@@ -489,6 +514,17 @@ void SnappingWindow::onEngineHarmonyVibratoChanged(bool enabled)
         m_harmonyVibratoCheckbox->blockSignals(true);
         m_harmonyVibratoCheckbox->setChecked(enabled);
         m_harmonyVibratoCheckbox->blockSignals(false);
+    }
+}
+
+void SnappingWindow::onEngineHarmonyHumanizationChanged(bool enabled)
+{
+    if (!m_harmonyHumanizationCheckbox) return;
+
+    if (m_harmonyHumanizationCheckbox->isChecked() != enabled) {
+        m_harmonyHumanizationCheckbox->blockSignals(true);
+        m_harmonyHumanizationCheckbox->setChecked(enabled);
+        m_harmonyHumanizationCheckbox->blockSignals(false);
     }
 }
 

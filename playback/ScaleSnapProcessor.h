@@ -119,6 +119,15 @@ public:
     bool harmonyVibratoEnabled() const { return m_harmonyVibratoEnabled; }
     void setHarmonyVibratoEnabled(bool enabled);
 
+    // Harmony humanization: add BPM-constrained timing offsets to harmony notes
+    // Creates more natural, human-like timing variation between voices
+    bool harmonyHumanizationEnabled() const { return m_harmonyHumanizationEnabled; }
+    void setHarmonyHumanizationEnabled(bool enabled);
+
+    // BPM for humanization timing calculations
+    void setTempoBpm(int bpm);
+    int tempoBpm() const { return m_tempoBpm; }
+
     // Voice sustain: keep notes sounding while singing (CC2 > threshold)
     bool voiceSustainEnabled() const { return m_voiceSustainEnabled; }
     void setVoiceSustainEnabled(bool enabled);
@@ -156,6 +165,7 @@ signals:
     void vocalVibratoRangeCentsChanged(double cents);
     void vibratoCorrectionEnabledChanged(bool enabled);
     void harmonyVibratoEnabledChanged(bool enabled);
+    void harmonyHumanizationEnabledChanged(bool enabled);
     void voiceSustainEnabledChanged(bool enabled);
 
 public slots:
@@ -241,6 +251,11 @@ private:
     void releaseVoiceSustainedNotes();  // Release all notes held by voice sustain
     void releaseNote(const ActiveNote& note);  // Release a single note based on mode
 
+    // Humanization helpers
+    int calculateHumanizationDelayMs(int voiceIndex) const;  // BPM-constrained delay for a voice
+    void emitHarmonyNoteOn(int channel, int note, int velocity, int voiceIndex);  // Delayed if humanization enabled
+    void emitHarmonyNoteOff(int channel, int note, int voiceIndex);  // Matches delay from note-on
+
     // Pitch conversion utilities
     static int normalizePc(int pc);
     static int noteToOctave(int midiNote);
@@ -277,6 +292,8 @@ private:
     double m_vocalVibratoRangeCents = 200.0;  // ±200 cents (default), or ±100 cents
     bool m_vibratoCorrectionEnabled = true;   // Enabled by default - filter out DC offset from voice
     bool m_harmonyVibratoEnabled = false;     // Disabled by default - harmony voices get no vibrato pitch bend
+    bool m_harmonyHumanizationEnabled = true; // Enabled by default - add timing offsets to harmony
+    int m_tempoBpm = 120;                     // Current tempo for humanization calculations
     bool m_voiceSustainEnabled = true;        // Enabled by default - hold notes while singing
     int m_harmonyRangeMin = 0;                // Min MIDI note for harmony (default: no limit)
     int m_harmonyRangeMax = 127;              // Max MIDI note for harmony (default: no limit)
@@ -301,6 +318,10 @@ private:
 
     // Multi-voice harmony configuration (4 voices on channels 12-15)
     std::array<HarmonyVoiceConfig, 4> m_voiceConfigs;
+
+    // Humanization state (per voice)
+    mutable std::array<int, 4> m_humanizationDelayMs = {0, 0, 0, 0};  // Last delay used for each voice
+    mutable quint32 m_humanizationRngState = 12345;  // Simple LCG state for humanization
 
     static constexpr qint64 kPhraseTimeoutMs = 500;  // Silence longer than this = new phrase
 

@@ -2,6 +2,7 @@
 
 #include <QDebug>
 #include <QDateTime>
+#include <QTimer>
 #include <cmath>
 #include <algorithm>
 
@@ -198,6 +199,19 @@ void ScaleSnapProcessor::setHarmonyVibratoEnabled(bool enabled)
         }
         emit harmonyVibratoEnabledChanged(enabled);
     }
+}
+
+void ScaleSnapProcessor::setHarmonyHumanizationEnabled(bool enabled)
+{
+    if (m_harmonyHumanizationEnabled != enabled) {
+        m_harmonyHumanizationEnabled = enabled;
+        emit harmonyHumanizationEnabledChanged(enabled);
+    }
+}
+
+void ScaleSnapProcessor::setTempoBpm(int bpm)
+{
+    m_tempoBpm = qBound(30, bpm, 300);  // Clamp to reasonable range
 }
 
 void ScaleSnapProcessor::setVoiceSustainEnabled(bool enabled)
@@ -787,9 +801,9 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
                 qDebug() << "ScaleSnap Multi-Voice" << voiceIdx << ":" << midiNote << "->" << harmonyNote
                          << "ch" << kHarmonyChannels[voiceIdx];
 
-                // Emit the harmony note
+                // Emit the harmony note (with humanization delay if enabled)
                 if (harmonyNote >= 0 && harmonyNote <= 127) {
-                    emitNoteOn(kHarmonyChannels[voiceIdx], harmonyNote, harmonyVelocity);
+                    emitHarmonyNoteOn(kHarmonyChannels[voiceIdx], harmonyNote, harmonyVelocity, voiceIdx);
                 }
             }
 
@@ -830,7 +844,7 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
             qDebug() << "ScaleSnap Harmony (legacy): INPUT" << midiNote << "-> HARMONY" << active.harmonyNote;
 
             if (active.harmonyNote >= 0 && active.harmonyNote <= 127) {
-                emitNoteOn(kChannelHarmony1, active.harmonyNote, harmonyVelocity);
+                emitHarmonyNoteOn(kChannelHarmony1, active.harmonyNote, harmonyVelocity, 0);
             }
         }
     }
@@ -1593,8 +1607,8 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
                     qDebug() << "ScaleSnap Multi-Voice" << voiceIdx << ": Re-conforming (leadChanged=" << leadChanged
                              << ", harmonyTier=" << harmonyTier << ")";
 
-                    // Turn off old harmony note
-                    emitNoteOff(kHarmonyChannels[voiceIdx], note.harmonyNotes[voiceIdx]);
+                    // Turn off old harmony note (with humanization delay if enabled)
+                    emitHarmonyNoteOff(kHarmonyChannels[voiceIdx], note.harmonyNotes[voiceIdx], voiceIdx);
 
                     // Generate new harmony using the voice's motion type, with inter-voice clash avoidance
                     int newHarmony = generateHarmonyForVoice(voiceIdx, currentLeadNote, chordTones, validPcs, generatedHarmonyNotes);
@@ -1602,10 +1616,10 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
                     // FINAL VALIDATION: Ensure re-conformed harmony is T1/T2/T3 (not chromatic T4)
                     newHarmony = validateHarmonyNote(newHarmony, currentLeadNote, activeChord);
 
-                    // Emit new harmony note
+                    // Emit new harmony note (with humanization delay if enabled)
                     int harmonyVelocity = static_cast<int>(note.velocity * m_harmonyConfig.velocityRatio);
                     harmonyVelocity = qBound(1, harmonyVelocity, 127);
-                    emitNoteOn(kHarmonyChannels[voiceIdx], newHarmony, harmonyVelocity);
+                    emitHarmonyNoteOn(kHarmonyChannels[voiceIdx], newHarmony, harmonyVelocity, voiceIdx);
 
                     // Update tracking
                     note.harmonyNotes[voiceIdx] = newHarmony;
@@ -1653,8 +1667,8 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
                 qDebug() << "ScaleSnap: Re-conforming harmony (leadChanged=" << leadChanged
                          << ", harmonyTier=" << harmonyTier << ")";
 
-                // Turn off old harmony note
-                emitNoteOff(kChannelHarmony1, note.harmonyNote);
+                // Turn off old harmony note (with humanization delay if enabled)
+                emitHarmonyNoteOff(kChannelHarmony1, note.harmonyNote, 0);
 
                 // Generate new harmony using the CORRECT motion-type generator
                 // This preserves voice leading context (parallel/contrary/similar motion)
@@ -1715,10 +1729,10 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
                 // FINAL VALIDATION: Ensure re-conformed harmony is T1/T2/T3 (not chromatic T4)
                 newHarmony = validateHarmonyNote(newHarmony, currentLeadNote, activeChord);
 
-                // Emit new harmony note
+                // Emit new harmony note (with humanization delay if enabled)
                 int harmonyVelocity = static_cast<int>(note.velocity * m_harmonyConfig.velocityRatio);
                 harmonyVelocity = qBound(1, harmonyVelocity, 127);
-                emitNoteOn(kChannelHarmony1, newHarmony, harmonyVelocity);
+                emitHarmonyNoteOn(kChannelHarmony1, newHarmony, harmonyVelocity, 0);
 
                 // Update tracking
                 note.harmonyNote = newHarmony;
@@ -3170,6 +3184,89 @@ void ScaleSnapProcessor::emitCC(int channel, int cc, int value)
     }
 }
 
+int ScaleSnapProcessor::calculateHumanizationDelayMs(int voiceIndex) const
+{
+    if (!m_harmonyHumanizationEnabled || voiceIndex < 0 || voiceIndex >= 4) {
+        return 0;
+    }
+
+    // BPM-constrained humanization: at higher tempos, use smaller delays
+    // Reference: at 90 BPM, use up to ~25ms; scale down at faster tempos
+    const double tempoScale = qBound(0.35, 90.0 / double(m_tempoBpm), 1.0);
+
+    // Base max delay per voice (slightly different to create voice separation)
+    // Voice 0: up to 15ms, Voice 1: up to 20ms, Voice 2: up to 18ms, Voice 3: up to 22ms
+    static const int kBaseMaxDelayMs[4] = {15, 20, 18, 22};
+    const int maxDelayMs = static_cast<int>(kBaseMaxDelayMs[voiceIndex] * tempoScale);
+
+    if (maxDelayMs <= 0) {
+        return 0;
+    }
+
+    // Simple triangular distribution (center-weighted) using LCG
+    // LCG: state = state * 1103515245 + 12345
+    m_humanizationRngState = m_humanizationRngState * 1103515245u + 12345u;
+    const int a = static_cast<int>((m_humanizationRngState >> 16) % (maxDelayMs + 1));
+    m_humanizationRngState = m_humanizationRngState * 1103515245u + 12345u;
+    const int b = static_cast<int>((m_humanizationRngState >> 16) % (maxDelayMs + 1));
+
+    // Triangular distribution: (a + b) / 2 gives center-weighted result in [0, maxDelayMs]
+    const int delayMs = (a + b) / 2;
+
+    return delayMs;
+}
+
+void ScaleSnapProcessor::emitHarmonyNoteOn(int channel, int note, int velocity, int voiceIndex)
+{
+    if (!m_midi || note < 0 || note > 127) {
+        return;
+    }
+
+    const int delayMs = calculateHumanizationDelayMs(voiceIndex);
+
+    if (voiceIndex >= 0 && voiceIndex < 4) {
+        m_humanizationDelayMs[voiceIndex] = delayMs;
+    }
+
+    if (delayMs <= 0) {
+        // No delay - emit immediately
+        m_midi->sendVirtualNoteOn(channel, note, velocity);
+    } else {
+        // Delay the note-on using QTimer::singleShot
+        // Capture by value to ensure data survives the lambda
+        QTimer::singleShot(delayMs, this, [this, channel, note, velocity]() {
+            if (m_midi) {
+                m_midi->sendVirtualNoteOn(channel, note, velocity);
+            }
+        });
+    }
+}
+
+void ScaleSnapProcessor::emitHarmonyNoteOff(int channel, int note, int voiceIndex)
+{
+    if (!m_midi || note < 0 || note > 127) {
+        return;
+    }
+
+    // Use the same delay that was used for note-on to maintain note duration
+    int delayMs = 0;
+    if (voiceIndex >= 0 && voiceIndex < 4) {
+        delayMs = m_humanizationDelayMs[voiceIndex];
+    }
+
+    if (delayMs <= 0) {
+        // No delay - emit immediately
+        m_midi->sendVirtualNoteOff(channel, note);
+    } else {
+        // Delay the note-off to match note-on delay
+        QTimer::singleShot(delayMs, this, [this, channel, note]() {
+            if (m_midi) {
+                m_midi->sendVirtualNoteOff(channel, note);
+            }
+        });
+    }
+}
+
 void ScaleSnapProcessor::emitAllNotesOff()
 {
     for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
@@ -3188,16 +3285,16 @@ void ScaleSnapProcessor::releaseNote(const ActiveNote& note)
     const bool multiVoiceActive = isMultiVoiceModeActive();
 
     if (multiVoiceActive) {
-        // Multi-voice mode: release all active harmony voices
+        // Multi-voice mode: release all active harmony voices (with humanization delay if enabled)
         static const int kHarmonyChannels[4] = {kChannelHarmony1, kChannelHarmony2, kChannelHarmony3, kChannelHarmony4};
         for (int i = 0; i < 4; ++i) {
             if (note.harmonyNotes[i] >= 0) {
-                emitNoteOff(kHarmonyChannels[i], note.harmonyNotes[i]);
+                emitHarmonyNoteOff(kHarmonyChannels[i], note.harmonyNotes[i], i);
             }
         }
     } else if (m_harmonyMode != HarmonyMode::OFF && note.harmonyNote >= 0) {
-        // Legacy mode: release harmony note on channel 12
-        emitNoteOff(kChannelHarmony1, note.harmonyNote);
+        // Legacy mode: release harmony note on channel 12 (with humanization delay if enabled)
+        emitHarmonyNoteOff(kChannelHarmony1, note.harmonyNote, 0);
     }
 }
 

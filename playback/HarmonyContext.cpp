@@ -79,19 +79,41 @@ QString HarmonyContext::ontologyChordKeyFor(const music::ChordSymbol& c) {
     if (c.noChord || c.placeholder) return {};
     if (c.quality == ChordQuality::Dominant) {
         if (c.alt) return "7alt";
-        bool hasB9 = false, hasSharp9 = false, hasB13 = false, hasSharp11 = false;
+
+        // Collect all alterations
+        bool hasB5 = false, hasSharp5 = false;
+        bool hasB9 = false, hasSharp9 = false;
+        bool hasSharp11 = false;
+        bool hasB13 = false;
         for (const auto& a : c.alterations) {
+            if (a.degree == 5 && a.delta < 0) hasB5 = true;
+            if (a.degree == 5 && a.delta > 0) hasSharp5 = true;
             if (a.degree == 9 && a.delta < 0) hasB9 = true;
             if (a.degree == 9 && a.delta > 0) hasSharp9 = true;
-            if (a.degree == 13 && a.delta < 0) hasB13 = true;
             if (a.degree == 11 && a.delta > 0) hasSharp11 = true;
+            if (a.degree == 13 && a.delta < 0) hasB13 = true;
         }
+
+        // Priority: 5th alterations first (they change the fundamental chord quality)
+        if (hasSharp5) return "7#5";  // aug7 equivalent
+        if (hasB5) return "7b5";
+
+        // Combined alterations (check most specific first)
         if (hasB9 && hasSharp9) return "7b9#9";
         if (hasB9 && hasB13) return "7b9b13";
         if (hasSharp9 && hasB13) return "7#9b13";
+        if (c.extension >= 13 && hasB9 && hasSharp11) return "13b9#11";
+        if (c.extension >= 13 && hasSharp9 && hasSharp11) return "13#9#11";
+        if (c.extension >= 13 && hasB9) return "13b9";
+        if (c.extension >= 13 && hasSharp9) return "13#9";
+
+        // Single alterations
         if (hasB9) return "7b9";
         if (hasSharp9) return "7#9";
         if (hasB13) return "7b13";
+        if (hasSharp11) return "7#11";
+
+        // Extensions without alterations
         if (c.extension >= 13 && hasSharp11) return "13#11";
         if (c.extension >= 13) return "13";
         if (c.extension >= 11) return "11";

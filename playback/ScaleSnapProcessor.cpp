@@ -1285,6 +1285,8 @@ QSet<int> ScaleSnapProcessor::computeChordTones(const music::ChordSymbol& chord)
         return chordTones;
     }
 
+    // Use ontology-based chord definition lookup
+    // The ontologyChordKeyFor() function handles alteration mapping (b5, #5, b9, #9, etc.)
     const auto* chordDef = m_harmony->chordDefForSymbol(chord);
     if (!chordDef) {
         // Fallback: just the root
@@ -1292,7 +1294,7 @@ QSet<int> ScaleSnapProcessor::computeChordTones(const music::ChordSymbol& chord)
         return chordTones;
     }
 
-    // Add root and all intervals
+    // Add root and all intervals from the chord definition
     const int root = chord.rootPc;
     chordTones.insert(normalizePc(root));
     for (int interval : chordDef->intervals) {

@@ -1607,8 +1607,9 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
                     qDebug() << "ScaleSnap Multi-Voice" << voiceIdx << ": Re-conforming (leadChanged=" << leadChanged
                              << ", harmonyTier=" << harmonyTier << ")";
 
-                    // Turn off old harmony note (with humanization delay if enabled)
-                    emitHarmonyNoteOff(kHarmonyChannels[voiceIdx], note.harmonyNotes[voiceIdx], voiceIdx);
+                    // Turn off old harmony note IMMEDIATELY (no humanization delay for chord-change reconform)
+                    // Using direct emitNoteOff to ensure instant chord conformance
+                    emitNoteOff(kHarmonyChannels[voiceIdx], note.harmonyNotes[voiceIdx]);
 
                     // Generate new harmony using the voice's motion type, with inter-voice clash avoidance
                     int newHarmony = generateHarmonyForVoice(voiceIdx, currentLeadNote, chordTones, validPcs, generatedHarmonyNotes);
@@ -1616,10 +1617,11 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
                     // FINAL VALIDATION: Ensure re-conformed harmony is T1/T2/T3 (not chromatic T4)
                     newHarmony = validateHarmonyNote(newHarmony, currentLeadNote, activeChord);
 
-                    // Emit new harmony note (with humanization delay if enabled)
+                    // Emit new harmony note IMMEDIATELY (no humanization delay for chord-change reconform)
+                    // Chord changes require instant conformance - humanization only applies to new note attacks
                     int harmonyVelocity = static_cast<int>(note.velocity * m_harmonyConfig.velocityRatio);
                     harmonyVelocity = qBound(1, harmonyVelocity, 127);
-                    emitHarmonyNoteOn(kHarmonyChannels[voiceIdx], newHarmony, harmonyVelocity, voiceIdx);
+                    emitNoteOn(kHarmonyChannels[voiceIdx], newHarmony, harmonyVelocity);
 
                     // Update tracking
                     note.harmonyNotes[voiceIdx] = newHarmony;
@@ -1667,8 +1669,8 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
                 qDebug() << "ScaleSnap: Re-conforming harmony (leadChanged=" << leadChanged
                          << ", harmonyTier=" << harmonyTier << ")";
 
-                // Turn off old harmony note (with humanization delay if enabled)
-                emitHarmonyNoteOff(kChannelHarmony1, note.harmonyNote, 0);
+                // Turn off old harmony note IMMEDIATELY (no humanization delay for chord-change reconform)
+                emitNoteOff(kChannelHarmony1, note.harmonyNote);
 
                 // Generate new harmony using the CORRECT motion-type generator
                 // This preserves voice leading context (parallel/contrary/similar motion)
@@ -1729,10 +1731,11 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
                 // FINAL VALIDATION: Ensure re-conformed harmony is T1/T2/T3 (not chromatic T4)
                 newHarmony = validateHarmonyNote(newHarmony, currentLeadNote, activeChord);
 
-                // Emit new harmony note (with humanization delay if enabled)
+                // Emit new harmony note IMMEDIATELY (no humanization delay for chord-change reconform)
+                // Chord changes require instant conformance - humanization only applies to new note attacks
                 int harmonyVelocity = static_cast<int>(note.velocity * m_harmonyConfig.velocityRatio);
                 harmonyVelocity = qBound(1, harmonyVelocity, 127);
-                emitHarmonyNoteOn(kChannelHarmony1, newHarmony, harmonyVelocity, 0);
+                emitNoteOn(kChannelHarmony1, newHarmony, harmonyVelocity);
 
                 // Update tracking
                 note.harmonyNote = newHarmony;

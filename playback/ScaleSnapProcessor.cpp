@@ -406,8 +406,11 @@ void ScaleSnapProcessor::updateConformance(float deltaMs)
     }
 
     // If conformance bend changed, we need to update the pitch bend output
-    if (needsBendUpdate && !m_activeNotes.isEmpty()) {
-        // Get the first active note's conformance bend
+    // POLYPHONIC PITCH BEND FIX:
+    // Pitch bend is channel-wide - can only correctly bend one note at a time.
+    // Only apply conformance bend when exactly one note is active (monophonic playing).
+    if (needsBendUpdate && m_activeNotes.size() == 1) {
+        // Get the single active note's conformance bend
         const ActiveNote& note = m_activeNotes.begin().value();
 
         // Always apply the bend if we have an active conformance bend
@@ -419,6 +422,9 @@ void ScaleSnapProcessor::updateConformance(float deltaMs)
 
         qDebug() << "ScaleSnap: Applying bend" << note.conformanceBendCurrent
                  << "cents, MIDI value:" << bendValue;
+    } else if (needsBendUpdate && m_activeNotes.size() > 1) {
+        // Multiple notes active - reset pitch bend to center
+        emitPitchBend(kChannelLead, 8192);
     }
 }
 
@@ -955,6 +961,15 @@ void ScaleSnapProcessor::onGuitarHzUpdated(double hz)
         return;
     }
 
+    // POLYPHONIC PITCH BEND FIX:
+    // Pitch bend is channel-wide - can only correctly bend relative to ONE note's referenceHz.
+    // Only apply guitar pitch bend when exactly one note is active (monophonic playing).
+    if (m_activeNotes.size() > 1) {
+        // Multiple notes active - reset pitch bend to center
+        emitPitchBend(kChannelLead, 8192);
+        return;
+    }
+
     m_lastGuitarHz = hz;
 
     const ActiveNote& note = m_activeNotes.begin().value();
@@ -1051,6 +1066,20 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
     const bool anyModeActive = (m_leadMode != LeadMode::Off) || multiVoiceActive || legacyHarmonyActive;
 
     if (!m_vocalBendEnabled || !anyModeActive || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
+        return;
+    }
+
+    // POLYPHONIC PITCH BEND FIX:
+    // Pitch bend is channel-wide (affects ALL notes on the channel equally).
+    // When multiple notes are active, we can only correctly bend relative to ONE note's referenceHz.
+    // Applying a bend calculated from one note to all notes causes incorrect pitch on the others.
+    // Solution: Only apply vocal pitch bend when exactly one note is active (monophonic playing).
+    if (m_activeNotes.size() > 1) {
+        // Multiple notes active - reset pitch bend to center and skip vocal bend processing
+        // This prevents the bug where polyphonic notes get incorrectly bent
+        if (m_leadMode != LeadMode::Off) {
+            emitPitchBend(kChannelLead, 8192);
+        }
         return;
     }
 

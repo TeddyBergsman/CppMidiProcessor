@@ -4,6 +4,7 @@
 #include <QSet>
 #include <QHash>
 #include <QVector>
+#include <QReadWriteLock>
 #include <array>
 
 #include "music/ChordSymbol.h"
@@ -339,6 +340,7 @@ private:
     bool m_hasLastKnownChord = false;
 
     QHash<int, ActiveNote> m_activeNotes;  // key = original input note
+    mutable QReadWriteLock m_activeNotesLock{QReadWriteLock::Recursive};  // Thread safety for m_activeNotes (recursive to allow nested locking)
 
     // Hz tracking for pitch bend
     double m_lastGuitarHz = 0.0;

@@ -316,8 +316,12 @@ void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
     // Also applies to multi-voice mode where each voice needs re-conformance.
     const bool multiVoiceActive = isMultiVoiceModeActive();
     const bool legacyHarmonyActive = !multiVoiceActive && (m_harmonyMode != HarmonyMode::OFF);
-    bool needsReconform = !m_activeNotes.isEmpty() &&
-                          (m_leadMode == LeadMode::Conformed || multiVoiceActive || legacyHarmonyActive);
+    bool needsReconform = false;
+    {
+        QReadLocker lock(&m_activeNotesLock);
+        needsReconform = !m_activeNotes.isEmpty() &&
+                              (m_leadMode == LeadMode::Conformed || multiVoiceActive || legacyHarmonyActive);
+    }
 
     if (needsReconform) {
         checkAndReconformOnChordChange(previousCellIndex);
@@ -331,6 +335,8 @@ void ScaleSnapProcessor::setBeatPosition(float beatPosition)
 
 void ScaleSnapProcessor::updateConformance(float deltaMs)
 {
+    QWriteLocker lock(&m_activeNotesLock);
+
     if (m_leadMode != LeadMode::Conformed || m_activeNotes.isEmpty()) {
         return;
     }
@@ -419,7 +425,10 @@ void ScaleSnapProcessor::updateConformance(float deltaMs)
 void ScaleSnapProcessor::reset()
 {
     emitAllNotesOff();
-    m_activeNotes.clear();
+    {
+        QWriteLocker lock(&m_activeNotesLock);
+        m_activeNotes.clear();
+    }
     m_lastGuitarHz = 0.0;
     m_lastGuitarCents = 0.0;
     m_lastVoiceCents = 0.0;
@@ -468,6 +477,9 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
         qDebug() << "ScaleSnap: Exiting early - no midi processor";
         return;
     }
+
+    // Thread safety: Lock for the duration of this function since we access m_activeNotes
+    QWriteLocker lock(&m_activeNotesLock);
 
     // NOTE: We do NOT call releaseVoiceSustainedNotes() here anymore.
     // It will be called later, only if we're actually going to play a new note.
@@ -854,6 +866,9 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
 
 void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
 {
+    // Thread safety: Lock for the duration of this function since we access m_activeNotes
+    QWriteLocker lock(&m_activeNotesLock);
+
     qDebug() << "ScaleSnap::onGuitarNoteOff - note:" << midiNote
              << "activeNotes count:" << m_activeNotes.size()
              << "guitarNotesHeld:" << m_guitarNotesHeld;
@@ -932,6 +947,9 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
 
 void ScaleSnapProcessor::onGuitarHzUpdated(double hz)
 {
+    // Thread safety: Lock for reading m_activeNotes
+    QReadLocker lock(&m_activeNotesLock);
+
     // Only track/forward guitar pitch bend in Original lead mode
     if (m_leadMode != LeadMode::Original || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
         return;
@@ -998,6 +1016,7 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
     }
 
     // Voice sustain: release sustained notes when CC2 drops below threshold
+    // Note: releaseVoiceSustainedNotes() acquires its own lock
     if (m_voiceSustainEnabled && previousCc2 > kVoiceSustainCc2Threshold && value <= kVoiceSustainCc2Threshold) {
         qDebug() << "ScaleSnap: CC2 dropped below threshold, releasing voice-sustained notes";
         releaseVoiceSustainedNotes();
@@ -1023,6 +1042,9 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
 
 void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
 {
+    // Thread safety: Lock for reading m_activeNotes
+    QReadLocker lock(&m_activeNotesLock);
+
     // Only active when vocal bend is enabled, at least one mode is on, and there are active notes
     const bool multiVoiceActive = isMultiVoiceModeActive();
     const bool legacyHarmonyActive = !multiVoiceActive && (m_harmonyMode != HarmonyMode::OFF);
@@ -1446,6 +1468,9 @@ ActiveChord ScaleSnapProcessor::buildActiveChord() const
 
 void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
 {
+    // Thread safety: Lock for modifying m_activeNotes
+    QWriteLocker lock(&m_activeNotesLock);
+
     // Get the new chord for the current cell
     if (!m_harmony || !m_ontology || !m_model) {
         return;
@@ -3274,6 +3299,9 @@ void ScaleSnapProcessor::emitHarmonyNoteOff(int channel, int note, int voiceInde
 
 void ScaleSnapProcessor::emitAllNotesOff()
 {
+    // Thread safety: Lock for reading m_activeNotes (recursive lock allows nested calls)
+    QReadLocker lock(&m_activeNotesLock);
+
     for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
         releaseNote(it.value());
     }
@@ -3305,6 +3333,9 @@ void ScaleSnapProcessor::releaseNote(const ActiveNote& note)
 
 void ScaleSnapProcessor::releaseVoiceSustainedNotes()
 {
+    // Thread safety: Lock for modifying m_activeNotes (recursive lock allows nested calls)
+    QWriteLocker lock(&m_activeNotesLock);
+
     // Release all notes that are being held by voice sustain
     QList<int> toRemove;
     for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {

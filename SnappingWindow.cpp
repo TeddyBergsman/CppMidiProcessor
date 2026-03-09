@@ -20,6 +20,77 @@ SnappingWindow::SnappingWindow(QWidget* parent)
     buildUi();
 }
 
+playback::ScaleSnapProcessor* SnappingWindow::activeSnap() const
+{
+    if (m_directSnap) return m_directSnap;
+    if (m_engine) return m_engine->scaleSnapProcessor();
+    return nullptr;
+}
+
+void SnappingWindow::setScaleSnapProcessor(playback::ScaleSnapProcessor* snap)
+{
+    m_directSnap = snap;
+    if (!m_directSnap) return;
+
+    // Sync UI to current snap state (same as setPlaybackEngine but using snap directly)
+    if (m_leadModeCombo) {
+        const int modeInt = static_cast<int>(snap->leadMode());
+        for (int i = 0; i < m_leadModeCombo->count(); ++i) {
+            if (m_leadModeCombo->itemData(i).toInt() == modeInt) {
+                m_leadModeCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+
+    // Apply multi-voice defaults to snap
+    for (int voiceIdx = 0; voiceIdx < 4; ++voiceIdx) {
+        if (m_voiceModeCombo[voiceIdx] && m_voiceRangeCombo[voiceIdx]) {
+            const int modeInt = m_voiceModeCombo[voiceIdx]->currentData().toInt();
+            snap->setVoiceMotionType(voiceIdx, static_cast<playback::VoiceMotionType>(modeInt));
+            const int encoded = m_voiceRangeCombo[voiceIdx]->currentData().toInt();
+            snap->setVoiceRange(voiceIdx, encoded / 1000, encoded % 1000);
+        }
+    }
+
+    syncMultiVoiceUiToEngine();
+
+    if (m_vocalBendCheckbox) m_vocalBendCheckbox->setChecked(snap->vocalBendEnabled());
+    if (m_vocalVibratoRangeCombo) {
+        const double cents = snap->vocalVibratoRangeCents();
+        for (int i = 0; i < m_vocalVibratoRangeCombo->count(); ++i) {
+            if (qAbs(m_vocalVibratoRangeCombo->itemData(i).toDouble() - cents) < 1.0) {
+                m_vocalVibratoRangeCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    if (m_vibratoCorrectionCheckbox) m_vibratoCorrectionCheckbox->setChecked(snap->vibratoCorrectionEnabled());
+    if (m_harmonyVibratoCheckbox) m_harmonyVibratoCheckbox->setChecked(snap->harmonyVibratoEnabled());
+    if (m_harmonyHumanizationCheckbox) m_harmonyHumanizationCheckbox->setChecked(snap->harmonyHumanizationEnabled());
+    if (m_voiceSustainCheckbox) m_voiceSustainCheckbox->setChecked(snap->voiceSustainEnabled());
+
+    // Connect to changes from the processor
+    connect(snap, &playback::ScaleSnapProcessor::leadModeChanged,
+            this, &SnappingWindow::onEngineLeadModeChanged, Qt::UniqueConnection);
+    connect(snap, &playback::ScaleSnapProcessor::harmonyModeChanged,
+            this, &SnappingWindow::onEngineHarmonyModeChanged, Qt::UniqueConnection);
+    connect(snap, &playback::ScaleSnapProcessor::vocalBendEnabledChanged,
+            this, &SnappingWindow::onEngineVocalBendChanged, Qt::UniqueConnection);
+    connect(snap, &playback::ScaleSnapProcessor::vocalVibratoRangeCentsChanged,
+            this, &SnappingWindow::onEngineVocalVibratoRangeChanged, Qt::UniqueConnection);
+    connect(snap, &playback::ScaleSnapProcessor::vibratoCorrectionEnabledChanged,
+            this, &SnappingWindow::onEngineVibratoCorrectionChanged, Qt::UniqueConnection);
+    connect(snap, &playback::ScaleSnapProcessor::harmonyVibratoEnabledChanged,
+            this, &SnappingWindow::onEngineHarmonyVibratoChanged, Qt::UniqueConnection);
+    connect(snap, &playback::ScaleSnapProcessor::harmonyHumanizationEnabledChanged,
+            this, &SnappingWindow::onEngineHarmonyHumanizationChanged, Qt::UniqueConnection);
+    connect(snap, &playback::ScaleSnapProcessor::voiceSustainEnabledChanged,
+            this, &SnappingWindow::onEngineVoiceSustainChanged, Qt::UniqueConnection);
+
+    updateLeadModeDescription();
+}
+
 void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine* engine)
 {
     m_engine = engine;
@@ -342,102 +413,74 @@ void SnappingWindow::buildUi()
 
 void SnappingWindow::onLeadModeChanged(int index)
 {
-    if (!m_engine || !m_leadModeCombo) return;
+    if (!m_leadModeCombo) return;
+    auto* snap = activeSnap();
+    if (!snap) return;
 
     const int modeInt = m_leadModeCombo->itemData(index).toInt();
-    auto* snap = m_engine->scaleSnapProcessor();
-    if (snap) {
-        snap->setLeadMode(static_cast<playback::ScaleSnapProcessor::LeadMode>(modeInt));
-    }
+    snap->setLeadMode(static_cast<playback::ScaleSnapProcessor::LeadMode>(modeInt));
 
     updateLeadModeDescription();
 }
 
 void SnappingWindow::onVoiceModeChanged(int voiceIndex, int modeComboIndex)
 {
-    if (!m_engine || voiceIndex < 0 || voiceIndex >= 4 || !m_voiceModeCombo[voiceIndex]) return;
+    if (voiceIndex < 0 || voiceIndex >= 4 || !m_voiceModeCombo[voiceIndex]) return;
+    auto* snap = activeSnap();
+    if (!snap) return;
 
     const int modeInt = m_voiceModeCombo[voiceIndex]->itemData(modeComboIndex).toInt();
-    auto* snap = m_engine->scaleSnapProcessor();
-    if (snap) {
-        snap->setVoiceMotionType(voiceIndex, static_cast<playback::VoiceMotionType>(modeInt));
-    }
+    snap->setVoiceMotionType(voiceIndex, static_cast<playback::VoiceMotionType>(modeInt));
 }
 
 void SnappingWindow::onVoiceRangeChanged(int voiceIndex, int rangeComboIndex)
 {
-    if (!m_engine || voiceIndex < 0 || voiceIndex >= 4 || !m_voiceRangeCombo[voiceIndex]) return;
+    if (voiceIndex < 0 || voiceIndex >= 4 || !m_voiceRangeCombo[voiceIndex]) return;
+    auto* snap = activeSnap();
+    if (!snap) return;
 
-    // Decode the min/max from the stored value (min * 1000 + max)
     const int encoded = m_voiceRangeCombo[voiceIndex]->itemData(rangeComboIndex).toInt();
-    const int minNote = encoded / 1000;
-    const int maxNote = encoded % 1000;
-
-    auto* snap = m_engine->scaleSnapProcessor();
-    if (snap) {
-        snap->setVoiceRange(voiceIndex, minNote, maxNote);
-    }
+    snap->setVoiceRange(voiceIndex, encoded / 1000, encoded % 1000);
 }
 
 void SnappingWindow::onVocalBendToggled(bool checked)
 {
-    if (!m_engine) return;
-
-    auto* snap = m_engine->scaleSnapProcessor();
-    if (snap) {
-        snap->setVocalBendEnabled(checked);
-    }
+    auto* snap = activeSnap();
+    if (snap) snap->setVocalBendEnabled(checked);
 }
 
 void SnappingWindow::onVocalVibratoRangeChanged(int index)
 {
-    if (!m_engine || !m_vocalVibratoRangeCombo) return;
+    if (!m_vocalVibratoRangeCombo) return;
+    auto* snap = activeSnap();
+    if (!snap) return;
 
     const double cents = m_vocalVibratoRangeCombo->itemData(index).toDouble();
-    auto* snap = m_engine->scaleSnapProcessor();
-    if (snap) {
-        snap->setVocalVibratoRangeCents(cents);
-    }
+    snap->setVocalVibratoRangeCents(cents);
 }
 
 void SnappingWindow::onVibratoCorrectionToggled(bool checked)
 {
-    if (!m_engine) return;
-
-    auto* snap = m_engine->scaleSnapProcessor();
-    if (snap) {
-        snap->setVibratoCorrectionEnabled(checked);
-    }
+    auto* snap = activeSnap();
+    if (snap) snap->setVibratoCorrectionEnabled(checked);
 }
 
 void SnappingWindow::onHarmonyVibratoToggled(bool checked)
 {
-    if (!m_engine) return;
-
-    auto* snap = m_engine->scaleSnapProcessor();
-    if (snap) {
-        snap->setHarmonyVibratoEnabled(checked);
-    }
+    auto* snap = activeSnap();
+    if (snap) snap->setHarmonyVibratoEnabled(checked);
 }
 
 void SnappingWindow::onHarmonyHumanizationToggled(bool checked)
 {
-    if (!m_engine) return;
-
-    auto* snap = m_engine->scaleSnapProcessor();
-    if (snap) {
-        snap->setHarmonyHumanizationEnabled(checked);
-    }
+    auto* snap = activeSnap();
+    if (snap) snap->setHarmonyHumanizationEnabled(checked);
 }
 
 void SnappingWindow::onVoiceSustainToggled(bool checked)
 {
-    if (!m_engine) return;
-
-    auto* snap = m_engine->scaleSnapProcessor();
-    if (snap) {
-        snap->setVoiceSustainEnabled(checked);
-    }
+    auto* snap = activeSnap();
+    if (snap) snap->setVoiceSustainEnabled(checked);
 }
 
 void SnappingWindow::onEngineLeadModeChanged(playback::ScaleSnapProcessor::LeadMode mode)
@@ -564,9 +607,7 @@ void SnappingWindow::updateLeadModeDescription()
 
 void SnappingWindow::syncMultiVoiceUiToEngine()
 {
-    if (!m_engine) return;
-
-    auto* snap = m_engine->scaleSnapProcessor();
+    auto* snap = activeSnap();
     if (!snap) return;
 
     for (int voiceIdx = 0; voiceIdx < 4; ++voiceIdx) {

@@ -30,6 +30,8 @@ public:
 
     // Set the playback engine to control (must be called before showing)
     void setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine* engine);
+    // Performance mode: set ScaleSnapProcessor directly (no full engine needed)
+    void setScaleSnapProcessor(playback::ScaleSnapProcessor* snap);
 
 private slots:
     void onLeadModeChanged(int index);
@@ -57,7 +59,11 @@ private:
     void updateLeadModeDescription();
     void syncMultiVoiceUiToEngine();
 
+    // Helper: returns the active ScaleSnapProcessor from either direct or engine path
+    playback::ScaleSnapProcessor* activeSnap() const;
+
     playback::VirtuosoBalladMvpPlaybackEngine* m_engine = nullptr;
+    playback::ScaleSnapProcessor* m_directSnap = nullptr;
 
     QComboBox* m_leadModeCombo = nullptr;
     QCheckBox* m_vocalBendCheckbox = nullptr;

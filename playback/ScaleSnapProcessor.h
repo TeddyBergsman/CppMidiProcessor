@@ -283,7 +283,7 @@ private:
     const chart::ChartModel* m_model = nullptr;
 
     // State
-    LeadMode m_leadMode = LeadMode::Off;
+    LeadMode m_leadMode = LeadMode::Original;
     HarmonyMode m_harmonyMode = HarmonyMode::OFF;
     HarmonyModeCompat m_harmonyModeCompat = HarmonyModeCompat::Off;
     HarmonyConfig m_harmonyConfig;

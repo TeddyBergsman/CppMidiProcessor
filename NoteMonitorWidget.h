@@ -18,13 +18,18 @@ class QProgressBar;
 
 namespace ireal { struct Playlist; }
 namespace chart { class SongChartWidget; }
-namespace playback { class VirtuosoBalladMvpPlaybackEngine; }
+namespace playback {
+    class VirtuosoBalladMvpPlaybackEngine;
+    class ScaleSnapProcessor;
+    class HarmonyContext;
+}
+namespace virtuoso { namespace ontology { class OntologyRegistry; } }
 class MidiProcessor;
 
 class NoteMonitorWidget : public QWidget {
     Q_OBJECT
 public:
-    explicit NoteMonitorWidget(QWidget* parent = nullptr);
+    explicit NoteMonitorWidget(bool performanceMode = false, QWidget* parent = nullptr);
     ~NoteMonitorWidget() override;
     void setKeyCenter(const QString& keyCenter);
     void setIRealPlaylist(const ireal::Playlist& playlist);
@@ -51,6 +56,8 @@ public slots:
     
     // Access to the playback engine for direct signal connections
     playback::VirtuosoBalladMvpPlaybackEngine* virtuosoPlayback() const { return m_virtuosoPlayback; }
+    // Access to the ScaleSnapProcessor (performance mode uses standalone, full mode uses engine's)
+    playback::ScaleSnapProcessor* scaleSnapProcessor() const;
     void setGuitarNote(int midiNote, double cents);
     void setVoiceNote(int midiNote, double cents);
     void setGuitarHz(double hz);
@@ -151,6 +158,13 @@ private:
     // PERFORMANCE: Throttle repositionNotes() to avoid excessive UI updates during live performance
     qint64 m_lastRepositionMs = 0;
     static constexpr qint64 kMinRepositionIntervalMs = 25; // Max ~40 updates/sec
+
+    // Performance mode: lightweight startup without Virtuoso musician subsystem
+    bool m_performanceMode = false;
+    virtuoso::ontology::OntologyRegistry* m_standaloneOntology = nullptr;
+    playback::HarmonyContext* m_standaloneHarmony = nullptr;
+    playback::ScaleSnapProcessor* m_standaloneScaleSnap = nullptr;
+    chart::ChartModel m_perfModeChartModel;  // owned chart model for performance mode
 
 protected:
     void resizeEvent(QResizeEvent* event) override;

@@ -106,6 +106,9 @@ protected:
 
     // Snapping settings window (Window → Snapping)
     SnappingWindow* m_snappingWindow = nullptr;
+
+    // Performance mode: lightweight startup with only vocal+guitar fusion/snapping
+    bool m_performanceMode = true;
 };
 
 #endif // MAINWINDOW_H

@@ -37,24 +37,27 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
     voiceTranscriptionTimer = new QTimer(this);
     voiceTranscriptionTimer->setSingleShot(true);
 
+    // Read performance mode setting BEFORE creating widgets (they depend on it)
+    QSettings settings;
+    m_performanceMode = settings.value("app/performanceMode", true).toBool();
+
     createWidgets(preset);
     createLayout();
     createConnections();
 
     setWindowTitle(preset.name);
-    
+
     // Initialize the processor after the UI is ready to receive signals
     if (!m_midiProcessor->initialize()) {
         QMessageBox::critical(this, "MIDI Error", "Could not initialize MIDI ports. Please check connections and port names in preset.xml.");
     }
-    
+
     // Start voice controller if enabled
     if (preset.settings.voiceControlEnabled) {
         m_voiceController->start();
     }
 
     // Apply legacy UI preference (default: OFF -> show new minimal UI)
-    QSettings settings;
     bool legacyOn = settings.value("ui/legacy", false).toBool();
     applyLegacyUiSetting(legacyOn);
 
@@ -79,7 +82,7 @@ void MainWindow::createWidgets(const Preset& preset) {
     rootStack->addWidget(centralWidget);
 
     // Minimal note-only UI
-    noteMonitorWidget = new NoteMonitorWidget(this);
+    noteMonitorWidget = new NoteMonitorWidget(m_performanceMode, this);
     noteMonitorWidget->setMidiProcessor(m_midiProcessor);
     rootStack->addWidget(noteMonitorWidget);
 
@@ -267,7 +270,12 @@ void MainWindow::createWidgets(const Preset& preset) {
             if (!m_snappingWindow) {
                 m_snappingWindow = new SnappingWindow(this);
                 m_snappingWindow->setAttribute(Qt::WA_DeleteOnClose, false);
-                if (noteMonitorWidget && noteMonitorWidget->virtuosoPlayback()) {
+                if (m_performanceMode) {
+                    // Performance mode: connect directly to ScaleSnapProcessor
+                    if (noteMonitorWidget && noteMonitorWidget->scaleSnapProcessor()) {
+                        m_snappingWindow->setScaleSnapProcessor(noteMonitorWidget->scaleSnapProcessor());
+                    }
+                } else if (noteMonitorWidget && noteMonitorWidget->virtuosoPlayback()) {
                     m_snappingWindow->setPlaybackEngine(noteMonitorWidget->virtuosoPlayback());
                 }
             }
@@ -276,6 +284,18 @@ void MainWindow::createWidgets(const Preset& preset) {
             m_snappingWindow->activateWindow();
         });
         windowMenu->addAction(snappingAction);
+
+        // Gray out menus not available in Performance Mode
+        if (m_performanceMode) {
+            libraryAction->setEnabled(false);
+            libraryAction->setToolTip("Not available in Performance Mode");
+            vocabMenu->setEnabled(false);
+            vocabMenu->setToolTip("Not available in Performance Mode");
+            grooveLabAction->setEnabled(false);
+            grooveLabAction->setToolTip("Not available in Performance Mode");
+            presetInspectorAction->setEnabled(false);
+            presetInspectorAction->setToolTip("Not available in Performance Mode");
+        }
     }
 
     // Dynamically create program buttons from preset data
@@ -599,6 +619,7 @@ QString MainWindow::formatTranscriptionWithColors(const QString& text, const QSt
 void MainWindow::openPreferences() {
     QSettings settings;
     bool legacyOn = settings.value("ui/legacy", false).toBool();
+    bool perfModeOn = settings.value("app/performanceMode", true).toBool();
 
     QDialog dlg(this);
     dlg.setWindowTitle("Preferences");
@@ -606,6 +627,11 @@ void MainWindow::openPreferences() {
     QCheckBox* legacyCheck = new QCheckBox("Legacy UI", &dlg);
     legacyCheck->setChecked(legacyOn);
     layout->addWidget(legacyCheck);
+
+    QCheckBox* perfModeCheck = new QCheckBox("Performance Mode (requires restart)", &dlg);
+    perfModeCheck->setChecked(perfModeOn);
+    perfModeCheck->setToolTip("When enabled, the app starts with only vocal+guitar MIDI fusion and snapping.\nVirtuoso musician subsystem is not loaded for faster startup.");
+    layout->addWidget(perfModeCheck);
 
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     layout->addWidget(buttons);
@@ -616,6 +642,14 @@ void MainWindow::openPreferences() {
         bool legacy = legacyCheck->isChecked();
         settings.setValue("ui/legacy", legacy);
         applyLegacyUiSetting(legacy);
+
+        bool newPerfMode = perfModeCheck->isChecked();
+        if (newPerfMode != perfModeOn) {
+            settings.setValue("app/performanceMode", newPerfMode);
+            QMessageBox::information(this, "Performance Mode",
+                "Performance Mode has been " + QString(newPerfMode ? "enabled" : "disabled") + ".\n"
+                "Please restart the application for this change to take effect.");
+        }
     }
 }
 

@@ -6,6 +6,9 @@
 #include "chart/IRealProgressionParser.h"
 #include "ireal/IRealTypes.h"
 #include "playback/VirtuosoBalladMvpPlaybackEngine.h"
+#include "playback/ScaleSnapProcessor.h"
+#include "playback/HarmonyContext.h"
+#include "virtuoso/ontology/OntologyRegistry.h"
 #include "midiprocessor.h"
 #include "virtuoso/groove/GrooveRegistry.h"
 #include <QtWidgets>
@@ -418,8 +421,8 @@ static QString overrideGroupForSongId(const QString& songId) {
 }
 } // namespace
 
-NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
-    : QWidget(parent) {
+NoteMonitorWidget::NoteMonitorWidget(bool performanceMode, QWidget* parent)
+    : QWidget(parent), m_performanceMode(performanceMode) {
     // Black background for entire minimal UI
     setAutoFillBackground(true);
     QPalette pal = palette();
@@ -512,6 +515,18 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     
     m_chartContainer->setLayout(chartLayout);
 
+    if (m_performanceMode) {
+        // Performance mode: lightweight startup with only ScaleSnapProcessor
+        m_standaloneOntology = new virtuoso::ontology::OntologyRegistry(virtuoso::ontology::OntologyRegistry::builtins());
+        m_standaloneHarmony = new playback::HarmonyContext();
+        m_standaloneHarmony->setOntology(m_standaloneOntology);
+        m_standaloneScaleSnap = new playback::ScaleSnapProcessor(this);
+        m_standaloneScaleSnap->setHarmonyContext(m_standaloneHarmony);
+        m_standaloneScaleSnap->setOntology(m_standaloneOntology);
+
+        // Hide ALL superfluous UI — performance mode shows only wave + note overlays
+        if (m_chartContainer) m_chartContainer->hide();
+    } else {
     // Virtuoso MVP playback engine (drives highlighting + new VirtuosoEngine groove pipeline)
     // The engine now shows its own popup dialog during pre-planning
     m_virtuosoPlayback = new playback::VirtuosoBalladMvpPlaybackEngine(this);
@@ -732,6 +747,7 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
             });
 
     // (Weights v2 sliders removed - all parameters now derived from Energy)
+    } // end else (!m_performanceMode)
 
     auto makeSection = [&](const QString& title,
                            QLabel*& titleLbl,
@@ -864,6 +880,11 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     m_pitchMonitor->setMinimumHeight(140);
     root->addWidget(m_pitchMonitor, 1);
 
+    // Performance mode: hide pitch monitor (keep only wave + note overlays)
+    if (m_performanceMode && m_pitchMonitor) {
+        m_pitchMonitor->hide();
+    }
+
     // Hide initially (keep section height fixed)
     m_guitarLetter->setVisible(false);
     m_guitarAccidental->setVisible(false);
@@ -956,11 +977,39 @@ NoteMonitorWidget::NoteMonitorWidget(QWidget* parent)
     });
 }
 
+playback::ScaleSnapProcessor* NoteMonitorWidget::scaleSnapProcessor() const {
+    if (m_performanceMode) return m_standaloneScaleSnap;
+    if (m_virtuosoPlayback) return m_virtuosoPlayback->scaleSnapProcessor();
+    return nullptr;
+}
+
 void NoteMonitorWidget::setMidiProcessor(MidiProcessor* processor) {
     m_midiProcessor = processor;
     if (!m_midiProcessor) return;
 
-    if (m_virtuosoPlayback) {
+    if (m_performanceMode) {
+        // Performance mode: wire ScaleSnapProcessor directly to MidiProcessor signals
+        if (m_standaloneScaleSnap) {
+            m_standaloneScaleSnap->setMidiProcessor(m_midiProcessor);
+            // Guitar signals: DirectConnection for real-time performance
+            connect(m_midiProcessor, &MidiProcessor::guitarNoteOn,
+                    m_standaloneScaleSnap, &playback::ScaleSnapProcessor::onGuitarNoteOn,
+                    Qt::DirectConnection);
+            connect(m_midiProcessor, &MidiProcessor::guitarNoteOff,
+                    m_standaloneScaleSnap, &playback::ScaleSnapProcessor::onGuitarNoteOff,
+                    Qt::DirectConnection);
+            connect(m_midiProcessor, &MidiProcessor::guitarHzUpdated,
+                    m_standaloneScaleSnap, &playback::ScaleSnapProcessor::onGuitarHzUpdated,
+                    Qt::DirectConnection);
+            // Voice signals: QueuedConnection (comes from worker thread)
+            connect(m_midiProcessor, &MidiProcessor::voiceCc2Updated,
+                    m_standaloneScaleSnap, &playback::ScaleSnapProcessor::onVoiceCc2Updated,
+                    Qt::QueuedConnection);
+            connect(m_midiProcessor, &MidiProcessor::voiceHzUpdated,
+                    m_standaloneScaleSnap, &playback::ScaleSnapProcessor::onVoiceHzUpdated,
+                    Qt::QueuedConnection);
+        }
+    } else if (m_virtuosoPlayback) {
         m_virtuosoPlayback->setMidiProcessor(m_midiProcessor);
     }
 }
@@ -969,7 +1018,7 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
     if (!m_playlist || idx < 0 || idx >= m_playlist->songs.size()) return;
 
     // Stop playback when switching songs.
-    if (m_virtuosoPlayback) m_virtuosoPlayback->stop();
+    if (!m_performanceMode && m_virtuosoPlayback) m_virtuosoPlayback->stop();
     setVirtuosoTransportButtonUi(m_virtuosoPlayButton, style(), /*isPlaying=*/false);
 
     const auto& song = m_playlist->songs[idx];
@@ -1001,7 +1050,14 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
         const bool flats = preferFlatsForKeyCenter(selectedKeyCenter);
         const chart::ChartModel m = transposeChartModel(m_baseChartModel, delta, flats);
         m_chartWidget->setChartModel(m);
-        if (m_virtuosoPlayback) m_virtuosoPlayback->setChartModel(m);
+        if (m_performanceMode) {
+            // Performance mode: feed chart model to standalone components
+            m_perfModeChartModel = m;
+            if (m_standaloneHarmony) m_standaloneHarmony->rebuildFromModel(m);
+            if (m_standaloneScaleSnap) m_standaloneScaleSnap->setChartModel(&m_perfModeChartModel);
+        } else if (m_virtuosoPlayback) {
+            m_virtuosoPlayback->setChartModel(m);
+        }
     }
 
     // Tempo preference: song tempo if present, else current spin.
@@ -1012,7 +1068,7 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
     m_tempoSpin->setValue(bpm);
     m_tempoSpin->blockSignals(false);
 
-    if (m_virtuosoPlayback) m_virtuosoPlayback->setTempoBpm(bpm);
+    if (!m_performanceMode && m_virtuosoPlayback) m_virtuosoPlayback->setTempoBpm(bpm);
     if (m_pitchMonitor) m_pitchMonitor->setBpm(bpm);
 
     // Repeats preference: song metadata if present, else default 3; overridable per-song.
@@ -1024,13 +1080,15 @@ void NoteMonitorWidget::loadSongAtIndex(int idx) {
         m_repeatsSpin->setValue(reps);
         m_repeatsSpin->blockSignals(false);
     }
-    if (m_virtuosoPlayback) m_virtuosoPlayback->setRepeats(reps);
+    if (!m_performanceMode && m_virtuosoPlayback) m_virtuosoPlayback->setRepeats(reps);
 
+    if (!m_performanceMode) {
     if (m_virtuosoPlayButton) m_virtuosoPlayButton->setEnabled(true);
     if (m_virtuosoPresetCombo) m_virtuosoPresetCombo->setEnabled(true);
+    }
 
     // Populate Virtuoso preset dropdown (jazz-only for now; filter to ballad/brushes first).
-    if (m_virtuosoPresetCombo) {
+    if (!m_performanceMode && m_virtuosoPresetCombo) {
         const bool prevSig = m_virtuosoPresetCombo->blockSignals(true);
         m_virtuosoPresetCombo->clear();
         const auto reg = virtuoso::groove::GrooveRegistry::builtins();
@@ -1101,7 +1159,7 @@ void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
 
     if (!hasSongs) {
         if (m_chartWidget) m_chartWidget->clear();
-        if (m_virtuosoPlayback) m_virtuosoPlayback->stop();
+        if (!m_performanceMode && m_virtuosoPlayback) m_virtuosoPlayback->stop();
         setVirtuosoTransportButtonUi(m_virtuosoPlayButton, style(), /*isPlaying=*/false);
         return;
     }
@@ -1129,21 +1187,27 @@ void NoteMonitorWidget::setIRealPlaylist(const ireal::Playlist& playlist) {
 NoteMonitorWidget::~NoteMonitorWidget() {
     delete m_playlist;
     m_playlist = nullptr;
+    // Performance mode standalone objects (non-QObject heap allocations)
+    delete m_standaloneHarmony;
+    m_standaloneHarmony = nullptr;
+    delete m_standaloneOntology;
+    m_standaloneOntology = nullptr;
 }
 
 void NoteMonitorWidget::requestVirtuosoLookaheadOnce() {
-    if (!m_virtuosoPlayback) return;
+    if (m_performanceMode || !m_virtuosoPlayback) return;
     m_virtuosoPlayback->emitLookaheadPlanOnce();
 }
 
 void NoteMonitorWidget::setVirtuosoAgentEnergyMultiplier(const QString& agent, double mult01to2) {
-    if (!m_virtuosoPlayback) return;
+    if (m_performanceMode || !m_virtuosoPlayback) return;
     m_virtuosoPlayback->setAgentEnergyMultiplier(agent, mult01to2);
     // Refresh lookahead immediately so UIs update even if transport is stopped.
     m_virtuosoPlayback->emitLookaheadPlanOnce();
 }
 
 void NoteMonitorWidget::setTheoryEventsEnabled(bool enabled) {
+    if (m_performanceMode) return;
     if (!m_virtuosoPlayback) {
         qWarning() << "NoteMonitorWidget::setTheoryEventsEnabled: m_virtuosoPlayback is NULL!";
         return;
@@ -1159,6 +1223,10 @@ void NoteMonitorWidget::setTheoryEventsEnabled(bool enabled) {
 }
 
 void NoteMonitorWidget::stopAllPlayback() {
+    if (m_performanceMode) {
+        if (m_standaloneScaleSnap) m_standaloneScaleSnap->reset();
+        return;
+    }
     if (m_virtuosoPlayback && m_virtuosoPlayback->isPlaying()) {
         m_virtuosoPlayback->stop();
         setVirtuosoTransportButtonUi(m_virtuosoPlayButton, style(), /*isPlaying=*/false);

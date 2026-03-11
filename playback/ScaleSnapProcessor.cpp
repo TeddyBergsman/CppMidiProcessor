@@ -30,6 +30,13 @@ void ScaleSnapProcessor::setMidiProcessor(MidiProcessor* midi)
         disconnect(m_midi, nullptr, this, nullptr);
     }
     m_midi = midi;
+
+    // Apply the current lead mode's side effects now that we have a MidiProcessor.
+    // The header default (Original) sets m_leadMode but never calls setLeadMode(),
+    // so setSuppressGuitarPassthrough() would otherwise never fire at startup.
+    if (m_midi) {
+        m_midi->setSuppressGuitarPassthrough(m_leadMode != LeadMode::Off);
+    }
 }
 
 void ScaleSnapProcessor::setHarmonyContext(HarmonyContext* harmony)

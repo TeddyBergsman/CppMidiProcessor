@@ -8,6 +8,7 @@ class QComboBox;
 class QCheckBox;
 class QLabel;
 class QGroupBox;
+class QSlider;
 class MidiProcessor;
 
 namespace playback { class VirtuosoBalladMvpPlaybackEngine; }
@@ -41,6 +42,8 @@ private slots:
     void onHarmonyVibratoToggled(bool checked);
     void onHarmonyHumanizationToggled(bool checked);
     void onVoiceSustainToggled(bool checked);
+    void onSustainSmoothingToggled(bool checked);
+    void onSustainSmoothingMsChanged(int value);
     void onEngineLeadModeChanged(playback::ScaleSnapProcessor::LeadMode mode);
     void onEngineHarmonyModeChanged(playback::HarmonyMode mode);
     void onEngineVocalBendChanged(bool enabled);
@@ -49,6 +52,8 @@ private slots:
     void onEngineHarmonyVibratoChanged(bool enabled);
     void onEngineHarmonyHumanizationChanged(bool enabled);
     void onEngineVoiceSustainChanged(bool enabled);
+    void onEngineSustainSmoothingChanged(bool enabled);
+    void onEngineSustainSmoothingMsChanged(int ms);
 
     // Multi-voice harmony slots
     void onVoiceModeChanged(int voiceIndex, int modeComboIndex);
@@ -72,6 +77,9 @@ private:
     QCheckBox* m_harmonyVibratoCheckbox = nullptr;
     QCheckBox* m_harmonyHumanizationCheckbox = nullptr;
     QCheckBox* m_voiceSustainCheckbox = nullptr;
+    QCheckBox* m_sustainSmoothingCheckbox = nullptr;
+    QSlider* m_sustainSmoothingSlider = nullptr;
+    QLabel* m_sustainSmoothingLabel = nullptr;
     QLabel* m_leadDescriptionLabel = nullptr;
 
     // Multi-voice harmony UI elements (4 voices, channels 12-15)

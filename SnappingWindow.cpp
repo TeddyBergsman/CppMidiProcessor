@@ -7,6 +7,8 @@
 #include <QLabel>
 #include <QGroupBox>
 #include <QGridLayout>
+#include <QSlider>
+#include <QSettings>
 
 #include "playback/VirtuosoBalladMvpPlaybackEngine.h"
 
@@ -70,6 +72,14 @@ void SnappingWindow::setScaleSnapProcessor(playback::ScaleSnapProcessor* snap)
     if (m_harmonyHumanizationCheckbox) m_harmonyHumanizationCheckbox->setChecked(snap->harmonyHumanizationEnabled());
     if (m_voiceSustainCheckbox) m_voiceSustainCheckbox->setChecked(snap->voiceSustainEnabled());
 
+    // Apply persisted sustain smoothing settings to the processor
+    if (m_sustainSmoothingCheckbox) {
+        snap->setSustainSmoothingEnabled(m_sustainSmoothingCheckbox->isChecked());
+    }
+    if (m_sustainSmoothingSlider) {
+        snap->setSustainSmoothingMs(m_sustainSmoothingSlider->value());
+    }
+
     // Connect to changes from the processor
     connect(snap, &playback::ScaleSnapProcessor::leadModeChanged,
             this, &SnappingWindow::onEngineLeadModeChanged, Qt::UniqueConnection);
@@ -87,6 +97,10 @@ void SnappingWindow::setScaleSnapProcessor(playback::ScaleSnapProcessor* snap)
             this, &SnappingWindow::onEngineHarmonyHumanizationChanged, Qt::UniqueConnection);
     connect(snap, &playback::ScaleSnapProcessor::voiceSustainEnabledChanged,
             this, &SnappingWindow::onEngineVoiceSustainChanged, Qt::UniqueConnection);
+    connect(snap, &playback::ScaleSnapProcessor::sustainSmoothingEnabledChanged,
+            this, &SnappingWindow::onEngineSustainSmoothingChanged, Qt::UniqueConnection);
+    connect(snap, &playback::ScaleSnapProcessor::sustainSmoothingMsChanged,
+            this, &SnappingWindow::onEngineSustainSmoothingMsChanged, Qt::UniqueConnection);
 
     updateLeadModeDescription();
 }
@@ -158,6 +172,14 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
             m_voiceSustainCheckbox->setChecked(snap->voiceSustainEnabled());
         }
 
+        // Apply persisted sustain smoothing settings to the processor
+        if (m_sustainSmoothingCheckbox) {
+            snap->setSustainSmoothingEnabled(m_sustainSmoothingCheckbox->isChecked());
+        }
+        if (m_sustainSmoothingSlider) {
+            snap->setSustainSmoothingMs(m_sustainSmoothingSlider->value());
+        }
+
         // Connect to changes from the processor (in case it changes elsewhere)
         connect(snap, &playback::ScaleSnapProcessor::leadModeChanged,
                 this, &SnappingWindow::onEngineLeadModeChanged,
@@ -182,6 +204,12 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
                 Qt::UniqueConnection);
         connect(snap, &playback::ScaleSnapProcessor::voiceSustainEnabledChanged,
                 this, &SnappingWindow::onEngineVoiceSustainChanged,
+                Qt::UniqueConnection);
+        connect(snap, &playback::ScaleSnapProcessor::sustainSmoothingEnabledChanged,
+                this, &SnappingWindow::onEngineSustainSmoothingChanged,
+                Qt::UniqueConnection);
+        connect(snap, &playback::ScaleSnapProcessor::sustainSmoothingMsChanged,
+                this, &SnappingWindow::onEngineSustainSmoothingMsChanged,
                 Qt::UniqueConnection);
     }
 
@@ -386,6 +414,32 @@ void SnappingWindow::buildUi()
     m_voiceSustainCheckbox->setToolTip("Sustain guitar notes for as long as you're singing (CC2 active).\nNotes ring out even after the guitar string stops, allowing longer sustained tones controlled by your voice.");
     mainLayout->addWidget(m_voiceSustainCheckbox);
 
+    // Sustain smoothing checkbox + slider
+    m_sustainSmoothingCheckbox = new QCheckBox("Sustain Smoothing", central);
+    m_sustainSmoothingCheckbox->setToolTip("Hold sustain briefly after voice drops out to survive short silences.\nPrevents notes from cutting off during brief pauses in singing.");
+    mainLayout->addWidget(m_sustainSmoothingCheckbox);
+
+    auto* smoothingRow = new QHBoxLayout();
+    m_sustainSmoothingLabel = new QLabel("Hold: 500 ms", central);
+    m_sustainSmoothingSlider = new QSlider(Qt::Horizontal, central);
+    m_sustainSmoothingSlider->setRange(50, 2000);
+    m_sustainSmoothingSlider->setValue(500);
+    m_sustainSmoothingSlider->setTickInterval(250);
+    m_sustainSmoothingSlider->setTickPosition(QSlider::TicksBelow);
+    m_sustainSmoothingSlider->setToolTip("How long to hold sustain after voice drops out (50-2000 ms).");
+    smoothingRow->addWidget(m_sustainSmoothingLabel);
+    smoothingRow->addWidget(m_sustainSmoothingSlider, 1);
+    mainLayout->addLayout(smoothingRow);
+
+    // Load persisted sustain smoothing settings
+    {
+        QSettings settings;
+        m_sustainSmoothingCheckbox->setChecked(settings.value("snapping/sustainSmoothingEnabled", true).toBool());
+        int ms = settings.value("snapping/sustainSmoothingMs", 500).toInt();
+        m_sustainSmoothingSlider->setValue(ms);
+        m_sustainSmoothingLabel->setText(QString("Hold: %1 ms").arg(ms));
+    }
+
     mainLayout->addStretch();
 
     // Connect widgets
@@ -403,6 +457,10 @@ void SnappingWindow::buildUi()
             this, &SnappingWindow::onHarmonyHumanizationToggled);
     connect(m_voiceSustainCheckbox, &QCheckBox::toggled,
             this, &SnappingWindow::onVoiceSustainToggled);
+    connect(m_sustainSmoothingCheckbox, &QCheckBox::toggled,
+            this, &SnappingWindow::onSustainSmoothingToggled);
+    connect(m_sustainSmoothingSlider, &QSlider::valueChanged,
+            this, &SnappingWindow::onSustainSmoothingMsChanged);
 
     updateLeadModeDescription();
 
@@ -579,6 +637,53 @@ void SnappingWindow::onEngineVoiceSustainChanged(bool enabled)
         m_voiceSustainCheckbox->blockSignals(true);
         m_voiceSustainCheckbox->setChecked(enabled);
         m_voiceSustainCheckbox->blockSignals(false);
+    }
+}
+
+void SnappingWindow::onSustainSmoothingToggled(bool checked)
+{
+    auto* snap = activeSnap();
+    if (snap) snap->setSustainSmoothingEnabled(checked);
+
+    QSettings settings;
+    settings.setValue("snapping/sustainSmoothingEnabled", checked);
+}
+
+void SnappingWindow::onSustainSmoothingMsChanged(int value)
+{
+    auto* snap = activeSnap();
+    if (snap) snap->setSustainSmoothingMs(value);
+
+    if (m_sustainSmoothingLabel) {
+        m_sustainSmoothingLabel->setText(QString("Hold: %1 ms").arg(value));
+    }
+
+    QSettings settings;
+    settings.setValue("snapping/sustainSmoothingMs", value);
+}
+
+void SnappingWindow::onEngineSustainSmoothingChanged(bool enabled)
+{
+    if (!m_sustainSmoothingCheckbox) return;
+
+    if (m_sustainSmoothingCheckbox->isChecked() != enabled) {
+        m_sustainSmoothingCheckbox->blockSignals(true);
+        m_sustainSmoothingCheckbox->setChecked(enabled);
+        m_sustainSmoothingCheckbox->blockSignals(false);
+    }
+}
+
+void SnappingWindow::onEngineSustainSmoothingMsChanged(int ms)
+{
+    if (!m_sustainSmoothingSlider) return;
+
+    if (m_sustainSmoothingSlider->value() != ms) {
+        m_sustainSmoothingSlider->blockSignals(true);
+        m_sustainSmoothingSlider->setValue(ms);
+        m_sustainSmoothingSlider->blockSignals(false);
+    }
+    if (m_sustainSmoothingLabel) {
+        m_sustainSmoothingLabel->setText(QString("Hold: %1 ms").arg(ms));
     }
 }
 

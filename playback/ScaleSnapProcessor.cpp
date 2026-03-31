@@ -233,6 +233,28 @@ void ScaleSnapProcessor::setVoiceSustainEnabled(bool enabled)
     }
 }
 
+void ScaleSnapProcessor::setSustainSmoothingEnabled(bool enabled)
+{
+    if (m_sustainSmoothingEnabled != enabled) {
+        m_sustainSmoothingEnabled = enabled;
+        // If disabling while timer is pending, release immediately
+        if (!enabled && m_sustainReleaseTimerActive) {
+            m_sustainReleaseTimerActive = false;
+            releaseVoiceSustainedNotes();
+        }
+        emit sustainSmoothingEnabledChanged(enabled);
+    }
+}
+
+void ScaleSnapProcessor::setSustainSmoothingMs(int ms)
+{
+    ms = std::clamp(ms, 50, 2000);
+    if (m_sustainSmoothingMs != ms) {
+        m_sustainSmoothingMs = ms;
+        emit sustainSmoothingMsChanged(ms);
+    }
+}
+
 void ScaleSnapProcessor::setHarmonyRange(int minNote, int maxNote)
 {
     // Validate and clamp to MIDI range
@@ -1040,8 +1062,30 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
     // Voice sustain: release sustained notes when CC2 drops below threshold
     // Note: releaseVoiceSustainedNotes() acquires its own lock
     if (m_voiceSustainEnabled && previousCc2 > kVoiceSustainCc2Threshold && value <= kVoiceSustainCc2Threshold) {
-        qDebug() << "ScaleSnap: CC2 dropped below threshold, releasing voice-sustained notes";
-        releaseVoiceSustainedNotes();
+        if (m_sustainSmoothingEnabled && m_sustainSmoothingMs > 0) {
+            // Delayed release: start timer so brief silences don't kill sustain
+            if (!m_sustainReleaseTimerActive) {
+                m_sustainReleaseTimerActive = true;
+                qDebug() << "ScaleSnap: CC2 dropped below threshold, starting sustain hold timer (" << m_sustainSmoothingMs << "ms)";
+                QTimer::singleShot(m_sustainSmoothingMs, this, [this]() {
+                    if (m_sustainReleaseTimerActive) {
+                        m_sustainReleaseTimerActive = false;
+                        qDebug() << "ScaleSnap: Sustain hold timer expired, releasing voice-sustained notes";
+                        releaseVoiceSustainedNotes();
+                    }
+                });
+            }
+        } else {
+            // Immediate release (smoothing disabled)
+            qDebug() << "ScaleSnap: CC2 dropped below threshold, releasing voice-sustained notes";
+            releaseVoiceSustainedNotes();
+        }
+    }
+
+    // Cancel pending release if CC2 came back above threshold
+    if (m_sustainReleaseTimerActive && value > kVoiceSustainCc2Threshold) {
+        qDebug() << "ScaleSnap: CC2 recovered above threshold, cancelling sustain release timer";
+        m_sustainReleaseTimerActive = false;
     }
 
     // Forward CC2 (breath control) to active channels

@@ -139,6 +139,14 @@ public:
     int sustainSmoothingMs() const { return m_sustainSmoothingMs; }
     void setSustainSmoothingMs(int ms);
 
+    // Release bend prevention: freeze guitar pitch bend on voice-sustained notes
+    bool releaseBendPreventionEnabled() const { return m_releaseBendPreventionEnabled; }
+    void setReleaseBendPreventionEnabled(bool enabled);
+
+    // Voice sustain sensitivity: CC2 threshold for triggering/releasing sustain (lower = more sensitive)
+    int voiceSustainThreshold() const { return m_voiceSustainThreshold; }
+    void setVoiceSustainThreshold(int threshold);
+
     // Harmony instrument range (constrains harmony notes to playable range)
     // Default is full MIDI range (0-127). Set to instrument-specific range.
     // Common ranges: Trumpet E3-C6 (52-84), Alto Sax Db3-Ab5 (49-80), Violin G3-E7 (55-100)
@@ -176,6 +184,8 @@ signals:
     void voiceSustainEnabledChanged(bool enabled);
     void sustainSmoothingEnabledChanged(bool enabled);
     void sustainSmoothingMsChanged(int ms);
+    void releaseBendPreventionEnabledChanged(bool enabled);
+    void voiceSustainThresholdChanged(int threshold);
 
 public slots:
     // Guitar input handlers (connected to MidiProcessor signals)
@@ -307,6 +317,8 @@ private:
     bool m_sustainSmoothingEnabled = true;    // Enabled by default - delay release on brief silences
     int m_sustainSmoothingMs = 500;           // Default 500ms hold time after CC2 drops
     bool m_sustainReleaseTimerActive = false; // True when waiting to release after CC2 dropped
+    bool m_releaseBendPreventionEnabled = true; // Enabled by default - freeze pitch bend on voice-sustained notes
+    int m_voiceSustainThreshold = 5;           // CC2 threshold for sustain (1-10, lower = more sensitive)
     int m_harmonyRangeMin = 0;                // Min MIDI note for harmony (default: no limit)
     int m_harmonyRangeMax = 127;              // Max MIDI note for harmony (default: no limit)
     int m_currentCellIndex = -1;
@@ -372,7 +384,6 @@ private:
     static constexpr int kSettlingDuration = 30;             // ~300ms settling period before detecting vibrato
     static constexpr int kVibratoFadeInDuration = 15;        // ~150ms fade-in once vibrato is detected
     static constexpr double kOscillationThreshold = 8.0;     // Minimum cents deviation to consider as oscillation
-    static constexpr int kVoiceSustainCc2Threshold = 1;      // CC2 must be above this to sustain notes (low to allow soft singing)
     static constexpr float kConformanceBendRatePerMs = 0.5f; // Cents per ms for conformance bend
 
     // Output channels (1-indexed, matching sendVirtualNoteOn expectations)

@@ -255,6 +255,23 @@ void ScaleSnapProcessor::setSustainSmoothingMs(int ms)
     }
 }
 
+void ScaleSnapProcessor::setReleaseBendPreventionEnabled(bool enabled)
+{
+    if (m_releaseBendPreventionEnabled != enabled) {
+        m_releaseBendPreventionEnabled = enabled;
+        emit releaseBendPreventionEnabledChanged(enabled);
+    }
+}
+
+void ScaleSnapProcessor::setVoiceSustainThreshold(int threshold)
+{
+    threshold = std::clamp(threshold, 1, 10);
+    if (m_voiceSustainThreshold != threshold) {
+        m_voiceSustainThreshold = threshold;
+        emit voiceSustainThresholdChanged(threshold);
+    }
+}
+
 void ScaleSnapProcessor::setHarmonyRange(int minNote, int maxNote)
 {
     // Validate and clamp to MIDI range
@@ -945,10 +962,22 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
     }
 
     // Voice sustain: if enabled and singing (CC2 > threshold), mark as sustained instead of releasing
-    if (m_voiceSustainEnabled && m_lastCc2Value > kVoiceSustainCc2Threshold) {
+    if (m_voiceSustainEnabled && m_lastCc2Value > m_voiceSustainThreshold) {
         // Mark note as voice-sustained instead of releasing
         it.value().voiceSustained = true;
         qDebug() << "ScaleSnap: Voice sustaining note" << midiNote << "CC2=" << m_lastCc2Value;
+
+        // Release bend prevention: reset guitar bend to center so the string release
+        // pitch droop from MG3 doesn't make the sustained note go sour
+        if (m_releaseBendPreventionEnabled) {
+            m_lastGuitarCents = 0.0;
+            if (m_leadMode == LeadMode::Original) {
+                emitPitchBend(kChannelLead, 8192);
+                if (m_harmonyMode != HarmonyMode::OFF) {
+                    emitPitchBend(kChannelHarmony1, 8192);
+                }
+            }
+        }
         return;
     }
 
@@ -997,6 +1026,22 @@ void ScaleSnapProcessor::onGuitarHzUpdated(double hz)
         // Multiple notes active - reset pitch bend to center
         emitPitchBend(kChannelLead, 8192);
         return;
+    }
+
+    // Release bend prevention: if all active notes are voice-sustained, the guitar string
+    // has been released and MG3 is sending spurious pitch droop. Freeze bend at center.
+    if (m_releaseBendPreventionEnabled) {
+        bool allVoiceSustained = true;
+        for (auto it = m_activeNotes.constBegin(); it != m_activeNotes.constEnd(); ++it) {
+            if (!it.value().voiceSustained) {
+                allVoiceSustained = false;
+                break;
+            }
+        }
+        if (allVoiceSustained) {
+            m_lastGuitarCents = 0.0;
+            return;
+        }
     }
 
     m_lastGuitarHz = hz;
@@ -1061,7 +1106,7 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
 
     // Voice sustain: release sustained notes when CC2 drops below threshold
     // Note: releaseVoiceSustainedNotes() acquires its own lock
-    if (m_voiceSustainEnabled && previousCc2 > kVoiceSustainCc2Threshold && value <= kVoiceSustainCc2Threshold) {
+    if (m_voiceSustainEnabled && previousCc2 > m_voiceSustainThreshold && value <= m_voiceSustainThreshold) {
         if (m_sustainSmoothingEnabled && m_sustainSmoothingMs > 0) {
             // Delayed release: start timer so brief silences don't kill sustain
             if (!m_sustainReleaseTimerActive) {
@@ -1083,7 +1128,7 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
     }
 
     // Cancel pending release if CC2 came back above threshold
-    if (m_sustainReleaseTimerActive && value > kVoiceSustainCc2Threshold) {
+    if (m_sustainReleaseTimerActive && value > m_voiceSustainThreshold) {
         qDebug() << "ScaleSnap: CC2 recovered above threshold, cancelling sustain release timer";
         m_sustainReleaseTimerActive = false;
     }

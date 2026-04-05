@@ -72,12 +72,18 @@ void SnappingWindow::setScaleSnapProcessor(playback::ScaleSnapProcessor* snap)
     if (m_harmonyHumanizationCheckbox) m_harmonyHumanizationCheckbox->setChecked(snap->harmonyHumanizationEnabled());
     if (m_voiceSustainCheckbox) m_voiceSustainCheckbox->setChecked(snap->voiceSustainEnabled());
 
-    // Apply persisted sustain smoothing settings to the processor
+    // Apply persisted sustain smoothing and release bend prevention settings to the processor
     if (m_sustainSmoothingCheckbox) {
         snap->setSustainSmoothingEnabled(m_sustainSmoothingCheckbox->isChecked());
     }
     if (m_sustainSmoothingSlider) {
         snap->setSustainSmoothingMs(m_sustainSmoothingSlider->value());
+    }
+    if (m_releaseBendPreventionCheckbox) {
+        snap->setReleaseBendPreventionEnabled(m_releaseBendPreventionCheckbox->isChecked());
+    }
+    if (m_voiceSustainThresholdSlider) {
+        snap->setVoiceSustainThreshold(m_voiceSustainThresholdSlider->value());
     }
 
     // Connect to changes from the processor
@@ -101,6 +107,10 @@ void SnappingWindow::setScaleSnapProcessor(playback::ScaleSnapProcessor* snap)
             this, &SnappingWindow::onEngineSustainSmoothingChanged, Qt::UniqueConnection);
     connect(snap, &playback::ScaleSnapProcessor::sustainSmoothingMsChanged,
             this, &SnappingWindow::onEngineSustainSmoothingMsChanged, Qt::UniqueConnection);
+    connect(snap, &playback::ScaleSnapProcessor::releaseBendPreventionEnabledChanged,
+            this, &SnappingWindow::onEngineReleaseBendPreventionChanged, Qt::UniqueConnection);
+    connect(snap, &playback::ScaleSnapProcessor::voiceSustainThresholdChanged,
+            this, &SnappingWindow::onEngineVoiceSustainThresholdChanged, Qt::UniqueConnection);
 
     updateLeadModeDescription();
 }
@@ -172,12 +182,18 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
             m_voiceSustainCheckbox->setChecked(snap->voiceSustainEnabled());
         }
 
-        // Apply persisted sustain smoothing settings to the processor
+        // Apply persisted sustain smoothing and release bend prevention settings to the processor
         if (m_sustainSmoothingCheckbox) {
             snap->setSustainSmoothingEnabled(m_sustainSmoothingCheckbox->isChecked());
         }
         if (m_sustainSmoothingSlider) {
             snap->setSustainSmoothingMs(m_sustainSmoothingSlider->value());
+        }
+        if (m_releaseBendPreventionCheckbox) {
+            snap->setReleaseBendPreventionEnabled(m_releaseBendPreventionCheckbox->isChecked());
+        }
+        if (m_voiceSustainThresholdSlider) {
+            snap->setVoiceSustainThreshold(m_voiceSustainThresholdSlider->value());
         }
 
         // Connect to changes from the processor (in case it changes elsewhere)
@@ -210,6 +226,12 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
                 Qt::UniqueConnection);
         connect(snap, &playback::ScaleSnapProcessor::sustainSmoothingMsChanged,
                 this, &SnappingWindow::onEngineSustainSmoothingMsChanged,
+                Qt::UniqueConnection);
+        connect(snap, &playback::ScaleSnapProcessor::releaseBendPreventionEnabledChanged,
+                this, &SnappingWindow::onEngineReleaseBendPreventionChanged,
+                Qt::UniqueConnection);
+        connect(snap, &playback::ScaleSnapProcessor::voiceSustainThresholdChanged,
+                this, &SnappingWindow::onEngineVoiceSustainThresholdChanged,
                 Qt::UniqueConnection);
     }
 
@@ -414,6 +436,20 @@ void SnappingWindow::buildUi()
     m_voiceSustainCheckbox->setToolTip("Sustain guitar notes for as long as you're singing (CC2 active).\nNotes ring out even after the guitar string stops, allowing longer sustained tones controlled by your voice.");
     mainLayout->addWidget(m_voiceSustainCheckbox);
 
+    // Voice sustain sensitivity slider
+    auto* thresholdRow = new QHBoxLayout();
+    m_voiceSustainThresholdLabel = new QLabel("Sensitivity: 5", central);
+    m_voiceSustainThresholdSlider = new QSlider(Qt::Horizontal, central);
+    m_voiceSustainThresholdSlider->setRange(1, 10);
+    m_voiceSustainThresholdSlider->setValue(5);
+    m_voiceSustainThresholdSlider->setTickInterval(1);
+    m_voiceSustainThresholdSlider->setTickPosition(QSlider::TicksBelow);
+    m_voiceSustainThresholdSlider->setInvertedAppearance(true);  // Left = high threshold (less sensitive), right = low (more sensitive)
+    m_voiceSustainThresholdSlider->setToolTip("Voice sustain sensitivity (CC2 threshold).\nHigher = more sensitive (softer singing triggers sustain).\nLower = less sensitive (requires stronger voice signal).");
+    thresholdRow->addWidget(m_voiceSustainThresholdLabel);
+    thresholdRow->addWidget(m_voiceSustainThresholdSlider, 1);
+    mainLayout->addLayout(thresholdRow);
+
     // Sustain smoothing checkbox + slider
     m_sustainSmoothingCheckbox = new QCheckBox("Sustain Smoothing", central);
     m_sustainSmoothingCheckbox->setToolTip("Hold sustain briefly after voice drops out to survive short silences.\nPrevents notes from cutting off during brief pauses in singing.");
@@ -431,13 +467,22 @@ void SnappingWindow::buildUi()
     smoothingRow->addWidget(m_sustainSmoothingSlider, 1);
     mainLayout->addLayout(smoothingRow);
 
-    // Load persisted sustain smoothing settings
+    // Release bend prevention checkbox
+    m_releaseBendPreventionCheckbox = new QCheckBox("Release Bend Prevention", central);
+    m_releaseBendPreventionCheckbox->setToolTip("Freeze pitch bend when a note is voice-sustained.\nPrevents the pitch droop from guitar string release (MIDI Guitar 3) from making sustained notes go flat.");
+    mainLayout->addWidget(m_releaseBendPreventionCheckbox);
+
+    // Load persisted sustain smoothing and release bend prevention settings
     {
         QSettings settings;
         m_sustainSmoothingCheckbox->setChecked(settings.value("snapping/sustainSmoothingEnabled", true).toBool());
         int ms = settings.value("snapping/sustainSmoothingMs", 500).toInt();
         m_sustainSmoothingSlider->setValue(ms);
         m_sustainSmoothingLabel->setText(QString("Hold: %1 ms").arg(ms));
+        m_releaseBendPreventionCheckbox->setChecked(settings.value("snapping/releaseBendPreventionEnabled", true).toBool());
+        int threshold = settings.value("snapping/voiceSustainThreshold", 5).toInt();
+        m_voiceSustainThresholdSlider->setValue(threshold);
+        m_voiceSustainThresholdLabel->setText(QString("Sensitivity: %1").arg(threshold));
     }
 
     mainLayout->addStretch();
@@ -461,6 +506,10 @@ void SnappingWindow::buildUi()
             this, &SnappingWindow::onSustainSmoothingToggled);
     connect(m_sustainSmoothingSlider, &QSlider::valueChanged,
             this, &SnappingWindow::onSustainSmoothingMsChanged);
+    connect(m_releaseBendPreventionCheckbox, &QCheckBox::toggled,
+            this, &SnappingWindow::onReleaseBendPreventionToggled);
+    connect(m_voiceSustainThresholdSlider, &QSlider::valueChanged,
+            this, &SnappingWindow::onVoiceSustainThresholdChanged);
 
     updateLeadModeDescription();
 
@@ -684,6 +733,53 @@ void SnappingWindow::onEngineSustainSmoothingMsChanged(int ms)
     }
     if (m_sustainSmoothingLabel) {
         m_sustainSmoothingLabel->setText(QString("Hold: %1 ms").arg(ms));
+    }
+}
+
+void SnappingWindow::onReleaseBendPreventionToggled(bool checked)
+{
+    auto* snap = activeSnap();
+    if (snap) snap->setReleaseBendPreventionEnabled(checked);
+
+    QSettings settings;
+    settings.setValue("snapping/releaseBendPreventionEnabled", checked);
+}
+
+void SnappingWindow::onEngineReleaseBendPreventionChanged(bool enabled)
+{
+    if (!m_releaseBendPreventionCheckbox) return;
+
+    if (m_releaseBendPreventionCheckbox->isChecked() != enabled) {
+        m_releaseBendPreventionCheckbox->blockSignals(true);
+        m_releaseBendPreventionCheckbox->setChecked(enabled);
+        m_releaseBendPreventionCheckbox->blockSignals(false);
+    }
+}
+
+void SnappingWindow::onVoiceSustainThresholdChanged(int value)
+{
+    auto* snap = activeSnap();
+    if (snap) snap->setVoiceSustainThreshold(value);
+
+    if (m_voiceSustainThresholdLabel) {
+        m_voiceSustainThresholdLabel->setText(QString("Sensitivity: %1").arg(value));
+    }
+
+    QSettings settings;
+    settings.setValue("snapping/voiceSustainThreshold", value);
+}
+
+void SnappingWindow::onEngineVoiceSustainThresholdChanged(int threshold)
+{
+    if (!m_voiceSustainThresholdSlider) return;
+
+    if (m_voiceSustainThresholdSlider->value() != threshold) {
+        m_voiceSustainThresholdSlider->blockSignals(true);
+        m_voiceSustainThresholdSlider->setValue(threshold);
+        m_voiceSustainThresholdSlider->blockSignals(false);
+    }
+    if (m_voiceSustainThresholdLabel) {
+        m_voiceSustainThresholdLabel->setText(QString("Sensitivity: %1").arg(threshold));
     }
 }
 

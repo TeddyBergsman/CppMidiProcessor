@@ -44,6 +44,8 @@ private slots:
     void onVoiceSustainToggled(bool checked);
     void onSustainSmoothingToggled(bool checked);
     void onSustainSmoothingMsChanged(int value);
+    void onReleaseBendPreventionToggled(bool checked);
+    void onVoiceSustainThresholdChanged(int value);
     void onEngineLeadModeChanged(playback::ScaleSnapProcessor::LeadMode mode);
     void onEngineHarmonyModeChanged(playback::HarmonyMode mode);
     void onEngineVocalBendChanged(bool enabled);
@@ -54,6 +56,8 @@ private slots:
     void onEngineVoiceSustainChanged(bool enabled);
     void onEngineSustainSmoothingChanged(bool enabled);
     void onEngineSustainSmoothingMsChanged(int ms);
+    void onEngineReleaseBendPreventionChanged(bool enabled);
+    void onEngineVoiceSustainThresholdChanged(int threshold);
 
     // Multi-voice harmony slots
     void onVoiceModeChanged(int voiceIndex, int modeComboIndex);
@@ -80,6 +84,9 @@ private:
     QCheckBox* m_sustainSmoothingCheckbox = nullptr;
     QSlider* m_sustainSmoothingSlider = nullptr;
     QLabel* m_sustainSmoothingLabel = nullptr;
+    QCheckBox* m_releaseBendPreventionCheckbox = nullptr;
+    QSlider* m_voiceSustainThresholdSlider = nullptr;
+    QLabel* m_voiceSustainThresholdLabel = nullptr;
     QLabel* m_leadDescriptionLabel = nullptr;
 
     // Multi-voice harmony UI elements (4 voices, channels 12-15)

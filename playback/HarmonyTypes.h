@@ -209,11 +209,12 @@ struct PhraseBoundary {
 // ============================================================================
 
 namespace channels {
-    constexpr int LEAD = 1;        // Lead melody (guitar with optional conformance)
-    constexpr int HARMONY_1 = 12;  // Primary harmony voice
-    constexpr int HARMONY_2 = 13;  // Second harmony voice
-    constexpr int HARMONY_3 = 14;  // Third harmony voice
-    constexpr int HARMONY_4 = 15;  // Fourth harmony voice
+    constexpr int LEAD = 1;          // Lead melody (guitar with optional conformance)
+    constexpr int VOCAL_SYNC = 2;    // VocalSync pitch target output (for AU plugin)
+    constexpr int HARMONY_1 = 12;    // Primary harmony voice
+    constexpr int HARMONY_2 = 13;    // Second harmony voice
+    constexpr int HARMONY_3 = 14;    // Third harmony voice
+    constexpr int HARMONY_4 = 15;    // Fourth harmony voice
 }
 
 // ============================================================================

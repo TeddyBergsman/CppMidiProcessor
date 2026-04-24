@@ -82,6 +82,9 @@ void SnappingWindow::setScaleSnapProcessor(playback::ScaleSnapProcessor* snap)
     if (m_releaseBendPreventionCheckbox) {
         snap->setReleaseBendPreventionEnabled(m_releaseBendPreventionCheckbox->isChecked());
     }
+    if (m_octaveGuardCheckbox) {
+        snap->setOctaveGuardEnabled(m_octaveGuardCheckbox->isChecked());
+    }
     if (m_voiceSustainThresholdSlider) {
         snap->setVoiceSustainThreshold(m_voiceSustainThresholdSlider->value());
     }
@@ -111,6 +114,18 @@ void SnappingWindow::setScaleSnapProcessor(playback::ScaleSnapProcessor* snap)
             this, &SnappingWindow::onEngineReleaseBendPreventionChanged, Qt::UniqueConnection);
     connect(snap, &playback::ScaleSnapProcessor::voiceSustainThresholdChanged,
             this, &SnappingWindow::onEngineVoiceSustainThresholdChanged, Qt::UniqueConnection);
+
+    // Show/hide glissando controls and apply settings based on current lead mode
+    if (m_glissandoGroup) {
+        const bool isVocalSync = (snap->leadMode() == playback::ScaleSnapProcessor::LeadMode::VocalSync);
+        m_glissandoGroup->setVisible(isVocalSync);
+        if (isVocalSync) {
+            if (m_glissandoEnabledCheckbox) snap->setGlissandoEnabled(m_glissandoEnabledCheckbox->isChecked());
+            if (m_glissandoRateSlider) snap->setGlissandoRateStPerSec(static_cast<float>(m_glissandoRateSlider->value()));
+            if (m_glissandoThresholdSlider) snap->setGlissandoIntervalThresholdSt(static_cast<float>(m_glissandoThresholdSlider->value()));
+            if (m_glissandoCurveCombo) snap->setGlissandoCurveExponent(m_glissandoCurveCombo->currentData().toFloat());
+        }
+    }
 
     updateLeadModeDescription();
 }
@@ -308,6 +323,7 @@ void SnappingWindow::buildUi()
     m_leadModeCombo->addItem("Off", static_cast<int>(playback::ScaleSnapProcessor::LeadMode::Off));
     m_leadModeCombo->addItem("Original", static_cast<int>(playback::ScaleSnapProcessor::LeadMode::Original));
     m_leadModeCombo->addItem("Conformed", static_cast<int>(playback::ScaleSnapProcessor::LeadMode::Conformed));
+    m_leadModeCombo->addItem("VocalSync", static_cast<int>(playback::ScaleSnapProcessor::LeadMode::VocalSync));
     m_leadModeCombo->setMinimumWidth(180);
 
     leadComboRow->addWidget(leadLabel);
@@ -323,6 +339,101 @@ void SnappingWindow::buildUi()
     leadLayout->addWidget(m_leadDescriptionLabel);
 
     mainLayout->addWidget(leadGroup);
+
+    // ===== GLISSANDO GROUP (VocalSync mode only) =====
+    m_glissandoGroup = new QGroupBox("Glissando (VocalSync)", central);
+    QVBoxLayout* glissandoLayout = new QVBoxLayout(m_glissandoGroup);
+    glissandoLayout->setContentsMargins(12, 12, 12, 12);
+    glissandoLayout->setSpacing(8);
+
+    m_glissandoEnabledCheckbox = new QCheckBox("Enable Glissando", m_glissandoGroup);
+    m_glissandoEnabledCheckbox->setToolTip("Smooth pitch transitions between guitar notes.\nWhen disabled, pitch changes snap instantly.");
+    glissandoLayout->addWidget(m_glissandoEnabledCheckbox);
+
+    // Glide rate slider
+    auto* rateRow = new QHBoxLayout();
+    m_glissandoRateLabel = new QLabel("Glide Rate: 100 st/s", m_glissandoGroup);
+    m_glissandoRateSlider = new QSlider(Qt::Horizontal, m_glissandoGroup);
+    m_glissandoRateSlider->setRange(10, 500);
+    m_glissandoRateSlider->setValue(100);
+    m_glissandoRateSlider->setTickInterval(50);
+    m_glissandoRateSlider->setTickPosition(QSlider::TicksBelow);
+    m_glissandoRateSlider->setToolTip("Base glide speed in semitones per second.\nLower = slower, more vocal portamento feel.\nHigher = faster transitions.");
+    rateRow->addWidget(m_glissandoRateLabel);
+    rateRow->addWidget(m_glissandoRateSlider, 1);
+    glissandoLayout->addLayout(rateRow);
+
+    // Snap threshold slider
+    auto* thresholdGlissRow = new QHBoxLayout();
+    m_glissandoThresholdLabel = new QLabel("Snap Threshold: 7 st", m_glissandoGroup);
+    m_glissandoThresholdSlider = new QSlider(Qt::Horizontal, m_glissandoGroup);
+    m_glissandoThresholdSlider->setRange(1, 12);
+    m_glissandoThresholdSlider->setValue(7);
+    m_glissandoThresholdSlider->setTickInterval(1);
+    m_glissandoThresholdSlider->setTickPosition(QSlider::TicksBelow);
+    m_glissandoThresholdSlider->setToolTip("Intervals larger than this glide proportionally faster.\nSmall intervals (steps) glide smoothly, large leaps snap quickly.");
+    thresholdGlissRow->addWidget(m_glissandoThresholdLabel);
+    thresholdGlissRow->addWidget(m_glissandoThresholdSlider, 1);
+    glissandoLayout->addLayout(thresholdGlissRow);
+
+    // Curve combo
+    auto* curveRow = new QHBoxLayout();
+    QLabel* curveLabel = new QLabel("Curve:", m_glissandoGroup);
+    m_glissandoCurveCombo = new QComboBox(m_glissandoGroup);
+    m_glissandoCurveCombo->addItem("Linear", 1.0f);
+    m_glissandoCurveCombo->addItem("Smooth (default)", 1.5f);
+    m_glissandoCurveCombo->addItem("Exponential", 2.0f);
+    m_glissandoCurveCombo->setCurrentIndex(1); // Smooth by default
+    m_glissandoCurveCombo->setToolTip("Glide curve shape.\nLinear = constant speed.\nSmooth = natural vocal feel.\nExponential = accelerates into the target note.");
+    curveRow->addWidget(curveLabel);
+    curveRow->addWidget(m_glissandoCurveCombo);
+    curveRow->addStretch();
+    glissandoLayout->addLayout(curveRow);
+
+    // Load persisted glissando settings
+    {
+        QSettings settings;
+        m_glissandoEnabledCheckbox->setChecked(settings.value("snapping/glissandoEnabled", true).toBool());
+        int rate = settings.value("snapping/glissandoRate", 100).toInt();
+        m_glissandoRateSlider->setValue(rate);
+        m_glissandoRateLabel->setText(QString("Glide Rate: %1 st/s").arg(rate));
+        int threshold = settings.value("snapping/glissandoThreshold", 7).toInt();
+        m_glissandoThresholdSlider->setValue(threshold);
+        m_glissandoThresholdLabel->setText(QString("Snap Threshold: %1 st").arg(threshold));
+        int curveIdx = settings.value("snapping/glissandoCurve", 1).toInt();
+        m_glissandoCurveCombo->setCurrentIndex(qBound(0, curveIdx, 2));
+    }
+
+    // Glissando connections
+    connect(m_glissandoEnabledCheckbox, &QCheckBox::toggled, this, [this](bool checked) {
+        QSettings().setValue("snapping/glissandoEnabled", checked);
+        auto* snap = activeSnap();
+        if (snap) snap->setGlissandoEnabled(checked);
+    });
+    connect(m_glissandoRateSlider, &QSlider::valueChanged, this, [this](int value) {
+        m_glissandoRateLabel->setText(QString("Glide Rate: %1 st/s").arg(value));
+        QSettings().setValue("snapping/glissandoRate", value);
+        auto* snap = activeSnap();
+        if (snap) snap->setGlissandoRateStPerSec(static_cast<float>(value));
+    });
+    connect(m_glissandoThresholdSlider, &QSlider::valueChanged, this, [this](int value) {
+        m_glissandoThresholdLabel->setText(QString("Snap Threshold: %1 st").arg(value));
+        QSettings().setValue("snapping/glissandoThreshold", value);
+        auto* snap = activeSnap();
+        if (snap) snap->setGlissandoIntervalThresholdSt(static_cast<float>(value));
+    });
+    connect(m_glissandoCurveCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        QSettings().setValue("snapping/glissandoCurve", index);
+        auto* snap = activeSnap();
+        if (snap && m_glissandoCurveCombo) {
+            float exponent = m_glissandoCurveCombo->itemData(index).toFloat();
+            snap->setGlissandoCurveExponent(exponent);
+        }
+    });
+
+    // Initially hidden - shown only when VocalSync mode is selected
+    m_glissandoGroup->setVisible(false);
+    mainLayout->addWidget(m_glissandoGroup);
 
     // ===== HARMONY GROUP (4 voices on channels 12-15) =====
     m_harmonyGroup = new QGroupBox("Harmony (Channels 12-15)", central);
@@ -472,6 +583,11 @@ void SnappingWindow::buildUi()
     m_releaseBendPreventionCheckbox->setToolTip("Freeze pitch bend when a note is voice-sustained.\nPrevents the pitch droop from guitar string release (MIDI Guitar 3) from making sustained notes go flat.");
     mainLayout->addWidget(m_releaseBendPreventionCheckbox);
 
+    // Octave guard checkbox
+    m_octaveGuardCheckbox = new QCheckBox("Octave Guard", central);
+    m_octaveGuardCheckbox->setToolTip("Reject sudden octave jumps from voice MIDI tracking errors.\nLarge pitch jumps (>9 semitones) must be stable for ~30ms before accepted.\nPrevents brief false octave spikes from MG2.");
+    mainLayout->addWidget(m_octaveGuardCheckbox);
+
     // Load persisted sustain smoothing and release bend prevention settings
     {
         QSettings settings;
@@ -480,6 +596,7 @@ void SnappingWindow::buildUi()
         m_sustainSmoothingSlider->setValue(ms);
         m_sustainSmoothingLabel->setText(QString("Hold: %1 ms").arg(ms));
         m_releaseBendPreventionCheckbox->setChecked(settings.value("snapping/releaseBendPreventionEnabled", true).toBool());
+        m_octaveGuardCheckbox->setChecked(settings.value("snapping/octaveGuardEnabled", true).toBool());
         int threshold = settings.value("snapping/voiceSustainThreshold", 5).toInt();
         m_voiceSustainThresholdSlider->setValue(threshold);
         m_voiceSustainThresholdLabel->setText(QString("Sensitivity: %1").arg(threshold));
@@ -508,6 +625,11 @@ void SnappingWindow::buildUi()
             this, &SnappingWindow::onSustainSmoothingMsChanged);
     connect(m_releaseBendPreventionCheckbox, &QCheckBox::toggled,
             this, &SnappingWindow::onReleaseBendPreventionToggled);
+    connect(m_octaveGuardCheckbox, &QCheckBox::toggled, this, [this](bool checked) {
+        auto* snap = activeSnap();
+        if (snap) snap->setOctaveGuardEnabled(checked);
+        QSettings().setValue("snapping/octaveGuardEnabled", checked);
+    });
     connect(m_voiceSustainThresholdSlider, &QSlider::valueChanged,
             this, &SnappingWindow::onVoiceSustainThresholdChanged);
 
@@ -525,7 +647,21 @@ void SnappingWindow::onLeadModeChanged(int index)
     if (!snap) return;
 
     const int modeInt = m_leadModeCombo->itemData(index).toInt();
-    snap->setLeadMode(static_cast<playback::ScaleSnapProcessor::LeadMode>(modeInt));
+    const auto mode = static_cast<playback::ScaleSnapProcessor::LeadMode>(modeInt);
+    snap->setLeadMode(mode);
+
+    // Show/hide glissando controls based on VocalSync mode
+    if (m_glissandoGroup) {
+        m_glissandoGroup->setVisible(mode == playback::ScaleSnapProcessor::LeadMode::VocalSync);
+    }
+
+    // Apply persisted glissando settings when entering VocalSync mode
+    if (mode == playback::ScaleSnapProcessor::LeadMode::VocalSync) {
+        if (m_glissandoEnabledCheckbox) snap->setGlissandoEnabled(m_glissandoEnabledCheckbox->isChecked());
+        if (m_glissandoRateSlider) snap->setGlissandoRateStPerSec(static_cast<float>(m_glissandoRateSlider->value()));
+        if (m_glissandoThresholdSlider) snap->setGlissandoIntervalThresholdSt(static_cast<float>(m_glissandoThresholdSlider->value()));
+        if (m_glissandoCurveCombo) snap->setGlissandoCurveExponent(m_glissandoCurveCombo->currentData().toFloat());
+    }
 
     updateLeadModeDescription();
 }
@@ -800,6 +936,11 @@ void SnappingWindow::updateLeadModeDescription()
         break;
     case playback::ScaleSnapProcessor::LeadMode::Conformed:
         desc = "Apply gravity-based pitch conformance to snap notes toward chord/scale tones. Output on MIDI channel 1.";
+        break;
+    case playback::ScaleSnapProcessor::LeadMode::VocalSync:
+        desc = "Output guitar pitch target on MIDI channel 1 for the VocalSync AU plugin. "
+               "Guitar notes set the target pitch, glissando smooths transitions, "
+               "and vocal vibrato is layered on top via pitch bend.";
         break;
     }
 

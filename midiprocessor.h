@@ -34,6 +34,9 @@ public slots:
     // Suppress guitar passthrough to channel 1 (used by ScaleSnapProcessor when Lead mode is active)
     void setSuppressGuitarPassthrough(bool suppress);
     bool suppressGuitarPassthrough() const { return m_suppressGuitarPassthrough.load(); }
+    // Suppress voice pitch passthrough to channel 2 (used by VocalSync mode to free Ch 2 for pitch targets)
+    void setSuppressVoicePassthrough(bool suppress);
+    bool suppressVoicePassthrough() const { return m_suppressVoicePassthrough.load(); }
     // Virtual musician MIDI (thread-safe; enqueued to worker thread)
     void sendVirtualNoteOn(int channel, int note, int velocity);
     void sendVirtualNoteOff(int channel, int note);
@@ -42,6 +45,11 @@ public slots:
     void sendVirtualCC(int channel, int cc, int value);
     // Virtual musician pitch bend (thread-safe; enqueued to worker thread)
     void sendVirtualPitchBend(int channel, int bendValue);
+    // VocalSync dedicated output (bypasses main output, goes to separate IAC bus)
+    void sendVocalSyncNoteOn(int note, int velocity);
+    void sendVocalSyncNoteOff(int note);
+    void sendVocalSyncCC(int cc, int value);
+    void sendVocalSyncPitchBend(int bendValue); // 14-bit (0-16383, center 8192)
     // Emergency stop for shutdown: sends explicit NOTE_OFF for all notes on all channels,
     // plus CC64/CC123/CC120. This is intended for app quit / teardown.
     void panicAllChannels();
@@ -101,7 +109,10 @@ private:
     // Suppress guitar passthrough: when true, guitar notes/CC are NOT passed through to channel 1.
     // ScaleSnapProcessor sets this when Lead mode is active so it can output processed notes instead.
     std::atomic<bool> m_suppressGuitarPassthrough{false};
-    
+    // Suppress voice pitch passthrough: when true, voice notes/pitch bend are NOT passed through to channel 2.
+    // VocalSync mode sets this so it can output pitch targets on channel 2 instead.
+    std::atomic<bool> m_suppressVoicePassthrough{false};
+
     QTimer* m_logPollTimer;
     std::queue<std::string> m_logQueue;
     std::mutex m_logMutex;
@@ -122,10 +133,13 @@ private:
     void hzToNoteAndCents(double hz, int& noteOut, double& centsOut) const;
     // Defensive MIDI output: never crash due to RtMidi exceptions or null output.
     void safeSendMessage(const std::vector<unsigned char>& msg);
+    // VocalSync-dedicated output: sends on a separate IAC bus to avoid flooding the AU plugin
+    void safeSendVocalSync(const std::vector<unsigned char>& msg);
 
     // --- MIDI Ports ---
     RtMidiIn* midiInGuitar = nullptr;
     RtMidiOut* midiOut = nullptr;
+    RtMidiOut* midiOutVocalSync = nullptr;  // Dedicated output for VocalSync AU plugin
     RtMidiIn* midiInVoice = nullptr;       // Voice amplitude (aftertouch) source
     RtMidiIn* midiInVoicePitch = nullptr;  // Voice accurate pitch/note source
     bool m_voicePitchAvailable = false;

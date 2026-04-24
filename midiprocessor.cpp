@@ -8,7 +8,7 @@
 #include <exception>
 #include <deque>
 
-MidiProcessor::MidiProcessor(const Preset& preset, QObject *parent) 
+MidiProcessor::MidiProcessor(const Preset& preset, QObject *parent)
     : QObject(parent), m_preset(preset), m_currentProgramIndex(-1) {
 
     for (int i = 0; i < m_preset.programs.size(); ++i) {
@@ -17,9 +17,16 @@ MidiProcessor::MidiProcessor(const Preset& preset, QObject *parent)
     for (const auto& toggle : m_preset.toggles) {
         m_trackStates[toggle.id.toStdString()] = true;
     }
-    
+
     // Initialize voice control state from preset
     m_voiceControlEnabled.store(preset.settings.voiceControlEnabled);
+
+    // Seed live audio-track switching state from the preset.
+    m_audioTrackSwitchCC.store(preset.settings.audioTrackSwitchCC);
+    {
+        std::lock_guard<std::mutex> lock(m_audioTrackMutesMutex);
+        m_audioTrackMutesList = preset.settings.audioTrackMutes;
+    }
 
     m_logPollTimer = new QTimer(this);
     connect(m_logPollTimer, &QTimer::timeout, this, &MidiProcessor::pollLogQueue);
@@ -44,6 +51,7 @@ MidiProcessor::~MidiProcessor() {
     delete midiOut;
     delete midiInVoice;
     delete midiInVoicePitch;
+    delete midiInAmpero;
 }
 
 void MidiProcessor::safeSendMessage(const std::vector<unsigned char>& msg) {
@@ -176,6 +184,7 @@ bool MidiProcessor::initialize() {
     midiOut = new RtMidiOut();
     midiInVoice = new RtMidiIn();
     midiInVoicePitch = new RtMidiIn();
+    midiInAmpero = new RtMidiIn();
 
     auto find_port = [](RtMidi& midi, const std::string& name) {
         for (unsigned int i = 0; i < midi.getPortCount(); i++) {
@@ -230,18 +239,44 @@ bool MidiProcessor::initialize() {
         }
     }
 
+    // Ampero Control: dedicated input for the footswitch controller. The
+    // Ampero shows up in CoreMIDI as its own source named "Ampero Control"
+    // (or whatever AMPERO_IN is set to in preset.xml). Open it if available;
+    // otherwise log and continue — CC-27 fan-out simply won't fire without it.
+    QString amperoName = m_preset.settings.ports.contains("AMPERO_IN")
+        ? m_preset.settings.ports["AMPERO_IN"]
+        : QString("Ampero Control");
+    int amperoPort = find_port(*midiInAmpero, amperoName.toStdString());
+    if (amperoPort != -1) {
+        midiInAmpero->openPort(amperoPort);
+        m_amperoAvailable = true;
+        std::lock_guard<std::mutex> lock(m_logMutex);
+        m_logQueue.push(std::string("SUCCESS: Opened Ampero input port: ") + amperoName.toStdString());
+    } else {
+        m_amperoAvailable = false;
+        std::lock_guard<std::mutex> lock(m_logMutex);
+        m_logQueue.push(std::string("WARN: Ampero input port not found ('") + amperoName.toStdString() +
+                        "'). Audio-track switching will not fire.");
+    }
+
     midiInGuitar->setCallback(&MidiProcessor::guitarCallback, this);
     midiInVoice->setCallback(&MidiProcessor::voiceAmpCallback, this);
     if (m_voicePitchAvailable) {
         midiInVoicePitch->setCallback(&MidiProcessor::voicePitchCallback, this);
     }
-    
+    if (m_amperoAvailable) {
+        midiInAmpero->setCallback(&MidiProcessor::amperoCallback, this);
+    }
+
     // We don't need SysEx/timing/sensing from live inputs; dropping them avoids
     // edge cases where system messages get accidentally mangled/forwarded.
     midiInGuitar->ignoreTypes(true, true, true);
     midiInVoice->ignoreTypes(true, true, true);
     if (m_voicePitchAvailable) {
         midiInVoicePitch->ignoreTypes(true, true, true);
+    }
+    if (m_amperoAvailable) {
+        midiInAmpero->ignoreTypes(true, true, true);
     }
 
     precalculateRatios();
@@ -363,6 +398,26 @@ void MidiProcessor::setSuppressVoicePassthrough(bool suppress) {
     m_suppressVoicePassthrough.store(suppress);
 }
 
+void MidiProcessor::setAudioTrackSwitch(int switchCC, const QList<AudioTrackMute>& entries) {
+    if (switchCC < 0) switchCC = 0;
+    if (switchCC > 127) switchCC = 127;
+    m_audioTrackSwitchCC.store(switchCC);
+    {
+        std::lock_guard<std::mutex> lock(m_audioTrackMutesMutex);
+        m_audioTrackMutesList = entries;
+    }
+    std::lock_guard<std::mutex> lock(m_logMutex);
+    m_logQueue.push(QString("AudioTrackSwitch updated: CC=%1, entries=%2")
+                        .arg(switchCC)
+                        .arg(entries.size())
+                        .toStdString());
+}
+
+QList<AudioTrackMute> MidiProcessor::audioTrackMutes() const {
+    std::lock_guard<std::mutex> lock(m_audioTrackMutesMutex);
+    return m_audioTrackMutesList;
+}
+
 void MidiProcessor::setTranspose(int semitones) {
     m_transposeAmount.store(semitones);
     {
@@ -412,6 +467,17 @@ void MidiProcessor::voicePitchCallback(double deltatime, std::vector<unsigned ch
     {
         std::lock_guard<std::mutex> lock(self->m_eventMutex);
         self->tryEnqueueEvent({EventType::MIDI_MESSAGE, *message, MidiSource::VoicePitch, -1, ""});
+    }
+    self->m_condition.notify_one();
+}
+
+void MidiProcessor::amperoCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
+    MidiProcessor* self = static_cast<MidiProcessor*>(userData);
+    if (!self->m_isRunning) return;
+    if (!message) return;
+    {
+        std::lock_guard<std::mutex> lock(self->m_eventMutex);
+        self->tryEnqueueEvent({EventType::MIDI_MESSAGE, *message, MidiSource::Ampero, -1, ""});
     }
     self->m_condition.notify_one();
 }
@@ -525,7 +591,61 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     } else {
                         safeSendMessage(passthroughMsg);
                     }
-                    
+
+                } else if (event.source == MidiSource::Ampero) {
+                    // Ampero Control footswitch input. Two responsibilities:
+                    //   1. Passthrough every message to CONTROLLER_OUT so Logic's
+                    //      Scripters (and existing CC 86 reverb toggle, etc.)
+                    //      keep working when the Ampero is routed through us.
+                    //   2. On the configured switching CC (default 27), fan out
+                    //      per-track mute CCs so exactly one audio track is
+                    //      audible in Logic. Observed polarity for Logic's
+                    //      learned Controller Assignment: 127 = unmuted,
+                    //      0 = muted. (The stock Logic mute button is
+                    //      inverted, but the learned CA ends up this way.)
+                    std::vector<unsigned char> passMsg = message;
+                    // Force channel 1 on passthrough so downstream Scripters /
+                    // Controller Assignments don't have to care about the
+                    // Ampero's transmit channel.
+                    if (!passMsg.empty() && passMsg[0] < 0xF0) {
+                        passMsg[0] = (passMsg[0] & 0xF0) | 0x00;
+                    }
+                    safeSendMessage(passMsg);
+
+                    if (status == 0xB0 && message.size() >= 3) {
+                        const int cc = int(message[1]);
+                        const int value = int(message[2]);
+                        if (cc == m_audioTrackSwitchCC.load()) {
+                            QList<AudioTrackMute> localMap;
+                            {
+                                std::lock_guard<std::mutex> lock(m_audioTrackMutesMutex);
+                                localMap = m_audioTrackMutesList;
+                            }
+                            for (const auto& at : localMap) {
+                                // 127 = unmute the matching track; 0 = mute the rest.
+                                const unsigned char muteVal = (value == at.switchValue) ? 127 : 0;
+                                std::vector<unsigned char> muteMsg = {
+                                    0xB0, (unsigned char)at.muteCC, muteVal
+                                };
+                                safeSendMessage(muteMsg);
+                            }
+                            // Always log fan-out events (not gated on verbose)
+                            // so the user can confirm the feature is firing.
+                            std::lock_guard<std::mutex> lock(m_logMutex);
+                            m_logQueue.push(QString("Ampero CC%1=%2 -> fanned out %3 mute CC(s)")
+                                                .arg(cc)
+                                                .arg(value)
+                                                .arg(localMap.size())
+                                                .toStdString());
+                        } else if (m_isVerbose.load()) {
+                            std::lock_guard<std::mutex> lock(m_logMutex);
+                            m_logQueue.push(QString("Ampero CC%1=%2 (passthrough only)")
+                                                .arg(cc)
+                                                .arg(value)
+                                                .toStdString());
+                        }
+                    }
+
                 } else if (event.source == MidiSource::VoiceAmp) {
                     // Handle aftertouch → CC2 and CC104; ignore voice notes here to avoid duplicates
                     if (status == 0xD0 && message.size() > 1) { // Aftertouch

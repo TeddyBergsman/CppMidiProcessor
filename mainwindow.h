@@ -29,6 +29,7 @@ class LibraryWindow;
 class GrooveLabWindow;
 class VirtuosoVocabularyWindow;
 class SnappingWindow;
+class AudioTrackSwitchEditor;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -106,6 +107,12 @@ protected:
 
     // Snapping settings window (Window → Snapping)
     SnappingWindow* m_snappingWindow = nullptr;
+
+    // Audio-track switching editor (Window → Audio Track Switch…)
+    AudioTrackSwitchEditor* m_audioTrackSwitchEditor = nullptr;
+    // Preset defaults captured at startup so the editor can offer "Reset".
+    QList<AudioTrackMute> m_audioTrackSwitchPresetDefaults;
+    int m_audioTrackSwitchPresetDefaultCC = 27;
 
     // Performance mode: lightweight startup with only vocal+guitar fusion/snapping
     bool m_performanceMode = true;

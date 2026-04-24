@@ -52,6 +52,8 @@ void PresetLoader::parseSettings(QXmlStreamReader& xml, Preset& preset) {
             preset.settings.commandNote = xml.readElementText().toInt();
         } else if (elementName == "DefaultTrackStates") {
             parseDefaultTrackStates(xml, preset);
+        } else if (elementName == "AudioTrackSwitch") {
+            parseAudioTrackSwitch(xml, preset);
         } else if (elementName == "PitchBendDeadZoneCents") { // NEW
             preset.settings.pitchBendDeadZoneCents = xml.readElementText().toInt();
         } else if (elementName == "PitchBendDownRangeCents") { // NEW
@@ -77,6 +79,28 @@ void PresetLoader::parseDefaultTrackStates(QXmlStreamReader& xml, Preset& preset
             QString toggleId = xml.attributes().value("toggleId").toString();
             bool enabled = (xml.attributes().value("enabled").toString() == "true");
             preset.settings.defaultTrackStates[toggleId] = enabled;
+        }
+        xml.skipCurrentElement();
+    }
+}
+
+// Parses the radio-button audio-track switching map. Example:
+//   <AudioTrackSwitch cc="27">
+//     <Track switchValue="8"  muteCC="80" name="Trem-O-Voice"/>
+//     <Track switchValue="9"  muteCC="81" name="Rain Song Acoustic"/>
+//   </AudioTrackSwitch>
+void PresetLoader::parseAudioTrackSwitch(QXmlStreamReader& xml, Preset& preset) {
+    if (xml.attributes().hasAttribute("cc")) {
+        preset.settings.audioTrackSwitchCC = xml.attributes().value("cc").toInt();
+    }
+    preset.settings.audioTrackMutes.clear();
+    while (xml.readNextStartElement()) {
+        if (xml.name().toString() == "Track") {
+            AudioTrackMute t;
+            t.switchValue = xml.attributes().value("switchValue").toInt();
+            t.muteCC = xml.attributes().value("muteCC").toInt();
+            t.name = xml.attributes().value("name").toString();
+            preset.settings.audioTrackMutes.append(t);
         }
         xml.skipCurrentElement();
     }

@@ -132,6 +132,8 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   VirtuosoVocabularyWindow.cpp
   SnappingWindow.h
   SnappingWindow.cpp
+  AudioTrackSwitchEditor.h
+  AudioTrackSwitchEditor.cpp
   midiprocessor.h
   midiprocessor.cpp
   voicecontroller.h

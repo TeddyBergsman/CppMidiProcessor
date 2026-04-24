@@ -19,6 +19,7 @@
 #include "VirtuosoPresetInspectorWindow.h"
 #include "VirtuosoVocabularyWindow.h"
 #include "SnappingWindow.h"
+#include "AudioTrackSwitchEditor.h"
 
 namespace {
 static const char* kIRealLastHtmlPathKey = "ireal/lastHtmlPath";
@@ -29,7 +30,37 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
 
     // MainWindow now owns MidiProcessor
     m_midiProcessor = new MidiProcessor(preset, this);
-    
+
+    // Capture the preset-defined audio-track-switch map so the editor's
+    // "Reset to Preset Defaults" button can always restore it.
+    m_audioTrackSwitchPresetDefaults = preset.settings.audioTrackMutes;
+    m_audioTrackSwitchPresetDefaultCC = preset.settings.audioTrackSwitchCC;
+
+    // Apply any persisted audio-track-switch overrides from QSettings. Edits
+    // made in the in-app editor survive restarts via this mechanism (the
+    // preset.xml is baked into the binary and not writable at runtime).
+    {
+        QSettings s;
+        const bool hasPersisted = s.contains("audioTrackSwitch/cc");
+        const int count = s.beginReadArray("audioTrackSwitch/entries");
+        QList<AudioTrackMute> entries;
+        entries.reserve(count);
+        for (int i = 0; i < count; ++i) {
+            s.setArrayIndex(i);
+            AudioTrackMute e;
+            e.name = s.value("name").toString();
+            e.switchValue = s.value("switchValue").toInt();
+            e.muteCC = s.value("muteCC").toInt();
+            entries.append(e);
+        }
+        s.endArray();
+        if (hasPersisted) {
+            const int cc = s.value("audioTrackSwitch/cc",
+                                   preset.settings.audioTrackSwitchCC).toInt();
+            m_midiProcessor->setAudioTrackSwitch(cc, entries);
+        }
+    }
+
     // Initialize voice controller
     m_voiceController = new VoiceController(preset, this);
     
@@ -284,6 +315,41 @@ void MainWindow::createWidgets(const Preset& preset) {
             m_snappingWindow->activateWindow();
         });
         windowMenu->addAction(snappingAction);
+
+        // Audio Track Switch editor (radio-button mute map for the Ampero CC 27 fan-out).
+        QAction* audioSwitchAction = new QAction("Audio Track Switch…", this);
+        audioSwitchAction->setMenuRole(QAction::NoRole);
+        connect(audioSwitchAction, &QAction::triggered, this, [this]() {
+            if (!m_audioTrackSwitchEditor) {
+                m_audioTrackSwitchEditor = new AudioTrackSwitchEditor(
+                    m_midiProcessor->audioTrackSwitchCC(),
+                    m_midiProcessor->audioTrackMutes(),
+                    m_audioTrackSwitchPresetDefaults,
+                    m_audioTrackSwitchPresetDefaultCC,
+                    this);
+                m_audioTrackSwitchEditor->setAttribute(Qt::WA_DeleteOnClose, false);
+                connect(m_audioTrackSwitchEditor, &AudioTrackSwitchEditor::mapChanged,
+                        this, [this](int cc, const QList<AudioTrackMute>& entries) {
+                    // Push live into the processor.
+                    m_midiProcessor->setAudioTrackSwitch(cc, entries);
+                    // Persist to QSettings so edits survive restarts.
+                    QSettings s;
+                    s.setValue("audioTrackSwitch/cc", cc);
+                    s.beginWriteArray("audioTrackSwitch/entries", entries.size());
+                    for (int i = 0; i < entries.size(); ++i) {
+                        s.setArrayIndex(i);
+                        s.setValue("name", entries[i].name);
+                        s.setValue("switchValue", entries[i].switchValue);
+                        s.setValue("muteCC", entries[i].muteCC);
+                    }
+                    s.endArray();
+                });
+            }
+            m_audioTrackSwitchEditor->show();
+            m_audioTrackSwitchEditor->raise();
+            m_audioTrackSwitchEditor->activateWindow();
+        });
+        windowMenu->addAction(audioSwitchAction);
 
         // Gray out menus not available in Performance Mode
         if (m_performanceMode) {

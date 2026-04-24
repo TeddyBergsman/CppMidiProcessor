@@ -31,6 +31,12 @@ public slots:
     void setVoiceControlEnabled(bool enabled);
     void setTranspose(int semitones);
     void applyTranspose(int semitones);
+    // Audio-track radio-button switching (CC-27 fan-out). Replaces the active
+    // switching CC number and mute map atomically; safe to call from any thread.
+    void setAudioTrackSwitch(int switchCC, const QList<AudioTrackMute>& entries);
+    // Read-only accessors for UI (snapshot copies).
+    int audioTrackSwitchCC() const { return m_audioTrackSwitchCC.load(); }
+    QList<AudioTrackMute> audioTrackMutes() const;
     // Suppress guitar passthrough to channel 1 (used by ScaleSnapProcessor when Lead mode is active)
     void setSuppressGuitarPassthrough(bool suppress);
     bool suppressGuitarPassthrough() const { return m_suppressGuitarPassthrough.load(); }
@@ -84,7 +90,7 @@ signals:
 
 private:
     enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, TRANSPOSE_CHANGE };
-    enum class MidiSource { Guitar, VoiceAmp, VoicePitch, VirtualBand };
+    enum class MidiSource { Guitar, VoiceAmp, VoicePitch, VirtualBand, Ampero };
     struct MidiEvent {
         EventType type;
         std::vector<unsigned char> message;
@@ -142,7 +148,9 @@ private:
     RtMidiOut* midiOutVocalSync = nullptr;  // Dedicated output for VocalSync AU plugin
     RtMidiIn* midiInVoice = nullptr;       // Voice amplitude (aftertouch) source
     RtMidiIn* midiInVoicePitch = nullptr;  // Voice accurate pitch/note source
+    RtMidiIn* midiInAmpero = nullptr;      // Ampero Control USB (footswitch CCs)
     bool m_voicePitchAvailable = false;
+    bool m_amperoAvailable = false;
 
 
     // --- State (Confined to Worker Thread) ---
@@ -155,6 +163,13 @@ private:
     std::atomic<bool> m_isVerbose{false};
     std::atomic<bool> m_voiceControlEnabled{true};
     std::atomic<int> m_transposeAmount{0};
+
+    // Live audio-track switching state. Seeded from the preset in ctor, then
+    // replaced at runtime by the Audio Track Switch editor. The atomic CC
+    // number lets the worker skip the mutex on every non-matching CC message.
+    std::atomic<int> m_audioTrackSwitchCC{27};
+    mutable std::mutex m_audioTrackMutesMutex;
+    QList<AudioTrackMute> m_audioTrackMutesList;
 
     // Pitch state
     int m_lastGuitarNote = -1;
@@ -185,6 +200,7 @@ private:
     static void guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData);
     static void voiceAmpCallback(double deltatime, std::vector<unsigned char>* message, void* userData);
     static void voicePitchCallback(double deltatime, std::vector<unsigned char>* message, void* userData);
+    static void amperoCallback(double deltatime, std::vector<unsigned char>* message, void* userData);
 };
 
 #endif // MIDIPROCESSOR_H

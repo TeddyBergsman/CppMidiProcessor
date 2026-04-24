@@ -13,6 +13,7 @@ public:
 private:
     void parseSettings(QXmlStreamReader& xml, Preset& preset);
     void parseDefaultTrackStates(QXmlStreamReader& xml, Preset& preset); // NEW
+    void parseAudioTrackSwitch(QXmlStreamReader& xml, Preset& preset);
     void parseToggles(QXmlStreamReader& xml, Preset& preset);
     void parsePrograms(QXmlStreamReader& xml, Preset& preset);
     void parseProgram(QXmlStreamReader& xml, Program& program);

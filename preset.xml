@@ -4,6 +4,11 @@
     <Settings>
         <InputPort name="GUITAR_IN">IAC Driver MG3 Guitar</InputPort>
         <InputPort name="VOICE_IN">IAC Driver MG3 Voice</InputPort>
+        <!-- The Ampero Control footswitch shows up in CoreMIDI as its own
+             USB source. Open it directly so we can fan out CC 27 → per-track
+             mute CCs. Optional: if the port isn't present, the app logs a
+             warning and audio-track switching simply doesn't fire. -->
+        <InputPort name="AMPERO_IN">Ampero Control</InputPort>
         <OutputPort name="CONTROLLER_OUT">IAC Driver Controller</OutputPort>
         <CommandNote>98</CommandNote>
         <BackingTrackCommandNote>99</BackingTrackCommandNote>
@@ -22,6 +27,26 @@
             <DefaultState toggleId="track5" enabled="true" />
             <DefaultState toggleId="track6" enabled="true" />
         </DefaultTrackStates>
+
+        <!--
+            Radio-button switching for Logic audio tracks.
+            The Ampero sends one CC (default 27) with a unique value per footswitch.
+            This app passes CC 27 through (Scripters on instrument tracks react to it)
+            AND fans out per-track mute CCs so only the matching audio track is
+            audible; all others are muted. Observed polarity for Logic's learned
+            Controller Assignment on the mute button: 127 = unmuted, 0 = muted.
+
+            To add a new audio track: add one <Track> entry below, map the muteCC
+            to that track's mute button in Logic (Cmd+K), and add a footswitch on
+            the Ampero that sends CC 27 with the next switchValue. No other edits.
+        -->
+        <AudioTrackSwitch cc="27">
+            <Track switchValue="8"  muteCC="80" name="Trem-O-Voice" />
+            <Track switchValue="9"  muteCC="81" name="Rain Song Acoustic" />
+            <Track switchValue="10" muteCC="82" name="Good Times Bad Times" />
+            <Track switchValue="11" muteCC="83" name="Brit and Clean" />
+            <Track switchValue="12" muteCC="84" name="Vocals" />
+        </AudioTrackSwitch>
 
         <!-- Path to backing tracks relative to the build directory -->
         <BackingTrackDirectory>/Users/teddybergsman/Documents</BackingTrackDirectory>

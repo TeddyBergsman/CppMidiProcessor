@@ -165,6 +165,7 @@ add_executable(CppMidiProcessor MACOSX_BUNDLE
   playback/ChordOntology.cpp
   playback/PitchConformanceEngine.h
   playback/PitchConformanceEngine.cpp
+  playback/GlissandoProcessor.h
   playback/HarmonyContext.h
   playback/HarmonyContext.cpp
   playback/ScaleSnapProcessor.h

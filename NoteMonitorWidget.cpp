@@ -524,6 +524,17 @@ NoteMonitorWidget::NoteMonitorWidget(bool performanceMode, QWidget* parent)
         m_standaloneScaleSnap->setHarmonyContext(m_standaloneHarmony);
         m_standaloneScaleSnap->setOntology(m_standaloneOntology);
 
+        // Timer to drive updateConformance() for glissando/bend behaviors in performance mode
+        // (In full engine mode, the engine's tick timer handles this)
+        m_conformanceTimer = new QTimer(this);
+        m_conformanceTimer->setTimerType(Qt::PreciseTimer);
+        connect(m_conformanceTimer, &QTimer::timeout, this, [this]() {
+            if (m_standaloneScaleSnap) {
+                m_standaloneScaleSnap->updateConformance(10.0f);
+            }
+        });
+        m_conformanceTimer->start(10); // 10ms tick, same as playback engine
+
         // Hide ALL superfluous UI — performance mode shows only wave + note overlays
         if (m_chartContainer) m_chartContainer->hide();
     } else {
@@ -1008,6 +1019,13 @@ void NoteMonitorWidget::setMidiProcessor(MidiProcessor* processor) {
             connect(m_midiProcessor, &MidiProcessor::voiceHzUpdated,
                     m_standaloneScaleSnap, &playback::ScaleSnapProcessor::onVoiceHzUpdated,
                     Qt::QueuedConnection);
+            // Voice MIDI notes for VocalSync mode (stable integer note tracking)
+            connect(m_midiProcessor, &MidiProcessor::voiceNoteOn,
+                    m_standaloneScaleSnap, &playback::ScaleSnapProcessor::onVoiceNoteOn,
+                    Qt::DirectConnection);
+            connect(m_midiProcessor, &MidiProcessor::voiceNoteOff,
+                    m_standaloneScaleSnap, &playback::ScaleSnapProcessor::onVoiceNoteOff,
+                    Qt::DirectConnection);
         }
     } else if (m_virtuosoPlayback) {
         m_virtuosoPlayback->setMidiProcessor(m_midiProcessor);

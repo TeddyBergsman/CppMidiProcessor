@@ -321,6 +321,14 @@ void VirtuosoBalladMvpPlaybackEngine::setMidiProcessor(MidiProcessor* midi) {
     connect(m_midi, &MidiProcessor::voiceHzUpdated,
             &m_scaleSnap, &ScaleSnapProcessor::onVoiceHzUpdated,
             static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+
+    // Forward voice MIDI notes (for VocalSync mode - stable integer note tracking)
+    connect(m_midi, &MidiProcessor::voiceNoteOn,
+            &m_scaleSnap, &ScaleSnapProcessor::onVoiceNoteOn,
+            static_cast<Qt::ConnectionType>(Qt::DirectConnection | Qt::UniqueConnection));
+    connect(m_midi, &MidiProcessor::voiceNoteOff,
+            &m_scaleSnap, &ScaleSnapProcessor::onVoiceNoteOff,
+            static_cast<Qt::ConnectionType>(Qt::DirectConnection | Qt::UniqueConnection));
 }
 
 void VirtuosoBalladMvpPlaybackEngine::setTempoBpm(int bpm) {

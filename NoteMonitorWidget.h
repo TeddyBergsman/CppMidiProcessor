@@ -164,6 +164,7 @@ private:
     virtuoso::ontology::OntologyRegistry* m_standaloneOntology = nullptr;
     playback::HarmonyContext* m_standaloneHarmony = nullptr;
     playback::ScaleSnapProcessor* m_standaloneScaleSnap = nullptr;
+    QTimer* m_conformanceTimer = nullptr;    // ticks updateConformance() for glissando/bend in perf mode
     chart::ChartModel m_perfModeChartModel;  // owned chart model for performance mode
 
 protected:

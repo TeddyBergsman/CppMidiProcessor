@@ -85,9 +85,19 @@ private:
     QSlider* m_sustainSmoothingSlider = nullptr;
     QLabel* m_sustainSmoothingLabel = nullptr;
     QCheckBox* m_releaseBendPreventionCheckbox = nullptr;
+    QCheckBox* m_octaveGuardCheckbox = nullptr;
     QSlider* m_voiceSustainThresholdSlider = nullptr;
     QLabel* m_voiceSustainThresholdLabel = nullptr;
     QLabel* m_leadDescriptionLabel = nullptr;
+
+    // Glissando UI elements (VocalSync mode only)
+    QGroupBox* m_glissandoGroup = nullptr;
+    QCheckBox* m_glissandoEnabledCheckbox = nullptr;
+    QSlider* m_glissandoRateSlider = nullptr;
+    QLabel* m_glissandoRateLabel = nullptr;
+    QSlider* m_glissandoThresholdSlider = nullptr;
+    QLabel* m_glissandoThresholdLabel = nullptr;
+    QComboBox* m_glissandoCurveCombo = nullptr;
 
     // Multi-voice harmony UI elements (4 voices, channels 12-15)
     QGroupBox* m_harmonyGroup = nullptr;

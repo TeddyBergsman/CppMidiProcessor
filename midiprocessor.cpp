@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <QDebug>
 #include <QStringBuilder>
 #include <exception>
 #include <deque>
@@ -60,6 +61,39 @@ void MidiProcessor::safeSendMessage(const std::vector<unsigned char>& msg) {
         std::lock_guard<std::mutex> lock(m_logMutex);
         m_logQueue.push("ERROR: MIDI sendMessage threw unknown exception");
     }
+}
+
+void MidiProcessor::safeSendVocalSync(const std::vector<unsigned char>& msg) {
+    if (!midiOutVocalSync) return;
+    if (msg.empty()) return;
+    try {
+        midiOutVocalSync->sendMessage(&msg);
+    } catch (...) {
+        // Silently ignore errors on VocalSync port
+    }
+}
+
+void MidiProcessor::sendVocalSyncNoteOn(int note, int velocity) {
+    std::vector<unsigned char> msg = { 0x90, (unsigned char)note, (unsigned char)velocity };
+    safeSendVocalSync(msg);
+}
+
+void MidiProcessor::sendVocalSyncNoteOff(int note) {
+    std::vector<unsigned char> msg = { 0x80, (unsigned char)note, 0 };
+    safeSendVocalSync(msg);
+}
+
+void MidiProcessor::sendVocalSyncCC(int cc, int value) {
+    std::vector<unsigned char> msg = { 0xB0, (unsigned char)cc, (unsigned char)value };
+    safeSendVocalSync(msg);
+}
+
+void MidiProcessor::sendVocalSyncPitchBend(int bendValue) {
+    bendValue = std::max(0, std::min(bendValue, 16383));
+    unsigned char lsb = bendValue & 0x7F;
+    unsigned char msb = (bendValue >> 7) & 0x7F;
+    std::vector<unsigned char> msg = { 0xE0, lsb, msb };
+    safeSendVocalSync(msg);
 }
 
 bool MidiProcessor::isCriticalMidiEvent(const MidiEvent& ev) {
@@ -168,6 +202,22 @@ bool MidiProcessor::initialize() {
     midiInGuitar->openPort(guitarPort);
     midiOut->openPort(outPort);
     midiInVoice->openPort(voicePort);
+
+    // VocalSync: open a dedicated output port on a separate IAC bus
+    // This avoids flooding the AU plugin with unrelated MIDI traffic
+    midiOutVocalSync = new RtMidiOut();
+    int vocalSyncPort = find_port(*midiOutVocalSync, "IAC Driver MG3 Bass");
+    if (vocalSyncPort >= 0) {
+        midiOutVocalSync->openPort(vocalSyncPort);
+    } else {
+        // Fallback: create a virtual port
+        try {
+            midiOutVocalSync->openVirtualPort("VocalSync Out");
+        } catch (...) {
+            delete midiOutVocalSync;
+            midiOutVocalSync = nullptr;
+        }
+    }
     if (voicePitchPort != -1) {
         midiInVoicePitch->openPort(voicePitchPort);
         m_voicePitchAvailable = true;
@@ -307,6 +357,10 @@ void MidiProcessor::setVoiceControlEnabled(bool enabled) {
 
 void MidiProcessor::setSuppressGuitarPassthrough(bool suppress) {
     m_suppressGuitarPassthrough.store(suppress);
+}
+
+void MidiProcessor::setSuppressVoicePassthrough(bool suppress) {
+    m_suppressVoicePassthrough.store(suppress);
 }
 
 void MidiProcessor::setTranspose(int semitones) {
@@ -501,7 +555,7 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                         if (voiceMsg[0] < 0xF0) {
                             voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01; // Set to channel 2
                         }
-                        
+
                         // Apply transpose to voice notes
                         int transposeAmount = m_transposeAmount.load();
                         if (transposeAmount != 0 && voiceMsg.size() > 1) {
@@ -519,14 +573,20 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                             if (status == 0x90 && vel > 0) emit voiceNoteOn(note, vel);
                             else if (status == 0x80 || (status == 0x90 && vel == 0)) emit voiceNoteOff(note);
                         }
-                        safeSendMessage(voiceMsg);
+                        // Skip raw passthrough when VocalSync uses Ch 2 for pitch targets
+                        if (!m_suppressVoicePassthrough.load()) {
+                            safeSendMessage(voiceMsg);
+                        }
                     } else if (status != 0xD0) {
                         // Forward other non-aftertouch messages as-is on channel 2
-                        std::vector<unsigned char> voiceMsg = message;
-                        if (voiceMsg[0] < 0xF0) {
-                            voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01;
+                        // Skip when VocalSync uses Ch 2 for pitch targets
+                        if (!m_suppressVoicePassthrough.load()) {
+                            std::vector<unsigned char> voiceMsg = message;
+                            if (voiceMsg[0] < 0xF0) {
+                                voiceMsg[0] = (voiceMsg[0] & 0xF0) | 0x01;
+                            }
+                            safeSendMessage(voiceMsg);
                         }
-                        safeSendMessage(voiceMsg);
                     }
                 } else if (event.source == MidiSource::VirtualBand) {
                     // Virtual musicians: forward as-is (no transpose, no channel remap).

@@ -70,8 +70,31 @@ void ScaleSnapProcessor::setLeadMode(LeadMode mode)
             m_midi->setSuppressGuitarPassthrough(mode != LeadMode::Off);
         }
 
+        // Reset glissando state when entering/leaving VocalSync
+        m_glissando.clear();
+
         emit leadModeChanged(mode);
     }
+}
+
+void ScaleSnapProcessor::setGlissandoEnabled(bool enabled)
+{
+    m_glissando.setEnabled(enabled);
+}
+
+void ScaleSnapProcessor::setGlissandoRateStPerSec(float rate)
+{
+    m_glissando.setRateStPerSec(rate);
+}
+
+void ScaleSnapProcessor::setGlissandoIntervalThresholdSt(float threshold)
+{
+    m_glissando.setIntervalThresholdSt(threshold);
+}
+
+void ScaleSnapProcessor::setGlissandoCurveExponent(float exponent)
+{
+    m_glissando.setCurveExponent(exponent);
 }
 
 void ScaleSnapProcessor::setHarmonyModeCompat(HarmonyModeCompat mode)
@@ -383,6 +406,15 @@ void ScaleSnapProcessor::updateConformance(float deltaMs)
 {
     QWriteLocker lock(&m_activeNotesLock);
 
+    // VocalSync: advance glissando and send shift
+    if (m_leadMode == LeadMode::VocalSync) {
+        if (m_glissando.isGliding()) {
+            m_vocalSyncGuitarHz = static_cast<double>(m_glissando.update(deltaMs));
+        }
+        emitVocalSyncShift();
+        return;
+    }
+
     if (m_leadMode != LeadMode::Conformed || m_activeNotes.isEmpty()) {
         return;
     }
@@ -505,7 +537,17 @@ void ScaleSnapProcessor::reset()
     m_lastHarmonyOutputNote = -1;
     m_lastGuitarNoteOffTimestamp = 0;  // Reset phrase tracking
     m_guitarNotesHeld = 0;
+    // Reset glissando and VocalSync state
+    m_glissando.clear();
+    m_vocalSyncGuitarHz = 0.0;
+    m_vocalSyncVoiceHz = 0.0;
+    m_vocalSyncLastShiftSent = 999;
+    // Reset octave guard
+    m_octaveGuardAcceptedHz = 0.0;
+    m_octaveGuardCandidateHz = 0.0;
+    m_octaveGuardConfirmCount = 0;
     // Reset pitch bend to center on all channels
+    emitPitchBend(kChannelVocalSync, 8192);
     emitPitchBend(kChannelLead, 8192);
     emitPitchBend(kChannelHarmony1, 8192);
     emitPitchBend(kChannelHarmony2, 8192);
@@ -552,7 +594,9 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
 
     // Reset pitch bend before new note (unless vocal bend will control it)
     if (!m_vocalBendEnabled) {
-        if (m_leadMode != LeadMode::Off) {
+        if (m_leadMode == LeadMode::VocalSync) {
+            emitPitchBend(kChannelVocalSync, 8192);
+        } else if (m_leadMode != LeadMode::Off) {
             emitPitchBend(kChannelLead, 8192);
         }
         if (m_harmonyMode != HarmonyMode::OFF) {
@@ -560,9 +604,20 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
         }
     }
 
-    // === LEAD MODE (Channel 1) ===
+    // === LEAD MODE (Channel 1, or Channel 2 for VocalSync) ===
     if (m_leadMode != LeadMode::Off) {
-        if (m_leadMode == LeadMode::Original) {
+        if (m_leadMode == LeadMode::VocalSync) {
+            // VocalSync mode: send note + shift to dedicated VocalSync output
+            releaseVoiceSustainedNotes();
+            active.snappedNote = midiNote;
+            active.referenceHz = midiNoteToHz(midiNote);
+
+            // Set glissando target — it will interpolate smoothly from previous note.
+            // Don't emit shift here — the 10ms conformance tick handles it.
+            // Freeze voice Hz for ~30ms to let MG2 recover from guitar transient.
+            m_glissando.setTarget(static_cast<float>(midiNoteToHz(midiNote)));
+            m_vocalSyncVoiceHoldTicks = 3; // Hold for 3 ticks (~30ms)
+        } else if (m_leadMode == LeadMode::Original) {
             // Original mode: pass through unchanged
             releaseVoiceSustainedNotes();
             active.snappedNote = midiNote;
@@ -971,7 +1026,11 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
         // pitch droop from MG3 doesn't make the sustained note go sour
         if (m_releaseBendPreventionEnabled) {
             m_lastGuitarCents = 0.0;
-            if (m_leadMode == LeadMode::Original) {
+            if (m_leadMode == LeadMode::VocalSync) {
+                // For VocalSync: freeze glissando at current position and reset bend
+                m_glissando.reset();
+                emitPitchBend(kChannelVocalSync, 8192);
+            } else if (m_leadMode == LeadMode::Original) {
                 emitPitchBend(kChannelLead, 8192);
                 if (m_harmonyMode != HarmonyMode::OFF) {
                     emitPitchBend(kChannelHarmony1, 8192);
@@ -1000,7 +1059,11 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
         m_currentlyPlayingNote = -1;
         m_currentNoteWasSnapped = false;
         qDebug() << "ScaleSnap: All notes released";
-        if (m_leadMode != LeadMode::Off) {
+        if (m_leadMode == LeadMode::VocalSync) {
+            // All guitar notes released — reset to passthrough
+            m_vocalSyncGuitarHz = 0.0;
+            m_midi->sendVocalSyncPitchBend(8192); // Center = no shift
+        } else if (m_leadMode != LeadMode::Off) {
             emitPitchBend(kChannelLead, 8192);
         }
         if (m_harmonyMode != HarmonyMode::OFF) {
@@ -1013,6 +1076,30 @@ void ScaleSnapProcessor::onGuitarHzUpdated(double hz)
 {
     // Thread safety: Lock for reading m_activeNotes
     QReadLocker lock(&m_activeNotesLock);
+
+    // VocalSync mode: update glissando target with guitar pitch bend
+    if (m_leadMode == LeadMode::VocalSync && m_midi && !m_activeNotes.isEmpty() && hz > 0.0) {
+        // Release bend prevention: freeze during voice sustain
+        if (m_releaseBendPreventionEnabled) {
+            bool allVoiceSustained = true;
+            for (auto it = m_activeNotes.constBegin(); it != m_activeNotes.constEnd(); ++it) {
+                if (!it.value().voiceSustained) {
+                    allVoiceSustained = false;
+                    break;
+                }
+            }
+            if (allVoiceSustained) {
+                m_lastGuitarCents = 0.0;
+                return;
+            }
+        }
+
+        // VocalSync: update glissando target with guitar pitch bend
+        m_glissando.setTarget(static_cast<float>(hz));
+        // Use glissando's interpolated position (smooth transitions between notes)
+        m_vocalSyncGuitarHz = static_cast<double>(m_glissando.currentHz());
+        return;
+    }
 
     // Only track/forward guitar pitch bend in Original lead mode
     if (m_leadMode != LeadMode::Original || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
@@ -1151,8 +1238,59 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
     }
 }
 
+void ScaleSnapProcessor::setOctaveGuardEnabled(bool enabled)
+{
+    if (m_octaveGuardEnabled != enabled) {
+        m_octaveGuardEnabled = enabled;
+        m_octaveGuardAcceptedHz = 0.0;
+        m_octaveGuardCandidateHz = 0.0;
+        m_octaveGuardConfirmCount = 0;
+        emit octaveGuardEnabledChanged(enabled);
+    }
+}
+
 void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
 {
+    // Octave guard: reject sudden octave jumps from voice tracking errors.
+    // Applied BEFORE any mode-specific processing so it benefits all modes.
+    if (m_octaveGuardEnabled && hz > 50.0 && m_octaveGuardAcceptedHz > 50.0) {
+        double semitoneJump = std::abs(12.0 * std::log2(hz / m_octaveGuardAcceptedHz));
+        if (semitoneJump > 9.0) {
+            // Large jump — require confirmation
+            double candidateJump = (m_octaveGuardCandidateHz > 50.0)
+                ? std::abs(12.0 * std::log2(hz / m_octaveGuardCandidateHz))
+                : 999.0;
+            if (candidateJump < 2.0) {
+                m_octaveGuardConfirmCount++;
+                if (m_octaveGuardConfirmCount >= kOctaveGuardConfirmTicks) {
+                    // Confirmed real jump — accept
+                    m_octaveGuardAcceptedHz = hz;
+                    m_octaveGuardConfirmCount = 0;
+                } else {
+                    return; // Still waiting — use previous accepted Hz
+                }
+            } else {
+                // New candidate
+                m_octaveGuardCandidateHz = hz;
+                m_octaveGuardConfirmCount = 1;
+                return;
+            }
+        } else {
+            // Small change — accept immediately
+            m_octaveGuardAcceptedHz = hz;
+            m_octaveGuardConfirmCount = 0;
+        }
+        hz = m_octaveGuardAcceptedHz;
+    } else if (hz > 50.0) {
+        m_octaveGuardAcceptedHz = hz;
+    }
+
+    // VocalSync: store voice Hz
+    if (m_leadMode == LeadMode::VocalSync && hz > 50.0) {
+        m_vocalSyncVoiceHz = hz;
+        return;
+    }
+
     // Thread safety: Lock for reading m_activeNotes
     QReadLocker lock(&m_activeNotesLock);
 
@@ -1257,7 +1395,10 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
 
     // Combine all bend sources based on lead mode
     double totalCents = voiceCents;
-    if (m_leadMode == LeadMode::Original) {
+    if (m_leadMode == LeadMode::VocalSync) {
+        // Voice Hz already tracked above (before early return). Nothing else to do.
+        return;
+    } else if (m_leadMode == LeadMode::Original) {
         // Original mode: guitar bend + voice vibrato
         totalCents = m_lastGuitarCents + voiceCents;
     } else if (m_leadMode == LeadMode::Conformed && note.behavior == ConformanceBehavior::BEND) {
@@ -1280,8 +1421,10 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
              << "fadeGain=" << (m_oscillationDetected ? static_cast<double>(m_vibratoFadeInSamples) / kVibratoFadeInDuration : 0.0)
              << "voiceCents=" << voiceCents << "bendValue=" << bendValue;
 
-    // Apply pitch bend to all active output channels
-    if (m_leadMode != LeadMode::Off) {
+    // Apply pitch bend to the appropriate output channel
+    if (m_leadMode == LeadMode::VocalSync) {
+        emitPitchBend(kChannelVocalSync, bendValue);
+    } else if (m_leadMode != LeadMode::Off) {
         emitPitchBend(kChannelLead, bendValue);
     }
 
@@ -3422,6 +3565,37 @@ void ScaleSnapProcessor::emitHarmonyNoteOff(int channel, int note, int voiceInde
     }
 }
 
+void ScaleSnapProcessor::onVoiceNoteOn(int midiNote)
+{
+    (void)midiNote; // VocalSync uses continuous Hz, not discrete notes
+}
+
+void ScaleSnapProcessor::onVoiceNoteOff(int midiNote)
+{
+    (void)midiNote;
+}
+
+void ScaleSnapProcessor::emitVocalSyncShift()
+{
+    // Real-time pitch correction from continuous Hz streams.
+    // Sends shift as 14-bit pitch bend for full precision (smooth bends, vibrato).
+    // Range: ±24 semitones mapped to 0-16383 (center 8192 = no shift)
+    if (!m_midi) return;
+    if (m_vocalSyncVoiceHz < 50.0 || m_vocalSyncGuitarHz < 20.0) return;
+
+    double shiftSemitones = 12.0 * std::log2(m_vocalSyncGuitarHz / m_vocalSyncVoiceHz);
+    shiftSemitones = qBound(-24.0, shiftSemitones, 24.0);
+
+    // Octave guard is now applied to voice Hz before it reaches here (in onVoiceHzUpdated),
+    // so no duplicate filtering needed.
+
+    // 14-bit encoding: 8192 = center (0 shift), full range = ±24 semitones
+    int bendValue = 8192 + static_cast<int>((shiftSemitones / 24.0) * 8192.0);
+    bendValue = qBound(0, bendValue, 16383);
+
+    m_midi->sendVocalSyncPitchBend(bendValue);
+}
+
 void ScaleSnapProcessor::emitAllNotesOff()
 {
     // Thread safety: Lock for reading m_activeNotes (recursive lock allows nested calls)
@@ -3434,8 +3608,11 @@ void ScaleSnapProcessor::emitAllNotesOff()
 
 void ScaleSnapProcessor::releaseNote(const ActiveNote& note)
 {
-    // Release lead note on channel 1
-    if (m_leadMode != LeadMode::Off) {
+    // Release lead note on the appropriate channel
+    if (m_leadMode == LeadMode::VocalSync) {
+        // Don't reset here — wait until ALL notes are released (in onGuitarNoteOff)
+        // to avoid passthrough blips during legato playing
+    } else if (m_leadMode != LeadMode::Off) {
         emitNoteOff(kChannelLead, note.snappedNote);
     }
 
@@ -3485,7 +3662,10 @@ void ScaleSnapProcessor::releaseVoiceSustainedNotes()
         m_oscillationDetected = false;
         m_lastOscillation = 0.0;
         qDebug() << "ScaleSnap: Voice sustain notes released";
-        if (m_leadMode != LeadMode::Off) {
+        if (m_leadMode == LeadMode::VocalSync) {
+            // Don't reset here — this runs inside onGuitarNoteOn during legato,
+            // which would cause a brief passthrough blip. Reset only in onGuitarNoteOff.
+        } else if (m_leadMode != LeadMode::Off) {
             emitPitchBend(kChannelLead, 8192);
         }
         if (m_harmonyMode != HarmonyMode::OFF) {

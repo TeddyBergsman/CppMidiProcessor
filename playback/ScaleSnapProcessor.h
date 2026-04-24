@@ -11,6 +11,7 @@
 #include "playback/HarmonyTypes.h"
 #include "playback/ChordOntology.h"
 #include "playback/PitchConformanceEngine.h"
+#include "playback/GlissandoProcessor.h"
 
 class MidiProcessor;
 
@@ -47,11 +48,12 @@ class ScaleSnapProcessor : public QObject {
     Q_OBJECT
 
 public:
-    // Lead mode: controls how guitar notes are processed -> Channel 1
+    // Lead mode: controls how guitar notes are processed -> Channel 1 (or Channel 2 for VocalSync)
     enum class LeadMode {
         Off = 0,
         Original,            // Pass through original notes with vocal bend -> channel 1
-        Conformed            // Apply pitch conformance (gravity-based) -> channel 1
+        Conformed,           // Apply pitch conformance (gravity-based) -> channel 1
+        VocalSync            // Output pitch target for AU plugin -> channel 2 (with glissando)
     };
     Q_ENUM(LeadMode)
 
@@ -115,6 +117,11 @@ public:
     bool vibratoCorrectionEnabled() const { return m_vibratoCorrectionEnabled; }
     void setVibratoCorrectionEnabled(bool enabled);
 
+    // Octave guard: rejects sudden octave jumps from voice MIDI tracking errors.
+    // Large pitch jumps (>9 semitones) must be stable for ~30ms before accepted.
+    bool octaveGuardEnabled() const { return m_octaveGuardEnabled; }
+    void setOctaveGuardEnabled(bool enabled);
+
     // Harmony vibrato: apply vocal vibrato pitch bend to harmony voices
     // When disabled (default), harmony voices stay at center pitch (no vibrato wobble)
     bool harmonyVibratoEnabled() const { return m_harmonyVibratoEnabled; }
@@ -146,6 +153,13 @@ public:
     // Voice sustain sensitivity: CC2 threshold for triggering/releasing sustain (lower = more sensitive)
     int voiceSustainThreshold() const { return m_voiceSustainThreshold; }
     void setVoiceSustainThreshold(int threshold);
+
+    // Glissando control (VocalSync mode: smooth pitch transitions between guitar notes)
+    const GlissandoProcessor::Config& glissandoConfig() const { return m_glissando.config(); }
+    void setGlissandoEnabled(bool enabled);
+    void setGlissandoRateStPerSec(float rate);
+    void setGlissandoIntervalThresholdSt(float threshold);
+    void setGlissandoCurveExponent(float exponent);
 
     // Harmony instrument range (constrains harmony notes to playable range)
     // Default is full MIDI range (0-127). Set to instrument-specific range.
@@ -179,6 +193,7 @@ signals:
     void vocalBendEnabledChanged(bool enabled);
     void vocalVibratoRangeCentsChanged(double cents);
     void vibratoCorrectionEnabledChanged(bool enabled);
+    void octaveGuardEnabledChanged(bool enabled);
     void harmonyVibratoEnabledChanged(bool enabled);
     void harmonyHumanizationEnabledChanged(bool enabled);
     void voiceSustainEnabledChanged(bool enabled);
@@ -198,6 +213,10 @@ public slots:
 
     // Voice Hz (for AsPlayedPlusBend mode - measures delta from snapped note for vibrato)
     void onVoiceHzUpdated(double hz);
+
+    // Voice MIDI note (for VocalSync mode - stable integer note, no Hz jitter)
+    void onVoiceNoteOn(int midiNote);
+    void onVoiceNoteOff(int midiNote);
 
     // Clear all active notes
     void reset();
@@ -307,9 +326,17 @@ private:
     HarmonyConfig m_harmonyConfig;
     LeadConfig m_leadConfig;
     PitchConformanceEngine m_conformanceEngine;
+    GlissandoProcessor m_glissando;
     bool m_vocalBendEnabled = true;           // Enabled by default
     double m_vocalVibratoRangeCents = 200.0;  // ±200 cents (default), or ±100 cents
     bool m_vibratoCorrectionEnabled = true;   // Enabled by default - filter out DC offset from voice
+    bool m_octaveGuardEnabled = true;         // Enabled by default - reject octave tracking glitches
+
+    // Octave guard state: applied to voice Hz before any mode-specific processing
+    double m_octaveGuardAcceptedHz = 0.0;     // Last accepted voice Hz
+    double m_octaveGuardCandidateHz = 0.0;    // Candidate Hz awaiting confirmation
+    int m_octaveGuardConfirmCount = 0;        // Ticks the candidate has been stable
+    static constexpr int kOctaveGuardConfirmTicks = 3; // ~30ms at 10ms tick
     bool m_harmonyVibratoEnabled = false;     // Disabled by default - harmony voices get no vibrato pitch bend
     bool m_harmonyHumanizationEnabled = true; // Enabled by default - add timing offsets to harmony
     int m_tempoBpm = 120;                     // Current tempo for humanization calculations
@@ -365,6 +392,15 @@ private:
     QHash<int, ActiveNote> m_activeNotes;  // key = original input note
     mutable QReadWriteLock m_activeNotesLock{QReadWriteLock::Recursive};  // Thread safety for m_activeNotes (recursive to allow nested locking)
 
+    // VocalSync: continuous Hz tracking for shift calculation
+    double m_vocalSyncGuitarHz = 0.0;              // Current guitar Hz (note + pitch bend)
+    double m_vocalSyncVoiceHz = 0.0;               // Current voice Hz
+    int m_vocalSyncVoiceHoldTicks = 0;             // Freeze voice Hz updates after guitar attack
+    int m_vocalSyncLastShiftSent = 999;            // Last bend value sent
+
+    // Helper: compute and emit VocalSync shift as pitch bend
+    void emitVocalSyncShift();
+
     // Hz tracking for pitch bend
     double m_lastGuitarHz = 0.0;
     double m_lastGuitarCents = 0.0;  // Guitar pitch deviation (for combining with vocal bend)
@@ -389,6 +425,9 @@ private:
     // Output channels (1-indexed, matching sendVirtualNoteOn expectations)
     // - Lead mode (Original/Conformed): output notes -> channel 1
     // - Harmony mode: harmony notes -> channels 12-15
+    // VocalSync outputs on channel 1 (same as lead) since guitar passthrough is suppressed
+    // and Logic Pro instruments default to responding on channel 1.
+    static constexpr int kChannelVocalSync = channels::LEAD;
     static constexpr int kChannelLead = channels::LEAD;        // MIDI channel 1 (lead output)
     static constexpr int kChannelHarmony1 = channels::HARMONY_1;  // MIDI channel 12 (primary harmony)
     static constexpr int kChannelHarmony2 = channels::HARMONY_2;  // MIDI channel 13 (second harmony)

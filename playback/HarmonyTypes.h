@@ -162,11 +162,14 @@ struct HarmonyVoice {
 
 // Motion type for each harmony voice (matches HarmonyModeCompat in ScaleSnapProcessor)
 enum class VoiceMotionType {
-    OFF,         // Voice disabled
-    PARALLEL,    // Parallel motion (Smart Thirds)
-    CONTRARY,    // Contrary motion
-    SIMILAR,     // Similar motion
-    OBLIQUE      // Oblique/pedal motion
+    OFF,             // Voice disabled
+    PARALLEL,        // Parallel motion (Smart Thirds)
+    CONTRARY,        // Contrary motion
+    SIMILAR,         // Similar motion
+    OBLIQUE,         // Oblique/pedal motion
+    PARALLEL_FIXED,  // Lead + fixed semitone offset, snapped to scale
+    DRONE,           // Always emit chord root in a fixed octave
+    SCALE_PARALLEL   // Lead's scale degree + N steps in the current scale
 };
 
 // Per-voice configuration for multi-voice harmony
@@ -174,6 +177,18 @@ struct HarmonyVoiceConfig {
     VoiceMotionType motionType = VoiceMotionType::OFF;
     int rangeMin = 0;                  // Instrument range minimum (MIDI note)
     int rangeMax = 127;                // Instrument range maximum (MIDI note)
+
+    // Mode-specific config:
+    // PARALLEL_FIXED: number of semitones above the lead note (-12..+12).
+    //                 Result is then conformed to the nearest valid scale note.
+    int parallelInterval = 0;
+    // DRONE: which octave the chord root is played in (0..9; C3 = 48 ⇒ octave 3).
+    int droneOctave = 3;
+    // SCALE_PARALLEL: number of *scale steps* above (or below) the lead's
+    // scale degree (-7..+7). +1 = next-scale-tone-up, +2 = a third up
+    // diatonically, etc. Inherently stays in the scale and never produces
+    // duplicate harmonies for adjacent leads.
+    int scaleStepOffset = 0;
 
     // Runtime state (not persisted)
     int lastOutputNote = -1;           // Last harmony note output

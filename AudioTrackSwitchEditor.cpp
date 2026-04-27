@@ -1,6 +1,10 @@
 #include "AudioTrackSwitchEditor.h"
 
+#include <QCheckBox>
+#include <QComboBox>
 #include <QFormLayout>
+#include <QGridLayout>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -14,19 +18,32 @@ namespace {
 constexpr int kColName = 0;
 constexpr int kColSwitchValue = 1;
 constexpr int kColMuteCC = 2;
+
+// Roots, accidentals, qualities — kept short here, matched by index across
+// the editor and MainWindow. (Updates here require matching changes in
+// MainWindow's chord-builder.)
+const QStringList kRootLabels   = { "C", "D", "E", "F", "G", "A", "B" };
+// Order: ♮ → ♭ → ♯ → ♮ … (flat before sharp; matches per-feedback ordering).
+const QStringList kAccidentals  = { QString::fromUtf8("\u266E"),    // ♮
+                                    QString::fromUtf8("\u266D"),    // ♭
+                                    QString::fromUtf8("\u266F") };  // ♯
+const QStringList kQualityLabels = {
+    "maj", "min", "dim", "aug", "sus2", "sus4", "maj7", "m7", "7", "m7♭5"
+};
 }
 
 AudioTrackSwitchEditor::AudioTrackSwitchEditor(int initialSwitchCC,
                                                const QList<AudioTrackMute>& initialEntries,
                                                QList<AudioTrackMute> presetDefaults,
                                                int presetDefaultSwitchCC,
+                                               const HarmonyEditorState& initialHarmony,
                                                QWidget* parent)
     : QDialog(parent),
       m_presetDefaults(std::move(presetDefaults)),
       m_presetDefaultSwitchCC(presetDefaultSwitchCC) {
     setWindowTitle("Audio Track Switch");
     setModal(false);
-    resize(520, 360);
+    resize(620, 540);
 
     buildUi();
 
@@ -40,6 +57,23 @@ AudioTrackSwitchEditor::AudioTrackSwitchEditor(int initialSwitchCC,
         populateRow(i, initialEntries[i]);
     }
     m_suppressCellChange = false;
+
+    // Seed the harmony section without firing edit signals.
+    m_suppressHarmonySignals = true;
+    m_harmonyToggleCCSpin->setValue(initialHarmony.toggleCC);
+    m_harmonyRootStepCCSpin->setValue(initialHarmony.rootStepCC);
+    m_harmonyAccStepCCSpin->setValue(initialHarmony.accidentalStepCC);
+    m_harmonyQualityStepCCSpin->setValue(initialHarmony.qualityStepCC);
+    m_rootCombo->setCurrentIndex(initialHarmony.rootIndex);
+    m_accidentalCombo->setCurrentIndex(initialHarmony.accidentalIndex);
+    m_qualityCombo->setCurrentIndex(initialHarmony.qualityIndex);
+    m_enabledOnStartupCheck->setChecked(initialHarmony.enabledOnStartup);
+    m_speakChangesCheck->setChecked(initialHarmony.speakChanges);
+    m_suppressHarmonySignals = false;
+
+    setLiveChord(initialHarmony.rootIndex, initialHarmony.accidentalIndex,
+                 initialHarmony.qualityIndex);
+    setLiveHarmonyEnabled(initialHarmony.enabledOnStartup);
 }
 
 int AudioTrackSwitchEditor::switchCC() const {
@@ -55,8 +89,128 @@ QList<AudioTrackMute> AudioTrackSwitchEditor::entries() const {
     return out;
 }
 
+HarmonyEditorState AudioTrackSwitchEditor::harmonyState() const {
+    HarmonyEditorState s;
+    s.toggleCC = m_harmonyToggleCCSpin->value();
+    s.rootStepCC = m_harmonyRootStepCCSpin->value();
+    s.accidentalStepCC = m_harmonyAccStepCCSpin->value();
+    s.qualityStepCC = m_harmonyQualityStepCCSpin->value();
+    s.rootIndex = m_rootCombo->currentIndex();
+    s.accidentalIndex = m_accidentalCombo->currentIndex();
+    s.qualityIndex = m_qualityCombo->currentIndex();
+    s.enabledOnStartup = m_enabledOnStartupCheck->isChecked();
+    s.speakChanges = m_speakChangesCheck->isChecked();
+    return s;
+}
+
+void AudioTrackSwitchEditor::setLiveChord(int rootIdx, int accidentalIdx, int qualityIdx) {
+    m_suppressHarmonySignals = true;
+    if (rootIdx >= 0 && rootIdx < kRootLabels.size()) m_rootCombo->setCurrentIndex(rootIdx);
+    if (accidentalIdx >= 0 && accidentalIdx < kAccidentals.size()) m_accidentalCombo->setCurrentIndex(accidentalIdx);
+    if (qualityIdx >= 0 && qualityIdx < kQualityLabels.size()) m_qualityCombo->setCurrentIndex(qualityIdx);
+    m_suppressHarmonySignals = false;
+
+    // Update the human-readable live-chord label, e.g. "B♭ maj".
+    QString text = kRootLabels.value(rootIdx);
+    if (accidentalIdx > 0) text += kAccidentals.value(accidentalIdx);
+    text += " " + kQualityLabels.value(qualityIdx);
+    m_liveChordLabel->setText(text);
+}
+
+void AudioTrackSwitchEditor::setLiveHarmonyEnabled(bool enabled) {
+    m_liveStateLabel->setText(enabled ? "Harmonies: ON" : "Harmonies: OFF");
+    m_liveStateLabel->setStyleSheet(enabled
+        ? "QLabel { color: #6c3; font-weight: bold; }"
+        : "QLabel { color: #888; }");
+}
+
+void AudioTrackSwitchEditor::setLiveScaleSummary(const QString& summary) {
+    if (!m_liveScaleLabel) return;
+    if (summary.isEmpty()) {
+        m_liveScaleLabel->setText("Scale: —");
+    } else {
+        m_liveScaleLabel->setText("Scale: " + summary);
+    }
+}
+
 void AudioTrackSwitchEditor::buildUi() {
     auto* rootLayout = new QVBoxLayout(this);
+
+    // ============================================================
+    // Harmony group (sits above the audio-track table).
+    // ============================================================
+    auto* harmonyBox = new QGroupBox("Harmony");
+    auto* harmonyLayout = new QVBoxLayout(harmonyBox);
+
+    // Live state row + checkboxes.
+    auto* harmonyTopRow = new QHBoxLayout;
+    m_liveStateLabel = new QLabel("Harmonies: OFF");
+    m_liveStateLabel->setStyleSheet("QLabel { color: #888; }");
+    m_enabledOnStartupCheck = new QCheckBox("Enable on app startup");
+    m_speakChangesCheck = new QCheckBox("Speak chord changes");
+    harmonyTopRow->addWidget(m_liveStateLabel);
+    harmonyTopRow->addStretch(1);
+    harmonyTopRow->addWidget(m_enabledOnStartupCheck);
+    harmonyTopRow->addWidget(m_speakChangesCheck);
+    harmonyLayout->addLayout(harmonyTopRow);
+
+    // CC numbers (4 spinboxes in a grid).
+    auto* ccGrid = new QGridLayout;
+    auto makeCCSpin = [](const QString& tooltip) {
+        auto* s = new QSpinBox;
+        s->setRange(0, 127);
+        s->setToolTip(tooltip);
+        return s;
+    };
+    m_harmonyToggleCCSpin = makeCCSpin("Footswitch CC that toggles all harmonies on/off (default 33).");
+    m_harmonyRootStepCCSpin = makeCCSpin("Footswitch CC that steps the root forward (default 34). Pressing also resets accidental → natural and quality → maj.");
+    m_harmonyAccStepCCSpin = makeCCSpin("Footswitch CC that steps the accidental forward (♮ → ♯ → ♭ → …, default 35).");
+    m_harmonyQualityStepCCSpin = makeCCSpin("Footswitch CC that steps the quality forward (default 36).");
+    ccGrid->addWidget(new QLabel("Toggle CC:"),       0, 0);
+    ccGrid->addWidget(m_harmonyToggleCCSpin,          0, 1);
+    ccGrid->addWidget(new QLabel("Root step CC:"),    0, 2);
+    ccGrid->addWidget(m_harmonyRootStepCCSpin,        0, 3);
+    ccGrid->addWidget(new QLabel("Accidental step CC:"), 1, 0);
+    ccGrid->addWidget(m_harmonyAccStepCCSpin,         1, 1);
+    ccGrid->addWidget(new QLabel("Quality step CC:"), 1, 2);
+    ccGrid->addWidget(m_harmonyQualityStepCCSpin,     1, 3);
+    ccGrid->setColumnStretch(4, 1);
+    harmonyLayout->addLayout(ccGrid);
+
+    // Default chord dropdowns + live readout.
+    auto* chordRow = new QHBoxLayout;
+    chordRow->addWidget(new QLabel("Default chord:"));
+    m_rootCombo = new QComboBox;
+    m_rootCombo->addItems(kRootLabels);
+    m_accidentalCombo = new QComboBox;
+    m_accidentalCombo->addItems(kAccidentals);
+    m_qualityCombo = new QComboBox;
+    m_qualityCombo->addItems(kQualityLabels);
+    chordRow->addWidget(m_rootCombo);
+    chordRow->addWidget(m_accidentalCombo);
+    chordRow->addWidget(m_qualityCombo);
+    chordRow->addSpacing(12);
+    chordRow->addWidget(new QLabel("Live:"));
+    m_liveChordLabel = new QLabel("—");
+    m_liveChordLabel->setStyleSheet("QLabel { font-weight: bold; }");
+    chordRow->addWidget(m_liveChordLabel);
+    chordRow->addStretch(1);
+    harmonyLayout->addLayout(chordRow);
+
+    // Scale summary label (debug aid): shows the actual scale being used
+    // to conform harmonies, e.g. "Scale: B♭ Ionian (Major) — B♭ C D E♭ F G A".
+    m_liveScaleLabel = new QLabel("Scale: —");
+    m_liveScaleLabel->setStyleSheet("QLabel { color: #888; }");
+    m_liveScaleLabel->setWordWrap(true);
+    harmonyLayout->addWidget(m_liveScaleLabel);
+
+    rootLayout->addWidget(harmonyBox);
+
+    // ============================================================
+    // Audio-track section.
+    // ============================================================
+    auto* audioBox = new QGroupBox("Audio Tracks");
+    auto* audioLayout = new QVBoxLayout(audioBox);
 
     // Top row: switching CC number.
     auto* topRow = new QHBoxLayout;
@@ -68,7 +222,7 @@ void AudioTrackSwitchEditor::buildUi() {
     topRow->addWidget(ccLabel);
     topRow->addWidget(m_switchCCSpin);
     topRow->addStretch(1);
-    rootLayout->addLayout(topRow);
+    audioLayout->addLayout(topRow);
 
     // Explanatory caption.
     auto* caption = new QLabel(
@@ -77,7 +231,7 @@ void AudioTrackSwitchEditor::buildUi() {
         "others are muted.");
     caption->setWordWrap(true);
     caption->setStyleSheet("QLabel { color: #888; }");
-    rootLayout->addWidget(caption);
+    audioLayout->addWidget(caption);
 
     // Table of entries.
     m_table = new QTableWidget(0, 3, this);
@@ -91,7 +245,7 @@ void AudioTrackSwitchEditor::buildUi() {
     m_table->verticalHeader()->setVisible(false);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
-    rootLayout->addWidget(m_table, /*stretch*/ 1);
+    audioLayout->addWidget(m_table, /*stretch*/ 1);
 
     // Row-editing buttons.
     auto* rowButtons = new QHBoxLayout;
@@ -100,11 +254,13 @@ void AudioTrackSwitchEditor::buildUi() {
     rowButtons->addWidget(m_addButton);
     rowButtons->addWidget(m_removeButton);
     rowButtons->addStretch(1);
-    rootLayout->addLayout(rowButtons);
+    audioLayout->addLayout(rowButtons);
 
-    // Footer: Reset + Close.
+    rootLayout->addWidget(audioBox, /*stretch*/ 1);
+
+    // Footer: Reset + Close (sit at dialog root, not inside the audio group).
     auto* footer = new QHBoxLayout;
-    m_resetButton = new QPushButton("Reset to Preset Defaults");
+    m_resetButton = new QPushButton("Reset Audio Tracks to Preset Defaults");
     m_closeButton = new QPushButton("Close");
     footer->addWidget(m_resetButton);
     footer->addStretch(1);
@@ -115,6 +271,26 @@ void AudioTrackSwitchEditor::buildUi() {
             this, &AudioTrackSwitchEditor::onSwitchCCChanged);
     connect(m_table, &QTableWidget::cellChanged,
             this, &AudioTrackSwitchEditor::onCellChanged);
+
+    // Harmony connections.
+    auto connectCCSpin = [this](QSpinBox* s) {
+        connect(s, qOverload<int>(&QSpinBox::valueChanged),
+                this, &AudioTrackSwitchEditor::onHarmonyCCChanged);
+    };
+    connectCCSpin(m_harmonyToggleCCSpin);
+    connectCCSpin(m_harmonyRootStepCCSpin);
+    connectCCSpin(m_harmonyAccStepCCSpin);
+    connectCCSpin(m_harmonyQualityStepCCSpin);
+    connect(m_rootCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &AudioTrackSwitchEditor::onChordDropdownChanged);
+    connect(m_accidentalCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &AudioTrackSwitchEditor::onChordDropdownChanged);
+    connect(m_qualityCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &AudioTrackSwitchEditor::onChordDropdownChanged);
+    connect(m_enabledOnStartupCheck, &QCheckBox::toggled,
+            this, &AudioTrackSwitchEditor::onEnabledOnStartupToggled);
+    connect(m_speakChangesCheck, &QCheckBox::toggled,
+            this, &AudioTrackSwitchEditor::onSpeakChangesToggled);
     connect(m_addButton, &QPushButton::clicked,
             this, &AudioTrackSwitchEditor::onAddRow);
     connect(m_removeButton, &QPushButton::clicked,
@@ -214,4 +390,32 @@ void AudioTrackSwitchEditor::onResetToPresetDefaults() {
 
 void AudioTrackSwitchEditor::emitMapChanged() {
     emit mapChanged(switchCC(), entries());
+}
+
+void AudioTrackSwitchEditor::onHarmonyCCChanged() {
+    if (m_suppressHarmonySignals) return;
+    emit harmonyCCsChanged(m_harmonyToggleCCSpin->value(),
+                           m_harmonyRootStepCCSpin->value(),
+                           m_harmonyAccStepCCSpin->value(),
+                           m_harmonyQualityStepCCSpin->value());
+}
+
+void AudioTrackSwitchEditor::onChordDropdownChanged() {
+    if (m_suppressHarmonySignals) return;
+    const int rootIdx = m_rootCombo->currentIndex();
+    const int accIdx = m_accidentalCombo->currentIndex();
+    const int qualIdx = m_qualityCombo->currentIndex();
+    emit defaultChordChanged(rootIdx, accIdx, qualIdx);
+    // Refresh the live label immediately for tight feedback.
+    setLiveChord(rootIdx, accIdx, qualIdx);
+}
+
+void AudioTrackSwitchEditor::onEnabledOnStartupToggled(bool checked) {
+    if (m_suppressHarmonySignals) return;
+    emit enabledOnStartupChanged(checked);
+}
+
+void AudioTrackSwitchEditor::onSpeakChangesToggled(bool checked) {
+    if (m_suppressHarmonySignals) return;
+    emit speakChangesChanged(checked);
 }

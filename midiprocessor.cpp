@@ -5,6 +5,11 @@
 #include <cstdio>
 #include <QDebug>
 #include <QStringBuilder>
+#include <QDir>
+#include <QFile>
+#include <QStandardPaths>
+#include <QTextStream>
+#include <QDateTime>
 #include <exception>
 #include <deque>
 
@@ -32,7 +37,22 @@ MidiProcessor::MidiProcessor(const Preset& preset, QObject *parent)
     connect(m_logPollTimer, &QTimer::timeout, this, &MidiProcessor::pollLogQueue);
     m_logPollTimer->start(33);
 
-    // Nothing extra here
+    // Set up a tail-able log file at ~/Library/Logs/CppMidiProcessor/harmony.log
+    // so users in performance mode (where the in-app console is hidden) can
+    // see diagnostic output. Truncated on each launch so it doesn't grow.
+    const QString logDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    QDir().mkpath(logDir + "/Logs/CppMidiProcessor");
+    m_logFilePath = logDir + "/Logs/CppMidiProcessor/harmony.log";
+    {
+        QFile f(m_logFilePath);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            QTextStream(&f) << "=== CppMidiProcessor session start "
+                            << QDateTime::currentDateTime().toString(Qt::ISODate)
+                            << " ===\n";
+        }
+        std::lock_guard<std::mutex> lock(m_logMutex);
+        m_logQueue.push(("Log file: " + m_logFilePath).toStdString());
+    }
 }
 
 MidiProcessor::~MidiProcessor() {
@@ -418,6 +438,27 @@ QList<AudioTrackMute> MidiProcessor::audioTrackMutes() const {
     return m_audioTrackMutesList;
 }
 
+void MidiProcessor::pushLog(const QString& message) {
+    std::lock_guard<std::mutex> lock(m_logMutex);
+    m_logQueue.push(message.toStdString());
+}
+
+void MidiProcessor::setHarmonyToggleStateForFlip(bool state) {
+    m_harmonyToggleState = state;
+}
+
+void MidiProcessor::setHarmonyCCs(int toggleCC, int rootStepCC, int accStepCC, int qualityStepCC) {
+    auto clamp = [](int x) { return std::max(0, std::min(127, x)); };
+    m_harmonyToggleCC.store(clamp(toggleCC));
+    m_harmonyRootStepCC.store(clamp(rootStepCC));
+    m_harmonyAccidentalStepCC.store(clamp(accStepCC));
+    m_harmonyQualityStepCC.store(clamp(qualityStepCC));
+    std::lock_guard<std::mutex> lock(m_logMutex);
+    m_logQueue.push(QString("Harmony CCs updated: toggle=%1 root=%2 acc=%3 quality=%4")
+                        .arg(toggleCC).arg(rootStepCC).arg(accStepCC).arg(qualityStepCC)
+                        .toStdString());
+}
+
 void MidiProcessor::setTranspose(int semitones) {
     m_transposeAmount.store(semitones);
     {
@@ -428,14 +469,29 @@ void MidiProcessor::setTranspose(int semitones) {
 
 void MidiProcessor::pollLogQueue() {
     QString allMessages;
-    std::lock_guard<std::mutex> lock(m_logMutex);
-    if (m_logQueue.empty()) return;
-    
-    while(!m_logQueue.empty()) {
-        allMessages.append(QString::fromStdString(m_logQueue.front())).append('\n');
-        m_logQueue.pop();
+    {
+        std::lock_guard<std::mutex> lock(m_logMutex);
+        if (m_logQueue.empty()) return;
+        while(!m_logQueue.empty()) {
+            allMessages.append(QString::fromStdString(m_logQueue.front())).append('\n');
+            m_logQueue.pop();
+        }
     }
-    emit logMessage(allMessages.trimmed());
+    const QString trimmed = allMessages.trimmed();
+    emit logMessage(trimmed);
+
+    // Mirror to the file log so performance mode (no in-app console) can
+    // still be diagnosed via `tail -f`.
+    if (!m_logFilePath.isEmpty()) {
+        QFile f(m_logFilePath);
+        if (f.open(QIODevice::Append | QIODevice::Text)) {
+            QTextStream out(&f);
+            const QString stamp = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+            for (const QString& line : trimmed.split('\n', Qt::SkipEmptyParts)) {
+                out << stamp << " " << line << "\n";
+            }
+        }
+    }
 }
 
 void MidiProcessor::guitarCallback(double deltatime, std::vector<unsigned char>* message, void* userData) {
@@ -615,6 +671,13 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     if (status == 0xB0 && message.size() >= 3) {
                         const int cc = int(message[1]);
                         const int value = int(message[2]);
+                        // Unconditional CC trace — diagnoses footswitch
+                        // mode (toggle vs momentary) at a glance.
+                        {
+                            std::lock_guard<std::mutex> lock(m_logMutex);
+                            m_logQueue.push(QString("Ampero RX  CC%1 = %2")
+                                                .arg(cc).arg(value).toStdString());
+                        }
                         if (cc == m_audioTrackSwitchCC.load()) {
                             QList<AudioTrackMute> localMap;
                             {
@@ -637,6 +700,41 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                                                 .arg(value)
                                                 .arg(localMap.size())
                                                 .toStdString());
+                        } else if (cc == m_harmonyToggleCC.load()) {
+                            // Harmony master toggle. The Ampero's "Toggle CC"
+                            // mode alternates 0/127 each press, with no
+                            // guarantee its starting state matches ours. So
+                            // we treat ANY change in CC value as one press
+                            // and flip our internal state — guaranteed one
+                            // flip per press regardless of which value the
+                            // footswitch happens to send first.
+                            if (value != m_lastHarmonyToggleValue) {
+                                m_lastHarmonyToggleValue = value;
+                                m_harmonyToggleState = !m_harmonyToggleState;
+                                emit harmonyToggleRequested(m_harmonyToggleState);
+                                std::lock_guard<std::mutex> lock(m_logMutex);
+                                m_logQueue.push(QString("Ampero harmony toggle CC%1=%2 (press) -> %3")
+                                                    .arg(cc).arg(value)
+                                                    .arg(m_harmonyToggleState ? "ON" : "OFF")
+                                                    .toStdString());
+                            }
+                        } else if (cc == m_harmonyRootStepCC.load()) {
+                            // Rising-edge detection so momentary footswitches
+                            // (127 on press, 0 on release) step exactly once.
+                            if (value > 63 && m_lastHarmonyRootStepValue <= 63) {
+                                emit harmonyRootStepRequested();
+                            }
+                            m_lastHarmonyRootStepValue = value;
+                        } else if (cc == m_harmonyAccidentalStepCC.load()) {
+                            if (value > 63 && m_lastHarmonyAccidentalStepValue <= 63) {
+                                emit harmonyAccidentalStepRequested();
+                            }
+                            m_lastHarmonyAccidentalStepValue = value;
+                        } else if (cc == m_harmonyQualityStepCC.load()) {
+                            if (value > 63 && m_lastHarmonyQualityStepValue <= 63) {
+                                emit harmonyQualityStepRequested();
+                            }
+                            m_lastHarmonyQualityStepValue = value;
                         } else if (m_isVerbose.load()) {
                             std::lock_guard<std::mutex> lock(m_logMutex);
                             m_logQueue.push(QString("Ampero CC%1=%2 (passthrough only)")

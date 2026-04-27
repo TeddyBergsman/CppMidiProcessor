@@ -9,6 +9,7 @@ class QCheckBox;
 class QLabel;
 class QGroupBox;
 class QSlider;
+class QSpinBox;
 class MidiProcessor;
 
 namespace playback { class VirtuosoBalladMvpPlaybackEngine; }
@@ -62,6 +63,8 @@ private slots:
     // Multi-voice harmony slots
     void onVoiceModeChanged(int voiceIndex, int modeComboIndex);
     void onVoiceRangeChanged(int voiceIndex, int rangeComboIndex);
+    void onVoiceValueChanged(int voiceIndex, int value);
+    void onVoicingPresetChanged(int comboIdx);
 
 private:
     void buildUi();
@@ -103,4 +106,11 @@ private:
     QGroupBox* m_harmonyGroup = nullptr;
     std::array<QComboBox*, 4> m_voiceModeCombo = {nullptr, nullptr, nullptr, nullptr};
     std::array<QComboBox*, 4> m_voiceRangeCombo = {nullptr, nullptr, nullptr, nullptr};
+    // Per-voice numeric value: semitones for PARALLEL_FIXED, octave for DRONE.
+    // Disabled (greyed) when the current mode doesn't use it.
+    std::array<QSpinBox*, 4>  m_voiceValueSpin  = {nullptr, nullptr, nullptr, nullptr};
+
+    // Voicing-preset selector (one-click setups for the 4 harmony voices).
+    // See kHarmonyPresets in SnappingWindow.cpp.
+    QComboBox* m_voicingPresetCombo = nullptr;
 };

@@ -11,6 +11,7 @@
 #include "chart/ChartModel.h"
 #include "virtuoso/ontology/OntologyRegistry.h"
 #include "virtuoso/theory/ScaleSuggester.h"
+#include "music/Pitch.h"
 
 namespace playback {
 
@@ -52,9 +53,15 @@ void ScaleSnapProcessor::setOntology(const virtuoso::ontology::OntologyRegistry*
 void ScaleSnapProcessor::setChartModel(const chart::ChartModel* model)
 {
     m_model = model;
-    // Reset chord tracking when chart changes
-    m_lastKnownChord = music::ChordSymbol{};
-    m_hasLastKnownChord = false;
+    // Reset chord tracking when chart changes — UNLESS the user has set
+    // an explicit default chord via the footswitch / editor. Otherwise
+    // iReal Pro auto-loading at startup silently wipes the user's choice
+    // (because setChartModel runs after applyHarmonyChordToEngine in the
+    // ctor) and the engine ends up with no chord at all.
+    if (!m_useDefaultHarmonyChord) {
+        m_lastKnownChord = music::ChordSymbol{};
+        m_hasLastKnownChord = false;
+    }
 }
 
 void ScaleSnapProcessor::setLeadMode(LeadMode mode)
@@ -362,12 +369,111 @@ void ScaleSnapProcessor::setVoiceRange(int voiceIndex, int minNote, int maxNote)
 
 bool ScaleSnapProcessor::isMultiVoiceModeActive() const
 {
+    // Live master switch: when harmonies are disabled, treat as inactive
+    // even if voices are configured. Avoids touching the user's snapping
+    // config while still gating output.
+    if (!m_harmonyEnabled.load()) return false;
     for (int i = 0; i < 4; ++i) {
         if (m_voiceConfigs[i].isEnabled()) {
             return true;
         }
     }
     return false;
+}
+
+void ScaleSnapProcessor::setHarmonyEnabled(bool enabled)
+{
+    const bool prev = m_harmonyEnabled.exchange(enabled);
+    if (prev == enabled) return;
+
+    // Going OFF: kill any sounding harmony notes on channels 12-15 so the
+    // user doesn't get stuck voices. Note: we use sendVirtualAllNotesOff
+    // rather than walking m_activeNotes — simpler and always safe.
+    if (!enabled && m_midi) {
+        // kHarmonyChannels[] uses 1-based MIDI channel numbers in this file.
+        for (int ch = 12; ch <= 15; ++ch) {
+            m_midi->sendVirtualAllNotesOff(ch);
+        }
+    }
+}
+
+void ScaleSnapProcessor::setDefaultHarmonyChord(const music::ChordSymbol& chord)
+{
+    m_lastKnownChord = chord;
+    m_hasLastKnownChord = (chord.rootPc >= 0);
+    // Mark the chord as user-driven so the chart-driven path in
+    // computeValidPitchClasses doesn't silently overwrite it on the next
+    // guitar note. iReal Pro auto-loads at startup, which sets a chart
+    // model and was previously stealing the footswitch chord.
+    m_useDefaultHarmonyChord = m_hasLastKnownChord;
+}
+
+QString ScaleSnapProcessor::scaleKeyForChord(const music::ChordSymbol& c) const
+{
+    // The user's chord stepper produces these chord qualities. We pick a
+    // single best-fit scale per quality, prioritizing what a guitar player
+    // would expect over jazz-inflected hints (the chart-driven path uses
+    // the existing explicitHintScalesForContext machinery instead).
+    using music::ChordQuality;
+    using music::SeventhQuality;
+    switch (c.quality) {
+        case ChordQuality::Major:
+            // maj / maj7 / maj9 / 6 / etc. — ionian.
+            return "ionian";
+        case ChordQuality::Minor:
+            // m7+ leans dorian (jazz idiom), plain "m" is natural minor.
+            if (c.seventh == SeventhQuality::Minor7 || c.extension >= 7)
+                return "dorian";
+            return "aeolian";
+        case ChordQuality::Dominant:
+            return "mixolydian";
+        case ChordQuality::Diminished:
+            return "locrian";
+        case ChordQuality::HalfDiminished:
+            return "locrian";
+        case ChordQuality::Augmented:
+            return "lydian_augmented";
+        case ChordQuality::Sus2:
+        case ChordQuality::Sus4:
+            return "mixolydian";
+        case ChordQuality::Power5:
+        case ChordQuality::Unknown:
+        default:
+            return "ionian";
+    }
+}
+
+QString ScaleSnapProcessor::currentScaleSummary(bool preferFlats) const
+{
+    if (!m_hasLastKnownChord || m_lastKnownChord.rootPc < 0 || !m_ontology) {
+        return QString();
+    }
+    const QString scaleKey = scaleKeyForChord(m_lastKnownChord);
+    const auto* sd = m_ontology->scale(scaleKey);
+    if (!sd) return QString();
+
+    const int rootPc = normalizePc(m_lastKnownChord.rootPc);
+    const QString rootName = music::spellPitchClass(rootPc, preferFlats);
+
+    QStringList notes;
+    notes.reserve(sd->intervals.size());
+    for (int iv : sd->intervals) {
+        notes.append(music::spellPitchClass(normalizePc(rootPc + iv), preferFlats));
+    }
+    // Replace ASCII b/# with proper unicode flat/sharp glyphs for display.
+    auto pretty = [](QString s) {
+        s.replace('b', QChar(0x266D));
+        s.replace('#', QChar(0x266F));
+        return s;
+    };
+    QStringList prettyNotes;
+    prettyNotes.reserve(notes.size());
+    for (const auto& n : notes) prettyNotes.append(pretty(n));
+
+    return QString("%1 %2 — %3")
+        .arg(pretty(rootName))
+        .arg(sd->name)
+        .arg(prettyNotes.join(' '));
 }
 
 void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
@@ -384,7 +490,7 @@ void ScaleSnapProcessor::setCurrentCellIndex(int cellIndex)
     // to be re-validated when chords change, regardless of lead mode!
     // Also applies to multi-voice mode where each voice needs re-conformance.
     const bool multiVoiceActive = isMultiVoiceModeActive();
-    const bool legacyHarmonyActive = !multiVoiceActive && (m_harmonyMode != HarmonyMode::OFF);
+    const bool legacyHarmonyActive = !multiVoiceActive && (legacyHarmonyOn());
     bool needsReconform = false;
     {
         QReadLocker lock(&m_activeNotesLock);
@@ -589,6 +695,28 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
     const QSet<int> validPcs = computeValidPitchClasses();
     qDebug() << "ScaleSnap: validPcs size=" << validPcs.size() << "pcs=" << validPcs;
 
+    // Pre-compute the harmony pitch we WILL emit on each voice for this
+    // new lead. This must happen BEFORE the lead-conformance path calls
+    // releaseVoiceSustainedNotes() — that release path consults
+    // m_upcomingHarmony to decide whether to chop a sustained voice or
+    // let it ride through the lead change. See releaseNote() for the
+    // tie logic. Reset skip flags here so they apply only to this turn.
+    {
+        m_skipUpcomingOn.fill(false);
+        m_upcomingHarmony.fill(-1);
+        if (isMultiVoiceModeActive()) {
+            const QSet<int> chordTones = computeChordTones(m_lastKnownChord);
+            QVector<int> generated;
+            generated.append(midiNote); // include lead so clash logic accounts for it
+            for (int v = 0; v < 4; ++v) {
+                if (!m_voiceConfigs[v].isEnabled()) continue;
+                const int h = generateHarmonyForVoice(v, midiNote, chordTones, validPcs, generated);
+                m_upcomingHarmony[v] = h;
+                if (h >= 0) generated.append(h);
+            }
+        }
+    }
+
     ActiveNote active;
     active.originalNote = midiNote;
 
@@ -599,7 +727,7 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
         } else if (m_leadMode != LeadMode::Off) {
             emitPitchBend(kChannelLead, 8192);
         }
-        if (m_harmonyMode != HarmonyMode::OFF) {
+        if (legacyHarmonyOn()) {
             emitPitchBend(kChannelHarmony1, 8192);
         }
     }
@@ -689,12 +817,23 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
 
                 // Fast chromatic sweep + non-chord tone = skip (previous note sustains)
                 // Fast melodic pattern + scale tone = allow (it's intentional)
+                // Gate "mark all as voice-sustained" on the voice-sustain
+                // feature being actively engaged. Without this guard, a fast-
+                // playing chromatic blip would leave the previous note flagged
+                // sustained even when the user isn't singing — and nothing
+                // ever clears the flag, leaving the harmony stuck until the
+                // next correct fret. Suppression itself (the early return) is
+                // still applied; only the lingering sustain flag is gated.
+                const bool sustainActive = m_voiceSustainEnabled &&
+                                           (m_lastCc2Value > m_voiceSustainThreshold);
                 if (isFastPlaying && !isChordTone) {
                     if (isChromaticSweep) {
                         // Chromatic sweep: skip non-chord tones
                         qDebug() << "ScaleSnap: SKIPPING non-chord tone during chromatic sweep";
-                        for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
-                            it.value().voiceSustained = true;
+                        if (sustainActive) {
+                            for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
+                                it.value().voiceSustained = true;
+                            }
                         }
                         return;  // Exit early - don't process this note
                     } else if (isScaleTone) {
@@ -704,8 +843,10 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
                     } else {
                         // Fast playing + chromatic (T4) note = skip
                         qDebug() << "ScaleSnap: SKIPPING chromatic note during fast playing";
-                        for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
-                            it.value().voiceSustained = true;
+                        if (sustainActive) {
+                            for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
+                                it.value().voiceSustained = true;
+                            }
                         }
                         return;
                     }
@@ -742,11 +883,15 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
                     // Same output note - but is this the "right" way to play it?
                     if (wouldBeSnapped) {
                         // Player is hitting a wrong fret that snaps to the current note
-                        // → sustain, don't retrigger
+                        // → sustain, don't retrigger.  Only mark voice-sustained
+                        // when sustain is actually engaged (otherwise the flag
+                        // would block the previous note's release later).
                         qDebug() << "ScaleSnap: Wrong fret" << midiNote << "would snap to already-playing"
                                  << m_currentlyPlayingNote << "- sustaining instead";
-                        for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
-                            it.value().voiceSustained = true;
+                        if (sustainActive) {
+                            for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
+                                it.value().voiceSustained = true;
+                            }
                         }
                         return;  // Exit early
                     }
@@ -841,7 +986,35 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
     // Multi-voice mode: each voice has its own motion type and range
     // Legacy mode: single harmony on channel 12 (when m_harmonyMode != OFF)
     const bool multiVoiceActive = isMultiVoiceModeActive();
-    const bool legacyHarmonyActive = !multiVoiceActive && (m_harmonyMode != HarmonyMode::OFF);
+    const bool legacyHarmonyActive = !multiVoiceActive && (legacyHarmonyOn());
+
+    if (m_harmonyDebug.load() && m_midi) {
+        // Per-voice mode + value (interval for PARALLEL_FIXED, octave for
+        // DRONE) so we can verify the spinbox actually pushed through.
+        // Mode codes: 0=Off 1=SmartThirds 2=Contrary 3=Similar 4=Oblique
+        //             5=Parallel 6=Drone
+        QString perVoice;
+        for (int i = 0; i < 4; ++i) {
+            const auto& c = m_voiceConfigs[i];
+            const int m = static_cast<int>(c.motionType);
+            int v = 0;
+            if (c.motionType == VoiceMotionType::PARALLEL_FIXED)      v = c.parallelInterval;
+            else if (c.motionType == VoiceMotionType::SCALE_PARALLEL) v = c.scaleStepOffset;
+            else if (c.motionType == VoiceMotionType::DRONE)          v = c.droneOctave;
+            perVoice += QString("v%1[m=%2,val=%3]").arg(i).arg(m).arg(v);
+            if (i < 3) perVoice += " ";
+        }
+        m_midi->pushLog(QString("HARMONY-DEBUG note=%1 vel=%2 enabled=%3 multiVoice=%4 legacy=%5 "
+                                "hasChord=%6 chordRoot=%7 validPcs=%8 %9")
+                            .arg(midiNote).arg(velocity)
+                            .arg(m_harmonyEnabled.load() ? "Y" : "N")
+                            .arg(multiVoiceActive ? "Y" : "N")
+                            .arg(legacyHarmonyActive ? "Y" : "N")
+                            .arg(m_hasLastKnownChord ? "Y" : "N")
+                            .arg(m_lastKnownChord.rootPc)
+                            .arg(int(validPcs.size()))
+                            .arg(perVoice));
+    }
 
     if (multiVoiceActive || legacyHarmonyActive) {
         qDebug() << "ScaleSnap: HARMONY MODE IS ACTIVE - multiVoice:" << multiVoiceActive
@@ -901,8 +1074,18 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
                 // Generate harmony for this voice, passing already-generated notes for clash avoidance
                 int harmonyNote = generateHarmonyForVoice(voiceIdx, midiNote, chordTones, validPcs, generatedHarmonyNotes);
 
-                // Validate (ensure not chromatic T4)
-                if (harmonyNote >= 0) {
+                // Validate (ensure not chromatic T4) — but ONLY for the
+                // legacy motion modes. The new PARALLEL_FIXED and DRONE modes
+                // are deterministic by user spec (lead+interval-snapped, or
+                // chord root in chosen octave); the validator was rejecting
+                // them and substituting chord tones, which made the user's
+                // configured value appear to "have no effect".
+                const auto& vc = m_voiceConfigs[voiceIdx];
+                const bool skipValidate =
+                    (vc.motionType == VoiceMotionType::PARALLEL_FIXED) ||
+                    (vc.motionType == VoiceMotionType::DRONE) ||
+                    (vc.motionType == VoiceMotionType::SCALE_PARALLEL);
+                if (harmonyNote >= 0 && !skipValidate) {
                     harmonyNote = validateHarmonyNote(harmonyNote, midiNote, activeChord);
                 }
 
@@ -920,9 +1103,28 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
                 qDebug() << "ScaleSnap Multi-Voice" << voiceIdx << ":" << midiNote << "->" << harmonyNote
                          << "ch" << kHarmonyChannels[voiceIdx];
 
-                // Emit the harmony note (with humanization delay if enabled)
+                // Emit the harmony note (with humanization delay if enabled).
+                // Voice-sustained tie: skip the on if releaseNote already
+                // marked this voice as "transferred" — the held pitch is
+                // still sounding from the previous lead.
                 if (harmonyNote >= 0 && harmonyNote <= 127) {
-                    emitHarmonyNoteOn(kHarmonyChannels[voiceIdx], harmonyNote, harmonyVelocity, voiceIdx);
+                    if (m_skipUpcomingOn[voiceIdx]) {
+                        if (m_harmonyDebug.load() && m_midi) {
+                            m_midi->pushLog(QString("HARMONY-TIE v%1 ch%2 note=%3 (sustained transfer)")
+                                                .arg(voiceIdx).arg(kHarmonyChannels[voiceIdx])
+                                                .arg(harmonyNote));
+                        }
+                    } else {
+                        emitHarmonyNoteOn(kHarmonyChannels[voiceIdx], harmonyNote, harmonyVelocity, voiceIdx);
+                        if (m_harmonyDebug.load() && m_midi) {
+                            m_midi->pushLog(QString("HARMONY-EMIT v%1 ch%2 note=%3 vel=%4")
+                                                .arg(voiceIdx).arg(kHarmonyChannels[voiceIdx])
+                                                .arg(harmonyNote).arg(harmonyVelocity));
+                        }
+                    }
+                } else if (m_harmonyDebug.load() && m_midi) {
+                    m_midi->pushLog(QString("HARMONY-SKIP v%1: generator returned %2 (out of range)")
+                                        .arg(voiceIdx).arg(harmonyNote));
                 }
             }
 
@@ -969,6 +1171,14 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
     }
 
     m_activeNotes.insert(midiNote, active);
+
+    // Clear the in-flight tie bookkeeping. After onGuitarNoteOn returns,
+    // any subsequent voice-sustain release (e.g. CC2 dropping below the
+    // sustain threshold) must not see stale "upcoming" pitches and
+    // mistakenly tie a release — that produced the indefinite stuck-note
+    // bug.
+    m_upcomingHarmony.fill(-1);
+    m_skipUpcomingOn.fill(false);
 }
 
 void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
@@ -1010,10 +1220,30 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
              << it.value().voiceSustained << "snappedNote=" << it.value().snappedNote;
 
     // If note is already marked as voice-sustained (e.g., from repeated wrong note
-    // or fast playing skip), don't release it - just return
+    // or fast playing skip), don't release it - just return.
+    //
+    // Safety net: the wrong-fret-suppression path sets voiceSustained=true on
+    // ALL active notes regardless of whether voice-sustain is actually active
+    // right now. If no real sustain signal is in effect (feature disabled,
+    // or CC2 below threshold), honoring the flag here strands the note —
+    // we'd never see another release path. Force a normal release in that
+    // case so drone / parallel etc. don't stick indefinitely.
     if (it.value().voiceSustained) {
-        qDebug() << "ScaleSnap: Note" << midiNote << "is voice-sustained, not releasing";
-        return;
+        const bool sustainActive = m_voiceSustainEnabled &&
+                                   (m_lastCc2Value > m_voiceSustainThreshold);
+        if (!sustainActive) {
+            qDebug() << "ScaleSnap: Note" << midiNote
+                     << "was flagged voiceSustained but sustain is inactive"
+                     << "(enabled=" << m_voiceSustainEnabled
+                     << "cc2=" << m_lastCc2Value
+                     << "threshold=" << m_voiceSustainThreshold
+                     << ") — forcing release.";
+            it.value().voiceSustained = false;
+            // fall through to normal release path below
+        } else {
+            qDebug() << "ScaleSnap: Note" << midiNote << "is voice-sustained, not releasing";
+            return;
+        }
     }
 
     // Voice sustain: if enabled and singing (CC2 > threshold), mark as sustained instead of releasing
@@ -1032,7 +1262,7 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
                 emitPitchBend(kChannelVocalSync, 8192);
             } else if (m_leadMode == LeadMode::Original) {
                 emitPitchBend(kChannelLead, 8192);
-                if (m_harmonyMode != HarmonyMode::OFF) {
+                if (legacyHarmonyOn()) {
                     emitPitchBend(kChannelHarmony1, 8192);
                 }
             }
@@ -1066,7 +1296,7 @@ void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)
         } else if (m_leadMode != LeadMode::Off) {
             emitPitchBend(kChannelLead, 8192);
         }
-        if (m_harmonyMode != HarmonyMode::OFF) {
+        if (legacyHarmonyOn()) {
             emitPitchBend(kChannelHarmony1, 8192);
         }
     }
@@ -1154,7 +1384,7 @@ void ScaleSnapProcessor::onGuitarHzUpdated(double hz)
 
         // Apply to lead channel (and harmony channel if harmony is active)
         emitPitchBend(kChannelLead, bendValue);
-        if (m_harmonyMode != HarmonyMode::OFF) {
+        if (legacyHarmonyOn()) {
             emitPitchBend(kChannelHarmony1, bendValue);
         }
     } else {
@@ -1166,7 +1396,7 @@ void ScaleSnapProcessor::onGuitarHzUpdated(double hz)
         bendValue = qBound(0, bendValue, 16383);
 
         emitPitchBend(kChannelLead, bendValue);
-        if (m_harmonyMode != HarmonyMode::OFF) {
+        if (legacyHarmonyOn()) {
             emitPitchBend(kChannelHarmony1, bendValue);
         }
     }
@@ -1180,7 +1410,7 @@ void ScaleSnapProcessor::onVoiceCc2Updated(int value)
 
     // Check if any mode is active
     const bool multiVoiceActive = isMultiVoiceModeActive();
-    const bool legacyHarmonyActive = !multiVoiceActive && (m_harmonyMode != HarmonyMode::OFF);
+    const bool legacyHarmonyActive = !multiVoiceActive && (legacyHarmonyOn());
     const bool anyModeActive = (m_leadMode != LeadMode::Off) || multiVoiceActive || legacyHarmonyActive;
 
     if (!anyModeActive) {
@@ -1296,7 +1526,7 @@ void ScaleSnapProcessor::onVoiceHzUpdated(double hz)
 
     // Only active when vocal bend is enabled, at least one mode is on, and there are active notes
     const bool multiVoiceActive = isMultiVoiceModeActive();
-    const bool legacyHarmonyActive = !multiVoiceActive && (m_harmonyMode != HarmonyMode::OFF);
+    const bool legacyHarmonyActive = !multiVoiceActive && (legacyHarmonyOn());
     const bool anyModeActive = (m_leadMode != LeadMode::Off) || multiVoiceActive || legacyHarmonyActive;
 
     if (!m_vocalBendEnabled || !anyModeActive || !m_midi || m_activeNotes.isEmpty() || hz <= 0.0) {
@@ -1454,8 +1684,38 @@ QSet<int> ScaleSnapProcessor::computeValidPitchClasses() const
              << "cellIndex=" << m_currentCellIndex
              << "hasLastKnownChord=" << m_hasLastKnownChord;
 
-    if (!m_harmony || !m_ontology || !m_model) {
-        qDebug() << "ScaleSnap::computeValidPitchClasses - missing dependency, returning empty";
+    if (!m_harmony || !m_ontology) {
+        qDebug() << "ScaleSnap::computeValidPitchClasses - missing harmony/ontology, returning empty";
+        return validPcs;
+    }
+
+    // Derive valid pitches from the user-set default chord whenever:
+    //   (a) we have no chart model (pure performance mode), OR
+    //   (b) the user has explicitly set a default via setDefaultHarmonyChord
+    //       (footswitch-driven chord stepping). In case (b) we must override
+    //       the chart-driven path below — otherwise iReal-Pro auto-load will
+    //       silently substitute the chart's first chord for the user's choice.
+    // Same chord-type → scale machinery as buildActiveChord(), so for B♭ maj
+    // you get the full B♭ ionian (B♭ C D E♭ F G A), not just chord tones.
+    if (!m_model || m_useDefaultHarmonyChord) {
+        if (m_hasLastKnownChord && m_lastKnownChord.rootPc >= 0) {
+            validPcs.unite(computeChordTones(m_lastKnownChord));
+
+            // Pick a single scale that matches the user's chord choice
+            // (ionian for maj, aeolian for plain minor, locrian for dim,
+            // lydian-augmented for aug, etc.). One scale, no unions —
+            // unioning multiple scales blurs the harmonic identity (e.g.
+            // ionian ∪ lydian for B♭ maj would add E natural).
+            const QString scaleKey = scaleKeyForChord(m_lastKnownChord);
+            if (const auto* sd = m_ontology->scale(scaleKey)) {
+                for (int iv : sd->intervals) {
+                    validPcs.insert(normalizePc(m_lastKnownChord.rootPc + iv));
+                }
+            } else {
+                // Scale lookup failed — fall back to chord-tone-only.
+                // (Already added above via computeChordTones.)
+            }
+        }
         return validPcs;
     }
 
@@ -1854,7 +2114,7 @@ void ScaleSnapProcessor::checkAndReconformOnChordChange(int previousCellIndex)
 
         // Check if multi-voice or legacy harmony mode is active
         const bool multiVoiceActive = isMultiVoiceModeActive();
-        const bool legacyHarmonyActive = !multiVoiceActive && (m_harmonyMode != HarmonyMode::OFF);
+        const bool legacyHarmonyActive = !multiVoiceActive && (legacyHarmonyOn());
 
         if (multiVoiceActive) {
             // MULTI-VOICE MODE: Re-conform each enabled voice
@@ -3350,9 +3610,32 @@ int ScaleSnapProcessor::generateHarmonyForVoice(int voiceIndex, int inputNote,
             harmonyNote = generateObliqueHarmonyNote(inputNote, previousLeadNote, previousHarmonyNote,
                                                       chordTones, validPcs, false);
             break;
+        case VoiceMotionType::PARALLEL_FIXED:
+            harmonyNote = generateParallelFixedHarmonyNote(inputNote, config.parallelInterval, validPcs);
+            break;
+        case VoiceMotionType::DRONE:
+            harmonyNote = generateDroneHarmonyNote(config.droneOctave);
+            break;
+        case VoiceMotionType::SCALE_PARALLEL:
+            harmonyNote = generateScaleParallelHarmonyNote(inputNote, config.scaleStepOffset, validPcs);
+            break;
         case VoiceMotionType::OFF:
         default:
             return -1;
+    }
+
+    // The new "simple" modes are deterministic by user spec: PARALLEL_FIXED
+    // produces lead+interval-snapped, DRONE produces chord-root in chosen
+    // octave, SCALE_PARALLEL produces lead's scale-degree + N steps. Skip
+    // the legacy post-processing (range octave-shift, voice-clash
+    // adjustment) so the user's configured pitch is honored verbatim.
+    // Just clamp to MIDI range as a safety floor/ceiling.
+    if (config.motionType == VoiceMotionType::PARALLEL_FIXED ||
+        config.motionType == VoiceMotionType::DRONE ||
+        config.motionType == VoiceMotionType::SCALE_PARALLEL) {
+        if (harmonyNote < 0)   harmonyNote = -1;
+        if (harmonyNote > 127) harmonyNote = 127;
+        return harmonyNote;
     }
 
     // Apply instrument range constraint (octave shift to fit)
@@ -3429,6 +3712,95 @@ bool ScaleSnapProcessor::wouldClashWithOtherVoices(int candidateNote, const QVec
     }
 
     return false;
+}
+
+int ScaleSnapProcessor::generateParallelFixedHarmonyNote(int inputNote, int intervalSemitones,
+                                                          const QSet<int>& validPcs) const
+{
+    // Apply interval, then conform the result to the nearest valid pitch
+    // class. We pick the nearest scale member by minimum |delta semitones|,
+    // searching ±6 from the target — that always covers a full chromatic
+    // octave and guarantees a hit if validPcs is non-empty. Range adjustment
+    // is done downstream in applyVoiceRange().
+    if (intervalSemitones < -12) intervalSemitones = -12;
+    if (intervalSemitones > 12)  intervalSemitones = 12;
+
+    int target = inputNote + intervalSemitones;
+    if (target < 0)   target = 0;
+    if (target > 127) target = 127;
+
+    if (validPcs.isEmpty()) {
+        // No scale info: emit raw target (better than silence — caller will
+        // range-clamp). Common in transient startup conditions.
+        return target;
+    }
+
+    // Find the nearest valid-PC note to `target`. Tie-break upward.
+    int bestNote = -1;
+    int bestDist = 999;
+    for (int delta = 0; delta <= 6; ++delta) {
+        for (int dir : {1, -1}) {
+            if (delta == 0 && dir == -1) continue;
+            const int candidate = target + (delta * dir);
+            if (candidate < 0 || candidate > 127) continue;
+            if (validPcs.contains(normalizePc(candidate))) {
+                const int dist = std::abs(delta);
+                if (dist < bestDist || (dist == bestDist && dir > 0)) {
+                    bestDist = dist;
+                    bestNote = candidate;
+                }
+            }
+        }
+        if (bestNote >= 0) break;  // smallest delta wins
+    }
+    return (bestNote >= 0) ? bestNote : target;
+}
+
+int ScaleSnapProcessor::generateDroneHarmonyNote(int octave) const
+{
+    if (!m_hasLastKnownChord || m_lastKnownChord.rootPc < 0) return -1;
+    if (octave < 0) octave = 0;
+    if (octave > 9) octave = 9;
+    // C-1 = 0, C0 = 12, C3 = 48 (typical "octave 3" convention).
+    int note = (octave + 1) * 12 + normalizePc(m_lastKnownChord.rootPc);
+    if (note < 0)   note = 0;
+    if (note > 127) note = 127;
+    return note;
+}
+
+int ScaleSnapProcessor::generateScaleParallelHarmonyNote(int inputNote, int scaleStepOffset,
+                                                          const QSet<int>& validPcs) const
+{
+    if (validPcs.isEmpty()) return inputNote;
+    if (scaleStepOffset < -14) scaleStepOffset = -14;
+    if (scaleStepOffset > 14)  scaleStepOffset = 14;
+
+    // Build a sorted list of every valid scale tone in MIDI range. Adjacent
+    // entries differ by one scale step. The lead's position in this list
+    // (snapping to the nearest entry if chromatic) plus the step offset
+    // gives the harmony note — guaranteed to land on a scale tone, and
+    // adjacent leads always produce adjacent harmonies (no duplicates).
+    QList<int> scaleNotes;
+    scaleNotes.reserve(80);
+    for (int n = 0; n <= 127; ++n) {
+        if (validPcs.contains(normalizePc(n))) scaleNotes.append(n);
+    }
+    if (scaleNotes.isEmpty()) return inputNote;
+
+    // Find the index of the lead in the scale list (nearest scale tone if
+    // the lead is chromatic). Tie-break upward.
+    int leadIdx = 0;
+    int bestDist = std::abs(scaleNotes[0] - inputNote);
+    for (int i = 1; i < scaleNotes.size(); ++i) {
+        const int d = std::abs(scaleNotes[i] - inputNote);
+        if (d < bestDist) { bestDist = d; leadIdx = i; }
+        else if (d == bestDist && scaleNotes[i] > inputNote) leadIdx = i;
+    }
+
+    int harmonyIdx = leadIdx + scaleStepOffset;
+    if (harmonyIdx < 0) harmonyIdx = 0;
+    if (harmonyIdx >= scaleNotes.size()) harmonyIdx = scaleNotes.size() - 1;
+    return scaleNotes[harmonyIdx];
 }
 
 int ScaleSnapProcessor::applyVoiceRange(int note, int minNote, int maxNote) const
@@ -3623,11 +3995,20 @@ void ScaleSnapProcessor::releaseNote(const ActiveNote& note)
         // Multi-voice mode: release all active harmony voices (with humanization delay if enabled)
         static const int kHarmonyChannels[4] = {kChannelHarmony1, kChannelHarmony2, kChannelHarmony3, kChannelHarmony4};
         for (int i = 0; i < 4; ++i) {
-            if (note.harmonyNotes[i] >= 0) {
-                emitHarmonyNoteOff(kHarmonyChannels[i], note.harmonyNotes[i], i);
+            if (note.harmonyNotes[i] < 0) continue;
+            // Voice-sustained tie: if THIS lead was sustaining the voice
+            // and the *upcoming* harmony for the new lead would land on
+            // the same pitch we'd otherwise release, skip the off and
+            // mark the matching upcoming on to be skipped too. The held
+            // note rides through the lead change with no off/on chop.
+            if (note.voiceSustained &&
+                m_upcomingHarmony[i] == note.harmonyNotes[i]) {
+                m_skipUpcomingOn[i] = true;
+                continue;
             }
+            emitHarmonyNoteOff(kHarmonyChannels[i], note.harmonyNotes[i], i);
         }
-    } else if (m_harmonyMode != HarmonyMode::OFF && note.harmonyNote >= 0) {
+    } else if (legacyHarmonyOn() && note.harmonyNote >= 0) {
         // Legacy mode: release harmony note on channel 12 (with humanization delay if enabled)
         emitHarmonyNoteOff(kChannelHarmony1, note.harmonyNote, 0);
     }
@@ -3668,7 +4049,7 @@ void ScaleSnapProcessor::releaseVoiceSustainedNotes()
         } else if (m_leadMode != LeadMode::Off) {
             emitPitchBend(kChannelLead, 8192);
         }
-        if (m_harmonyMode != HarmonyMode::OFF) {
+        if (legacyHarmonyOn()) {
             emitPitchBend(kChannelHarmony1, 8192);
         }
     }

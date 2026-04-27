@@ -114,6 +114,30 @@ protected:
     QList<AudioTrackMute> m_audioTrackSwitchPresetDefaults;
     int m_audioTrackSwitchPresetDefaultCC = 27;
 
+    // --- Harmony footswitch state (live; persisted to QSettings) ---
+    int m_harmonyToggleCC = 33;
+    int m_harmonyRootStepCC = 34;
+    int m_harmonyAccidentalStepCC = 35;
+    int m_harmonyQualityStepCC = 36;
+    int m_harmonyRootIdx = 6;        // default 'B' (matches editor's kRootLabels)
+    int m_harmonyAccidentalIdx = 1;  // default '♭' (order is ♮ → ♭ → ♯)
+    int m_harmonyQualityIdx = 0;     // default 'maj'
+    bool m_harmonyEnabled = false;
+    bool m_harmonyEnabledAtStartup = false;
+    bool m_speakChordChanges = true;
+
+    // Slots that respond to MidiProcessor's harmony footswitch signals.
+    void onHarmonyToggleRequested(bool enabled);
+    void onHarmonyRootStepRequested();
+    void onHarmonyAccidentalStepRequested();
+    void onHarmonyQualityStepRequested();
+    // Helpers
+    void applyHarmonyChordToEngine();
+    void persistHarmonyChordIndices();
+    QString chordSymbolText() const;   // e.g. "Bbmaj7" — for ChordSymbol parser
+    QString chordSpokenText() const;   // e.g. "B flat major seven" — for `say`
+    void speakChordIfEnabled();
+
     // Performance mode: lightweight startup with only vocal+guitar fusion/snapping
     bool m_performanceMode = true;
 };

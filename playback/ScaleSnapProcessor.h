@@ -6,6 +6,7 @@
 #include <QVector>
 #include <QReadWriteLock>
 #include <array>
+#include <atomic>
 
 #include "music/ChordSymbol.h"
 #include "playback/HarmonyTypes.h"
@@ -175,6 +176,33 @@ public:
     void setVoiceRange(int voiceIndex, int minNote, int maxNote);
     bool isMultiVoiceModeActive() const;  // True if any voice is enabled
 
+    // --- Live harmony master switch (footswitch-driven) ---
+    // When false, all harmony output is suppressed regardless of the
+    // configured per-voice modes / harmony mode / chord. Disabling sends
+    // all-notes-off on harmony channels 12-15 so nothing sticks. The
+    // user's snapping-window config is preserved across toggles.
+    bool harmonyEnabled() const { return m_harmonyEnabled.load(); }
+    void setHarmonyEnabled(bool enabled);
+
+    // Verbose diagnostic logging for the harmony pipeline. When true, key
+    // decision points push human-readable lines into MidiProcessor's console
+    // (the in-app log) so a "no harmony output" symptom can be debugged
+    // without rebuilding. Off by default; toggled from the UI.
+    void setHarmonyDebug(bool on) { m_harmonyDebug.store(on); }
+    bool harmonyDebug() const { return m_harmonyDebug.load(); }
+
+    // --- Default chord override (for performance mode without a chart) ---
+    // Sets the chord the harmony engine uses when no chart-driven chord is
+    // active. Triggered from the footswitch chord-stepper UI. Pass the
+    // already-parsed ChordSymbol; the caller is responsible for parsing.
+    void setDefaultHarmonyChord(const music::ChordSymbol& chord);
+
+    // Human-readable summary of the scale currently used to conform the
+    // harmony output (e.g. "B♭ Ionian — B♭ C D E♭ F G A"). Returns empty
+    // string when no chord is set or scale lookup fails. Used by the
+    // Audio Track Switch editor for visual debugging.
+    QString currentScaleSummary(bool preferFlats = true) const;
+
     // Cell index tracking (called by engine on each step)
     void setCurrentCellIndex(int cellIndex);
     int currentCellIndex() const { return m_currentCellIndex; }
@@ -261,6 +289,21 @@ private:
     int generateSimilarHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove = false) const;
     int generateObliqueHarmonyNote(int inputNote, int previousLeadNote, int previousHarmonyNote, const QSet<int>& chordTones, const QSet<int>& validPcs, bool harmonyAbove = false) const;
 
+    // PARALLEL_FIXED: lead + interval (semitones), then snap result to the
+    //   nearest pitch class in validPcs (chord+scale tones derived from the
+    //   current default chord). Returns a MIDI note ready to be range-applied.
+    int generateParallelFixedHarmonyNote(int inputNote, int intervalSemitones,
+                                         const QSet<int>& validPcs) const;
+    // DRONE: emit the chord root in the configured base octave.
+    //   Returns rootPc + (octave * 12), clamped to MIDI range, or -1 if no
+    //   chord is set yet.
+    int generateDroneHarmonyNote(int octave) const;
+    // SCALE_PARALLEL: find the lead's position in the current scale (or the
+    //   nearest scale tone if it's chromatic), then offset by N scale steps.
+    //   Always lands on a scale tone; consecutive leads never collide.
+    int generateScaleParallelHarmonyNote(int inputNote, int scaleStepOffset,
+                                         const QSet<int>& validPcs) const;
+
     // Final validation: ensures harmony note is T1, T2, or T3 (not chromatic T4)
     // If T4, snaps to nearest T1 (chord tone). Returns validated MIDI note.
     int validateHarmonyNote(int harmonyNote, int leadNote, const ActiveChord& chord) const;
@@ -318,6 +361,20 @@ private:
     HarmonyContext* m_harmony = nullptr;
     const virtuoso::ontology::OntologyRegistry* m_ontology = nullptr;
     const chart::ChartModel* m_model = nullptr;
+
+    // True iff legacy single-voice harmony output is currently allowed:
+    // master-switch on AND configured harmony mode is non-OFF.
+    inline bool legacyHarmonyOn() const {
+        return m_harmonyEnabled.load() && (m_harmonyMode != HarmonyMode::OFF);
+    }
+
+    // Map a chord directly to the scale that best matches the user's
+    // expectation when they've stepped through the footswitch chord
+    // controls. The legacy explicitHintScalesForContext only handles
+    // major / minor / dominant cleanly; this covers dim / aug / sus
+    // / m7b5 etc. with the right diatonic completion (e.g. natural
+    // minor for "Bm", locrian for "Bdim", etc.).
+    QString scaleKeyForChord(const music::ChordSymbol& c) const;
 
     // State
     LeadMode m_leadMode = LeadMode::Original;
@@ -388,6 +445,31 @@ private:
     // Track last known chord (to persist across empty cells)
     music::ChordSymbol m_lastKnownChord;
     bool m_hasLastKnownChord = false;
+    // True when the chord was set explicitly via setDefaultHarmonyChord
+    // (footswitch / editor). Forces harmony to use this chord even when an
+    // iReal chart model is loaded — prevents the chart from silently
+    // overwriting the user's footswitch-driven chord choice.
+    bool m_useDefaultHarmonyChord = false;
+
+    // Live master switch for harmony output (atomic so worker thread reads cheaply).
+    std::atomic<bool> m_harmonyEnabled{false};
+    std::atomic<bool> m_harmonyDebug{false};
+
+    // Voice-sustained tie semantics. Pre-computed for the in-flight
+    // onGuitarNoteOn so that releaseVoiceSustainedNotes() (which fires
+    // mid-flight, before the new note's harmony is emitted) can decide:
+    //   "if this voice's NEW harmony pitch matches the SUSTAINED harmony
+    //    we're about to release, don't release it; keep it sounding and
+    //    suppress the about-to-fire note-on for the same pitch."
+    // m_upcomingHarmony[v]   = MIDI note we're going to emit on voice v
+    //                          for the new lead, or -1 if voice off / no
+    //                          new harmony.
+    // m_skipUpcomingOn[v]    = true once a voice-sustained release has
+    //                          "transferred" its held pitch to the new
+    //                          lead — the upcoming ON for that voice is
+    //                          a no-op because the note is already playing.
+    std::array<int, 4>  m_upcomingHarmony  = {-1, -1, -1, -1};
+    std::array<bool, 4> m_skipUpcomingOn   = {false, false, false, false};
 
     QHash<int, ActiveNote> m_activeNotes;  // key = original input note
     mutable QReadWriteLock m_activeNotesLock{QReadWriteLock::Recursive};  // Thread safety for m_activeNotes (recursive to allow nested locking)

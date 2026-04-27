@@ -20,6 +20,9 @@
 #include "VirtuosoVocabularyWindow.h"
 #include "SnappingWindow.h"
 #include "AudioTrackSwitchEditor.h"
+#include "playback/ScaleSnapProcessor.h"
+#include "music/ChordSymbol.h"
+#include <QProcess>
 
 namespace {
 static const char* kIRealLastHtmlPathKey = "ireal/lastHtmlPath";
@@ -91,6 +94,61 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
     // Apply legacy UI preference (default: OFF -> show new minimal UI)
     bool legacyOn = settings.value("ui/legacy", false).toBool();
     applyLegacyUiSetting(legacyOn);
+
+    // --- Harmony footswitch state: load from QSettings, then apply live ---
+    m_harmonyToggleCC          = settings.value("harmony/toggleCC", 33).toInt();
+    m_harmonyRootStepCC        = settings.value("harmony/rootStepCC", 34).toInt();
+    m_harmonyAccidentalStepCC  = settings.value("harmony/accidentalStepCC", 35).toInt();
+    m_harmonyQualityStepCC     = settings.value("harmony/qualityStepCC", 36).toInt();
+    m_harmonyRootIdx           = settings.value("harmony/rootIndex", 6).toInt();        // B
+    m_harmonyAccidentalIdx     = settings.value("harmony/accidentalIndex", 1).toInt();  // ♭ (new order: ♮/♭/♯)
+    // One-time migration: the accidental dropdown order changed from
+    // ♮(0)/♯(1)/♭(2) to ♮(0)/♭(1)/♯(2). Swap 1↔2 on existing saves so the
+    // user keeps the chord they configured under the old order.
+    if (!settings.contains("harmony/accidentalSchemaV2")) {
+        if (m_harmonyAccidentalIdx == 1)      m_harmonyAccidentalIdx = 2; // was ♯
+        else if (m_harmonyAccidentalIdx == 2) m_harmonyAccidentalIdx = 1; // was ♭
+        settings.setValue("harmony/accidentalIndex", m_harmonyAccidentalIdx);
+        settings.setValue("harmony/accidentalSchemaV2", true);
+    }
+    m_harmonyQualityIdx        = settings.value("harmony/qualityIndex", 0).toInt();     // maj
+    m_harmonyEnabledAtStartup  = settings.value("harmony/enabledAtStartup", false).toBool();
+    m_speakChordChanges        = settings.value("harmony/speakChanges", true).toBool();
+    m_harmonyEnabled           = m_harmonyEnabledAtStartup;
+
+    // Push CC numbers to MidiProcessor and wire its signals back to us.
+    m_midiProcessor->setHarmonyCCs(m_harmonyToggleCC, m_harmonyRootStepCC,
+                                   m_harmonyAccidentalStepCC, m_harmonyQualityStepCC);
+    // Seed the worker's toggle bookkeeping so the first CC33 press flips
+    // *from* whatever state we just loaded (not from a default of false).
+    m_midiProcessor->setHarmonyToggleStateForFlip(m_harmonyEnabled);
+    connect(m_midiProcessor, &MidiProcessor::harmonyToggleRequested,
+            this, &MainWindow::onHarmonyToggleRequested);
+    connect(m_midiProcessor, &MidiProcessor::harmonyRootStepRequested,
+            this, &MainWindow::onHarmonyRootStepRequested);
+    connect(m_midiProcessor, &MidiProcessor::harmonyAccidentalStepRequested,
+            this, &MainWindow::onHarmonyAccidentalStepRequested);
+    connect(m_midiProcessor, &MidiProcessor::harmonyQualityStepRequested,
+            this, &MainWindow::onHarmonyQualityStepRequested);
+
+    // Push initial chord + enabled state to the standalone ScaleSnapProcessor.
+    // Done after createWidgets() so noteMonitorWidget exists.
+    applyHarmonyChordToEngine();
+    if (noteMonitorWidget && noteMonitorWidget->scaleSnapProcessor()) {
+        // Eagerly construct SnappingWindow (hidden) so its persisted voice
+        // configs get pushed to the standalone ScaleSnapProcessor at launch.
+        // Without this, voice configs only apply after the user opens the
+        // Snapping window — which means the master harmony toggle would
+        // silently do nothing the first time you use it after a fresh start.
+        if (m_performanceMode && !m_snappingWindow) {
+            m_snappingWindow = new SnappingWindow(this);
+            m_snappingWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+            m_snappingWindow->setScaleSnapProcessor(noteMonitorWidget->scaleSnapProcessor());
+            // Don't show — the user opens it explicitly via Window → Snapping.
+        }
+
+        noteMonitorWidget->scaleSnapProcessor()->setHarmonyEnabled(m_harmonyEnabled);
+    }
 
     // Auto-load last opened iReal HTML (persisted between sessions).
     const QString lastIReal = settings.value(kIRealLastHtmlPathKey, QString()).toString();
@@ -321,13 +379,31 @@ void MainWindow::createWidgets(const Preset& preset) {
         audioSwitchAction->setMenuRole(QAction::NoRole);
         connect(audioSwitchAction, &QAction::triggered, this, [this]() {
             if (!m_audioTrackSwitchEditor) {
+                HarmonyEditorState hs;
+                hs.toggleCC = m_harmonyToggleCC;
+                hs.rootStepCC = m_harmonyRootStepCC;
+                hs.accidentalStepCC = m_harmonyAccidentalStepCC;
+                hs.qualityStepCC = m_harmonyQualityStepCC;
+                hs.rootIndex = m_harmonyRootIdx;
+                hs.accidentalIndex = m_harmonyAccidentalIdx;
+                hs.qualityIndex = m_harmonyQualityIdx;
+                hs.enabledOnStartup = m_harmonyEnabledAtStartup;
+                hs.speakChanges = m_speakChordChanges;
+
                 m_audioTrackSwitchEditor = new AudioTrackSwitchEditor(
                     m_midiProcessor->audioTrackSwitchCC(),
                     m_midiProcessor->audioTrackMutes(),
                     m_audioTrackSwitchPresetDefaults,
                     m_audioTrackSwitchPresetDefaultCC,
+                    hs,
                     this);
+                m_audioTrackSwitchEditor->setLiveHarmonyEnabled(m_harmonyEnabled);
+                if (auto* snap = noteMonitorWidget ? noteMonitorWidget->scaleSnapProcessor() : nullptr) {
+                    const bool preferFlats = (m_harmonyAccidentalIdx == 1);
+                    m_audioTrackSwitchEditor->setLiveScaleSummary(snap->currentScaleSummary(preferFlats));
+                }
                 m_audioTrackSwitchEditor->setAttribute(Qt::WA_DeleteOnClose, false);
+
                 connect(m_audioTrackSwitchEditor, &AudioTrackSwitchEditor::mapChanged,
                         this, [this](int cc, const QList<AudioTrackMute>& entries) {
                     // Push live into the processor.
@@ -343,6 +419,39 @@ void MainWindow::createWidgets(const Preset& preset) {
                         s.setValue("muteCC", entries[i].muteCC);
                     }
                     s.endArray();
+                });
+
+                // Harmony editor → MainWindow wiring.
+                connect(m_audioTrackSwitchEditor, &AudioTrackSwitchEditor::harmonyCCsChanged,
+                        this, [this](int t, int r, int a, int q) {
+                    m_harmonyToggleCC = t; m_harmonyRootStepCC = r;
+                    m_harmonyAccidentalStepCC = a; m_harmonyQualityStepCC = q;
+                    m_midiProcessor->setHarmonyCCs(t, r, a, q);
+                    QSettings s;
+                    s.setValue("harmony/toggleCC", t);
+                    s.setValue("harmony/rootStepCC", r);
+                    s.setValue("harmony/accidentalStepCC", a);
+                    s.setValue("harmony/qualityStepCC", q);
+                });
+                connect(m_audioTrackSwitchEditor, &AudioTrackSwitchEditor::defaultChordChanged,
+                        this, [this](int rootIdx, int accIdx, int qualIdx) {
+                    m_harmonyRootIdx = rootIdx;
+                    m_harmonyAccidentalIdx = accIdx;
+                    m_harmonyQualityIdx = qualIdx;
+                    persistHarmonyChordIndices();
+                    applyHarmonyChordToEngine();
+                    // Don't speak when the user clicks dropdowns themselves —
+                    // only footswitch presses speak. Keeps mouse use silent.
+                });
+                connect(m_audioTrackSwitchEditor, &AudioTrackSwitchEditor::enabledOnStartupChanged,
+                        this, [this](bool checked) {
+                    m_harmonyEnabledAtStartup = checked;
+                    QSettings().setValue("harmony/enabledAtStartup", checked);
+                });
+                connect(m_audioTrackSwitchEditor, &AudioTrackSwitchEditor::speakChangesChanged,
+                        this, [this](bool checked) {
+                    m_speakChordChanges = checked;
+                    QSettings().setValue("harmony/speakChanges", checked);
                 });
             }
             m_audioTrackSwitchEditor->show();
@@ -765,4 +874,149 @@ bool MainWindow::loadIRealHtmlFile(const QString& path, bool showErrors) {
         applyLegacyUiSetting(false);
     }
     return true;
+}
+
+// ============================================================================
+// Harmony footswitch handling
+// ============================================================================
+//
+// Each step CC advances one component. Pressing the root-step also resets the
+// accidental to natural and the quality to maj — the user's preference, so
+// they always land on a clean fresh-major chord and tune from there. Speech
+// only fires on actual footswitch presses (not editor dropdown clicks).
+
+namespace {
+// Roots in the same order as the editor's kRootLabels (C, D, E, F, G, A, B).
+// Pitch-class numbers are 0..11 with C=0.
+const int kRootPcs[7] = { 0, 2, 4, 5, 7, 9, 11 };
+// ChordSymbol parser is happy with ASCII root letters + 'b' / '#'.
+const char  kRootChars[7]   = { 'C','D','E','F','G','A','B' };
+const QString kRootSpoken[7] = { "C","D","E","F","G","A","B" };
+// Accidental order: 0=natural, 1=flat, 2=sharp (matches editor's kAccidentals).
+const QString kAccidentalParser[3] = { "", "b", "#" };
+const QString kAccidentalSpoken[3] = { "", " flat", " sharp" };
+// Quality strings in the same order as the editor's kQualityLabels:
+//   maj, min, dim, aug, sus2, sus4, maj7, m7, 7, m7♭5
+const QString kQualityParser[10] = {
+    "", "m", "dim", "aug", "sus2", "sus4", "maj7", "m7", "7", "m7b5"
+};
+const QString kQualitySpoken[10] = {
+    " major", " minor", " diminished", " augmented",
+    " suss two", " suss four", " major seven", " minor seven", " seven",
+    " minor seven flat five"
+};
+}
+
+QString MainWindow::chordSymbolText() const {
+    QString out;
+    out += QChar(kRootChars[m_harmonyRootIdx]);
+    out += kAccidentalParser[m_harmonyAccidentalIdx];
+    out += kQualityParser[m_harmonyQualityIdx];
+    return out;
+}
+
+QString MainWindow::chordSpokenText() const {
+    return kRootSpoken[m_harmonyRootIdx]
+         + kAccidentalSpoken[m_harmonyAccidentalIdx]
+         + kQualitySpoken[m_harmonyQualityIdx];
+}
+
+void MainWindow::applyHarmonyChordToEngine() {
+    if (!noteMonitorWidget || !noteMonitorWidget->scaleSnapProcessor()) return;
+    const QString text = chordSymbolText();
+    music::ChordSymbol chord;
+    const bool parsed = music::parseChordSymbol(text, chord);
+    if (parsed) {
+        noteMonitorWidget->scaleSnapProcessor()->setDefaultHarmonyChord(chord);
+    }
+    const QString line = QString("Harmony chord: \"%1\" parsed=%2 rootPc=%3 quality=%4 "
+                                 "(idx root=%5 acc=%6 quality=%7)")
+                             .arg(text)
+                             .arg(parsed ? "Y" : "N")
+                             .arg(chord.rootPc)
+                             .arg(static_cast<int>(chord.quality))
+                             .arg(m_harmonyRootIdx)
+                             .arg(m_harmonyAccidentalIdx)
+                             .arg(m_harmonyQualityIdx);
+    logToConsole(line);
+    if (m_midiProcessor) m_midiProcessor->pushLog(line);
+    if (m_audioTrackSwitchEditor) {
+        m_audioTrackSwitchEditor->setLiveChord(m_harmonyRootIdx,
+                                               m_harmonyAccidentalIdx,
+                                               m_harmonyQualityIdx);
+        // Show the scale that's actually conforming the harmony output —
+        // useful for visually verifying that footswitch chord changes
+        // produce the expected scale (e.g. B♭ minor → B♭ Aeolian, not
+        // dorian).
+        if (auto* snap = noteMonitorWidget ? noteMonitorWidget->scaleSnapProcessor() : nullptr) {
+            // Prefer flats only when the chord uses a flat accidental.
+            const bool preferFlats = (m_harmonyAccidentalIdx == 1);
+            m_audioTrackSwitchEditor->setLiveScaleSummary(snap->currentScaleSummary(preferFlats));
+        }
+    }
+}
+
+void MainWindow::persistHarmonyChordIndices() {
+    QSettings s;
+    s.setValue("harmony/rootIndex", m_harmonyRootIdx);
+    s.setValue("harmony/accidentalIndex", m_harmonyAccidentalIdx);
+    s.setValue("harmony/qualityIndex", m_harmonyQualityIdx);
+}
+
+void MainWindow::speakChordIfEnabled() {
+    if (!m_speakChordChanges) return;
+    // 220 wpm — faster than default (~175) for performance feedback.
+    QProcess::startDetached("say",
+        QStringList() << "-r" << "220" << chordSpokenText());
+}
+
+void MainWindow::onHarmonyToggleRequested(bool enabled) {
+    m_harmonyEnabled = enabled;
+    auto* snap = noteMonitorWidget ? noteMonitorWidget->scaleSnapProcessor() : nullptr;
+    if (snap) {
+        snap->setHarmonyEnabled(enabled);
+        // Echo every harmony decision into the console while toggle is on,
+        // so we can see exactly which gate is killing output.
+        snap->setHarmonyDebug(enabled);
+    }
+    if (m_audioTrackSwitchEditor) {
+        m_audioTrackSwitchEditor->setLiveHarmonyEnabled(enabled);
+    }
+    logToConsole(QString("Harmony toggle (footswitch): %1")
+                     .arg(enabled ? "ON" : "OFF"));
+
+    // Diagnostic: turning the master switch ON has no audible effect unless
+    // at least one voice is configured in the Snapping window. After the
+    // setHarmonyEnabled(true) call above, isMultiVoiceModeActive() returns
+    // true iff any voice has a non-Off mode. If false here, the silence is
+    // because nothing is configured to play.
+    if (enabled && snap && !snap->isMultiVoiceModeActive()) {
+        logToConsole("WARNING: harmonies enabled but no voices configured. "
+                     "Open Window → Snapping → Multi-Voice Harmony and set "
+                     "at least one voice's Mode to something other than Off.");
+    }
+}
+
+void MainWindow::onHarmonyRootStepRequested() {
+    m_harmonyRootIdx = (m_harmonyRootIdx + 1) % 7;
+    // Per spec: root change resets accidental and quality to defaults.
+    m_harmonyAccidentalIdx = 0;  // ♮
+    m_harmonyQualityIdx = 0;     // maj
+    persistHarmonyChordIndices();
+    applyHarmonyChordToEngine();
+    speakChordIfEnabled();
+}
+
+void MainWindow::onHarmonyAccidentalStepRequested() {
+    m_harmonyAccidentalIdx = (m_harmonyAccidentalIdx + 1) % 3;
+    persistHarmonyChordIndices();
+    applyHarmonyChordToEngine();
+    speakChordIfEnabled();
+}
+
+void MainWindow::onHarmonyQualityStepRequested() {
+    m_harmonyQualityIdx = (m_harmonyQualityIdx + 1) % 10;
+    persistHarmonyChordIndices();
+    applyHarmonyChordToEngine();
+    speakChordIfEnabled();
 }

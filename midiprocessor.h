@@ -37,6 +37,23 @@ public slots:
     // Read-only accessors for UI (snapshot copies).
     int audioTrackSwitchCC() const { return m_audioTrackSwitchCC.load(); }
     QList<AudioTrackMute> audioTrackMutes() const;
+
+    // Harmony footswitch CCs (default 33 toggle, 34/35/36 root/acc/quality
+    // step). Receivers connect to the signals below. All atomic / lock-free
+    // for the worker thread.
+    void setHarmonyCCs(int toggleCC, int rootStepCC, int accStepCC, int qualityStepCC);
+    // Tell the MIDI worker what the current harmony master state is. Each
+    // future CC-33 press will then flip starting from this value, keeping
+    // the footswitch and the engine in lockstep.
+    void setHarmonyToggleStateForFlip(bool state);
+    int harmonyToggleCC() const { return m_harmonyToggleCC.load(); }
+    // Public log entry point — lets non-Qt-friendly subsystems (e.g.
+    // ScaleSnapProcessor) push diagnostic messages into the shared in-app
+    // console without needing a signal/slot of their own.
+    void pushLog(const QString& message);
+    int harmonyRootStepCC() const { return m_harmonyRootStepCC.load(); }
+    int harmonyAccidentalStepCC() const { return m_harmonyAccidentalStepCC.load(); }
+    int harmonyQualityStepCC() const { return m_harmonyQualityStepCC.load(); }
     // Suppress guitar passthrough to channel 1 (used by ScaleSnapProcessor when Lead mode is active)
     void setSuppressGuitarPassthrough(bool suppress);
     bool suppressGuitarPassthrough() const { return m_suppressGuitarPassthrough.load(); }
@@ -88,6 +105,15 @@ signals:
     void voiceNoteOn(int midiNote, int velocity);
     void voiceNoteOff(int midiNote);
 
+    // --- Ampero-driven harmony control ---
+    // Toggle: level-based (value > 63 = on, ≤ 63 = off). Step signals are
+    // emitted on rising edge only (≤63 → >63), so a momentary footswitch
+    // sending 127-on-press / 0-on-release advances exactly once per press.
+    void harmonyToggleRequested(bool enabled);
+    void harmonyRootStepRequested();
+    void harmonyAccidentalStepRequested();
+    void harmonyQualityStepRequested();
+
 private:
     enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, TRANSPOSE_CHANGE };
     enum class MidiSource { Guitar, VoiceAmp, VoicePitch, VirtualBand, Ampero };
@@ -122,6 +148,11 @@ private:
     QTimer* m_logPollTimer;
     std::queue<std::string> m_logQueue;
     std::mutex m_logMutex;
+
+    // File log: every console message also goes to
+    // ~/Library/Logs/CppMidiProcessor/harmony.log so the user can
+    // `tail -f` it in performance mode (where the in-app console is hidden).
+    QString m_logFilePath;
 
     // --- Worker Thread Methods ---
     void workerLoop();
@@ -170,6 +201,18 @@ private:
     std::atomic<int> m_audioTrackSwitchCC{27};
     mutable std::mutex m_audioTrackMutesMutex;
     QList<AudioTrackMute> m_audioTrackMutesList;
+
+    // Harmony footswitch CCs. Worker-thread-only "last value" trackers
+    // implement rising-edge detection on the step CCs.
+    std::atomic<int> m_harmonyToggleCC{33};
+    std::atomic<int> m_harmonyRootStepCC{34};
+    std::atomic<int> m_harmonyAccidentalStepCC{35};
+    std::atomic<int> m_harmonyQualityStepCC{36};
+    int m_lastHarmonyToggleValue = -1;
+    bool m_harmonyToggleState = false;  // flipped per Ampero CC33 press
+    int m_lastHarmonyRootStepValue = 0;
+    int m_lastHarmonyAccidentalStepValue = 0;
+    int m_lastHarmonyQualityStepValue = 0;
 
     // Pitch state
     int m_lastGuitarNote = -1;

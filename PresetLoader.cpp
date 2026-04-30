@@ -54,6 +54,8 @@ void PresetLoader::parseSettings(QXmlStreamReader& xml, Preset& preset) {
             parseDefaultTrackStates(xml, preset);
         } else if (elementName == "AudioTrackSwitch") {
             parseAudioTrackSwitch(xml, preset);
+        } else if (elementName == "HarmonyDirectChord") {
+            parseHarmonyDirectChord(xml, preset);
         } else if (elementName == "PitchBendDeadZoneCents") { // NEW
             preset.settings.pitchBendDeadZoneCents = xml.readElementText().toInt();
         } else if (elementName == "PitchBendDownRangeCents") { // NEW
@@ -101,6 +103,33 @@ void PresetLoader::parseAudioTrackSwitch(QXmlStreamReader& xml, Preset& preset) 
             t.muteCC = xml.attributes().value("muteCC").toInt();
             t.name = xml.attributes().value("name").toString();
             preset.settings.audioTrackMutes.append(t);
+        }
+        xml.skipCurrentElement();
+    }
+}
+
+// Parses the direct-chord lookup table. Example:
+//   <HarmonyDirectChord cc="42">
+//     <Mapping value="0" chord="A"  name="A major"/>
+//     <Mapping value="1" chord="Bb" name="B-flat major"/>
+//     <Mapping value="2" chord="B"  name="B major"/>
+//   </HarmonyDirectChord>
+// The chord attribute is fed to music::parseChordSymbol so any chord text the
+// existing harmony pipeline understands is valid (not just majors).
+void PresetLoader::parseHarmonyDirectChord(QXmlStreamReader& xml, Preset& preset) {
+    if (xml.attributes().hasAttribute("cc")) {
+        preset.settings.harmonyDirectChordCC = xml.attributes().value("cc").toInt();
+    }
+    preset.settings.harmonyDirectChordMap.clear();
+    while (xml.readNextStartElement()) {
+        if (xml.name().toString() == "Mapping") {
+            HarmonyDirectChord m;
+            m.value = xml.attributes().value("value").toInt();
+            m.chord = xml.attributes().value("chord").toString();
+            m.name  = xml.attributes().value("name").toString();
+            if (!m.chord.isEmpty()) {
+                preset.settings.harmonyDirectChordMap.append(m);
+            }
         }
         xml.skipCurrentElement();
     }

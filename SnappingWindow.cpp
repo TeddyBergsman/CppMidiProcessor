@@ -222,6 +222,15 @@ void SnappingWindow::setScaleSnapProcessor(playback::ScaleSnapProcessor* snap)
         snap->setVoiceSustainThreshold(m_voiceSustainThresholdSlider->value());
     }
 
+    // Push the current Voice → Ch 10 snap choice down to MidiProcessor (via
+    // ScaleSnapProcessor's relay setter) and seed the scale mask so the
+    // worker thread has a usable bitmap from the first voice note onward.
+    if (m_voiceCh10SnapCombo) {
+        const bool snapVoice = m_voiceCh10SnapCombo->currentData().toBool();
+        snap->setVoiceCh10SnapEnabled(snapVoice);
+        snap->publishVoiceScaleMask();
+    }
+
     // Connect to changes from the processor
     connect(snap, &playback::ScaleSnapProcessor::leadModeChanged,
             this, &SnappingWindow::onEngineLeadModeChanged, Qt::UniqueConnection);
@@ -342,6 +351,15 @@ void SnappingWindow::setPlaybackEngine(playback::VirtuosoBalladMvpPlaybackEngine
         }
         if (m_voiceSustainThresholdSlider) {
             snap->setVoiceSustainThreshold(m_voiceSustainThresholdSlider->value());
+        }
+
+        // Push the current Voice → Ch 10 snap choice and seed the mask
+        // (same as the standalone-snap path above). Behavior diverges only
+        // by which ScaleSnapProcessor instance is targeted.
+        if (m_voiceCh10SnapCombo) {
+            const bool snapVoice = m_voiceCh10SnapCombo->currentData().toBool();
+            snap->setVoiceCh10SnapEnabled(snapVoice);
+            snap->publishVoiceScaleMask();
         }
 
         // Connect to changes from the processor (in case it changes elsewhere)
@@ -475,6 +493,53 @@ void SnappingWindow::buildUi()
     leadLayout->addWidget(m_leadDescriptionLabel);
 
     mainLayout->addWidget(leadGroup);
+
+    // ===== VOICE OUTPUT GROUP (Channel 10) =====
+    // Controls the raw voice mirror to ch 10 (notes from MG3 voice tracker
+    // + breath as velocity / CC2). The dropdown chooses whether each note's
+    // pitch class is snapped to the current chord/scale (default) or sent
+    // through unchanged. Snapping uses the same valid-PC set the harmony
+    // engine uses, so the voice stays in-key with the band.
+    {
+        QGroupBox* voiceCh10Group = new QGroupBox("Voice Output (Channel 10)", central);
+        QHBoxLayout* row = new QHBoxLayout(voiceCh10Group);
+        row->setContentsMargins(12, 12, 12, 12);
+        row->setSpacing(8);
+        row->addWidget(new QLabel("Pitch Mode:", voiceCh10Group));
+        m_voiceCh10SnapCombo = new QComboBox(voiceCh10Group);
+        // itemData = bool, true = snap-to-scale, false = raw
+        m_voiceCh10SnapCombo->addItem("Conformed to Scale", true);
+        m_voiceCh10SnapCombo->addItem("Unsnapped (raw)", false);
+        m_voiceCh10SnapCombo->setMinimumWidth(220);
+        m_voiceCh10SnapCombo->setToolTip(
+            "Conformed: voice notes mirrored to channel 10 are snapped to the "
+            "nearest pitch class in the current chord/scale (same conformation "
+            "the harmony voices use).\n"
+            "Unsnapped: voice notes pass through unchanged from MG3.");
+
+        // Restore persisted choice (default = Conformed).
+        const bool persistedSnap = QSettings()
+            .value("snapping/voiceCh10SnapEnabled", true).toBool();
+        m_voiceCh10SnapCombo->setCurrentIndex(persistedSnap ? 0 : 1);
+
+        row->addWidget(m_voiceCh10SnapCombo);
+        row->addStretch();
+        mainLayout->addWidget(voiceCh10Group);
+
+        connect(m_voiceCh10SnapCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this](int idx) {
+            if (!m_voiceCh10SnapCombo) return;
+            const bool snap = m_voiceCh10SnapCombo->itemData(idx).toBool();
+            QSettings().setValue("snapping/voiceCh10SnapEnabled", snap);
+            if (auto* s = activeSnap()) {
+                s->setVoiceCh10SnapEnabled(snap);
+                // Refresh the mask in case the chord was set before this
+                // snap got attached — keeps behavior consistent on first
+                // toggle after launch.
+                s->publishVoiceScaleMask();
+            }
+        });
+    }
 
     // ===== GLISSANDO GROUP (VocalSync mode only) =====
     m_glissandoGroup = new QGroupBox("Glissando (VocalSync)", central);

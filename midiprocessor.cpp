@@ -10,6 +10,7 @@
 #include <QStandardPaths>
 #include <QTextStream>
 #include <QDateTime>
+#include <chrono>
 #include <exception>
 #include <deque>
 
@@ -99,6 +100,110 @@ void MidiProcessor::safeSendVocalSync(const std::vector<unsigned char>& msg) {
     } catch (...) {
         // Silently ignore errors on VocalSync port
     }
+}
+
+// === Voice ch-10 monophonic legato helpers ===
+void MidiProcessor::sendVoiceCh10NoteOff(int snapNote) {
+    if (snapNote < 0 || snapNote > 127) return;
+    // 0x89 = note-off on ch 10 (1-based). Velocity 0 — release velocity isn't
+    // meaningful for breath/sample synths, and matches what we send on the
+    // raw-mirror path elsewhere.
+    std::vector<unsigned char> off = {0x89, (unsigned char)snapNote, 0};
+    safeSendMessage(off);
+}
+
+void MidiProcessor::flushVoiceCh10PendingOff() {
+    if (m_voiceCh10PendingOffSnap < 0) return;
+    const int snap = m_voiceCh10PendingOffSnap;
+    sendVoiceCh10NoteOff(snap);
+    m_voiceCh10PendingOffSnap = -1;
+    m_voiceCh10PendingOffMs = 0;
+    if (m_voiceCh10HeldSnap == snap) m_voiceCh10HeldSnap = -1;
+    {
+        std::lock_guard<std::mutex> lock(m_logMutex);
+        m_logQueue.push(QString("RAW-MIRROR Voice→ch10 NOTE_OFF (deferred-flushed) note=%1")
+                            .arg(snap).toStdString());
+    }
+}
+
+void MidiProcessor::setVoiceCh10SnapEnabled(bool enabled) {
+    const bool prev = m_voiceCh10SnapEnabled.exchange(enabled);
+    if (enabled && !prev) {
+        // false → true transition: enqueue an immediate pitch bend center
+        // on ch 10 so any stale bend the synth picked up before snap was
+        // active gets cleared. Without this, a note held across the toggle
+        // continues to sound at whatever bend was last received from MG3.
+        // Goes through the worker queue (thread-safe).
+        sendVirtualPitchBend(10, 8192);
+        // Also signal the worker to re-evaluate its held note against
+        // whatever the current mask is (the noteOn that established held
+        // may have been emitted in unsnap mode where held = origNote).
+        m_voiceCh10MaskChanged.store(true);
+        m_condition.notify_one();
+        std::lock_guard<std::mutex> lock(m_logMutex);
+        m_logQueue.push("Voice ch10 snap ENABLED — sent bend center reset");
+    } else if (!enabled && prev) {
+        std::lock_guard<std::mutex> lock(m_logMutex);
+        m_logQueue.push("Voice ch10 snap DISABLED");
+    }
+}
+
+void MidiProcessor::setVoiceCh10ScaleMask(uint16_t mask) {
+    const uint16_t old = m_voiceCh10ScaleMask.exchange(mask);
+    if (old != mask) {
+        m_voiceCh10MaskChanged.store(true);
+        m_condition.notify_one();
+    }
+}
+
+void MidiProcessor::handleVoiceCh10MaskChange() {
+    const uint16_t mask = m_voiceCh10ScaleMask.load();
+    const bool snapEnabled = m_voiceCh10SnapEnabled.load();
+    const bool maskActive = snapEnabled && mask != 0 && mask != 0x0FFF;
+    if (!maskActive) return;
+    if (m_voiceCh10HeldSnap < 0) return;
+
+    const int pc = m_voiceCh10HeldSnap % 12;
+    if ((mask & (uint16_t)(1u << pc)) == 0) {
+        // Held pc is no longer (or was never) in the active mask. Release
+        // it — the singer's next attack will re-snap to the new context.
+        const int snap = m_voiceCh10HeldSnap;
+        sendVoiceCh10NoteOff(snap);
+        m_voiceCh10HeldSnap = -1;
+        m_voiceCh10PendingOffSnap = -1;
+        m_voiceCh10PendingOffMs = 0;
+        // Stale orig→snap entries reference the released note; clearing
+        // the map prevents a future noteOff from sending a release for a
+        // note that's no longer sounding.
+        m_voiceCh10SnapMap.clear();
+        std::lock_guard<std::mutex> lock(m_logMutex);
+        m_logQueue.push(QString("Voice→ch10 held note %1 released — out of new mask 0x%2")
+                            .arg(snap).arg(mask, 3, 16, QChar('0')).toStdString());
+    }
+}
+
+int MidiProcessor::computeVoiceCh10Snap(int origNote, uint16_t mask) const {
+    // mask == 0 means "no scale info known" → no constraint, return original.
+    // mask == 0x0FFF (all 12 PCs allowed) is also a passthrough.
+    if (mask == 0 || mask == 0x0FFF) return origNote;
+    const int origPc = origNote % 12;
+    int bestPc = origPc;
+    int bestDist = 13;
+    for (int pc = 0; pc < 12; ++pc) {
+        if (!(mask & (uint16_t)(1u << pc))) continue;
+        int d = std::abs(pc - origPc);
+        if (d > 6) d = 12 - d;
+        if (d < bestDist || (d == bestDist && pc < bestPc)) {
+            bestDist = d;
+            bestPc = pc;
+        }
+    }
+    int delta = bestPc - origPc;
+    if (delta > 6)        delta -= 12;
+    else if (delta < -6)  delta += 12;
+    int candidate = origNote + delta;
+    if (candidate < 0 || candidate > 127) return origNote;
+    return candidate;
 }
 
 void MidiProcessor::sendVocalSyncNoteOn(int note, int velocity) {
@@ -459,6 +564,27 @@ void MidiProcessor::setHarmonyCCs(int toggleCC, int rootStepCC, int accStepCC, i
                         .toStdString());
 }
 
+void MidiProcessor::setHarmonyDirectChord(int directChordCC,
+                                          const QList<HarmonyDirectChord>& mapping) {
+    // Allow -1 (disabled) explicitly; clamp anything else to MIDI CC range.
+    const int cc = (directChordCC < 0) ? -1
+                                       : std::max(0, std::min(127, directChordCC));
+    m_harmonyDirectChordCC.store(cc);
+    {
+        std::lock_guard<std::mutex> lock(m_harmonyDirectChordMutex);
+        m_harmonyDirectChordMap = mapping;
+    }
+    std::lock_guard<std::mutex> lock(m_logMutex);
+    m_logQueue.push(QString("Harmony direct chord CC=%1 with %2 mapping(s)")
+                        .arg(cc).arg(mapping.size())
+                        .toStdString());
+}
+
+QList<HarmonyDirectChord> MidiProcessor::harmonyDirectChordMap() const {
+    std::lock_guard<std::mutex> lock(m_harmonyDirectChordMutex);
+    return m_harmonyDirectChordMap;
+}
+
 void MidiProcessor::setTranspose(int semitones) {
     m_transposeAmount.store(semitones);
     {
@@ -541,21 +667,74 @@ void MidiProcessor::amperoCallback(double deltatime, std::vector<unsigned char>*
 void MidiProcessor::workerLoop() {
     while (m_isRunning) {
         MidiEvent event;
+        bool gotEvent = false;
         {
             std::unique_lock<std::mutex> lock(m_eventMutex);
-            m_condition.wait(lock, [this] { return !m_eventQueue.empty() || !m_isRunning; });
-            
+            // When a voice ch-10 note-off is deferred, wake at the deadline
+            // even if no events arrive — otherwise the held legato note
+            // hangs (singer stops, MG3 stops emitting, no event triggers
+            // the timeout check inside processMidiEvent).
+            // Also wake on a voice mask change so a held note that's no
+            // longer in scale can be released without waiting for the next
+            // event.
+            auto pred = [this] {
+                return !m_eventQueue.empty() || !m_isRunning ||
+                       m_voiceCh10MaskChanged.load();
+            };
+            if (m_voiceCh10PendingOffSnap >= 0) {
+                const qint64 now = QDateTime::currentMSecsSinceEpoch();
+                const qint64 elapsed = now - m_voiceCh10PendingOffMs;
+                if (elapsed < kVoiceCh10PendingTimeoutMs) {
+                    const auto remaining = std::chrono::milliseconds(
+                        kVoiceCh10PendingTimeoutMs - elapsed);
+                    m_condition.wait_for(lock, remaining, pred);
+                }
+                // else: deadline already passed; fall through to consume / flush.
+            } else {
+                m_condition.wait(lock, pred);
+            }
+
             if (!m_isRunning && m_eventQueue.empty()) break;
-            
-            event = std::move(m_eventQueue.front());
-            m_eventQueue.pop_front();
+
+            if (!m_eventQueue.empty()) {
+                event = std::move(m_eventQueue.front());
+                m_eventQueue.pop_front();
+                gotEvent = true;
+            }
         }
-        
-        processMidiEvent(event);
+
+        // Handle out-of-band signals before consuming the event so a stale
+        // held note doesn't briefly process under the new mask.
+        if (m_voiceCh10MaskChanged.exchange(false)) {
+            handleVoiceCh10MaskChange();
+        }
+
+        if (gotEvent) {
+            processMidiEvent(event);
+        } else if (m_voiceCh10PendingOffSnap >= 0) {
+            // Timed out without an event — flush the deferred release so the
+            // synth doesn't hold the legato note past the singer's silence.
+            const qint64 now = QDateTime::currentMSecsSinceEpoch();
+            if (now - m_voiceCh10PendingOffMs >= kVoiceCh10PendingTimeoutMs) {
+                flushVoiceCh10PendingOff();
+            }
+        }
     }
 }
 
 void MidiProcessor::processMidiEvent(const MidiEvent& event) {
+    // Voice ch-10 deferred note-off timeout. The legato state machine in the
+    // VoicePitch branch defers each note-off to give the next note-on a
+    // chance to "tie" via merge. If neither merge nor release fires within
+    // the timeout, flush — singer truly stopped, release the held note.
+    // Checked at the top of every event so a continuous CC2 stream (which
+    // arrives at ~10ms intervals while singing) keeps the timer responsive.
+    if (m_voiceCh10PendingOffSnap >= 0) {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (now - m_voiceCh10PendingOffMs > kVoiceCh10PendingTimeoutMs) {
+            flushVoiceCh10PendingOff();
+        }
+    }
     switch(event.type) {
         case EventType::MIDI_MESSAGE:
             {
@@ -576,6 +755,25 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                 }
 
                 if (event.source == MidiSource::Guitar) {
+                    // RAW MIRROR — emit a verbatim copy of the incoming guitar
+                    // MIDI on channel 9 of CONTROLLER_OUT, regardless of any
+                    // suppression downstream. Lets a Logic instrument track
+                    // listen specifically to raw guitar (filter MIDI In Channel
+                    // = 9) without channel-1 traffic mixed in. The processed
+                    // lead still flows on channel 1 via ScaleSnapProcessor.
+                    if (!message.empty() && message[0] < 0xF0) {
+                        std::vector<unsigned char> rawMsg = message;
+                        rawMsg[0] = (rawMsg[0] & 0xF0) | 0x08; // ch 9 (1-based)
+                        safeSendMessage(rawMsg);
+                        // Log every note-on (unconditional, not verbose-gated).
+                        if ((rawMsg[0] & 0xF0) == 0x90 && rawMsg.size() >= 3 && rawMsg[2] > 0) {
+                            std::lock_guard<std::mutex> lock(m_logMutex);
+                            m_logQueue.push(QString("RAW-MIRROR Guitar→ch9 note=%1 vel=%2 status=0x%3")
+                                                .arg(rawMsg[1]).arg(rawMsg[2])
+                                                .arg(rawMsg[0], 2, 16, QChar('0')).toStdString());
+                        }
+                    }
+
                     int inputNote = message.size() > 1 ? message[1] : 0;
                     int velocity = message.size() > 2 ? message[2] : 0;
                     if (status == 0x90 && velocity > 0) {
@@ -668,6 +866,24 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     }
                     safeSendMessage(passMsg);
 
+                    // Also mirror the Ampero input on the raw-mirror channels
+                    // (9 = guitar, 10 = combined voice). Lets a Logic
+                    // instrument track filtered to channel 9 or 10 receive
+                    // footswitch control CCs (CC 27 voice-select, CC 86
+                    // reverb toggle, etc.) alongside the raw notes on the
+                    // same filtered channel. The audio-track-switch mute
+                    // fan-out (CC 80–84) and harmony toggle/step CCs still
+                    // fire exclusively on channel 1 — those are picked up by
+                    // Logic's global Controller Assignments and don't need
+                    // duplication.
+                    if (!message.empty() && message[0] < 0xF0) {
+                        for (unsigned char chNibble = 0x08; chNibble <= 0x09; ++chNibble) {
+                            std::vector<unsigned char> mirrorMsg = message;
+                            mirrorMsg[0] = (mirrorMsg[0] & 0xF0) | chNibble;
+                            safeSendMessage(mirrorMsg);
+                        }
+                    }
+
                     if (status == 0xB0 && message.size() >= 3) {
                         const int cc = int(message[1]);
                         const int value = int(message[2]);
@@ -735,6 +951,40 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                                 emit harmonyQualityStepRequested();
                             }
                             m_lastHarmonyQualityStepValue = value;
+                        } else if (m_harmonyDirectChordCC.load() >= 0
+                                && cc == m_harmonyDirectChordCC.load()) {
+                            // Direct-chord lookup: find the entry whose
+                            // `value` matches the incoming CC value, emit
+                            // its chord text. Unknown values are logged but
+                            // ignored (no chord change). The list is short
+                            // so a copy under lock is cheap.
+                            QList<HarmonyDirectChord> mapCopy;
+                            {
+                                std::lock_guard<std::mutex> lock(m_harmonyDirectChordMutex);
+                                mapCopy = m_harmonyDirectChordMap;
+                            }
+                            QString matched;
+                            QString matchedName;
+                            for (const auto& m : mapCopy) {
+                                if (m.value == value) {
+                                    matched = m.chord;
+                                    matchedName = m.name;
+                                    break;
+                                }
+                            }
+                            std::lock_guard<std::mutex> lock(m_logMutex);
+                            if (!matched.isEmpty()) {
+                                emit harmonyDirectChordRequested(matched);
+                                m_logQueue.push(QString("Ampero direct-chord CC%1=%2 -> '%3'%4")
+                                                    .arg(cc).arg(value).arg(matched)
+                                                    .arg(matchedName.isEmpty()
+                                                         ? QString()
+                                                         : QString(" (%1)").arg(matchedName))
+                                                    .toStdString());
+                            } else {
+                                m_logQueue.push(QString("Ampero direct-chord CC%1=%2 (no mapping)")
+                                                    .arg(cc).arg(value).toStdString());
+                            }
                         } else if (m_isVerbose.load()) {
                             std::lock_guard<std::mutex> lock(m_logMutex);
                             m_logQueue.push(QString("Ampero CC%1=%2 (passthrough only)")
@@ -745,16 +995,50 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     }
 
                 } else if (event.source == MidiSource::VoiceAmp) {
+                    // RAW MIRROR — combined voice on channel 10. Voice
+                    // amplitude (aftertouch / channel pressure) is mirrored
+                    // here; voice pitch (notes / pitch bend) is mirrored on
+                    // the same channel from the VoicePitch branch below.
+                    // A Logic instrument track filtered to ch 10 gets a
+                    // single combined stream of pitched notes + continuous
+                    // breath/aftertouch expression.
+                    if (!message.empty() && message[0] < 0xF0) {
+                        std::vector<unsigned char> rawMsg = message;
+                        rawMsg[0] = (rawMsg[0] & 0xF0) | 0x09; // ch 10 (1-based)
+                        // Defensive: drop any pitch bend coming from the amp
+                        // port while snap is active, so the snapped note
+                        // stays dead-on. (MG3's amp port doesn't normally
+                        // emit pitch bend, but Logic-side patches sometimes
+                        // do — never let a bend slip through in snap mode.)
+                        const unsigned char ampSt = rawMsg[0] & 0xF0;
+                        const bool ampMaskActive = m_voiceCh10SnapEnabled.load() &&
+                                                   m_voiceCh10ScaleMask.load() != 0 &&
+                                                   m_voiceCh10ScaleMask.load() != 0x0FFF;
+                        if (!(ampMaskActive && ampSt == 0xE0)) {
+                            safeSendMessage(rawMsg);
+                        }
+                    }
                     // Handle aftertouch → CC2 and CC104; ignore voice notes here to avoid duplicates
                     if (status == 0xD0 && message.size() > 1) { // Aftertouch
                         int value = message[1];
                         int breathValue = std::max(0, value - 16);
-                        
+
+                        // Channel 1: existing breath-control destination.
                         std::vector<unsigned char> cc2_msg = {0xB0, 2, (unsigned char)breathValue};
                         safeSendMessage(cc2_msg);
-
                         std::vector<unsigned char> cc104_msg = {0xB0, 104, (unsigned char)breathValue};
                         safeSendMessage(cc104_msg);
+
+                        // Channel 10: combined voice channel needs the same
+                        // breath CCs so synths configured to read CC 2 (or
+                        // CC 11/CC 104) for vocal dynamics actually receive
+                        // expression. The raw aftertouch is also there from
+                        // the mirror above, but most synths don't route
+                        // channel pressure to volume by default.
+                        std::vector<unsigned char> cc2_ch10  = {0xB9, 2,   (unsigned char)breathValue};
+                        std::vector<unsigned char> cc104_ch10 = {0xB9, 104, (unsigned char)breathValue};
+                        safeSendMessage(cc2_ch10);
+                        safeSendMessage(cc104_ch10);
 
                         // Unthrottled stream for interaction/vibe detection.
                         emit voiceCc2Stream(breathValue);
@@ -764,9 +1048,196 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                             m_lastVoiceCc2 = breathValue;
                             emit voiceCc2Updated(breathValue);
                         }
+
+                        // Singer truly stopped — flush any deferred ch-10
+                        // note-off so the held legato note releases without
+                        // waiting for the timeout. Strict "== 0" so a soft
+                        // dip mid-phrase doesn't kill the note.
+                        if (breathValue == 0 && m_voiceCh10PendingOffSnap >= 0) {
+                            flushVoiceCh10PendingOff();
+                        }
                     }
                     // Do not call updatePitch here; pitch comes from VoicePitch source
                 } else if (event.source == MidiSource::VoicePitch) {
+                    // RAW MIRROR — voice pitch (notes / pitch bend) merged
+                    // onto channel 10 alongside the amplitude/aftertouch
+                    // mirrored from the VoiceAmp branch above. One channel,
+                    // one stream — the synth gets both pitch and expression
+                    // without needing to listen to two channels.
+                    //
+                    // VELOCITY OVERRIDE: MG3's voice pitch tracker emits
+                    // velocity ≈ 1 as a placeholder (actual loudness comes
+                    // via aftertouch). Substitute the current breath value
+                    // as velocity so soft singing → soft attacks, loud
+                    // singing → loud attacks. The breath PRIMER below uses
+                    // the same value to keep velocity and breath envelope
+                    // coherent at note-on. MIDI requires velocity ≥ 1
+                    // (vel = 0 would be interpreted as note-off).
+                    if (!message.empty() && message[0] < 0xF0) {
+                        std::vector<unsigned char> rawMsg = message;
+                        rawMsg[0] = (rawMsg[0] & 0xF0) | 0x09; // ch 10 (combined voice)
+
+                        const unsigned char statusType = rawMsg[0] & 0xF0;
+                        const bool isNoteOn  = (statusType == 0x90 && rawMsg.size() >= 3 && rawMsg[2] > 0);
+                        const bool isNoteOff = (statusType == 0x80 && rawMsg.size() >= 3) ||
+                                               (statusType == 0x90 && rawMsg.size() >= 3 && rawMsg[2] == 0);
+
+                        const bool snapEnabled = m_voiceCh10SnapEnabled.load();
+                        const uint16_t mask    = m_voiceCh10ScaleMask.load();
+                        // Mask is "active" only when the user wants snapping
+                        // AND we have meaningful scale info. With mask 0 or
+                        // 0x0FFF every PC is allowed → no merging needed and
+                        // we fall back to the simpler per-note path.
+                        const bool maskActive = snapEnabled && mask != 0 && mask != 0x0FFF;
+
+                        if (isNoteOn) {
+                            const int origNote = rawMsg[1];
+                            const int snapNote = computeVoiceCh10Snap(origNote, maskActive ? mask : 0);
+
+                            // === Legato decision ===
+                            //   maskActive +    pending == snap → MERGE  (note keeps sounding, no new attack)
+                            //   maskActive +    pending != snap → RELEASE pending, then start new note
+                            //   maskActive +    no pending + held == snap → suppress (legato overlap)
+                            //   maskActive +    no pending + held != snap → release held (defensive), start new
+                            //   !maskActive (passthrough)                  → start new (no merging)
+                            bool sendNoteOn = true;
+                            bool merged = false;
+                            if (maskActive) {
+                                if (m_voiceCh10PendingOffSnap >= 0) {
+                                    if (m_voiceCh10PendingOffSnap == snapNote) {
+                                        // MERGE: cancel deferred release; the
+                                        // previously-held note simply continues
+                                        // sounding under a new orig→snap entry.
+                                        m_voiceCh10PendingOffSnap = -1;
+                                        m_voiceCh10PendingOffMs = 0;
+                                        sendNoteOn = false;
+                                        merged = true;
+                                    } else {
+                                        // Different scale tone → flush pending release first.
+                                        sendVoiceCh10NoteOff(m_voiceCh10PendingOffSnap);
+                                        m_voiceCh10PendingOffSnap = -1;
+                                        m_voiceCh10PendingOffMs = 0;
+                                        m_voiceCh10HeldSnap = -1;
+                                    }
+                                } else if (m_voiceCh10HeldSnap == snapNote) {
+                                    // Legato overlap (some trackers emit new
+                                    // noteOn before previous noteOff). Already
+                                    // sounding, so suppress the redundant on.
+                                    sendNoteOn = false;
+                                } else if (m_voiceCh10HeldSnap >= 0) {
+                                    // Defensive: held lingering without pending.
+                                    // Release before starting a new note.
+                                    sendVoiceCh10NoteOff(m_voiceCh10HeldSnap);
+                                    m_voiceCh10HeldSnap = -1;
+                                }
+                            }
+
+                            // Always record orig→snap so the matching note-off
+                            // routes correctly even when we don't emit the on.
+                            m_voiceCh10SnapMap[origNote] = snapNote;
+
+                            if (sendNoteOn) {
+                                int v = m_lastVoiceCc2;     // current breath, 0..111
+                                if (v < 0) v = 0;
+                                if (v > 127) v = 127;
+                                // Velocity must be at least 1 (0 = note-off).
+                                const unsigned char vel = (unsigned char)(v > 0 ? v : 1);
+                                rawMsg[1] = (unsigned char)snapNote;
+                                rawMsg[2] = vel;
+                                // PITCH LOCK (snap mode): force ch 10 to attack
+                                // dead-on the snapped note. MG3's pitch bend on
+                                // VoicePitch encodes the singer's deviation from
+                                // the unsnapped MIDI number — without zeroing
+                                // it here, the heard pitch becomes
+                                // snap_note + (sung_pitch − orig_note), which
+                                // is just the unsnapped pitch in disguise.
+                                // Subsequent pitch bend on ch 10 is also
+                                // suppressed below so the note holds exactly
+                                // on scale for its full duration.
+                                if (maskActive) {
+                                    std::vector<unsigned char> bendCenter = {0xE9, 0x00, 0x40};
+                                    safeSendMessage(bendCenter);
+                                }
+                                // BREATH PRIMER: physical-modeling brass / wind
+                                // instruments (Samplemodeling, VHorns, etc.) need
+                                // CC 2 to be set when the note arrives, otherwise
+                                // their breath envelope is at 0 and the note
+                                // voices silently. Send CC 2 / CC 104 with the
+                                // same value as velocity right before the note.
+                                std::vector<unsigned char> primeCc2  = {0xB9, 2,   (unsigned char)v};
+                                std::vector<unsigned char> primeCc104= {0xB9, 104, (unsigned char)v};
+                                safeSendMessage(primeCc2);
+                                safeSendMessage(primeCc104);
+                                safeSendMessage(rawMsg);
+                                m_voiceCh10HeldSnap = snapNote;
+                                std::lock_guard<std::mutex> lock(m_logMutex);
+                                m_logQueue.push(QString("RAW-MIRROR Voice→ch10 NOTE_ON snap=%1 orig=%2 vel=%3 (breath=%4 mask=0x%5)")
+                                                    .arg(snapNote).arg(origNote).arg(vel)
+                                                    .arg(m_lastVoiceCc2)
+                                                    .arg(mask, 3, 16, QChar('0')).toStdString());
+                            } else {
+                                std::lock_guard<std::mutex> lock(m_logMutex);
+                                m_logQueue.push(QString("RAW-MIRROR Voice→ch10 NOTE_ON %1 snap=%2 orig=%3 (held)")
+                                                    .arg(merged ? "MERGED" : "tied")
+                                                    .arg(snapNote).arg(origNote).toStdString());
+                            }
+                        } else if (isNoteOff) {
+                            const int origNote = rawMsg[1];
+                            auto it = m_voiceCh10SnapMap.find(origNote);
+                            if (it != m_voiceCh10SnapMap.end()) {
+                                const int snapNote = it->second;
+                                m_voiceCh10SnapMap.erase(it);
+
+                                // If another orig still maps to this snap (legato
+                                // overlap), don't touch the synth — the note is
+                                // still owned by another orig.
+                                bool stillReferenced = false;
+                                for (const auto& kv : m_voiceCh10SnapMap) {
+                                    if (kv.second == snapNote) { stillReferenced = true; break; }
+                                }
+
+                                if (stillReferenced) {
+                                    // Suppress; another orig still owns this snap note.
+                                } else if (maskActive && m_voiceCh10HeldSnap == snapNote) {
+                                    // Defer the release. The next voiceOn will
+                                    // either MERGE (same snap → cancel) or
+                                    // RELEASE (different snap → flush this).
+                                    // Worst case we time out (~80ms) or breath
+                                    // drops to zero, both flush via the helper.
+                                    m_voiceCh10PendingOffSnap = snapNote;
+                                    m_voiceCh10PendingOffMs   = QDateTime::currentMSecsSinceEpoch();
+                                    std::lock_guard<std::mutex> lock(m_logMutex);
+                                    m_logQueue.push(QString("RAW-MIRROR Voice→ch10 NOTE_OFF deferred snap=%1 orig=%2")
+                                                        .arg(snapNote).arg(origNote).toStdString());
+                                } else {
+                                    // Unsnapped path (or held mismatch — defensive):
+                                    // release immediately on the snapped note number.
+                                    rawMsg[1] = (unsigned char)snapNote;
+                                    safeSendMessage(rawMsg);
+                                    if (m_voiceCh10HeldSnap == snapNote) m_voiceCh10HeldSnap = -1;
+                                }
+                            } else {
+                                // No mapping found (note was never on, or app
+                                // started mid-stream). Pass through verbatim
+                                // so we don't drop a real release.
+                                safeSendMessage(rawMsg);
+                            }
+                        } else {
+                            // Pitch bend, polyphonic AT, etc. on ch 10.
+                            // In snap mode we DROP pitch bend so the held
+                            // legato note stays dead-on the scale tone — the
+                            // singer's intonation drift would otherwise bend
+                            // the snapped note off pitch by however much
+                            // they're flat/sharp of MG3's emitted MIDI note.
+                            // Other passthrough (poly AT, etc.) flows through.
+                            const unsigned char st = rawMsg[0] & 0xF0;
+                            if (maskActive && st == 0xE0) {
+                                // drop
+                            } else {
+                                safeSendMessage(rawMsg);
+                            }
+                        }
+                    }
                     // Use accurate pitch notes for visualization and optionally for output
                     if (status == 0x90 || status == 0x80) { // Note on/off for voice
                         std::vector<unsigned char> voiceMsg = message;

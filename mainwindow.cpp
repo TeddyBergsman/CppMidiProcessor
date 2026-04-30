@@ -119,6 +119,10 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
     // Push CC numbers to MidiProcessor and wire its signals back to us.
     m_midiProcessor->setHarmonyCCs(m_harmonyToggleCC, m_harmonyRootStepCC,
                                    m_harmonyAccidentalStepCC, m_harmonyQualityStepCC);
+    // Direct-chord lookup table comes straight from the preset XML — no
+    // editor UI for it (yet); edit preset.xml's <HarmonyDirectChord> block.
+    m_midiProcessor->setHarmonyDirectChord(preset.settings.harmonyDirectChordCC,
+                                           preset.settings.harmonyDirectChordMap);
     // Seed the worker's toggle bookkeeping so the first CC33 press flips
     // *from* whatever state we just loaded (not from a default of false).
     m_midiProcessor->setHarmonyToggleStateForFlip(m_harmonyEnabled);
@@ -128,6 +132,8 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
             this, &MainWindow::onHarmonyRootStepRequested);
     connect(m_midiProcessor, &MidiProcessor::harmonyAccidentalStepRequested,
             this, &MainWindow::onHarmonyAccidentalStepRequested);
+    connect(m_midiProcessor, &MidiProcessor::harmonyDirectChordRequested,
+            this, &MainWindow::onHarmonyDirectChordRequested);
     connect(m_midiProcessor, &MidiProcessor::harmonyQualityStepRequested,
             this, &MainWindow::onHarmonyQualityStepRequested);
 
@@ -1016,6 +1022,64 @@ void MainWindow::onHarmonyAccidentalStepRequested() {
 
 void MainWindow::onHarmonyQualityStepRequested() {
     m_harmonyQualityIdx = (m_harmonyQualityIdx + 1) % 10;
+    persistHarmonyChordIndices();
+    applyHarmonyChordToEngine();
+    speakChordIfEnabled();
+}
+
+void MainWindow::onHarmonyDirectChordRequested(const QString& chordText) {
+    // Translate the preset's chord text directly into the editor's three
+    // index dimensions (root letter / accidental / quality). This keeps the
+    // direct-chord path on the same rails as the manual stepper: the live
+    // editor display, persisted QSettings, scale label, and "say" callouts
+    // all behave identically — they just got driven by one CC instead of
+    // three button presses.
+    if (chordText.isEmpty()) return;
+
+    // Root letter — required, must be A..G (uppercase).
+    const QChar c = chordText.at(0).toUpper();
+    int rootIdx = -1;
+    for (int i = 0; i < 7; ++i) {
+        if (kRootChars[i] == c.toLatin1()) { rootIdx = i; break; }
+    }
+    if (rootIdx < 0) {
+        logToConsole(QString("Direct chord '%1' rejected: bad root letter").arg(chordText));
+        return;
+    }
+
+    // Optional accidental immediately after the root letter.
+    int accIdx = 0; // natural
+    int qualStart = 1;
+    if (chordText.size() > 1) {
+        const QChar c2 = chordText.at(1);
+        if (c2 == QChar('b'))      { accIdx = 1; qualStart = 2; }
+        else if (c2 == QChar('#')) { accIdx = 2; qualStart = 2; }
+    }
+
+    // Whatever's left is the quality string (may be empty for plain major).
+    // Match against the editor's quality table; unmatched qualities fall
+    // back to "major" rather than silently ignoring the press.
+    const QString qual = chordText.mid(qualStart);
+    int qualIdx = 0;
+    bool qualMatched = qual.isEmpty();
+    if (!qualMatched) {
+        for (int i = 0; i < 10; ++i) {
+            if (kQualityParser[i] == qual) {
+                qualIdx = i;
+                qualMatched = true;
+                break;
+            }
+        }
+    }
+    if (!qualMatched) {
+        logToConsole(QString("Direct chord '%1' has unknown quality '%2', "
+                             "falling back to major")
+                         .arg(chordText).arg(qual));
+    }
+
+    m_harmonyRootIdx       = rootIdx;
+    m_harmonyAccidentalIdx = accIdx;
+    m_harmonyQualityIdx    = qualIdx;
     persistHarmonyChordIndices();
     applyHarmonyChordToEngine();
     speakChordIfEnabled();

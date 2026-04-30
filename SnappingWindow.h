@@ -78,6 +78,9 @@ private:
     playback::ScaleSnapProcessor* m_directSnap = nullptr;
 
     QComboBox* m_leadModeCombo = nullptr;
+    // Voice → Channel 10 snapping mode (Conformed-to-Scale / Unsnapped).
+    // Default Conformed; "Unsnapped" emits the raw voice pitch like before.
+    QComboBox* m_voiceCh10SnapCombo = nullptr;
     QCheckBox* m_vocalBendCheckbox = nullptr;
     QComboBox* m_vocalVibratoRangeCombo = nullptr;
     QCheckBox* m_vibratoCorrectionCheckbox = nullptr;

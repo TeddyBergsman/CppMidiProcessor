@@ -25,6 +25,16 @@ struct AudioTrackMute {
     QString name;    // Informational only (used in logs)
 };
 
+// Maps a single value of a "direct chord" Ampero CC to a specific chord. The
+// chord text is parsed by music::parseChordSymbol, so anything that parser
+// understands works ("A", "Bb", "C#m7", "Gbsus4"). The user-facing default
+// preset just lists the 12 major chords, but the format is general.
+struct HarmonyDirectChord {
+    int     value; // CC value (0..127) the footswitch sends
+    QString chord; // Chord text (e.g. "A", "Bb", "C#m7")
+    QString name;  // Optional human label for logs
+};
+
 // Represents a single program, with explicit CCs for program/volume
 struct Program {
     QString name;
@@ -60,6 +70,15 @@ struct Settings {
     // track's switchValue matches, else value 127 (mute).
     int audioTrackSwitchCC = 27;
     QList<AudioTrackMute> audioTrackMutes;
+
+    // Direct-chord lookup: when a CC with number == harmonyDirectChordCC arrives,
+    // its value is matched against harmonyDirectChordMap and the chord text from
+    // the matched entry is applied as the harmony chord. Set CC to -1 (default) to
+    // disable. Designed for an Ampero footswitch sending a unique value per chord
+    // (e.g. value 0..11 → A, Bb, B, ..., G#) so the player can jump directly to
+    // any chord without root/acc/quality stepping.
+    int harmonyDirectChordCC = -1;
+    QList<HarmonyDirectChord> harmonyDirectChordMap;
 };
 
 // Top-level container for the entire preset file

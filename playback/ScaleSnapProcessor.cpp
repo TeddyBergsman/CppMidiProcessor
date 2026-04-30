@@ -37,6 +37,9 @@ void ScaleSnapProcessor::setMidiProcessor(MidiProcessor* midi)
     // so setSuppressGuitarPassthrough() would otherwise never fire at startup.
     if (m_midi) {
         m_midi->setSuppressGuitarPassthrough(m_leadMode != LeadMode::Off);
+        // Publish the initial voice-snap scale mask. With no chord set yet
+        // this will be 0 (= passthrough), which is the right behavior.
+        publishVoiceScaleMask();
     }
 }
 
@@ -406,6 +409,36 @@ void ScaleSnapProcessor::setDefaultHarmonyChord(const music::ChordSymbol& chord)
     // guitar note. iReal Pro auto-loads at startup, which sets a chart
     // model and was previously stealing the footswitch chord.
     m_useDefaultHarmonyChord = m_hasLastKnownChord;
+    // Republish the voice-snap mask so ch-10 voice mirroring follows the
+    // new chord/scale immediately, not on the next guitar note.
+    publishVoiceScaleMask();
+}
+
+void ScaleSnapProcessor::setVoiceCh10SnapEnabled(bool enabled)
+{
+    if (m_midi) m_midi->setVoiceCh10SnapEnabled(enabled);
+}
+
+bool ScaleSnapProcessor::voiceCh10SnapEnabled() const
+{
+    return m_midi ? m_midi->voiceCh10SnapEnabled() : true;
+}
+
+void ScaleSnapProcessor::publishVoiceScaleMask()
+{
+    if (!m_midi) return;
+    // Build the 12-bit pitch-class bitmap from the current valid PCs.
+    // 0 means "no constraint" (passthrough on the worker side); we emit 0
+    // only when no chord/scale is known so unsnapping happens by default
+    // pre-chord.
+    const QSet<int> validPcs = computeValidPitchClasses();
+    uint16_t mask = 0;
+    for (int pc : validPcs) {
+        if (pc >= 0 && pc < 12) {
+            mask |= (uint16_t)(1u << pc);
+        }
+    }
+    m_midi->setVoiceCh10ScaleMask(mask);
 }
 
 QString ScaleSnapProcessor::scaleKeyForChord(const music::ChordSymbol& c) const
@@ -1179,6 +1212,13 @@ void ScaleSnapProcessor::onGuitarNoteOn(int midiNote, int velocity)
     // bug.
     m_upcomingHarmony.fill(-1);
     m_skipUpcomingOn.fill(false);
+
+    // The chart-driven path inside computeValidPitchClasses may have updated
+    // m_lastKnownChord (via const_cast) when the cell index advanced. Push
+    // the resulting scale mask out to MidiProcessor so ch-10 voice mirroring
+    // tracks chord changes between guitar notes too, not just on
+    // setDefaultHarmonyChord.
+    publishVoiceScaleMask();
 }
 
 void ScaleSnapProcessor::onGuitarNoteOff(int midiNote)

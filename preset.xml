@@ -48,6 +48,37 @@
             <Track switchValue="12" muteCC="84" name="Vocals" />
         </AudioTrackSwitch>
 
+        <!--
+            Direct-chord lookup: one CC (default 42) whose value selects a
+            specific chord from the table below. Pressing an Ampero footswitch
+            programmed to send "CC 42 = N" jumps the harmony chord to the
+            entry with value="N" — same as if the player had stepped through
+            root/accidental/quality manually (UI updates, scale label, "say"
+            callouts, all unchanged).
+
+            The chord attribute is parsed by music::parseChordSymbol, so any
+            chord text the harmony engine understands works ("A", "Bb",
+            "C#m7", "Gbsus4" …). The default below covers the 12 majors in
+            chromatic order starting from A; reorder / extend to match your
+            Ampero layout.
+
+            Remove the block (or set cc="-1") to disable direct-chord lookup.
+        -->
+        <HarmonyDirectChord cc="42">
+            <Mapping value="0"  chord="A"  name="A major" />
+            <Mapping value="1"  chord="Bb" name="B-flat major" />
+            <Mapping value="2"  chord="B"  name="B major" />
+            <Mapping value="3"  chord="C"  name="C major" />
+            <Mapping value="4"  chord="Db" name="D-flat major" />
+            <Mapping value="5"  chord="D"  name="D major" />
+            <Mapping value="6"  chord="Eb" name="E-flat major" />
+            <Mapping value="7"  chord="E"  name="E major" />
+            <Mapping value="8"  chord="F"  name="F major" />
+            <Mapping value="9"  chord="Gb" name="G-flat major" />
+            <Mapping value="10" chord="G"  name="G major" />
+            <Mapping value="11" chord="Ab" name="A-flat major" />
+        </HarmonyDirectChord>
+
         <!-- Path to backing tracks relative to the build directory -->
         <BackingTrackDirectory>/Users/teddybergsman/Documents</BackingTrackDirectory>
         

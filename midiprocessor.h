@@ -42,6 +42,15 @@ public slots:
     // step). Receivers connect to the signals below. All atomic / lock-free
     // for the worker thread.
     void setHarmonyCCs(int toggleCC, int rootStepCC, int accStepCC, int qualityStepCC);
+
+    // Direct-chord lookup. When a CC with number == directChordCC arrives on
+    // any input (Ampero, etc.), its value is matched against the supplied
+    // mapping and the matching chord text is emitted via
+    // harmonyDirectChordRequested. Pass cc = -1 to disable. Atomic update;
+    // safe to call from any thread.
+    void setHarmonyDirectChord(int directChordCC, const QList<HarmonyDirectChord>& mapping);
+    int harmonyDirectChordCC() const { return m_harmonyDirectChordCC.load(); }
+    QList<HarmonyDirectChord> harmonyDirectChordMap() const;
     // Tell the MIDI worker what the current harmony master state is. Each
     // future CC-33 press will then flip starting from this value, keeping
     // the footswitch and the engine in lockstep.
@@ -60,6 +69,19 @@ public slots:
     // Suppress voice pitch passthrough to channel 2 (used by VocalSync mode to free Ch 2 for pitch targets)
     void setSuppressVoicePassthrough(bool suppress);
     bool suppressVoicePassthrough() const { return m_suppressVoicePassthrough.load(); }
+
+    // --- Voice Channel-10 scale snapping ---
+    // When enabled (default) and a non-empty scale mask has been published by
+    // ScaleSnapProcessor, voice note-ons mirrored onto ch 10 are snapped to
+    // the nearest valid pitch class in the current chord/scale. Pitch bend
+    // and other CCs pass through unchanged. Note-offs follow the snap mapping
+    // recorded at note-on so the right note gets released. The mask is a
+    // 12-bit bitmap (bit i = pitch-class i is allowed); 0 disables snapping
+    // even when the enable flag is on.
+    void setVoiceCh10SnapEnabled(bool enabled);
+    bool voiceCh10SnapEnabled() const { return m_voiceCh10SnapEnabled.load(); }
+    void setVoiceCh10ScaleMask(uint16_t mask);
+    uint16_t voiceCh10ScaleMask() const { return m_voiceCh10ScaleMask.load(); }
     // Virtual musician MIDI (thread-safe; enqueued to worker thread)
     void sendVirtualNoteOn(int channel, int note, int velocity);
     void sendVirtualNoteOff(int channel, int note);
@@ -113,6 +135,11 @@ signals:
     void harmonyRootStepRequested();
     void harmonyAccidentalStepRequested();
     void harmonyQualityStepRequested();
+    // Direct chord — emitted when a CC matches harmonyDirectChordCC AND the
+    // received value matches one of the configured mappings. The receiver is
+    // expected to apply the chord text via the same path the chord-stepper
+    // uses (parse → ChordSymbol → setDefaultHarmonyChord + UI sync).
+    void harmonyDirectChordRequested(const QString& chordText);
 
 private:
     enum class EventType { MIDI_MESSAGE, PROGRAM_CHANGE, TRACK_TOGGLE, TRANSPOSE_CHANGE };
@@ -144,6 +171,48 @@ private:
     // Suppress voice pitch passthrough: when true, voice notes/pitch bend are NOT passed through to channel 2.
     // VocalSync mode sets this so it can output pitch targets on channel 2 instead.
     std::atomic<bool> m_suppressVoicePassthrough{false};
+
+    // Voice ch-10 snapping state. The 12-bit mask is published by
+    // ScaleSnapProcessor whenever the chord/scale changes; bit i = pitch
+    // class i is in-scale. The map records original→snapped MIDI numbers
+    // for currently-sounding notes so note-off targets the right note.
+    // Worker-thread-only access; no mutex needed.
+    std::atomic<bool> m_voiceCh10SnapEnabled{true};
+    std::atomic<uint16_t> m_voiceCh10ScaleMask{0};
+    std::map<int, int> m_voiceCh10SnapMap;
+
+    // Voice ch-10 monophonic legato state (snap mode only).
+    // The voice tracker emits chromatic noteOn/noteOff pairs per sub-semitone
+    // of the singer's pitch, so during a glissando we get adjacent semitones
+    // that snap to the SAME scale tone — without intervention each pair is
+    // emitted as a noteOff/noteOn on the same MIDI number, which makes the
+    // synth restrike its attack envelope every ~20 ms. To avoid this:
+    //   * each note-off is DEFERRED into m_voiceCh10PendingOffSnap rather
+    //     than emitted immediately;
+    //   * the next voice note-on either MERGES (same snap target → cancel
+    //     pending, don't emit any new note-on; held note keeps sounding)
+    //     or RELEASES (different snap → flush pending, then start new note);
+    //   * if neither happens within kVoiceCh10PendingTimeoutMs OR breath
+    //     drops to zero, the pending release is flushed (singer truly
+    //     stopped — release the note).
+    int m_voiceCh10HeldSnap = -1;       // snap MIDI note currently sounding (-1 = none)
+    int m_voiceCh10PendingOffSnap = -1; // snap awaiting deferred release (-1 = none)
+    qint64 m_voiceCh10PendingOffMs = 0; // ms-since-epoch when pending was set
+    static constexpr qint64 kVoiceCh10PendingTimeoutMs = 80;
+
+    // Set whenever the scale mask changes (chord change, snap toggle).
+    // Worker checks this each iteration and re-evaluates the held legato
+    // note against the new mask — if the held pitch class is no longer in
+    // scale, release it so the singer's next attack re-snaps cleanly.
+    // Without this, a note held across a chord change keeps sounding at
+    // the OLD scale tone, which is audibly "outside the new scale".
+    std::atomic<bool> m_voiceCh10MaskChanged{false};
+
+    // Helpers for the legato state machine (worker-thread-only).
+    void sendVoiceCh10NoteOff(int snapNote);
+    void flushVoiceCh10PendingOff();
+    int  computeVoiceCh10Snap(int origNote, uint16_t mask) const;
+    void handleVoiceCh10MaskChange();
 
     QTimer* m_logPollTimer;
     std::queue<std::string> m_logQueue;
@@ -213,6 +282,14 @@ private:
     int m_lastHarmonyRootStepValue = 0;
     int m_lastHarmonyAccidentalStepValue = 0;
     int m_lastHarmonyQualityStepValue = 0;
+
+    // Direct-chord CC + lookup table. CC -1 = disabled. The list is short
+    // (≤ 12 typical), so a mutex around copy/replace is fine — no lock
+    // contention in the hot path because the worker only takes a brief
+    // snapshot when CC matches.
+    std::atomic<int> m_harmonyDirectChordCC{-1};
+    mutable std::mutex m_harmonyDirectChordMutex;
+    QList<HarmonyDirectChord> m_harmonyDirectChordMap;
 
     // Pitch state
     int m_lastGuitarNote = -1;

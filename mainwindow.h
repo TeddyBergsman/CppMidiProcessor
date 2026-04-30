@@ -131,6 +131,11 @@ protected:
     void onHarmonyRootStepRequested();
     void onHarmonyAccidentalStepRequested();
     void onHarmonyQualityStepRequested();
+    // Direct chord — invoked when an Ampero CC value matches one of the
+    // mappings in the preset's <HarmonyDirectChord>. The chord text is
+    // dispatched as if the user had stepped to it manually (root + accidental
+    // + quality indices set, engine + UI synced, chord spoken if enabled).
+    void onHarmonyDirectChordRequested(const QString& chordText);
     // Helpers
     void applyHarmonyChordToEngine();
     void persistHarmonyChordIndices();

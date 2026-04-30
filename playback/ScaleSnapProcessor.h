@@ -203,6 +203,17 @@ public:
     // Audio Track Switch editor for visual debugging.
     QString currentScaleSummary(bool preferFlats = true) const;
 
+    // --- Voice Channel-10 scale snap relay ---
+    // The actual snapping happens on MidiProcessor's worker thread (lock-free
+    // via an atomic 12-bit pitch-class mask). These methods are convenience
+    // relays so the SnappingWindow can drive the feature without holding a
+    // direct MidiProcessor pointer. publishVoiceScaleMask() recomputes the
+    // current valid-PC mask from the active chord/scale and pushes it to
+    // MidiProcessor; call it whenever the chord changes.
+    void setVoiceCh10SnapEnabled(bool enabled);
+    bool voiceCh10SnapEnabled() const;
+    void publishVoiceScaleMask();
+
     // Cell index tracking (called by engine on each step)
     void setCurrentCellIndex(int cellIndex);
     int currentCellIndex() const { return m_currentCellIndex; }

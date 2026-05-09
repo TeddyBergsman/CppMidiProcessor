@@ -473,6 +473,27 @@ void MidiProcessor::sendVirtualAllNotesOff(int channel) {
     m_condition.notify_one();
 }
 
+void MidiProcessor::sendVirtualHardKill(int channel) {
+    if (channel < 1 || channel > 16) return;
+    const unsigned char chan = (unsigned char)(channel - 1);
+    std::lock_guard<std::mutex> lock(m_eventMutex);
+    // Send the standard "all notes off" controllers first (synths that
+    // honor them release immediately and ignore the per-note sweep below).
+    std::vector<unsigned char> sustainOff = { (unsigned char)(0xB0 | chan), 64, 0 };
+    std::vector<unsigned char> allNotesOff = { (unsigned char)(0xB0 | chan), 123, 0 };
+    std::vector<unsigned char> allSoundOff = { (unsigned char)(0xB0 | chan), 120, 0 };
+    tryEnqueueEvent({EventType::MIDI_MESSAGE, sustainOff, MidiSource::VirtualBand, -1, ""});
+    tryEnqueueEvent({EventType::MIDI_MESSAGE, allNotesOff, MidiSource::VirtualBand, -1, ""});
+    tryEnqueueEvent({EventType::MIDI_MESSAGE, allSoundOff, MidiSource::VirtualBand, -1, ""});
+    // Belt-and-suspenders: explicit note-off for every MIDI note. Catches
+    // synths that ignore CC123/CC120 but reliably honor 0x8c-style note-offs.
+    for (int n = 0; n < 128; ++n) {
+        std::vector<unsigned char> off = { (unsigned char)(0x80 | chan), (unsigned char)n, 0 };
+        tryEnqueueEvent({EventType::MIDI_MESSAGE, off, MidiSource::VirtualBand, -1, ""});
+    }
+    m_condition.notify_one();
+}
+
 void MidiProcessor::sendVirtualCC(int channel, int cc, int value) {
     if (channel < 1 || channel > 16) return;
     if (cc < 0) cc = 0;

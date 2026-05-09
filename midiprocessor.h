@@ -86,6 +86,12 @@ public slots:
     void sendVirtualNoteOn(int channel, int note, int velocity);
     void sendVirtualNoteOff(int channel, int note);
     void sendVirtualAllNotesOff(int channel);
+    // Hard-kill: enqueues an explicit note-off for every MIDI note 0-127
+    // on the channel, plus CC64/CC123/CC120. Use when a downstream synth
+    // doesn't honor the controllers alone (common with software
+    // instruments — they latch sustained voices that survive CC123).
+    // Thread-safe: enqueues on the worker queue.
+    void sendVirtualHardKill(int channel);
     // Virtual musician CC (thread-safe; enqueued to worker thread)
     void sendVirtualCC(int channel, int cc, int value);
     // Virtual musician pitch bend (thread-safe; enqueued to worker thread)

@@ -389,13 +389,46 @@ void ScaleSnapProcessor::setHarmonyEnabled(bool enabled)
     const bool prev = m_harmonyEnabled.exchange(enabled);
     if (prev == enabled) return;
 
-    // Going OFF: kill any sounding harmony notes on channels 12-15 so the
-    // user doesn't get stuck voices. Note: we use sendVirtualAllNotesOff
-    // rather than walking m_activeNotes — simpler and always safe.
+    // Going OFF: kill EVERY sounding harmony note. Three layers, because
+    // CC123/CC120 alone aren't enough — many software synths (Logic
+    // instrument tracks especially) latch voices and ignore those CCs,
+    // leaving notes sounding indefinitely until the synth is reset.
+    //
+    //   1) Walk m_activeNotes and emit explicit note-off for every harmony
+    //      note we know about. Reset the tracking entries so a re-enable
+    //      starts clean and so a later guitar note-off doesn't try to
+    //      re-release something we already killed.
+    //   2) Hard-kill sweep on each harmony channel — explicit note-off for
+    //      all 128 MIDI notes plus CC64/CC123/CC120. Catches anything not
+    //      tracked in m_activeNotes (e.g. notes the synth latched from
+    //      humanization-delayed attacks that fired after the input note
+    //      was already released).
+    //   3) emitHarmonyNoteOn's QTimer::singleShot lambda checks
+    //      m_harmonyEnabled before firing, so any in-flight delayed
+    //      attack scheduled BEFORE the toggle gets suppressed when the
+    //      timer fires.
     if (!enabled && m_midi) {
-        // kHarmonyChannels[] uses 1-based MIDI channel numbers in this file.
+        static const int kHarmonyChannels[4] = {
+            kChannelHarmony1, kChannelHarmony2, kChannelHarmony3, kChannelHarmony4
+        };
+        {
+            QWriteLocker lock(&m_activeNotesLock);
+            for (auto it = m_activeNotes.begin(); it != m_activeNotes.end(); ++it) {
+                ActiveNote& n = it.value();
+                if (n.harmonyNote >= 0) {
+                    emitNoteOff(kChannelHarmony1, n.harmonyNote);
+                    n.harmonyNote = -1;
+                }
+                for (int v = 0; v < 4; ++v) {
+                    if (n.harmonyNotes[v] >= 0) {
+                        emitNoteOff(kHarmonyChannels[v], n.harmonyNotes[v]);
+                        n.harmonyNotes[v] = -1;
+                    }
+                }
+            }
+        }
         for (int ch = 12; ch <= 15; ++ch) {
-            m_midi->sendVirtualAllNotesOff(ch);
+            m_midi->sendVirtualHardKill(ch);
         }
     }
 }
@@ -3942,10 +3975,13 @@ void ScaleSnapProcessor::emitHarmonyNoteOn(int channel, int note, int velocity, 
         // No delay - emit immediately
         m_midi->sendVirtualNoteOn(channel, note, velocity);
     } else {
-        // Delay the note-on using QTimer::singleShot
-        // Capture by value to ensure data survives the lambda
+        // Delay the note-on using QTimer::singleShot.
+        // IMPORTANT: re-check m_harmonyEnabled at fire time — if the user
+        // disabled harmony in the (delayMs)-ms window between scheduling
+        // and firing, suppress the attack so it doesn't leave a stuck
+        // voice that survives setHarmonyEnabled(false)'s kill sweep.
         QTimer::singleShot(delayMs, this, [this, channel, note, velocity]() {
-            if (m_midi) {
+            if (m_midi && m_harmonyEnabled.load()) {
                 m_midi->sendVirtualNoteOn(channel, note, velocity);
             }
         });

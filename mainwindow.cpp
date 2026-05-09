@@ -81,21 +81,18 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
 
     setWindowTitle(preset.name);
 
-    // Initialize the processor after the UI is ready to receive signals
-    if (!m_midiProcessor->initialize()) {
-        QMessageBox::critical(this, "MIDI Error", "Could not initialize MIDI ports. Please check connections and port names in preset.xml.");
-    }
-
-    // Start voice controller if enabled
-    if (preset.settings.voiceControlEnabled) {
-        m_voiceController->start();
-    }
-
     // Apply legacy UI preference (default: OFF -> show new minimal UI)
     bool legacyOn = settings.value("ui/legacy", false).toBool();
     applyLegacyUiSetting(legacyOn);
 
     // --- Harmony footswitch state: load from QSettings, then apply live ---
+    // CRITICAL: this all happens BEFORE m_midiProcessor->initialize() opens
+    // the MG3 input ports. Otherwise voice events would start flowing into
+    // the worker thread with the voice-snap scale mask still at 0 (= no
+    // constraint), and the very first sung note out-of-scale would slip
+    // through unsnapped — exactly the "first note bypasses snap" symptom.
+    // Pushing applyHarmonyChordToEngine() here means the mask is published
+    // to MidiProcessor before any voice MIDI can arrive.
     m_harmonyToggleCC          = settings.value("harmony/toggleCC", 33).toInt();
     m_harmonyRootStepCC        = settings.value("harmony/rootStepCC", 34).toInt();
     m_harmonyAccidentalStepCC  = settings.value("harmony/accidentalStepCC", 35).toInt();
@@ -137,9 +134,21 @@ MainWindow::MainWindow(const Preset& preset, QWidget *parent)
     connect(m_midiProcessor, &MidiProcessor::harmonyQualityStepRequested,
             this, &MainWindow::onHarmonyQualityStepRequested);
 
-    // Push initial chord + enabled state to the standalone ScaleSnapProcessor.
-    // Done after createWidgets() so noteMonitorWidget exists.
+    // Push initial chord to the standalone ScaleSnapProcessor — also primes
+    // the voice-ch10 scale mask on MidiProcessor *before* any voice events
+    // can arrive (see comment above on the race window).
     applyHarmonyChordToEngine();
+
+    // Initialize the processor LAST so MIDI events start flowing only after
+    // every consumer (snap mask, harmony state, signal connections) is set.
+    if (!m_midiProcessor->initialize()) {
+        QMessageBox::critical(this, "MIDI Error", "Could not initialize MIDI ports. Please check connections and port names in preset.xml.");
+    }
+
+    // Start voice controller if enabled
+    if (preset.settings.voiceControlEnabled) {
+        m_voiceController->start();
+    }
     if (noteMonitorWidget && noteMonitorWidget->scaleSnapProcessor()) {
         // Eagerly construct SnappingWindow (hidden) so its persisted voice
         // configs get pushed to the standalone ScaleSnapProcessor at launch.

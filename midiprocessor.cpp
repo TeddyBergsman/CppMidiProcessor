@@ -917,22 +917,31 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                                                 .arg(localMap.size())
                                                 .toStdString());
                         } else if (cc == m_harmonyToggleCC.load()) {
-                            // Harmony master toggle. The Ampero's "Toggle CC"
-                            // mode alternates 0/127 each press, with no
-                            // guarantee its starting state matches ours. So
-                            // we treat ANY change in CC value as one press
-                            // and flip our internal state — guaranteed one
-                            // flip per press regardless of which value the
-                            // footswitch happens to send first.
-                            if (value != m_lastHarmonyToggleValue) {
+                            // Harmony master toggle — LEVEL-BASED.
+                            //   value > 63 → ON
+                            //   value ≤ 63 → OFF
+                            // This is the natural mapping for an Ampero
+                            // footswitch in "Toggle CC" mode where each state
+                            // holds a specific persistent value (0 in state A,
+                            // 127 in state B, alternating per press). It also
+                            // works correctly for momentary footswitches that
+                            // send "127 on press, 0 on release" — the press
+                            // turns harmony ON, the release turns it OFF.
+                            // Emit only on actual state transitions to avoid
+                            // re-firing on repeated identical CC values.
+                            const bool newState = (value > 63);
+                            if (value != m_lastHarmonyToggleValue ||
+                                newState != m_harmonyToggleState) {
                                 m_lastHarmonyToggleValue = value;
-                                m_harmonyToggleState = !m_harmonyToggleState;
-                                emit harmonyToggleRequested(m_harmonyToggleState);
-                                std::lock_guard<std::mutex> lock(m_logMutex);
-                                m_logQueue.push(QString("Ampero harmony toggle CC%1=%2 (press) -> %3")
-                                                    .arg(cc).arg(value)
-                                                    .arg(m_harmonyToggleState ? "ON" : "OFF")
-                                                    .toStdString());
+                                if (newState != m_harmonyToggleState) {
+                                    m_harmonyToggleState = newState;
+                                    emit harmonyToggleRequested(newState);
+                                    std::lock_guard<std::mutex> lock(m_logMutex);
+                                    m_logQueue.push(QString("Ampero harmony toggle CC%1=%2 -> %3")
+                                                        .arg(cc).arg(value)
+                                                        .arg(newState ? "ON" : "OFF")
+                                                        .toStdString());
+                                }
                             }
                         } else if (cc == m_harmonyRootStepCC.load()) {
                             // Rising-edge detection so momentary footswitches
@@ -1005,16 +1014,36 @@ void MidiProcessor::processMidiEvent(const MidiEvent& event) {
                     if (!message.empty() && message[0] < 0xF0) {
                         std::vector<unsigned char> rawMsg = message;
                         rawMsg[0] = (rawMsg[0] & 0xF0) | 0x09; // ch 10 (1-based)
-                        // Defensive: drop any pitch bend coming from the amp
-                        // port while snap is active, so the snapped note
-                        // stays dead-on. (MG3's amp port doesn't normally
-                        // emit pitch bend, but Logic-side patches sometimes
-                        // do — never let a bend slip through in snap mode.)
                         const unsigned char ampSt = rawMsg[0] & 0xF0;
+
+                        // The amp port is supposed to carry only amplitude
+                        // (channel pressure / CCs). Some MG3 versions /
+                        // configs ALSO emit note-on/note-off here, which
+                        // would arrive on ch 10 unsnapped and race against
+                        // the snapped notes from the VoicePitch branch —
+                        // exactly the "first note bypasses snap" symptom.
+                        // Drop notes here unconditionally; the VoicePitch
+                        // branch is the single source of truth for ch 10
+                        // note events. Same goes for pitch bend in snap
+                        // mode (amp port sneak path).
                         const bool ampMaskActive = m_voiceCh10SnapEnabled.load() &&
                                                    m_voiceCh10ScaleMask.load() != 0 &&
                                                    m_voiceCh10ScaleMask.load() != 0x0FFF;
-                        if (!(ampMaskActive && ampSt == 0xE0)) {
+                        const bool ampIsNoteEvent = (ampSt == 0x80 || ampSt == 0x90);
+                        const bool dropAmp = ampIsNoteEvent ||
+                                             (ampMaskActive && ampSt == 0xE0);
+                        if (ampIsNoteEvent) {
+                            // Log so we can verify the suppression is firing
+                            // when MG3's amp port emits ghost notes (proves
+                            // / disproves the "first note unsnapped" cause).
+                            std::lock_guard<std::mutex> lock(m_logMutex);
+                            m_logQueue.push(QString("VoiceAmp ch10 note suppressed status=0x%1 note=%2 vel=%3")
+                                                .arg(rawMsg[0], 2, 16, QChar('0'))
+                                                .arg(rawMsg.size() > 1 ? rawMsg[1] : 0)
+                                                .arg(rawMsg.size() > 2 ? rawMsg[2] : 0)
+                                                .toStdString());
+                        }
+                        if (!dropAmp) {
                             safeSendMessage(rawMsg);
                         }
                     }
